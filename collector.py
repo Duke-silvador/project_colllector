@@ -11,6 +11,12 @@ HEADERS = {
     "Accept": "vnd.github+json"
 } if GITHUB_TOKEN else {}
 
+# Hapa ndipo tulipoweka aina zote za lugha za programu (Extensions) za kuchukua
+VALID_EXTENSIONS = (
+    '.py', '.js', '.ts', '.cpp', '.c', '.h', '.hpp', 
+    '.java', '.go', '.rs', '.rb', '.php', '.sh', '.html', '.css', '.json'
+)
+
 def fetch_latest_github_repos():
     url = "https://api.github.com/search/repositories?q=created:>2026-08-30&sort=updated&order=desc"
     response = requests.get(url, headers=HEADERS)
@@ -27,18 +33,22 @@ def fetch_latest_huggingface_spaces():
     print("Hitilafu Hugging Face API:", response.status_code)
     return []
 
-def save_project_structure(source_name, proj_id, description, code_content=""):
+def save_project_structure(source_name, proj_id, description, collected_files={}):
     safe_id = proj_id.replace("/", "_")
     folder_path = f"collected_projects/{source_name}/{safe_id}"
     os.makedirs(folder_path, exist_ok=True)
     
+    # Kuandika faili la maelezo (README)
     with open(f"{folder_path}/README.md", "w", encoding="utf-8") as f:
         f.write(f"# Project: {proj_id}\n\n**Source:** {source_name}\n\n**Description:** {description}\n")
     
-    if code_content:
-        with open(f"{folder_path}/main.py", "w", encoding="utf-8") as f:
-            f.write(code_content)
-    print(f"Imehifadhiwa: {source_name} -> {proj_id}")
+    # Kuweka mafaili yote ya kodi yaliyovutwa kwenye folda hiyo
+    for filename, content in collected_files.items():
+        file_path = f"{folder_path}/{filename}"
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(content)
+            
+    print(f"Imehifadhiwa kikamilifu: {source_name} -> {proj_id} (Mafaili {len(collected_files)} yamechukuliwa)")
 
 def process_github_repos():
     repos = fetch_latest_github_repos()
@@ -49,25 +59,27 @@ def process_github_repos():
         contents_url = f"https://api.github.com/repos/{full_name}/contents"
         contents_res = requests.get(contents_url, headers=HEADERS)
         
-        main_code = ""
+        collected_files = {}
         if contents_res.status_code == 200:
             files = contents_res.json()
             if isinstance(files, list):
                 for file in files:
-                    if file['name'].lower() in ['main.py', 'app.py', 'index.py', 'run.py']:
+                    # Inachunguza kama ni faili na linaishia kwenye mojawapo ya lugha zetu zilizoorodheshwa
+                    if file.get('type') == 'file' and file['name'].lower().endswith(VALID_EXTENSIONS):
                         file_res = requests.get(file['download_url'])
                         if file_res.status_code == 200:
-                            main_code = file_res.text
-                            break
+                            collected_files[file['name']] = file_res.text
                             
-        save_project_structure("GitHub", full_name, desc, main_code)
+        save_project_structure("GitHub", full_name, desc, collected_files)
 
 def process_huggingface_spaces():
     spaces = fetch_latest_huggingface_spaces()
     for space in spaces:
         space_id = space.get("id") or space.get("_id", "unknown_space")
         desc = space.get("title") or "Hugging Face Space mpya"
-        save_project_structure("HuggingFace", space_id, desc, "# Hugging Face Space - Auto Collected")
+        
+        hf_files = {"info.txt": "Hugging Face Space - Auto Collected Metadata"}
+        save_project_structure("HuggingFace", space_id, desc, hf_files)
 
 if __name__ == "__main__":
     print(f"Uchunguzi umeanza rasmi: {datetime.now(timezone.utc)}")
