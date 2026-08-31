@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>বিআরএস খতিয়ান জেনারেটর</title>
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Hind Siliguri', 'SolaimanLipi', Arial, sans-serif; }
+        body { background-color: #0f172a; color: #fff; padding: 20px; }
+
+        .container { max-width: 1050px; margin: auto; }
+        .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+        .header-title { font-size: 20px; color: #f97316; margin-bottom: 15px; font-weight: bold; }
+        
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-group label { font-size: 12px; color: #cbd5e1; }
+        
+        input, select, textarea { background: #0f172a; border: 1px solid #475569; color: #fff; padding: 6px 8px; border-radius: 4px; font-size: 13px; outline: none; }
+        input:focus, textarea:focus { border-color: #f97316; }
+        
+        .btn-submit { background: #f97316; color: #fff; border: none; width: 100%; padding: 12px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-top: 15px; }
+        .btn-submit:hover { background: #ea580c; }
+
+        .khatian-page {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 10mm 12mm;
+            margin: auto;
+            background: white;
+            color: #000;
+            box-sizing: border-box;
+            display: none;
+            position: relative;
+        }
+
+        .title-area { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; }
+        .title-area h1 { font-size: 20px; font-weight: 700; width: 100%; text-align: center; margin-left: 70px; }
+        .page-num { font-size: 13px; white-space: nowrap; font-weight: normal; }
+
+        .info-bar { display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; margin-bottom: 6px; }
+
+        table.khatian-table { width: 100%; border-collapse: collapse; border: 1.5px solid #000; color: #000; }
+        table.khatian-table th, table.khatian-table td { border: 1px solid #000; padding: 2px 3px; font-size: 12px; vertical-align: top; text-align: center; line-height: 1.35; }
+        table.khatian-table th { font-weight: normal; }
+        
+        .align-left { text-align: left !important; padding-left: 4px !important; }
+
+        .footer-section { margin-top: 8px; display: flex; justify-content: space-between; align-items: flex-end; position: relative; }
+        .footer-left { font-size: 11px; line-height: 1.4; font-weight: 500; }
+        
+        .seal-box { position: absolute; left: 45%; bottom: 0; transform: translateX(-50%); text-align: center; }
+        .seal-circle {
+            width: 72px;
+            height: 72px;
+            border: 2px solid #1e3a8a;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 7.5px;
+            font-weight: bold;
+            color: #1e3a8a;
+            text-align: center;
+            line-height: 1.15;
+            padding: 2px;
+            box-sizing: border-box;
+        }
+
+        .qr-box img { width: 75px; height: 75px; display: block; }
+
+        @media print {
+            body { background: white; padding: 0; }
+            .no-print { display: none !important; }
+            .khatian-page { display: block !important; margin: 0; width: 100%; padding: 5mm 8mm; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container no-print">
+    <div class="card">
+        <div class="header-title">বিআরএস খতিয়ান ডাটা এন্ট্রি ফরম</div>
+        <form id="khatianForm">
+            <div class="form-grid">
+                <div class="form-group"><label>বিভাগ</label><input type="text" id="division" value="চট্টগ্রাম"></div>
+                <div class="form-group"><label>জেলা</label><input type="text" id="district" value="নোয়াখালী"></div>
+                <div class="form-group"><label>উপজেলা/থানা</label><input type="text" id="upazila" value="বেগমগঞ্জ"></div>
+                <div class="form-group"><label>মৌজা</label><input type="text" id="mouza" value="অনন্তপুর"></div>
+                <div class="form-group"><label>জে, এল, নং</label><input type="text" id="jlNo" value="২৩৪"></div>
+                <div class="form-group"><label>রেঃ সাঃ নং</label><input type="text" id="reSaNo" value=""></div>
+                <div class="form-group"><label>খতিয়ান নং</label><input type="text" id="khatianNo" value="৬১৮"></div>
+            </div>
+
+            <div style="margin-top: 15px;" class="form-grid">
+                <div class="form-group" style="grid-column: span 2;">
+                    <label>মালিকের নাম ও ঠিকানা (Enter দিয়ে আলাদা করুন)</label>
+                    <textarea id="ownerNames" rows="10">দং-গিয়াস উদ্দিন, নিজাম উদ্দিন, মহি উদ্দিন</textarea>
+                </div>
+                <div class="form-group"><label>অংশ (কলাম ২)</label><textarea id="ownerShares" rows="10">০.১১৭
+০.১১৭
+০.১১৭</textarea></div>
+                <div class="form-group"><label>দাগ (কলাম ৪)</label><textarea id="dagNos" rows="10">৪২৫৭
+৪২৫৮
+৪২৫৯</textarea></div>
+                <div class="form-group"><label>জমির শ্রেণী (কলাম ৫)</label><textarea id="landClasses" rows="10">বাড়ী
+বাড়ী
+বাড়ী</textarea></div>
+                <div class="form-group"><label>দাগের মোট (একর|শতাংশ)</label><textarea id="totalDagAmounts" rows="10">৫৮০০
+১৮০০
+১ | ০০০০</textarea></div>
+                <div class="form-group"><label>খতিয়ানের অংশ (কলাম ৭)</label><textarea id="khatianShares" rows="10">০.১০৩
+০.০৫৫
+০.৩০০</textarea></div>
+                <div class="form-group"><label>অংশ অনুযায়ী জমি (একর|শতাংশ)</label><textarea id="khatianAmounts" rows="10">০ | ০৬০০
+০ | ০১০০
+০ | ৩০০০</textarea></div>
+                <div class="form-group"><label>মন্তব্য (কলাম ৯)</label><textarea id="comments" rows="10">টিন/১
+টিন/১ ঘর/১</textarea></div>
+            </div>
+
+            <button type="button" class="btn-submit" onclick="generateAndPrint()">🖨 খতিয়ান সেভ ও প্রিন্ট করুন</button>
+        </form>
+    </div>
+</div>
+
+<div class="khatian-page" id="khatianPage">
+    <div class="title-area">
+        <h1>খতিয়ান নং- <span id="out_khatianNo">৬১৮</span></h1>
+        <div class="page-num">পৃষ্ঠা নং: ১ এর ১</div>
+    </div>
+
+    <div class="info-bar">
+        <span>বিভাগ: <span id="out_division">চট্টগ্রাম</span></span>
+        <span>জেলা: <span id="out_district">নোয়াখালী</span></span>
+        <span>উপজেলা/থানা: <span id="out_upazila">বেগমগঞ্জ</span></span>
+        <span>মৌজা: <span id="out_mouza">অনন্তপুর</span></span>
+        <span>জে, এল, নং: <span id="out_jlNo">২৩৪</span></span>
+        <span>রেঃ সাঃ নং: <span id="out_reSaNo"></span></span>
+    </div>
+
+    <table class="khatian-table">
+        <thead>
+            <tr>
+                <th rowspan="2" style="width: 20%;">মালিক, অকৃষি প্রজা বা ইজারাদারের নাম ও ঠিকানা</th>
+                <th rowspan="2" style="width: 6%;">অংশ</th>
+                <th rowspan="2" style="width: 5%;">রাজস্ব</th>
+                <th rowspan="2" style="width: 6%;">দাগ</th>
+                <th colspan="2" style="width: 14%;">জমির শ্রেণী</th>
+                <th colspan="2" style="width: 14%;">দাগের মোট পরিমাণ</th>
+                <th rowspan="2" style="width: 9%;">দাগের মধ্যে অত্র খতিয়ানের অংশ</th>
+                <th colspan="2" style="width: 14%;">অংশানুযায়ী জমির পরিমাণ</th>
+                <th rowspan="2" style="width: 12%;">দখল বিষয়ক বা অন্যান্য বিশেষ মন্তব্য</th>
+            </tr>
+            <tr>
+                <th style="width: 7%;">কৃষি ৫(ক)</th>
+                <th style="width: 7%;">অকৃষি ৫(খ)</th>
+                <th style="width: 6%;">একর ৬(ক)</th>
+                <th style="width: 8%;">শতাংশ ৬(খ)</th>
+                <th style="width: 6%;">একর ৮(ক)</th>
+                <th style="width: 8%;">শতাংশ ৮(খ)</th>
+            </tr>
+            <tr>
+                <th>১</th>
+                <th>২</th>
+                <th>৩</th>
+                <th>৪</th>
+                <th colspan="2">৫</th>
+                <th colspan="2">৬</th>
+                <th>৭</th>
+                <th colspan="2">৮</th>
+                <th>৯</th>
+            </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+        <tfoot>
+            <tr>
+                <td class="align-left" style="font-size: 10px; vertical-align: bottom;">
+                    ........ধারামতে নোট বা পরিবর্তন <b>মায় মোকদ্দমা নং ..... এবং সন.........</b>
+                </td>
+                <td style="font-weight: bold; vertical-align: bottom;">১.০০০</td>
+                <td></td>
+                <td></td>
+                <td colspan="4" style="font-weight: bold; font-size: 13px; vertical-align: middle;">পরিবার পরিকল্পনা গ্রহণ করুন</td>
+                <td style="font-weight: bold; text-align: right; vertical-align: middle;">মোট জমি:</td>
+                <td style="font-weight: bold; vertical-align: middle;">০</td>
+                <td style="font-weight: bold; vertical-align: middle;">৩৭০০</td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div class="footer-section">
+        <div class="footer-left">
+            মুদ্রণ: সেটেলমেন্ট প্রেস, ঢাকা। তারিখ: ২২-০৮-২০২৬<br>
+            বাংলাদেশ ফরম নং ৫৪৬২ (সংশোধিত)
+        </div>
+        <div class="seal-box">
+            <div class="seal-circle">
+                উপজেলা রেকর্ড রুম<br>জেলা প্রশাসকের কার্যালয়<br>নোয়াখালী
+            </div>
+        </div>
+        <div class="qr-box">
+            <img id="qrImage" src="" alt="QR Code">
+        </div>
+    </div>
+</div>
+
+<script>
+    function generateAndPrint() {
+        const khatianNo = document.getElementById('khatianNo').value;
+        const division = document.getElementById('division').value;
+        const district = document.getElementById('district').value;
+        const upazila = document.getElementById('upazila').value;
+        const mouza = document.getElementById('mouza').value;
+        
+        document.getElementById('out_khatianNo').innerText = khatianNo;
+        document.getElementById('out_division').innerText = division;
+        document.getElementById('out_district').innerText = district;
+        document.getElementById('out_upazila').innerText = upazila;
+        document.getElementById('out_mouza').innerText = mouza;
+        document.getElementById('out_jlNo').innerText = document.getElementById('jlNo').value;
+        document.getElementById('out_reSaNo').innerText = document.getElementById('reSaNo').value;
+
+        const owners = document.getElementById('ownerNames').value.split('\n');
+        const shares = document.getElementById('ownerShares').value.split('\n');
+        const dags = document.getElementById('dagNos').value.split('\n');
+        const classes = document.getElementById('landClasses').value.split('\n');
+        const totals = document.getElementById('totalDagAmounts').value.split('\n');
+        const kShares = document.getElementById('khatianShares').value.split('\n');
+        const kAmounts = document.getElementById('khatianAmounts').value.split('\n');
+        const comments = document.getElementById('comments').value.split('\n');
+
+        const totalRows = Math.max(owners.length, dags.length);
+        let tableHtml = '';
+
+        for (let i = 0; i < totalRows; i++) {
+            let totalPart = (totals[i] || '').split('|');
+            let amountPart = (kAmounts[i] || '').split('|');
+
+            tableHtml += `<tr>
+                <td class="align-left">${owners[i] || ''}</td>
+                <td>${shares[i] || ''}</td>
+                <td></td>
+                <td>${dags[i] || ''}</td>
+                <td colspan="2">${classes[i] || ''}</td>
+                <td>${totalPart[0] && totalPart.length > 1 ? totalPart[0] : ''}</td>
+                <td>${totalPart[1] || totalPart[0] || ''}</td>
+                <td>${kShares[i] || ''}</td>
+                <td>${amountPart[0] && amountPart.length > 1 ? amountPart[0] : ''}</td>
+                <td>${amountPart[1] || amountPart[0] || ''}</td>
+                <td>${comments[i] || ''}</td>
+            </tr>`;
+        }
+
+        document.getElementById('tableBody').innerHTML = tableHtml;
+
+        // আপনার GitHub Username অনুযায়ী নিচের লিঙ্কটি পরিবর্তন করে নিন
+        const githubUsername = "your-username"; // <-- এখানে আপনার GitHub এর ইউজারনেম দিন
+        const repoName = "land-verify"; // <-- আপনার রিপোজিটরির নাম
+
+        const verifyUrl = `https://${githubUsername}.github.io/${repoName}/verify.html?khatian=${encodeURIComponent(khatianNo)}&mouza=${encodeURIComponent(mouza)}&upazila=${encodeURIComponent(upazila)}&district=${encodeURIComponent(district)}&division=${encodeURIComponent(division)}&owner=${encodeURIComponent(owners.join(', '))}&dag=${encodeURIComponent(dags.join(','))}`;
+
+        document.getElementById('qrImage').src = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(verifyUrl)}`;
+
+        document.getElementById('khatianPage').style.display = 'block';
+
+        setTimeout(() => {
+            window.print();
+        }, 700);
+    }
+</script>
+
+</body>
+</html>
