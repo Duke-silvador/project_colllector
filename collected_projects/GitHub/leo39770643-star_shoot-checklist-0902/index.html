@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>奈爾吉斯｜拍攝日 B-roll 清單</title>
+<style>
+  :root {
+    --bg: #f6f7f5;
+    --card: #ffffff;
+    --accent: #4a6b5a;
+    --accent-dark: #33493d;
+    --text: #2a2e2b;
+    --muted: #82897f;
+    --border: #e2e6e0;
+    --model-tag: #f4e4d4;
+    --model-tag-text: #a15c1f;
+    --nonshoot-tag: #e6e6f0;
+    --nonshoot-tag-text: #5a5a8a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding-bottom: 60px;
+  }
+  header {
+    padding: 20px 16px 12px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 10;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 18px; margin: 0 0 4px; }
+  header .sub { font-size: 13px; color: var(--muted); }
+  .progress-wrap { margin-top: 10px; background: var(--border); border-radius: 8px; height: 8px; overflow: hidden; }
+  .progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width 0.3s; }
+  .progress-text { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  main { padding: 12px 16px; max-width: 640px; margin: 0 auto; }
+  .location-group { margin-bottom: 22px; }
+  .location-title { font-size: 15px; font-weight: 700; color: var(--accent-dark); margin: 0 0 8px; padding-left: 2px; }
+  .item { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; margin-bottom: 8px; display: flex; gap: 10px; align-items: flex-start; transition: opacity 0.2s; }
+  .item.checked { opacity: 0.5; }
+  .item input[type="checkbox"] { width: 22px; height: 22px; margin-top: 2px; flex-shrink: 0; accent-color: var(--accent); }
+  .item-body { flex: 1; }
+  .item-desc { font-size: 14px; line-height: 1.5; }
+  .item.checked .item-desc { text-decoration: line-through; }
+  .tags { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #eef1ec; color: var(--muted); }
+  .tag.ep { background: #e8f0ec; color: #3f6b52; }
+  .tag.model { background: var(--model-tag); color: var(--model-tag-text); font-weight: 600; }
+  .tag.nonshoot { background: var(--nonshoot-tag); color: var(--nonshoot-tag-text); }
+  .loading, .error { text-align: center; padding: 40px 20px; color: var(--muted); font-size: 14px; }
+  .error { color: #b04040; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>奈爾吉斯｜拍攝日 B-roll 清單</h1>
+  <div class="sub">依拍攝地點分組，勾選即時同步</div>
+  <div class="progress-wrap"><div class="progress-bar" id="progressBar"></div></div>
+  <div class="progress-text" id="progressText">載入中…</div>
+</header>
+
+<main id="main">
+  <div class="loading">正在載入清單…</div>
+</main>
+
+<script>
+const API_URL = 'https://script.google.com/macros/s/AKfycbwiR7NR7J-lIoPxxVkbeBRI4wkqBNtuAYrNLVUxg6ILCNsZlpFEBj6zF2CZR2Ev95bl-A/exec';
+
+let allItems = [];
+
+async function loadData() {
+  try {
+    const res = await fetch(API_URL);
+    const data = await res.json();
+    allItems = data;
+    render();
+  } catch (err) {
+    document.getElementById('main').innerHTML = '<div class="error">載入失敗，請確認 API_URL 是否已正確貼上，或稍後再試一次。</div>';
+    console.error(err);
+  }
+}
+
+function normBool(v) { return v === true || v === 'TRUE' || v === 'true' || v === 1; }
+
+function render() {
+  const main = document.getElementById('main');
+  main.innerHTML = '';
+  const groups = [];
+  const groupMap = {};
+  allItems.forEach(item => {
+    const loc = item['拍攝地點'];
+    if (!groupMap[loc]) { groupMap[loc] = []; groups.push(loc); }
+    groupMap[loc].push(item);
+  });
+  const total = allItems.length;
+  const doneCount = allItems.filter(i => normBool(i['已完成'])).length;
+  document.getElementById('progressBar').style.width = total ? (doneCount / total * 100) + '%' : '0%';
+  document.getElementById('progressText').textContent = `已完成 ${doneCount} / ${total} 項`;
+
+  groups.forEach(loc => {
+    const section = document.createElement('div');
+    section.className = 'location-group';
+    const title = document.createElement('div');
+    title.className = 'location-title';
+    title.textContent = `📍 ${loc}`;
+    section.appendChild(title);
+
+    groupMap[loc].forEach(item => {
+      const checked = normBool(item['已完成']);
+      const isNonShoot = item['非拍攝項目'] === '是';
+      const needModel = String(item['需要Model'] || '').startsWith('是');
+      const div = document.createElement('div');
+      div.className = 'item' + (checked ? ' checked' : '');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = checked;
+      cb.addEventListener('change', () => toggleItem(item['ID'], cb.checked, div));
+      const body = document.createElement('div');
+      body.className = 'item-body';
+      const desc = document.createElement('div');
+      desc.className = 'item-desc';
+      desc.textContent = item['對應畫面說明'];
+      const tags = document.createElement('div');
+      tags.className = 'tags';
+      const epTag = document.createElement('span');
+      epTag.className = 'tag ep';
+      epTag.textContent = `${item['集數']}・${item['段落']}`;
+      tags.appendChild(epTag);
+      if (needModel) {
+        const modelTag = document.createElement('span');
+        modelTag.className = 'tag model';
+        modelTag.textContent = '⚠️ 需要 Model';
+        tags.appendChild(modelTag);
+      }
+      if (isNonShoot) {
+        const nsTag = document.createElement('span');
+        nsTag.className = 'tag nonshoot';
+        nsTag.textContent = '🎬 非現場拍攝（後製）';
+        tags.appendChild(nsTag);
+      }
+      body.appendChild(desc);
+      body.appendChild(tags);
+      div.appendChild(cb);
+      div.appendChild(body);
+      section.appendChild(div);
+    });
+    main.appendChild(section);
+  });
+}
+
+async function toggleItem(id, checked, el) {
+  el.classList.toggle('checked', checked);
+  const item = allItems.find(i => String(i['ID']) === String(id));
+  if (item) item['已完成'] = checked;
+  updateProgress();
+  try {
+    await fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ id, checked }) });
+  } catch (err) { console.error('同步失敗', err); }
+}
+
+function updateProgress() {
+  const total = allItems.length;
+  const doneCount = allItems.filter(i => normBool(i['已完成'])).length;
+  document.getElementById('progressBar').style.width = total ? (doneCount / total * 100) + '%' : '0%';
+  document.getElementById('progressText').textContent = `已完成 ${doneCount} / ${total} 項`;
+}
+
+loadData();
+</script>
+
+</body>
+</html>
