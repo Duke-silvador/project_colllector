@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Execution platform (ex_net) — the matcher beneath Armada's adapters</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<main>
+<nav class="nav">
+  <a href="index.html">Overview</a>
+  <a href="architecture.html">Architecture</a>
+  <a href="build-plan.html">Build plan</a>
+  <a href="execution-platform.html" class="active">Execution platform</a>
+  <a href="laconic_ethereum_privacy_via_armada.html">Thesis</a>
+</nav>
+
+<h1>Execution platform (ex_net)</h1>
+<p class="lede">Tier T4 — the private execution/settlement platform beneath Armada's Adapters tier. A frequent-batch-auction, curve-order matcher that unifies CLOB + RFQ, is capital-efficient, non-custodial, and powers the Swaps and yield adapters as applications on top.</p>
+<p style="margin-top:14px">
+  <span class="tag">tier: T4</span>
+  <span class="tag">validated in depth</span>
+  <span class="tag">non-custodial</span>
+  <span class="tag">powers swaps + yield</span>
+</p>
+
+<div class="note">
+This is the one tier read in depth this cycle (code + provenance), so it is the credibility anchor of the proposal — but it is deliberately <em>subordinate</em>: the platform that yield and swaps run on, not a new product. See <a href="architecture.html#t4">Architecture · T4</a> for where it sits and <a href="build-plan.html#t4">Build plan · T4</a> for what's built vs. net-new.
+</div>
+
+<h2>Contents</h2>
+<div class="toc">
+  <a href="#why">Why a platform, not an adapter</a>
+  <a href="#lineage">Lineage — ex_net (2017) → matcher (2019–20)</a>
+  <a href="#matcher">The matcher — what it actually is</a>
+  <a href="#fba">Frequent batch auction (fair ordering)</a>
+  <a href="#clobrfq">CLOB + RFQ in one order type</a>
+  <a href="#capital">Capital efficiency vs. AMMs</a>
+  <a href="#settle">Settlement into Nitro</a>
+  <a href="#apps">Swaps &amp; yield as applications</a>
+  <a href="#refs">References</a>
+</div>
+
+<h2 id="why">Why a platform, not an adapter</h2>
+<p>
+A shielded A→B swap needs a venue that <strong>prices, matches, and settles privately and non-custodially</strong>. Moving idle balances into yield needs the same primitives plus metering and accounting. Those are not two separate adapters — they are two <strong>applications of one execution/settlement substrate</strong>. ex_net generalizes exactly what adapters need: move assets, price/swap, provide liquidity/yield, settle privately. So it sits <em>beneath</em> Armada's Adapters tier, and Swaps and yield become thin integrations on top — not peers.
+</p>
+<div class="note">
+<strong>Trade-off, stated up front.</strong> A shared substrate under multiple adapters is a bigger surface than one independently-deployed adapter, and it needs its own audit — a deliberate deviation from Armada's per-adapter audit discipline. The pool stays immutable and untouched; ex_net operates at the adapter/execution tier only.
+</div>
+
+<h2 id="lineage">Lineage — ex_net (2017) → matcher (2019–20)</h2>
+<p>
+Vulcanize's 2017 <strong>ex_net</strong> whitepaper<sup><a href="#r-exnet">[1]</a></sup> specified a bonded, federated venue for the <strong>privacy-preserving, cross-chain exchange of crypto-assets</strong> where assets never leave the trader's custody (they sit in parent-chain payment channels) and the federation only matches, prices, and authorizes settlement. It gave the vocabulary still in use — traders, liquidity providers, validators; bonding; per-block auditable snapshots; <strong>liquidity proofs</strong>; identity proofs; and the observation that a "decentralized exchange" as a noun cannot prevent operator front-running.
+</p>
+<p>
+The <strong>matcher</strong><sup><a href="#r-matcher">[24]</a></sup> is the concrete engine: a private Vulcanize repo (commits 2019–2020) with three branches — <code>master</code> (spec + skeletons), <code>ian_branch</code> (a fuller <code>matcher.py</code>), and the most-developed <code>xsleonard_branch</code> (Steve Leonard: <code>algorithm.md</code>, <code>matcher2.py</code>, a runnable <code>matcher-sim.py</code>). Together they are a working proof-of-concept of the ex_net matching layer.
+</p>
+
+<h2 id="matcher">The matcher — what it actually is</h2>
+<p>
+A <strong>per-block batch-auction matcher over order <em>curves</em></strong>, across multiple trading pairs, on a payment-channel hub, with <strong>per-order counterparty filtering</strong>. From the design docstring: "reducing free options and cryptographically binding both parties based on their stated intentions." Concretely:
+</p>
+<ul>
+<li><strong>Order = a curve, not a point.</strong> An order specifies price-varying liquidity over a range (<code>Curve</code> / <code>cRange</code>), flattened into fillable <code>Chunk</code> units — a depth view over one order.</li>
+<li><strong>Filler-filtered.</strong> Each order carries an allowlist (<code>Order_Curve.fillers</code>): empty ⇒ open to anyone; non-empty ⇒ only listed pubkeys may fill. This is the RFQ/private-swap boundary inside one order type.</li>
+<li><strong>Multi-pair rings.</strong> A DFS path/ring clearing (<code>find_path</code> / <code>execute_path</code>) fills an order across multiple pairs (<code>LOL-ABC → LOL-XYZ → XYZ-WTF</code>), giving price improvement transparently.</li>
+<li><strong>Receipts / vouchers / plasma.</strong> Validators issue three receipt types (asset-for-voucher, order-curve-accepted, voucher-transfer) — the ex_net settlement lineage.</li>
+</ul>
+<p class="src">source: <code>vulcanize/matcher</code> (private) — <code>xsleonard_branch</code>: <code>algorithm.md</code>, <code>matcher2.py</code>, <code>matcher-sim.py</code><sup><a href="#r-matcher">[24]</a></sup></p>
+
+<h2 id="fba">Frequent batch auction (fair ordering)</h2>
+<p>
+The engine clears as a <strong>frequent batch auction</strong>: discrete per-block clearing at a <strong>uniform price</strong> per pair, allocation by <strong>pro-rata + a deterministic lottery</strong> (<code>_distribute_chunks</code> → shuffle) — explicitly <em>not</em> first-in-queue price-time priority. There is no <code>priority</code> / <code>cancel</code> / <code>market</code> speed queue in the engine. This is the Budish–Cramton–Shim design<sup><a href="#r-fba">[23]</a></sup> for defeating latency/HFT front-running, and combined with commit-reveal (<a href="architecture.html#t3">T3</a>) it also blocks operator front-running. Fills feel like a CLOB but settle like a batch auction.
+</p>
+
+<h2 id="clobrfq">CLOB + RFQ in one order type</h2>
+<p>
+The atomic order is already a limit order (the <code>Curve</code> is the aggregated book; <code>OrderSet</code> builds a bid/ask depth view), so a familiar <strong>limit-order + depth-book UX drops out directly</strong>. The one thing that differs (and must be disclosed) is that matching is a frequent batch auction — uniform price, pro-rata/lottery — not continuous price-time priority.
+</p>
+<ul>
+<li><strong>Open orders</strong> (empty <code>fillers</code>) are the <em>lit</em> book — a public CLOB view.</li>
+<li><strong>Filler-filtered / blinded orders</strong> stay off-book — the RFQ / private-swap side.</li>
+</ul>
+<p>
+So one construction spans a public CLOB and bilateral RFQ, with the privacy caveat that a lit book only ever shows opt-in open orders. Because privacy forces <strong>request → quote → fill</strong> bilaterally over hidden participants and hidden flow, private note swaps are an <strong>RFQ system by nature</strong> — a public CLOB over hidden participants is a contradiction. The lit book is the public branch; private note swaps are the P2P branch taken to its conclusion.
+</p>
+
+<h2 id="capital">Capital efficiency vs. AMMs</h2>
+<p>
+The venue is <strong>quote-based market-making</strong> (maker/keeper prices off-chain, any strategy), settled in channels — structurally <em>more</em> capital-efficient than an AMM, for two reasons:
+</p>
+<ul>
+<li><strong>No dead curve.</strong> An AMM spreads LP capital across the whole price range (0→∞); the vast majority is never near the market. A quoting maker deploys capital <em>at</em> the touch, sized to actual demand.</li>
+<li><strong>No forced LVR / impermanent loss.</strong> An AMM is a mechanical stale quote arbitrageurs pick off every block; a quote-based maker <strong>reprices to live</strong> (bounded by the reveal/quote epoch), a direct capital-return advantage. Balance-sheet reuse across pairs from one hub channel raises utilization per dollar locked.</li>
+</ul>
+<p>
+This is the empirically-known result: 0x RFQ, Hashflow, and professional FX/OTC exist precisely because quote-based market-making delivers better prices with less locked capital than AMMs. <strong>Passive LPs are still first-class</strong> — they can fund hub capacity, post resting liquidity, or deposit into a pooled-maker vault where a keeper runs the market-making; the real difference is <em>who runs the pricing</em> (an active maker off-chain) not <em>whether passive capital can participate</em>.
+</p>
+
+<h2 id="settle">Settlement into Nitro</h2>
+<p>
+Fills settle non-custodially into <strong>Nitro state channels</strong>: go-nitro's multi-asset <strong>swap protocol</strong><sup><a href="#r-swap">[6]</a></sup> and <code>SwapChannel</code><sup><a href="#r-swapchan">[7]</a></sup> over virtual channels<sup><a href="#r-vfund">[9]</a></sup>, with the <code>ForceMove</code> dispute game<sup><a href="#r-forcemove">[5]</a></sup> as the escape hatch. Every fill terminates in a co-signed <strong>settlement receipt</strong> or a slashable proof of its absence; no receipt ⇒ force-close to the pre-fill state. Net-new wiring: the LP/market-maker vault, receipt-or-slash, and multi-asset outcomes (see <a href="build-plan.html#t4">Build plan · T4</a>).
+</p>
+
+<h2 id="apps">Swaps &amp; yield as applications</h2>
+<table>
+<tr><th>Armada adapter</th><th>How it uses the platform</th></tr>
+<tr><td><strong>Swaps</strong></td><td>a thin integration exposing "swap shielded A→B"; the matcher does the pricing + matching + channel settlement underneath.</td></tr>
+<tr><td><strong>Yield (Aave v4)</strong></td><td>ex_net is the <em>private rail</em> moving idle shielded balances into Aave and back, with metering/accounting/settlement.</td></tr>
+<tr><td><strong>Yield (native)</strong></td><td>ex_net <em>originates</em> yield — LP/market-making spread + swap/routing fees — an additional source alongside Aave.</td></tr>
+<tr><td><strong>Future adapters</strong></td><td>governance-added, on the same substrate; nothing touches the immutable pool.</td></tr>
+</table>
+
+<hr/>
+<h2 id="refs">References</h2>
+<ol class="refs">
+<li id="r-exnet"><strong>ex_net whitepaper</strong>, Vulcanize (© 2017). <a href="./ex_net_whitepaper.pdf">ex_net_whitepaper.pdf</a> (in this repo).</li>
+<li id="r-forcemove"><strong>ForceMove.sol</strong> — dispute game. <a href="https://github.com/cerc-io/go-nitro/blob/435eb2b02777d740483f5b5953ed5b88ef90c665/packages/nitro-protocol/contracts/ForceMove.sol#L39-L127">go-nitro · ForceMove.sol</a>.</li>
+<li id="r-swap"><strong>Nitro swap protocol</strong> (Deepstack). <a href="https://github.com/cerc-io/go-nitro/blob/435eb2b02777d740483f5b5953ed5b88ef90c665/protocols/swap/swap.go#L44-L146">go-nitro · protocols/swap/swap.go</a>; demo <a href="https://github.com/cerc-io/go-nitro/blob/435eb2b02777d740483f5b5953ed5b88ef90c665/demo/swaps.md">demo/swaps.md</a>.</li>
+<li id="r-swapchan"><strong>SwapChannel</strong>. <a href="https://github.com/cerc-io/go-nitro/blob/435eb2b02777d740483f5b5953ed5b88ef90c665/channel/swap.go#L10-L14">go-nitro · channel/swap.go#L10–L14</a>.</li>
+<li id="r-vfund"><strong>Virtual channels</strong>. <a href="https://github.com/cerc-io/go-nitro/blob/435eb2b02777d740483f5b5953ed5b88ef90c665/protocols/virtualfund/virtualfund.go">go-nitro · protocols/virtualfund/virtualfund.go</a>.</li>
+<li id="r-railgun"><strong>Railgun</strong> — shielded-pool contracts &amp; circuits. <a href="https://github.com/Railgun-Privacy/contract">contract</a>, <a href="https://github.com/Railgun-Privacy/circuits-v2">circuits-v2</a>.</li>
+<li id="r-fba"><strong>Frequent batch auctions</strong> — E. Budish, P. Cramton &amp; J. Shim, "The High-Frequency Trading Arms Race: Frequent Batch Auctions as a Market Design Response," <em>Quarterly Journal of Economics</em> 130(4), 2015, 1547–1621. <a href="https://doi.org/10.1093/qje/qjv027">doi:10.1093/qje/qjv027</a>.</li>
+<li id="r-matcher"><strong>matcher</strong> — curve-based orderbook batch-auction matching-engine PoC (Vulcanize, private; commits 2019–2020; branches <code>master</code> / <code>ian_branch</code> / <code>xsleonard_branch</code>). <span class="small">Footnote: its range-order ("curve") liquidity model predates Uniswap v3 concentrated liquidity (2021).</span></li>
+</ol>
+
+<p class="small" style="margin-top:26px">Code links pinned to commits: go-nitro <code>435eb2b</code>. <code>matcher</code> is a private Vulcanize repo (access-gated). Internal Google Docs require Laconic/Vulcanize access.</p>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Leveraging Laconic for Ethereum Privacy (via Armada)</title>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #121722;
+    --ink: #e6e9ef;
+    --muted: #9aa4b2;
+    --accent: #6ea8fe;
+    --border: #232b3a;
+    --code: #0f141d;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 3rem 1.25rem 5rem;
+  }
+  main {
+    max-width: 820px;
+    margin: 0 auto;
+  }
+  h1 {
+    font-size: 2rem;
+    line-height: 1.2;
+    margin: 0 0 0.75rem;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: 1.3rem;
+    margin: 2.4rem 0 0.75rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--border);
+    letter-spacing: -0.01em;
+  }
+  p { margin: 0 0 1rem; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  strong { color: #fff; }
+  .lede {
+    color: var(--muted);
+    font-size: 1.02rem;
+    border-left: 3px solid var(--accent);
+    padding: 0.6rem 0 0.6rem 1rem;
+    margin: 0 0 2rem;
+    background: linear-gradient(90deg, rgba(110,168,254,0.06), transparent);
+  }
+  ol, ul { margin: 0 0 1rem; padding-left: 1.4rem; }
+  li { margin: 0.35rem 0; }
+  code {
+    background: var(--code);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.1em 0.4em;
+    font: 0.86em/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #cdd6e4;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.4rem;
+    font-size: 0.95rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.7rem 0.9rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: #161c28;
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  tr:last-child td { border-bottom: none; }
+  .note {
+    color: var(--muted);
+    font-size: 0.92rem;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.9rem 1.1rem;
+    margin: 1.2rem 0;
+  }
+  footer {
+    margin-top: 3rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Leveraging Laconic for Ethereum Privacy <span style="color:var(--muted);font-weight:400">(via Armada)</span></h1>
+
+  <p class="lede">
+    Forward-looking companion to the backward-looking audit in
+    <a href="./laconic_asset_inventory.md">laconic_asset_inventory.md</a>.
+    Where the audit says what Laconic <em>is</em>, this says what it can
+    <em>become</em>: the infrastructure layer beneath Ethereum privacy protocols,
+    with Armada as the first aligned counterparty.
+  </p>
+
+  <h2>The thesis, in one paragraph</h2>
+  <p>
+    Laconic's durable value is not its Cosmos chain or token &mdash; it is the software
+    the team built to serve verifiable Ethereum data cheaply and privately:
+    <strong>watchers</strong> (proof-carrying, metered state indexing),
+    <strong>Nitro state-channel micropayments</strong>, and a working
+    <strong>in-browser client stack</strong> (MobyMask: MetaMask snap + payment node
+    + p2p relay + keeper). Ethereum privacy protocols need exactly this substrate and
+    do not want to build it themselves. Armada is the first such protocol whose
+    architecture leaves a Laconic-shaped hole.
+  </p>
+
+  <h2>What Armada is (and isn't)</h2>
+  <p>
+    Armada builds the <strong>crypto core</strong>: a Railgun-circuit shielded pool
+    for USDC, with governance-added <strong>adapters</strong> (cross-chain USDC via
+    CCTP, Aave-v4 shielded yield, swaps) and an <strong>SDK</strong> whose boundary is
+    "build apps, never touch keys or circuits." Armada deliberately does
+    <strong>not</strong> build the indexing, payment-metering, or client substrate
+    around the pool. That gap is what Laconic fills.
+  </p>
+
+  <h2>How Laconic plugs in &mdash; three points</h2>
+  <ol>
+    <li>
+      <strong>Anonymity-preserving sync (watchers).</strong> A shielded pool's privacy
+      dies at read-time: any app that scans the pool over a normal RPC endpoint
+      fingerprints its users to that provider. A Laconic watcher over the pool serves
+      proof-carrying, everyone-gets-the-same-bytes note-streams, metered by Nitro, so
+      clients scan <strong>locally and privately</strong>. This directly protects the
+      pool's shared anonymity set &mdash; the single property the whole design rests on.
+    </li>
+    <li>
+      <strong>Metered payments + fee marketplace (Nitro + SP Marketplace).</strong>
+      Armada's model is metered flows with integrator fee-sharing. Laconic already
+      meters per request (Nitro vouchers, proven end-to-end in MobyMask) and already
+      has a Service Provider Marketplace that sets and shares fees among providers.
+      Everything settles in <strong>USDC</strong>.
+    </li>
+    <li>
+      <strong>Reference client (MobyMask stack).</strong> Armada's SDK boundary is
+      exactly the MobyMask client shape: a snap for app-specific signing, an in-browser
+      Nitro node for payments, and a p2p relay to a keeper that submits transactions.
+      It is a head start on the Armada front-end and integrator app templates,
+      including the mobile proving-cost path.
+    </li>
+  </ol>
+
+  <h2>This is the model Laconic was designed for</h2>
+  <p>
+    This is not a bespoke deal &mdash; it is Laconic's founding business model
+    instantiated with a first real customer. Laconic was always meant to run a
+    multi-sided <strong>Service Provider Marketplace</strong> that matches a
+    demand-side publisher with service providers, organizes them into a
+    <strong>Federated Cache</strong> to serve one data need,
+    <strong>negotiates the fee on the providers' behalf</strong>, and
+    <strong>pools fees</strong> for distribution. Armada slots straight in:
+  </p>
+  <table>
+    <thead>
+      <tr><th>Laconic's designed role</th><th>Armada collaboration</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Watcher Publisher (demand side)</td><td><strong>Armada</strong> &mdash; the shielded pool needing private sync + metering</td></tr>
+      <tr><td>Federated Cache (providers serving one need)</td><td><strong>Laconic SP fleet</strong> &mdash; watcher + relay + keeper for the pool</td></tr>
+      <tr><td>SP Marketplace (sets/negotiates the fee)</td><td><strong>Unified USDC fee</strong>, negotiated on the providers' behalf</td></tr>
+      <tr><td>Fee pool</td><td><strong>Fee-share settlement</strong>, in USDC</td></tr>
+    </tbody>
+  </table>
+  <p class="note">
+    Design intent per <code>docs.laconic.com</code> &mdash; service-provider-marketplace,
+    federated cache, fee vault. Note: those docs describe intent, much of which never
+    shipped; this collaboration is the path to finally running that model against live
+    demand.
+  </p>
+
+  <h2>Commercial shape (simple)</h2>
+  <ul>
+    <li><strong>One unified USDC fee</strong> the user/integrator sees &mdash; not two stacked tolls.</li>
+    <li><strong>Laconic runs and maintains</strong> the shared watcher/relay/keeper fleet and takes a <strong>fee-share that scales with served volume</strong>.</li>
+    <li>Laconic can charge on its own rail, so it is <strong>not dependent on Armada's fee switch</strong> &mdash; the two fee surfaces are merged into one coordinated schedule.</li>
+    <li><strong>All code is open source</strong> (or will be). Nothing to license. The collaboration is operation + fee-sharing, not IP transfer.</li>
+  </ul>
+
+  <h2>Boundary</h2>
+  <p>
+    Laconic contributes <strong>nothing</strong> to the cryptography &mdash; the
+    circuits, the pool, and any threshold/MPC are Armada's, and that is the
+    audit-gating path. Laconic makes the layer <em>around</em> the crypto work: sync,
+    payments, client, deployment, operation.
+  </p>
+
+  <h2>Why it matters for Laconic's next chapter</h2>
+  <p>
+    It converts Laconic's durable IP into <strong>recurring, volume-aligned USDC
+    revenue</strong> against a funded, aligned counterparty &mdash; and does so by
+    finally running the network's original designed model against real demand, rather
+    than the never-delivered token-unlock path.
+  </p>
+
+  <footer>
+    Companion to <a href="./laconic_asset_inventory.md">laconic_asset_inventory.md</a>
+    and <a href="./laconic_mainnet_tge_plan.md">laconic_mainnet_tge_plan.md</a>.
+  </footer>
+</main>
+</body>
+</html>

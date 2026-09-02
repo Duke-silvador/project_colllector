@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Build plan — Armada × Laconic status &amp; backlog</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<main>
+<nav class="nav">
+  <a href="index.html">Overview</a>
+  <a href="architecture.html">Architecture</a>
+  <a href="build-plan.html" class="active">Build plan</a>
+  <a href="execution-platform.html">Execution platform</a>
+  <a href="laconic_ethereum_privacy_via_armada.html">Thesis</a>
+</nav>
+
+<h1>Build plan — status &amp; backlog</h1>
+<p class="lede">What exists, what needs work, and what is genuinely net-new — per tier, with pinned code and a per-component confidence mark. The <a href="architecture.html">Architecture</a> page is the structure; this is the status.</p>
+<p class="legend" style="margin-top:14px">
+  <span class="chip ok">built</span> reusable today ·
+  <span class="chip part">partial</span> exists, needs work/integration ·
+  <span class="chip new">net-new</span> must build
+</p>
+<div class="note">
+<strong>Confidence key.</strong> <span class="kbd">validated</span> = we read the code / grounded it this cycle · <span class="kbd">design</span> = specified, not yet code-reviewed in depth. Only the execution platform (T4, ex_net → matcher) is <span class="kbd">validated</span> so far; everything else is <span class="kbd">design</span>-level and should be read that way.
+</div>
+
+<h2>Contents</h2>
+<div class="toc">
+  <a href="#summary">Status summary (all tiers)</a>
+  <a href="#t0">T0 · Ethereum anchor</a>
+  <a href="#t1">T1 · Ingestion</a>
+  <a href="#t2">T2 · Watcher-party substrate</a>
+  <a href="#t3">T3 · Ordering</a>
+  <a href="#t4">T4 · Execution platform (ex_net)</a>
+  <a href="#t5">T5 · Adapters</a>
+  <a href="#t6">T6 · Client / apps</a>
+  <a href="#backlog">Net-new backlog (sequenced)</a>
+  <a href="#refs">References</a>
+</div>
+
+<h2 id="summary">Status summary (all tiers)</h2>
+<table>
+<tr><th>Tier</th><th>Component</th><th>Repo (pinned)</th><th>Status</th><th>Conf.</th></tr>
+
+<tr><td rowspan="5"><strong>T0</strong><br>anchor</td><td>Railgun shielded pool</td><td>Railgun<sup><a href="#r-railgun">[20]</a></sup> (Armada's)</td><td class="ok">built · immutable</td><td>design</td></tr>
+<tr><td>Nitro settlement + disputes</td><td>cerc-io/go-nitro<sup><a href="#r-forcemove">[5]</a></sup></td><td class="ok">live on ETH</td><td>validated</td></tr>
+<tr><td>Venue/party registry + bond</td><td>—</td><td class="new">net-new</td><td>design</td></tr>
+<tr><td>Sequencing-cert + fraud-proof verifier</td><td>uses chain-signatures<sup><a href="#r-ethdss">[13]</a></sup></td><td class="new">net-new</td><td>design</td></tr>
+<tr><td>Nitro↔Railgun boundary adapter</td><td>—</td><td class="new">net-new</td><td>design</td></tr>
+
+<tr><td rowspan="2"><strong>T1</strong><br>ingestion</td><td>plugeth / statediff / IPLD</td><td>plugeth<sup><a href="#r-plugeth">[16]</a></sup> · statediff<sup><a href="#r-statediff">[17]</a></sup> · ipld-eth-*<sup><a href="#r-ipldserver">[18]</a></sup></td><td class="ok">built</td><td>design</td></tr>
+<tr><td>Railgun + adjudicator watcher config</td><td>cerc-io/watcher-ts<sup><a href="#r-watcherts">[2]</a></sup></td><td class="part">framework built; config net-new</td><td>design</td></tr>
+
+<tr><td rowspan="5"><strong>T2</strong><br>substrate</td><td>Federation membership / bonding</td><td>on T0 registry</td><td class="new">net-new</td><td>design</td></tr>
+<tr><td>Threshold key DKG (signing)</td><td>cerc-io/chain-signatures<sup><a href="#r-ethdss">[13]</a></sup></td><td class="part">lib + tests; DKG/reshare/wire net-new</td><td>design</td></tr>
+<tr><td>Metering / payments</td><td>go-nitro vouchers<sup><a href="#r-vouchers">[8]</a></sup> / virtual<sup><a href="#r-vfund">[9]</a></sup></td><td class="ok">built</td><td>validated</td></tr>
+<tr><td>p2p relay + STUN/TURN</td><td>mobymask<sup><a href="#r-mobymask">[3]</a></sup> / ts-nitro<sup><a href="#r-tsnitro">[4]</a></sup> relay</td><td class="ok">built + commodity ops</td><td>design</td></tr>
+<tr><td>Private-sync serving (metered note stream)</td><td>watcher-ts<sup><a href="#r-watcherts">[2]</a></sup></td><td class="part">serves; private-note config net-new</td><td>design</td></tr>
+
+<tr><td rowspan="5"><strong>T3</strong><br>ordering</td><td>Commit-reveal mempool + post-seal beacon</td><td>—</td><td class="new">net-new</td><td>design</td></tr>
+<tr><td>Epoch set-agreement (leader + attest + fraud proofs)</td><td>—</td><td class="new">net-new · highest risk</td><td>design</td></tr>
+<tr><td>Inclusion receipts + sequencing certificate</td><td>chain-signatures<sup><a href="#r-ethdss">[13]</a></sup></td><td class="part">signing built; protocol net-new</td><td>design</td></tr>
+<tr><td>DA publish of revealed epoch</td><td>—</td><td class="new">net-new</td><td>design</td></tr>
+<tr><td>Watchtower</td><td>—</td><td class="new">net-new</td><td>design</td></tr>
+
+<tr><td rowspan="3"><strong>T4</strong><br>ex_net</td><td>Matcher (FBA / curve / CLOB-RFQ / rings)</td><td>vulcanize/matcher<sup><a href="#r-matcher">[24]</a></sup> (PoC 2019–20)</td><td class="part">PoC; productionize net-new</td><td>validated</td></tr>
+<tr><td>Channel-hub liquidity + LP / MM vault</td><td>go-nitro channels/virtual<sup><a href="#r-vfund">[9]</a></sup></td><td class="part">channels built; LP/MM vault net-new</td><td>validated</td></tr>
+<tr><td>Settlement + receipt-or-slash + force-close</td><td>go-nitro swap<sup><a href="#r-swap">[6]</a></sup> / ForceMove<sup><a href="#r-forcemove">[5]</a></sup></td><td class="part">ForceMove built; receipt wiring net-new</td><td>validated</td></tr>
+
+<tr><td rowspan="3"><strong>T5</strong><br>adapters</td><td>Swaps adapter (on matcher)</td><td>on T4</td><td class="new">net-new (thin)</td><td>design</td></tr>
+<tr><td>Yield adapter (native LP + route to Aave v4)</td><td>on T4</td><td class="new">net-new (thin)</td><td>design</td></tr>
+<tr><td>CCTP cross-chain USDC</td><td>Armada's</td><td class="ok">built</td><td>design</td></tr>
+
+<tr><td rowspan="3"><strong>T6</strong><br>client</td><td>Laconic wallet (Android/iOS/web)</td><td>laconic-wallet<sup><a href="#r-lacwallet">[21]</a></sup> / -web<sup><a href="#r-lacwalletweb">[22]</a></sup></td><td class="part">built; needs updates</td><td>validated</td></tr>
+<tr><td>In-browser / mobile Nitro node</td><td>ts-nitro<sup><a href="#r-tsnitro">[4]</a></sup></td><td class="ok">built</td><td>design</td></tr>
+<tr><td>Armada SDK integration</td><td>Armada SDK + T6 client</td><td class="new">net-new</td><td>design</td></tr>
+
+<tr><td rowspan="2"><strong>×-cut</strong><br>identity</td><td>ex_net identity proofs (selective disclosure)</td><td>ex_net<sup><a href="#r-exnet">[1]</a></sup> + onboarding<sup><a href="#r-onboard">[14]</a></sup></td><td class="part">spec + precedent</td><td>design</td></tr>
+<tr><td>Laconic Matchmaker (compliance matching)</td><td>proposal<sup><a href="#r-match">[15]</a></sup> (FHE)</td><td class="part">external / design</td><td>design</td></tr>
+</table>
+
+<h2 id="t0">T0 · Ethereum anchor</h2>
+<p><strong>Built:</strong> Railgun pool (Armada's, immutable); full Nitro adjudicator / ForceMove / MultiAssetHolder, live on Ethereum<sup><a href="#r-forcemove">[5]</a></sup>. <strong>Net-new:</strong></p>
+<ul>
+<li><strong>Venue/party registry + bond</strong> — the federation's on-chain entry point; where membership and slashing settle.</li>
+<li><strong>Sequencing-cert + fraud-proof verifier</strong> — an L1 contract that verifies the party's aggregate Schnorr signature<sup><a href="#r-ethdss">[13]</a></sup>, so a bad ordering/censored commit is slashable against the bond.</li>
+<li><strong>Nitro↔Railgun boundary adapter</strong> — note-funded, note-settled channels (Design A privacy boundary).</li>
+</ul>
+
+<h2 id="t1">T1 · Ingestion</h2>
+<p><strong>Built:</strong> plugeth<sup><a href="#r-plugeth">[16]</a></sup> + statediff<sup><a href="#r-statediff">[17]</a></sup> + ipld-eth-*<sup><a href="#r-ipldserver">[18]</a></sup>; the generic watcher-ts framework<sup><a href="#r-watcherts">[2]</a></sup>. <strong>Net-new / integration:</strong> a Railgun-pool + Nitro-adjudicator watcher config, and the metered private-note-stream serving on top of it. This tier is what protects the anonymity set at read-time.</p>
+
+<h2 id="t2">T2 · Watcher-party substrate</h2>
+<p><strong>Built:</strong> Nitro metering (vouchers<sup><a href="#r-vouchers">[8]</a></sup> / virtual channels<sup><a href="#r-vfund">[9]</a></sup>); p2p relay (mobymask<sup><a href="#r-mobymask">[3]</a></sup> / ts-nitro<sup><a href="#r-tsnitro">[4]</a></sup>); the Schnorr DSS library<sup><a href="#r-ethdss">[13]</a></sup>. <strong>Net-new:</strong> federation membership/bonding coordination; the <strong>DKG ceremony + resharing</strong> and wiring chain-signatures into the signing paths; STUN/TURN is commodity ops.</p>
+
+<h2 id="t3">T3 · Ordering</h2>
+<p>The highest-design-risk, mostly net-new tier. <strong>Net-new:</strong> commit-reveal mempool + post-seal randomness beacon; <strong>epoch set-agreement</strong> (leader-proposes + threshold-attest + receipt-backed censorship fraud proofs — deliberately <em>not</em> BFT); DA publish of the revealed epoch; a watchtower. Threshold-signed inclusion receipts reuse the DSS signing that already exists<sup><a href="#r-ethdss">[13]</a></sup>; the sequencing <em>protocol</em> around it is new.</p>
+
+<h2 id="t4">T4 · Execution platform (ex_net)</h2>
+<p>The one <span class="kbd">validated</span> tier — read in depth this cycle. <strong>Reusable:</strong> the 2019–2020 <code>matcher</code> PoC<sup><a href="#r-matcher">[24]</a></sup> (frequent-batch-auction, curve-order, filler-filtered CLOB/RFQ, multi-pair rings — see <a href="execution-platform.html">Execution platform</a>); go-nitro channels/virtual<sup><a href="#r-vfund">[9]</a></sup>, swap protocol<sup><a href="#r-swap">[6]</a></sup>, ForceMove<sup><a href="#r-forcemove">[5]</a></sup>. <strong>Net-new:</strong> productionize the matcher; the LP / market-maker vault; receipt-or-slash + commit-reveal settlement wiring; multi-asset outcomes.</p>
+
+<h2 id="t5">T5 · Adapters</h2>
+<p><strong>Built:</strong> CCTP (Armada's). <strong>Net-new (thin, on T4):</strong> the Swaps adapter (exposes "swap shielded A→B" over the matcher) and the yield adapter (ex_net native LP yield + private route into Aave v4). <em>Audit note:</em> ex_net as a shared substrate under multiple adapters has its own audit boundary — a deliberate deviation from Armada's per-adapter audit discipline.</p>
+
+<h2 id="t6">T6 · Client / apps</h2>
+<p><strong>Built:</strong> laconic-wallet (Android/iOS)<sup><a href="#r-lacwallet">[21]</a></sup> + laconic-wallet-web<sup><a href="#r-lacwalletweb">[22]</a></sup>; in-browser Nitro node<sup><a href="#r-tsnitro">[4]</a></sup>. <strong>Net-new:</strong> wallet updates (return pubkey on <code>cosmos_signAmino</code>, Nitro + commit-reveal integration, Railgun boundary UX) and the Armada SDK integration.</p>
+
+<h2 id="backlog">Net-new backlog (roughly sequenced)</h2>
+<ol>
+<li><strong>Contracts (T0):</strong> venue registry+bond → sequencing-cert + fraud-proof verifier → Nitro↔Railgun boundary adapter.</li>
+<li><strong>Ordering (T3):</strong> commit-reveal + beacon → <strong>epoch set-agreement</strong> (the real research-adjacent lift) → DA publish → watchtower.</li>
+<li><strong>Platform (T4):</strong> productionize matcher → LP / market-maker vault → receipt-or-slash + force-close/commit-reveal wiring → multi-asset outcomes.</li>
+<li><strong>Threshold (T2):</strong> DKG ceremony + resharing + integrate chain-signatures into signing paths.</li>
+<li><strong>Adapters (T5):</strong> swaps-on-matcher; yield (native LP + private route to Aave v4).</li>
+<li><strong>Client (T6):</strong> wallet updates; Armada SDK integration.</li>
+<li><strong>Ingestion (T1):</strong> Railgun/adjudicator watcher config + metered private note stream.</li>
+<li><strong>Identity (×-cut):</strong> selective-disclosure proofs; Matchmaker integration (if in scope).</li>
+</ol>
+<p class="small">One-line shape: T0–T2 is mostly built/integration; the genuine new build is <strong>T3 ordering + T4 platform + the T0 contracts</strong>. Deferred (Design B): ZK matching + shielded ForceMove to hide trade amounts from the venue itself; native BTC settlement beyond an HTLC leg.</p>
+
+<hr/>
+<h2 id="refs">References</h2>
+<ol class="refs">
+<li id="r-exnet"><strong>ex_net whitepaper</strong>, Vulcanize (© 2017). <a href="./ex_net_whitepaper.pdf">ex_net_whitepaper.pdf</a> (in this repo).</li>
+<li id="r-watcherts"><strong>watcher-ts</strong>. <a href="https://github.com/cerc-io/watcher-ts/blob/18ca4e1a08328770af8e10f15f2128a459c9c704/README.md">github.com/cerc-io/watcher-ts</a> @ <code>18ca4e1</code>.</li>
+<li id="r-mobymask"><strong>mobymask</strong>. <a href="https://github.com/cerc-io/mobymask/blob/23291987766f863e366a344973670c57cd82d678/README.md">github.com/cerc-io/mobymask</a> @ <code>2329198</code>.</li>
+<li id="r-tsnitro"><strong>ts-nitro</strong>. <a href="https://github.com/cerc-io/ts-nitro/tree/884d616a9a026742ef1ce57233801a13d681375a">github.com/cerc-io/ts-nitro</a> @ <code>884d616</code>.</li>
+<li id="r-forcemove"><strong>ForceMove.sol / NitroAdjudicator</strong>. <a href="https://github.com/cerc-io/go-nitro/blob/435eb2b02777d740483f5b5953ed5b88ef90c665/packages/nitro-protocol/contracts/ForceMove.sol#L39-L127">go-nitro · ForceMove.sol</a>.</li>
+<li id="r-swap"><strong>Nitro swap protocol</strong> (Deepstack). <a href="https://github.com/cerc-io/go-nitro/blob/435eb2b02777d740483f5b5953ed5b88ef90c665/protocols/swap/swap.go#L44-L146">go-nitro · protocols/swap/swap.go</a>.</li>
+<li id="r-vouchers"><strong>Payment vouchers</strong>. <a href="https://github.com/cerc-io/go-nitro/blob/435eb2b02777d740483f5b5953ed5b88ef90c665/payments/vouchers.go">go-nitro · payments/vouchers.go</a>.</li>
+<li id="r-vfund"><strong>Virtual channels</strong>. <a href="https://github.com/cerc-io/go-nitro/blob/435eb2b02777d740483f5b5953ed5b88ef90c665/protocols/virtualfund/virtualfund.go">go-nitro · protocols/virtualfund/virtualfund.go</a>.</li>
+<li id="r-ethdss"><strong>chain-signatures</strong> — ethschnorr + Distributed Schnorr (Stinson–Strobl (t,n)). <a href="https://git.vdb.to/cerc-io/chain-signatures/src/commit/9016a7c4a7f046cac8f57b3335a1afcde346e75f/ethdss/ethdss.go#L55-L287">git.vdb.to · chain-signatures/ethdss</a>.</li>
+<li id="r-onboard"><strong>laconicd onboarding</strong> — <code>Participant</code>. <a href="https://git.vdb.to/cerc-io/laconicd/src/commit/d130608f672983cb65acfbddc89976747a417aac/proto/cerc/onboarding/v1/onboarding.proto#L18-L41">git.vdb.to · onboarding.proto</a>.</li>
+<li id="r-match"><strong>Laconic Matchmaking Services</strong> proposal, Nov 2022. Internal Google Doc — <a href="https://docs.google.com/document/d/1AkUfIT_fBDgErBUy2YFCCUsPwHhL0WQngVRgKSqjqi0/">Proposal</a>.</li>
+<li id="r-plugeth"><strong>plugeth</strong>. <a href="https://github.com/cerc-io/plugeth/tree/98f17553032d9a90d27eef7695046c7c5d0a3c39">github.com/cerc-io/plugeth</a> @ <code>98f1755</code>.</li>
+<li id="r-statediff"><strong>plugeth-statediff</strong>. <a href="https://github.com/cerc-io/plugeth-statediff/blob/9a18f199e13ec41cfaeea3d9e4bf0f7968d13e88/README.md">github.com/cerc-io/plugeth-statediff</a> @ <code>9a18f19</code>.</li>
+<li id="r-ipldserver"><strong>ipld-eth-server</strong>. <a href="https://github.com/cerc-io/ipld-eth-server/blob/330bc3d7e2dd6acf4f7a1e744d39ea462ecb2323/README.md">github.com/cerc-io/ipld-eth-server</a> @ <code>330bc3d</code>. See also <a href="https://github.com/cerc-io/ipld-eth-state-snapshot/tree/9e483fc9f7dfa993e3d1e98a311cb4e45917cd51">ipld-eth-state-snapshot</a>.</li>
+<li id="r-railgun"><strong>Railgun</strong> — shielded-pool contracts &amp; circuits. <a href="https://github.com/Railgun-Privacy/contract">contract</a>, <a href="https://github.com/Railgun-Privacy/circuits-v2">circuits-v2</a>.</li>
+<li id="r-lacwallet"><strong>laconic-wallet</strong> — React Native (Android/iOS). <a href="https://git.vdb.to/cerc-io/laconic-wallet/src/commit/bb5223afdab0d16822bb3c119b6ba2350dab921e/android">git.vdb.to · cerc-io/laconic-wallet</a> @ <code>bb5223a</code>.</li>
+<li id="r-lacwalletweb"><strong>laconic-wallet-web</strong>. <a href="https://git.vdb.to/cerc-io/laconic-wallet-web/src/commit/2a4a478e32d0a677711ac41f93ff40f364851c3a">git.vdb.to · cerc-io/laconic-wallet-web</a> @ <code>2a4a478</code>.</li>
+<li id="r-matcher"><strong>matcher</strong> — curve-based orderbook batch-auction matching-engine PoC (Vulcanize, private; commits 2019–2020). <span class="small">Footnote: its range-order ("curve") liquidity model predates Uniswap v3 concentrated liquidity (2021).</span> See <a href="execution-platform.html">Execution platform</a>.</li>
+</ol>
+
+<p class="small" style="margin-top:26px">Code links pinned to commits: go-nitro <code>435eb2b</code>, chain-signatures <code>9016a7c</code>, laconicd <code>d130608</code> (<code>roysc/nitro-integration</code>). Internal Google Docs require Laconic/Vulcanize access.</p>
+
+</main>
+</body>
+</html>
