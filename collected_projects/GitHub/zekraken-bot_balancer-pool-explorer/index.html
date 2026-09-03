@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700,900&display=swap" rel="stylesheet">
+<title>Pool Explorer · Balancer Toolkit</title>
+<style>
+  :root {
+    /* Defilytica — slate dark */
+    --bg:          #383e47;
+    --bg2:         #3b3b3b;
+    --panel:       #3f4650;
+    --panel2:      #464d58;
+    --field-bd:    #535d6a;
+    --line:        rgba(255,255,255,.08);
+    --line2:       rgba(255,255,255,.16);
+    --txt:         rgba(255,255,255,.92);
+    --muted:       #a0aec0;
+    --muted2:      #c2cbd8;
+    --accent:      #7f6ae8;
+    --accent-dim:  #6b54e0;
+    --accent2:     #b3aef5;
+    --slate:       #8b97ac;
+    --warn:        #f9b5a8;
+    --gold:        #eaa879;
+    --pos:         #63f2be;
+    --elev: 0 0 0 1px rgba(0,0,0,.02),1px 1px 1px -.5px rgba(0,0,0,.06),3px 3px 3px -1.5px rgba(0,0,0,.06),6px 6px 6px -3px rgba(0,0,0,.06),12px 12px 12px -6px rgba(0,0,0,.06),24px 24px 24px -12px rgba(0,0,0,.1),-.5px -1px 0 0 rgba(255,255,255,.15);
+    /* legacy aliases (kept so existing rules resolve to the new palette) */
+    --bg-alt:      var(--panel);
+    --bg-row:      rgba(255,255,255,.015);
+    --bg-hover:    rgba(127,106,232,.08);
+    --border:      var(--line);
+    --border-strong: var(--line2);
+    --fg:          var(--txt);
+    --fg-dim:      var(--muted);
+    --fg-mute:     var(--slate);
+    --neg:         var(--warn);
+    --cyan:        var(--accent2);
+    --magenta:     var(--gold);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body { background: var(--bg); }
+
+  body {
+    font-family: "Satoshi", -apple-system, "Segoe UI", sans-serif;
+    color: var(--txt);
+    min-height: 100vh;
+    font-size: 12px;
+    line-height: 1.35;
+    font-feature-settings: "tnum" 1, "zero" 1;
+    position: relative;
+  }
+
+  a { color: var(--accent2); text-decoration: none; }
+
+  /* Top bar */
+  .topbar {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 16px;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255,255,255,.09);
+    background: var(--panel);
+    box-shadow: var(--elev);
+    font-size: 11px;
+  }
+  .topbar .brand {
+    font-weight: 900; letter-spacing: 1px;
+    background: linear-gradient(90deg,#b3aef5 0%,#d7cbe7 25%,#e5c8c8 50%,#eaa879 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .topbar .sub { color: var(--muted); }
+  .topbar .right { margin-left: auto; display: flex; gap: 16px; align-items: center; }
+  .topbar .count { color: var(--fg-dim); }
+  .topbar .status {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--pos);
+  }
+  .topbar .status .dot {
+    width: 6px; height: 6px; background: var(--pos);
+  }
+  .topbar.loading .status { color: var(--accent2); }
+  .topbar.loading .status .dot { background: var(--accent2); animation: blink 1s step-start infinite; }
+  .topbar .time { color: var(--slate); }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* KPI strip */
+  .kpi-strip {
+    display: grid; grid-template-columns: repeat(10, 1fr);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .kpi-strip .kpi {
+    padding: 10px 14px;
+    border-right: 1px solid var(--border);
+  }
+  .kpi-strip .kpi:last-child { border-right: none; }
+  .kpi-strip .kpi .label {
+    font-size: 10px; color: var(--muted); letter-spacing: 1px;
+    text-transform: uppercase; font-weight: 600;
+  }
+  .kpi-strip .kpi .val {
+    font-size: 16px; color: var(--txt); font-weight: 700; margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi-strip .kpi .ver-split {
+    font-size: 9px; color: var(--slate); margin-top: 3px;
+    letter-spacing: 0.2px; white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .kpi-strip .kpi .ver-split .v3 { color: var(--accent2); }
+  .kpi-strip .kpi[title] { cursor: help; }
+
+  /* Controls row */
+  .controls {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+
+  /* Select/input fields */
+  .t-field {
+    display: inline-flex; align-items: center;
+    border: 1px solid var(--field-bd);
+    background: var(--bg2);
+    border-radius: 6px;
+    height: 24px; overflow: hidden;
+    font-size: 11px;
+  }
+  .t-field .t-label {
+    padding: 0 8px; height: 100%;
+    background: var(--panel2); color: var(--muted);
+    display: flex; align-items: center;
+    border-right: 1px solid var(--field-bd);
+    letter-spacing: 0.5px; font-size: 10px;
+    white-space: nowrap;
+  }
+  .t-field input, .t-field select {
+    background: transparent; color: var(--txt);
+    border: none; outline: none; padding: 0 8px;
+    font-family: inherit; font-size: 11px;
+    height: 100%;
+  }
+  .t-field select { cursor: pointer; padding-right: 4px; }
+  .t-field select option { background: var(--bg2); color: var(--txt); }
+  .t-field input::placeholder { color: var(--slate); }
+  .t-field.search input { min-width: 180px; }
+  .t-field.search .t-label { color: var(--accent2); }
+  .t-field:focus-within { border-color: var(--accent); }
+
+  .btn {
+    background: var(--panel2); color: var(--muted2); border: 1px solid var(--field-bd);
+    border-radius: 6px;
+    padding: 0 10px; height: 24px;
+    font-family: inherit; font-size: 10px; letter-spacing: 0.5px;
+    cursor: pointer; text-transform: uppercase;
+  }
+  .btn:hover { background: var(--bg-hover); border-color: var(--accent); color: var(--accent2); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn.accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.accent:hover { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
+
+  /* Column show/hide dropdown */
+  .cols-wrap { position: relative; display: inline-block; }
+  .cols-menu {
+    display: none;
+    position: absolute; top: calc(100% + 4px); right: 0; z-index: 50;
+    min-width: 180px;
+    background: var(--bg-alt);
+    border: 1px solid var(--border-strong);
+    box-shadow: 0 6px 22px rgba(0,0,0,0.5);
+    padding: 6px;
+  }
+  .cols-menu.open { display: block; }
+  .cols-menu-head {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 10px; letter-spacing: 0.08em; color: var(--fg-mute);
+    padding: 4px 6px 6px; border-bottom: 1px solid var(--border);
+  }
+  .cols-reset {
+    background: transparent; border: none; color: var(--fg-dim);
+    font-family: inherit; font-size: 10px; cursor: pointer; text-transform: uppercase;
+  }
+  .cols-reset:hover { color: var(--accent); }
+  .cols-menu label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 6px; font-size: 12px; color: var(--fg); cursor: pointer;
+  }
+  .cols-menu label:hover { background: var(--bg-hover); }
+  .cols-menu input[type=checkbox] { accent-color: var(--accent); cursor: pointer; }
+
+  /* Table */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Subtle right-edge scroll hint */
+  .table-wrap {
+    background:
+      linear-gradient(to right, var(--bg) 30%, rgba(56,62,71,0)) left center / 20px 100% no-repeat,
+      linear-gradient(to right, rgba(56,62,71,0), var(--bg) 70%) right center / 20px 100% no-repeat,
+      linear-gradient(to right, rgba(127,106,232,0.06), rgba(56,62,71,0)) left center / 8px 100% no-repeat,
+      linear-gradient(to left, rgba(127,106,232,0.06), rgba(56,62,71,0)) right center / 8px 100% no-repeat;
+    background-attachment: local, local, scroll, scroll;
+  }
+
+  table {
+    width: 100%; border-collapse: collapse;
+    font-size: 12px;
+    min-width: 1400px;
+  }
+
+  thead th {
+    position: sticky; top: 0; z-index: 2;
+    background: var(--panel);
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    border-bottom: 1px solid var(--line2);
+    border-right: 1px solid var(--line);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+  thead th:last-child { border-right: none; }
+  thead th:hover { background: var(--panel2); color: var(--muted2); }
+  thead th.numeric { text-align: right; }
+  thead th.center { text-align: center; }
+  thead th .sort-arrow {
+    display: inline-block; margin-left: 4px;
+    font-size: 10px; color: var(--slate);
+  }
+  thead th.sorted { color: var(--accent2); }
+  thead th.sorted .sort-arrow { color: var(--accent2); }
+
+  tbody tr {
+    border-bottom: 1px solid var(--line);
+    transition: background 0.1s;
+  }
+  tbody tr:nth-child(even) { background: var(--bg-row); }
+  tbody tr:hover { background: rgba(127,106,232,.04); cursor: pointer; }
+
+  tbody td {
+    padding: 6px 10px;
+    white-space: nowrap;
+    vertical-align: middle;
+    color: var(--txt);
+    border-right: 1px solid var(--line);
+  }
+  tbody td:last-child { border-right: none; }
+
+  .numeric { text-align: right; font-variant-numeric: tabular-nums; }
+  .center { text-align: center; }
+
+  /* Pool name cell — stacked */
+  .pool-cell {
+    display: flex; flex-direction: column; gap: 1px;
+    line-height: 1.15;
+    min-width: 0;
+  }
+  .pool-cell .tokens {
+    color: var(--accent2);
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    font-weight: 500;
+    opacity: 0.9;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 340px;
+  }
+  .pool-cell .name {
+    color: var(--fg);
+    font-weight: 600;
+    font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 340px;
+  }
+  /* Badges / cells */
+  .type { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.3px; }
+  .chain { font-weight: 600; font-size: 11px; letter-spacing: 0.3px; }
+  .ver { color: var(--muted); }
+  .ver.v3 { color: var(--accent2); font-weight: 600; }
+  .hook { color: var(--gold); font-size: 9px; letter-spacing: 0.3px; }
+  .hook.none { color: var(--slate); }
+  .fee-pct { color: var(--muted); }
+  .apr-pos { color: var(--pos); font-weight: 600; }
+  .apr-accent { color: var(--accent2); font-weight: 600; }
+  .muted { color: var(--slate); }
+
+  .usage-high { color: var(--pos); font-weight: 600; }
+  .usage-medium { color: var(--txt); font-weight: 500; }
+  .usage-low { color: var(--muted); }
+
+  /* Loading / error */
+  .loading, .error, .empty {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  .loading .cursor { color: var(--accent2); animation: blink 0.8s step-start infinite; }
+  .error { color: var(--warn); }
+
+  /* Pagination + status footer */
+  .pagination {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--line);
+    background: var(--bg);
+    font-size: 11px; color: var(--muted);
+  }
+  .pagination .page-info { color: var(--txt); }
+
+  .footer {
+    padding: 8px 16px;
+    border-top: 1px solid var(--line2);
+    background: var(--panel);
+    font-size: 10px; color: var(--slate);
+    display: flex; gap: 20px; flex-wrap: wrap;
+  }
+  .footer .right { margin-left: auto; }
+  .footer .right b { color: var(--accent2); font-weight: 500; }
+
+  /* ---------- Responsive: tablet ---------- */
+  @media (max-width: 900px) {
+    /* The 4-layer gradient + background-attachment: local on .table-wrap
+       causes scroll jank on iOS Safari. Use a plain background on mobile. */
+    .table-wrap { background: var(--bg); }
+
+    .topbar { padding: 8px 12px; gap: 10px; }
+    .topbar .sub, .topbar .time { display: none; }
+    .kpi-strip { grid-template-columns: repeat(4, 1fr); }
+    .kpi-strip .kpi:nth-child(4n) { border-right: none; }
+    .kpi-strip .kpi:nth-child(-n+4) { border-bottom: 1px solid var(--border); }
+    .kpi-strip .kpi {
+      padding: 8px 10px;
+    }
+    .kpi-strip .kpi .val { font-size: 14px; }
+    .controls { padding: 8px 12px; }
+    .footer { padding: 8px 12px; gap: 12px; }
+    .footer .hide-sm { display: none; }
+  }
+
+  /* ---------- Responsive: phone ---------- */
+  @media (max-width: 480px) {
+    .kpi-strip { grid-template-columns: repeat(2, 1fr); }
+    .kpi-strip .kpi { padding: 7px 9px; }
+    .kpi-strip .kpi:nth-child(4n) { border-right: 1px solid var(--border); }
+    .kpi-strip .kpi:nth-child(2n) { border-right: none; }
+    .kpi-strip .kpi:not(:nth-last-child(-n+2)) { border-bottom: 1px solid var(--border); }
+    .kpi-strip .kpi .val { font-size: 13px; }
+    .kpi-strip .kpi .label { font-size: 9px; }
+    .topbar .brand { font-size: 10px; }
+    /* Make t-fields wrap nicely without squishing */
+    .t-field.search { flex: 1 1 100%; }
+    .t-field.search input { min-width: 0; width: 100%; }
+    .t-field:not(.search) { flex: 1 1 calc(50% - 4px); }
+    .t-field:not(.search) select { flex: 1; }
+    .btn { flex: 1 1 calc(50% - 4px); }
+    thead th { padding: 7px 8px; font-size: 9px; }
+    tbody td { padding: 7px 8px; font-size: 11px; }
+    .pool-cell .name { font-size: 11px; max-width: 240px; }
+    .pool-cell .tokens { font-size: 9px; max-width: 240px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar" id="topbar">
+  <div class="brand">BALANCER▚POOL▚EXPLORER</div>
+  <div class="sub">v1.0 // api-v3.balancer.fi</div>
+  <div class="right">
+    <span class="count" id="topbar-count">[—]</span>
+    <span class="status" id="topbar-status"><span class="dot"></span><span id="topbar-status-text">OK</span></span>
+    <span class="time" id="topbar-time">—</span>
+  </div>
+</div>
+
+<div class="kpi-strip">
+  <div class="kpi"><div class="label">Pools</div><div class="val" id="stat-pools">—</div><div class="ver-split" id="stat-pools-ver"></div></div>
+  <div class="kpi"><div class="label">Total TVL</div><div class="val" id="stat-tvl">—</div><div class="ver-split" id="stat-tvl-ver"></div></div>
+  <div class="kpi"><div class="label">Vol 24h</div><div class="val" id="stat-vol">—</div><div class="ver-split" id="stat-vol-ver"></div></div>
+  <div class="kpi" title="Total swap fees generated by filtered pools in the last 24h"><div class="label">Swap Fees 24h</div><div class="val" id="stat-swap-fees-gross">—</div><div class="ver-split" id="stat-swap-fees-gross-ver"></div></div>
+  <div class="kpi" title="Protocol share of swap fees routed to the DAO Treasury (25% v3, 50% v2)"><div class="label">DAO Swap 24h</div><div class="val" id="stat-dao-swap">—</div><div class="ver-split" id="stat-dao-swap-ver"></div></div>
+  <div class="kpi" title="Total yield captured from rate-provider / yield-bearing tokens in the last 24h"><div class="label">Yield 24h</div><div class="val" id="stat-yield-gross">—</div><div class="ver-split" id="stat-yield-gross-ver"></div></div>
+  <div class="kpi" title="Protocol share of yield capture routed to the DAO Treasury (10% v3, 50% v2)"><div class="label">DAO Yield 24h</div><div class="val" id="stat-yield">—</div><div class="ver-split" id="stat-yield-ver"></div></div>
+  <div class="kpi" title="Total protocol fee revenue to the DAO Treasury in the last 24h (swap + yield)"><div class="label">DAO Total 24h</div><div class="val" id="stat-dao-total">—</div><div class="ver-split" id="stat-dao-total-ver"></div></div>
+  <div class="kpi" title="Estimated 30d DAO revenue = snapshot DAO Swap 30d + (DAO Yield/day × 30). Yield portion assumes current TVL/APR holds; swap portion loads from daily snapshots."><div class="label">DAO Total 30d ≈</div><div class="val" id="stat-dao-total-30d">—</div><div class="ver-split" id="stat-dao-total-30d-ver"></div></div>
+  <div class="kpi"><div class="label">Updated</div><div class="val" id="stat-time">—</div></div>
+</div>
+
+<div class="controls">
+  <label class="t-field search">
+    <span class="t-label">&gt;</span>
+    <input type="text" id="search" placeholder="search pool / token / address…">
+  </label>
+
+  <label class="t-field">
+    <span class="t-label">CHN</span>
+    <select id="filter-chain"><option value="">ALL</option></select>
+  </label>
+
+  <label class="t-field">
+    <span class="t-label">TYPE</span>
+    <select id="filter-type"><option value="">ALL</option></select>
+  </label>
+
+  <label class="t-field">
+    <span class="t-label">VER</span>
+    <select id="filter-version">
+      <option value="">ALL</option>
+      <option value="2">v2</option>
+      <option value="3">v3</option>
+    </select>
+  </label>
+
+  <label class="t-field">
+    <span class="t-label">HOOK</span>
+    <select id="filter-hook">
+      <option value="">ANY</option>
+      <option value="yes">YES</option>
+      <option value="no">NO</option>
+    </select>
+  </label>
+
+  <label class="t-field">
+    <span class="t-label">MIN-TVL</span>
+    <select id="filter-min-tvl">
+      <option value="0">ANY</option>
+      <option value="1000" selected>$1K</option>
+      <option value="10000">$10K</option>
+      <option value="100000">$100K</option>
+      <option value="1000000">$1M</option>
+      <option value="10000000">$10M</option>
+    </select>
+  </label>
+
+  <button class="btn accent" id="btn-refresh">[ REFRESH ]</button>
+  <button class="btn" id="btn-export" title="Download the currently filtered pools as CSV">[ CSV ]</button>
+
+  <div class="cols-wrap">
+    <button class="btn" id="btn-cols" title="Show / hide columns">[ COLS ▾ ]</button>
+    <div class="cols-menu" id="cols-menu">
+      <div class="cols-menu-head">
+        <span>COLUMNS</span>
+        <button class="cols-reset" id="cols-reset">reset</button>
+      </div>
+      <div id="cols-list"></div>
+    </div>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <div class="loading" id="loading">&gt; FETCHING POOLS <span class="cursor">█</span></div>
+  <div class="error" id="error" style="display:none"></div>
+
+  <table id="pool-table" style="display:none">
+    <thead>
+      <tr>
+        <th data-sort="name" data-col="name">Pool <span class="sort-arrow">·</span></th>
+        <th data-sort="type" data-col="type">Type <span class="sort-arrow">·</span></th>
+        <th data-sort="chain" data-col="chain">Chain <span class="sort-arrow">·</span></th>
+        <th data-sort="version" data-col="version" class="center">Ver <span class="sort-arrow">·</span></th>
+        <th data-sort="hook" data-col="hook" class="center">Hook <span class="sort-arrow">·</span></th>
+        <th data-sort="tvl" data-col="tvl" class="numeric sorted">TVL <span class="sort-arrow">▼</span></th>
+        <th data-sort="volume" data-col="volume" class="numeric">Vol 24h <span class="sort-arrow">·</span></th>
+        <th data-sort="swapFees" data-col="swapFees" class="numeric" title="Total swap fees generated by the pool in the last 24h">Swap Fees 24h <span class="sort-arrow">·</span></th>
+        <th data-sort="daoSwap" data-col="daoSwap" class="numeric" title="Protocol share of swap fees routed to the DAO Treasury">DAO Swap 24h <span class="sort-arrow">·</span></th>
+        <th data-sort="daoSwap30d" data-col="daoSwap30d" class="numeric" title="Protocol share of swap fees over the last 30 days (sum of daily gross fees × protocol rate)">DAO Swap 30d <span class="sort-arrow">·</span></th>
+        <th data-sort="swapFee" data-col="swapFee" class="numeric">Swap Fee <span class="sort-arrow">·</span></th>
+        <th data-sort="yieldApr" data-col="yieldApr" class="numeric" title="Projected DAO yield-fee APR (protocol share of IB_YIELD; 10% v3, 50% v2)">DAO Yield APR <span class="sort-arrow">·</span></th>
+        <th data-sort="yieldDaily" data-col="yieldDaily" class="numeric" title="Projected daily DAO yield revenue (DAO Yield APR × TVL / 365)">DAO Yield/day <span class="sort-arrow">·</span></th>
+        <th data-sort="daoYield30d" data-col="daoYield30d" class="numeric" title="Estimated: DAO Yield/day × 30. Assumes current TVL and yield APR hold; not a historical sum (API has no daily yield snapshots).">DAO Yield 30d ≈ <span class="sort-arrow">·</span></th>
+        <th data-sort="usage" data-col="usage" class="numeric">Usage (Vol/TVL) <span class="sort-arrow">·</span></th>
+        <th data-sort="holders" data-col="holders" class="numeric">Holders <span class="sort-arrow">·</span></th>
+        <th data-sort="created" data-col="created">Created <span class="sort-arrow">·</span></th>
+      </tr>
+    </thead>
+    <tbody id="pool-tbody"></tbody>
+  </table>
+</div>
+
+<div class="pagination" id="pagination" style="display:none">
+  <button class="btn" id="btn-prev">[ PREV ]</button>
+  <span class="page-info" id="page-info"></span>
+  <button class="btn" id="btn-next">[ NEXT ]</button>
+</div>
+
+<div class="footer">
+  <span class="hide-sm">[/] search</span>
+  <span class="hide-sm">[R] refresh</span>
+  <span class="hide-sm">[C] csv</span>
+  <span class="right">
+    sort: <b id="footer-sort">tvl desc</b> · rows: <b id="footer-rows">0</b>
+  </span>
+</div>
+
+<script>
+const API = 'https://api-v3.balancer.fi/';
+const PAGE_SIZE = 50;
+const BALANCER_APP = 'https://balancer.fi/pools';
+
+let allPools = [];
+let filteredPools = [];
+let sortKey = 'tvl';
+let sortDir = 'desc';
+let currentPage = 0;
+
+// Pool types we never want to show in the explorer.
+//   LIQUIDITY_BOOTSTRAPPING  - one-sided launch pools, user requested removal
+//   INVESTMENT               - deprecated Balancer v1/v2 managed pools
+//   ELEMENT                  - deprecated Element Finance yield-token pools
+//   LINEAR                   - deprecated Aave linear pools (replaced by ERC4626 wrappers in v3)
+//   FX                       - XAVE pools; fees routed entirely to XAVE, no Balancer fee share
+// Balancer's own frontend does not display any of these by default (except FX, which we hide for DAO revenue).
+const HIDDEN_POOL_TYPES = new Set([
+  'LIQUIDITY_BOOTSTRAPPING',
+  'FIXED_LBP',              // LBP variant — same removal reason
+  'INVESTMENT',
+  'ELEMENT',
+  'LINEAR',
+  'FX',
+  'UNKNOWN',                // unclassifiable legacy v2 pools; balancer.fi crashes rendering them
+]);
+
+// Chains we never want to show.
+//   SONIC   - user requested removal (Beets territory, not balancer.fi)
+//   SEPOLIA - testnet; fake TVL, not a production pool
+//   ZKEVM   - balancer.fi no longer serves zkEVM (every slug errors); network wound down
+//   FANTOM  - user requested removal (legacy Beets territory)
+//   MODE    - user requested removal (network being sunset on Balancer)
+//   FRAXTAL - user requested removal
+const HIDDEN_CHAINS = new Set(['SONIC', 'SEPOLIA', 'ZKEVM', 'FANTOM', 'MODE', 'FRAXTAL']);
+
+// Chain display names and explorer URLs
+const CHAIN_INFO = {
+  MAINNET:   { name: 'Ethereum',  short: 'ETH',  explorer: 'https://etherscan.io/address/' },
+  ARBITRUM:  { name: 'Arbitrum',  short: 'ARB',  explorer: 'https://arbiscan.io/address/' },
+  OPTIMISM:  { name: 'Optimism',  short: 'OP',   explorer: 'https://optimistic.etherscan.io/address/' },
+  POLYGON:   { name: 'Polygon',   short: 'POLY', explorer: 'https://polygonscan.com/address/' },
+  BASE:      { name: 'Base',      short: 'BASE', explorer: 'https://basescan.org/address/' },
+  GNOSIS:    { name: 'Gnosis',    short: 'GNO',  explorer: 'https://gnosisscan.io/address/' },
+  AVALANCHE: { name: 'Avalanche', short: 'AVAX', explorer: 'https://snowtrace.io/address/' },
+  SONIC:     { name: 'Sonic',     short: 'SON',  explorer: 'https://sonicscan.org/address/' },
+  FRAXTAL:   { name: 'Fraxtal',   short: 'FRX',  explorer: 'https://fraxscan.com/address/' },
+  MODE:      { name: 'Mode',      short: 'MODE', explorer: 'https://modescan.io/address/' },
+  FANTOM:    { name: 'Fantom',    short: 'FTM',  explorer: 'https://ftmscan.com/address/' },
+  ZKEVM:     { name: 'zkEVM',     short: 'ZKEV', explorer: 'https://zkevm.polygonscan.com/address/' },
+  XLAYER:    { name: 'X Layer',   short: 'XLAY', explorer: 'https://www.okx.com/web3/explorer/xlayer/address/' },
+  PLASMA:    { name: 'Plasma',    short: 'PLAS', explorer: '' },
+  HYPEREVM:  { name: 'HyperEVM',  short: 'HYPE', explorer: '' },
+  MONAD:     { name: 'Monad',     short: 'MON',  explorer: '' },
+  SEPOLIA:   { name: 'Sepolia',   short: 'SEP',  explorer: 'https://sepolia.etherscan.io/address/' },
+};
+
+// Per-chain accent color for the chain column
+const CHAIN_COLOR = {
+  MAINNET: '#9bb0d8', ARBITRUM: '#5cb8f5', BASE: '#6e93ff',
+  POLYGON: '#a87cf0', OPTIMISM: '#ff8f8f', GNOSIS: '#6fcfa4',
+  AVALANCHE: '#f08a8b', SONIC: '#feae6e', FRAXTAL: '#c8ced8',
+  MODE: '#dffe00', FANTOM: '#7eb4f0', ZKEVM: '#a87cf0',
+  XLAYER: '#cfd3da', PLASMA: '#eaa879', HYPEREVM: '#97fce4',
+  MONAD: '#bca5fc', SEPOLIA: '#a0aec0',
+};
+
+// balancer.fi URL slugs — every entry live-verified 2026-07 (a wrong slug
+// SSR-crashes balancer.fi, e.g. the old 'gnosis-chain' → digest 1502723864).
+const CHAIN_SLUG = {
+  MAINNET: 'ethereum', ARBITRUM: 'arbitrum', OPTIMISM: 'optimism',
+  POLYGON: 'polygon', BASE: 'base', GNOSIS: 'gnosis',
+  AVALANCHE: 'avalanche', FRAXTAL: 'fraxtal', MODE: 'mode',
+  FANTOM: 'fantom', PLASMA: 'plasma', HYPEREVM: 'hyperevm', MONAD: 'monad',
+};
+
+function fmt$(val) {
+  const n = parseFloat(val);
+  if (isNaN(n)) return '—';
+  if (n >= 1e9) return '$' + (n / 1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K';
+  if (n >= 1)   return '$' + n.toFixed(2);
+  if (n > 0)    return '$' + n.toFixed(4);
+  return '$0';
+}
+
+function fmt$Exact(val) {
+  const n = parseFloat(val);
+  if (isNaN(n)) return '—';
+  if (n === 0) return '$0.00';
+  if (n >= 1) {
+    return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  return '$' + n.toFixed(4);
+}
+
+// Split filtered pools into v2 (incl. v1 CoW) vs v3 buckets.
+function splitByVersion(pools, fn) {
+  let v2 = 0, v3 = 0;
+  for (const p of pools) {
+    if (p.protocolVersion === 3) v3 += fn(p);
+    else v2 += fn(p);
+  }
+  return { v2, v3 };
+}
+
+function setVerSplit(id, v2, v3, fmt) {
+  const el = document.getElementById(id + '-ver');
+  if (!el) return;
+  el.innerHTML = `<span class="v2">v2 ${fmt(v2)}</span> · <span class="v3">v3 ${fmt(v3)}</span>`;
+}
+
+function fmtPct(val) {
+  const n = parseFloat(val);
+  if (isNaN(n)) return '—';
+  return (n * 100).toFixed(n < 0.0001 ? 4 : n < 0.01 ? 3 : 2) + '%';
+}
+
+function fmtApr(val) {
+  const n = parseFloat(val);
+  if (isNaN(n) || n === 0) return '—';
+  return (n * 100).toFixed(2) + '%';
+}
+
+function fmtUsage(vol, tvl) {
+  const v = parseFloat(vol);
+  const t = parseFloat(tvl);
+  if (!t || isNaN(v) || isNaN(t)) return { text: '—', cls: 'usage-low', val: 0 };
+  const ratio = v / t;
+  let cls = 'usage-low';
+  if (ratio >= 0.5) cls = 'usage-high';
+  else if (ratio >= 0.1) cls = 'usage-medium';
+  return { text: (ratio * 100).toFixed(2) + '%', cls, val: ratio };
+}
+
+function fmtNum(val) {
+  const n = parseInt(val);
+  if (isNaN(n)) return '—';
+  return n.toLocaleString();
+}
+
+function fmtDate(ts) {
+  const n = parseInt(ts);
+  if (!n) return '—';
+  return new Date(n * 1000).toISOString().slice(0, 10); // YYYY-MM-DD
+}
+
+function fmtAge(ts) {
+  const n = parseInt(ts);
+  if (!n) return '';
+  const days = Math.floor((Date.now() / 1000 - n) / 86400);
+  if (days < 1) return 'today';
+  if (days < 31) return days + 'd ago';
+  if (days < 365) return Math.floor(days / 30) + 'mo ago';
+  const y = Math.floor(days / 365), mo = Math.floor((days % 365) / 30);
+  return y + 'y' + (mo ? ' ' + mo + 'mo' : '') + ' ago';
+}
+
+function typeShort(t) {
+  const map = {
+    WEIGHTED: 'WEIGHTED', COMPOSABLE_STABLE: 'STABLE',
+    META_STABLE: 'METASTBL', STABLE: 'STABLE',
+    GYROE: 'GYRO-E', GYRO: 'GYRO', GYRO3: 'GYRO-3', FX: 'FX',
+    QUANT_AMM_WEIGHTED: 'QUANT', RECLAMM: 'AutoRange', COW_AMM: 'CoW AMM',
+  };
+  return map[t] || (t || '').replace(/_/g, ' ');
+}
+
+function hookShort(t) {
+  if (!t) return '';
+  const map = {
+    STABLE_SURGE: 'SURGE',
+    RECLAMM: 'RECLAMM',
+    MEV_TAX: 'MEV TAX',
+  };
+  return map[t] || t.replace(/_/g, ' ').slice(0, 7);
+}
+
+function poolUrl(pool) {
+  const slug = CHAIN_SLUG[pool.chain] || pool.chain.toLowerCase();
+  // v2 pool pages are keyed by the full 66-char pool id (address + pool index),
+  // e.g. 0x5c6e…014. v1 (CoW AMM) and v3 use the plain 40-char contract address.
+  const key = pool.protocolVersion === 2 ? pool.id : pool.address;
+  // v1 pools are CoW AMMs; balancer.fi's canonical segment for them is "cow".
+  const seg = pool.protocolVersion === 1 ? 'cow' : 'v' + pool.protocolVersion;
+  return `${BALANCER_APP}/${slug}/${seg}/${key}`;
+}
+
+// Debounce: coalesce bursty events (search keystrokes) into one call.
+function debounce(fn, ms) {
+  let t;
+  return function (...args) {
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(this, args), ms);
+  };
+}
+
+async function fetchPools() {
+  // tagNotIn: ["BLACK_LISTED"] is the same filter Balancer's own frontend uses
+  // to hide pools the team has flagged as broken, deprecated, test, or scam.
+  const query = `{
+    poolGetPools(
+      first: 1000
+      skip: 0
+      orderBy: totalLiquidity
+      orderDirection: desc
+      where: { minTvl: 0, tagNotIn: ["BLACK_LISTED"] }
+    ) {
+      id
+      name
+      address
+      type
+      chain
+      symbol
+      protocolVersion
+      createTime
+      hasErc4626
+      hook { address type }
+      dynamicData {
+        totalLiquidity volume24h fees24h
+        protocolFees24h yieldCapture24h protocolYieldCapture24h
+        aggregateSwapFee aggregateYieldFee surplus24h
+        swapFee holdersCount
+        lifetimeVolume lifetimeSwapFees
+        swapEnabled isPaused isInRecoveryMode
+        aprItems { apr type id }
+      }
+      poolTokens { symbol address }
+    }
+  }`;
+
+  const res = await fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query }),
+  });
+
+  if (!res.ok) throw new Error(`API returned ${res.status}`);
+  const json = await res.json();
+  if (json.errors) throw new Error(json.errors.map(e => e.message).join(', '));
+  return json.data.poolGetPools;
+}
+
+// --- 30d DAO swap fees via poolGetSnapshots ---------------------------------
+// No protocolFees30d on poolGetPools. We sum daily gross fees24h from snapshots
+// and apply each pool's protocol swap-fee rate. Serial batches + spacing to
+// avoid rate-limiting the shared Balancer API; filled after the main table loads.
+const SNAPSHOT_BATCH_SIZE = 8;    // pools per GraphQL request
+const SNAPSHOT_CONCURRENCY = 2;   // parallel batch requests
+const SNAPSHOT_BATCH_GAP_MS = 300; // pause after each batch
+const SNAPSHOT_MAX_RETRIES = 4;
+
+let snapshotFetchGen = 0;
+let snapshotDone = 0;
+let snapshotTotal = 0;
+const snapshotCache = new Map(); // `${chain}:${id}` → daoSwap30d number
+const debouncedRender = debounce(() => render(), 250);
+
+function snapshotCacheKey(p) {
+  return p.chain + ':' + p.id;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchSnapshotBatch(pools, attempt) {
+  const fields = pools.map((p, i) =>
+    `p${i}: poolGetSnapshots(chain: ${p.chain}, id: "${p.id}", range: THIRTY_DAYS) { fees24h }`
+  ).join('\n');
+  const res = await fetch(API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ query: `{ ${fields} }` }),
+  });
+  if (res.status === 429 || res.status === 503) {
+    if (attempt >= SNAPSHOT_MAX_RETRIES) throw new Error(`API ${res.status} after retries`);
+    // Longer backoff when the shared API is under pressure
+    await sleep(1500 * Math.pow(2, attempt));
+    return fetchSnapshotBatch(pools, attempt + 1);
+  }
+  if (!res.ok) throw new Error(`API returned ${res.status}`);
+  const json = await res.json();
+  // Partial GraphQL errors still return data for other aliases — keep going.
+  const data = (json && json.data) || {};
+  return pools.map((p, i) => {
+    const snaps = data['p' + i];
+    if (!Array.isArray(snaps)) return { pool: p, gross30d: null, ok: false };
+    const gross30d = snaps.reduce((s, row) => s + (parseFloat(row.fees24h) || 0), 0);
+    return { pool: p, gross30d, ok: true };
+  });
+}
+
+function updateSnapshotProgress() {
+  const status = document.getElementById('topbar-status-text');
+  if (!status) return;
+  if (snapshotTotal > 0 && snapshotDone < snapshotTotal) {
+    status.textContent = `30d ${snapshotDone}/${snapshotTotal}`;
+  } else if (snapshotTotal > 0 && snapshotDone >= snapshotTotal) {
+    status.textContent = 'OK';
+  }
+}
+
+async function loadDaoSwap30d(pools, gen) {
+  snapshotDone = 0;
+  snapshotTotal = pools.length;
+  updateSnapshotProgress();
+  if (!pools.length) return;
+
+  // Prefer cache hits first so UI fills quickly on re-filter/refresh within session.
+  const need = [];
+  for (const p of pools) {
+    const key = snapshotCacheKey(p);
+    if (snapshotCache.has(key)) {
+      p.daoSwap30d = snapshotCache.get(key);
+      p.daoSwap30dStatus = 'ok';
+      snapshotDone++;
+    } else {
+      need.push(p);
+    }
+  }
+  updateSnapshotProgress();
+  if (snapshotDone) debouncedRender();
+
+  const batches = [];
+  for (let i = 0; i < need.length; i += SNAPSHOT_BATCH_SIZE) {
+    batches.push(need.slice(i, i + SNAPSHOT_BATCH_SIZE));
+  }
+
+  let next = 0;
+  async function worker() {
+    while (next < batches.length) {
+      if (gen !== snapshotFetchGen) return;
+      const idx = next++;
+      const batch = batches[idx];
+      try {
+        const results = await fetchSnapshotBatch(batch, 0);
+        if (gen !== snapshotFetchGen) return;
+        for (const { pool, gross30d, ok } of results) {
+          if (ok) {
+            const dao = gross30d * (pool.protocolSwapFeeRate || 0);
+            pool.daoSwap30d = dao;
+            pool.daoSwap30dStatus = 'ok';
+            snapshotCache.set(snapshotCacheKey(pool), dao);
+          } else {
+            pool.daoSwap30d = null;
+            pool.daoSwap30dStatus = 'err';
+          }
+          snapshotDone++;
+        }
+      } catch (e) {
+        console.warn('30d snapshot batch failed', e);
+        if (gen !== snapshotFetchGen) return;
+        for (const pool of batch) {
+          pool.daoSwap30d = null;
+          pool.daoSwap30dStatus = 'err';
+          snapshotDone++;
+        }
+      }
+      updateSnapshotProgress();
+      debouncedRender();
+      await sleep(SNAPSHOT_BATCH_GAP_MS);
+    }
+  }
+
+  const workers = [];
+  for (let i = 0; i < Math.min(SNAPSHOT_CONCURRENCY, batches.length); i++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+  if (gen === snapshotFetchGen) updateSnapshotProgress();
+}
+
+function protocolYieldFeeRate(p, d) {
+  const agg = parseFloat(d.aggregateYieldFee);
+  if (agg > 0) return agg;
+  const gross = parseFloat(d.yieldCapture24h) || 0;
+  if (gross > 0) return (parseFloat(d.protocolYieldCapture24h) || 0) / gross;
+  return p.protocolVersion === 3 ? 0.1 : 0.5;
+}
+
+function protocolSwapFeeRate(p, d) {
+  const agg = parseFloat(d.aggregateSwapFee);
+  if (agg > 0) return agg;
+  const gross = parseFloat(d.fees24h) || 0;
+  if (gross > 0) return (parseFloat(d.protocolFees24h) || 0) / gross;
+  // v1 CoW / v2 default 50%; v3 default 25% (BIP-919)
+  return p.protocolVersion === 3 ? 0.25 : 0.5;
+}
+
+function processPool(p) {
+  const d = p.dynamicData;
+  const tvl = parseFloat(d.totalLiquidity) || 0;
+  const vol = parseFloat(d.volume24h) || 0;
+  const usage = tvl > 0 ? vol / tvl : 0;
+  const aprItems = d.aprItems || [];
+  const totalApr = aprItems.reduce((sum, item) => sum + (parseFloat(item.apr) || 0), 0);
+  // IB_YIELD APR items are LP-facing (post protocol yield fee); derive DAO share.
+  const lpYieldApr = aprItems
+    .filter(i => i.type && /YIELD/i.test(i.type))
+    .reduce((sum, item) => sum + (parseFloat(item.apr) || 0), 0);
+  const protocolYieldFee = protocolYieldFeeRate(p, d);
+  const daoYieldApr = protocolYieldFee > 0 && protocolYieldFee < 1
+    ? lpYieldApr * protocolYieldFee / (1 - protocolYieldFee)
+    : 0;
+  const swapFeeRate = protocolSwapFeeRate(p, d);
+
+  const swapFees24h = parseFloat(d.fees24h) || 0;
+  const yield24h = parseFloat(d.yieldCapture24h) || 0;
+  const protocolSwapFees24h = parseFloat(d.protocolFees24h) || 0;
+  const protocolYield24h = parseFloat(d.protocolYieldCapture24h) || 0;
+  const surplus24h = parseFloat(d.surplus24h) || 0;
+
+  const daoYieldDaily = tvl > 0 ? daoYieldApr * tvl / 365 : 0;
+  // API has no historical yield snapshots — estimate 30d from projected daily DAO yield.
+  const daoYield30d = daoYieldDaily * 30;
+
+  return {
+    ...p,
+    tvl, vol,
+    swapFees24h, yield24h, protocolSwapFees24h, protocolYield24h,
+    daoFees24h: protocolSwapFees24h + protocolYield24h,
+    surplus24h,
+    swapFee: parseFloat(d.swapFee) || 0,
+    protocolSwapFeeRate: swapFeeRate,
+    daoSwap30d: null,       // filled async from poolGetSnapshots
+    daoSwap30dStatus: 'pending',
+    usage,
+    holders: parseInt(d.holdersCount) || 0,
+    createdAt: parseInt(p.createTime) || 0,   // unix seconds
+    totalApr, lpYieldApr, daoYieldApr, daoYieldDaily, daoYield30d,
+    hookType: p.hook ? p.hook.type : null,
+    tokenSymbols: p.poolTokens.map(t => t.symbol).join(' · '),
+    searchText: [
+      p.name, p.address, p.type, p.chain,
+      ...p.poolTokens.map(t => t.symbol),
+      p.hook ? p.hook.type : '',
+    ].join(' ').toLowerCase(),
+  };
+}
+
+function populateFilters() {
+  const chains = [...new Set(allPools.map(p => p.chain))].sort();
+  const types = [...new Set(allPools.map(p => p.type))].sort();
+
+  const chainSelect = document.getElementById('filter-chain');
+  chains.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c;
+    opt.textContent = (CHAIN_INFO[c] && CHAIN_INFO[c].name) || c;
+    chainSelect.appendChild(opt);
+  });
+
+  const typeSelect = document.getElementById('filter-type');
+  types.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t;
+    // Same friendly names as the table (AutoRange, CoW AMM, …); keep
+    // COMPOSABLE_STABLE spelled out so it doesn't collide with STABLE.
+    opt.textContent = t === 'COMPOSABLE_STABLE' ? 'COMPOSABLE STABLE' : typeShort(t);
+    typeSelect.appendChild(opt);
+  });
+}
+
+function applyFilters() {
+  const search = document.getElementById('search').value.toLowerCase().trim();
+  const chain = document.getElementById('filter-chain').value;
+  const type = document.getElementById('filter-type').value;
+  const version = document.getElementById('filter-version').value;
+  const hook = document.getElementById('filter-hook').value;
+  const minTvl = parseFloat(document.getElementById('filter-min-tvl').value) || 0;
+
+  // allPools is kept pre-sorted (see applySorting); Array.filter preserves order,
+  // so filteredPools inherits the current sort — no re-sort needed per keystroke.
+  filteredPools = allPools.filter(p => {
+    if (search && !p.searchText.includes(search)) return false;
+    if (chain && p.chain !== chain) return false;
+    if (type && p.type !== type) return false;
+    if (version && p.protocolVersion !== parseInt(version)) return false;
+    if (hook === 'yes' && !p.hookType) return false;
+    if (hook === 'no' && p.hookType) return false;
+    if (p.tvl < minTvl) return false;
+    return true;
+  });
+
+  currentPage = 0;
+  render();
+}
+
+// Sort allPools in-place according to the current sortKey/sortDir.
+// Called once on load and again whenever the user clicks a sort header —
+// not on every filter change.
+function applySorting() {
+  const keyFn = {
+    name: p => p.name.toLowerCase(),
+    type: p => p.type,
+    chain: p => p.chain,
+    version: p => p.protocolVersion,
+    hook: p => p.hookType || '',
+    created: p => p.createdAt,
+    tvl: p => p.tvl,
+    volume: p => p.vol,
+    swapFees: p => p.swapFees24h,
+    daoSwap: p => p.protocolSwapFees24h,
+    daoSwap30d: p => p.daoSwap30d == null ? -1 : p.daoSwap30d,
+    swapFee: p => p.swapFee,
+    yieldApr: p => p.daoYieldApr,
+    yieldDaily: p => p.daoYieldDaily,
+    daoYield30d: p => p.daoYield30d,
+    usage: p => p.usage,
+    holders: p => p.holders,
+  };
+
+  const fn = keyFn[sortKey] || keyFn.tvl;
+  const dir = sortDir === 'asc' ? 1 : -1;
+
+  allPools.sort((a, b) => {
+    const va = fn(a), vb = fn(b);
+    if (va < vb) return -1 * dir;
+    if (va > vb) return 1 * dir;
+    return 0;
+  });
+}
+
+function render() {
+  const tbody = document.getElementById('pool-tbody');
+  const start = currentPage * PAGE_SIZE;
+  const page = filteredPools.slice(start, start + PAGE_SIZE);
+
+  tbody.innerHTML = page.map((p, idx) => {
+    const u = fmtUsage(p.vol, p.tvl);
+    const chainInfo = CHAIN_INFO[p.chain];
+    const chainShort = (chainInfo && chainInfo.short) || p.chain.slice(0, 4);
+    const chainColor = CHAIN_COLOR[p.chain] || 'var(--fg)';
+    const vClass = p.protocolVersion === 3 ? 'ver v3' : 'ver';
+
+    return `<tr data-idx="${idx}">
+      <td data-col="name">
+        <div class="pool-cell">
+          <span class="tokens">${esc(p.tokenSymbols)}</span>
+          <span class="name" title="${esc(p.name)}">${esc(p.name)}</span>
+        </div>
+      </td>
+      <td data-col="type"><span class="type">${esc(typeShort(p.type))}</span></td>
+      <td data-col="chain"><span class="chain" style="color:${chainColor}">${chainShort}</span></td>
+      <td data-col="version" class="center"><span class="${vClass}">v${p.protocolVersion}</span></td>
+      <td data-col="hook" class="center">${p.hookType ? `<span class="hook">◆${esc(hookShort(p.hookType))}</span>` : `<span class="hook none">–</span>`}</td>
+      <td data-col="tvl" class="numeric">${fmt$(p.tvl)}</td>
+      <td data-col="volume" class="numeric">${fmt$(p.vol)}</td>
+      <td data-col="swapFees" class="numeric">${fmt$(p.swapFees24h)}</td>
+      <td data-col="daoSwap" class="numeric">${fmt$(p.protocolSwapFees24h)}</td>
+      <td data-col="daoSwap30d" class="numeric">${
+        p.daoSwap30dStatus === 'ok' ? fmt$(p.daoSwap30d)
+        : p.daoSwap30dStatus === 'err' ? `<span class="muted">—</span>`
+        : `<span class="muted">…</span>`
+      }</td>
+      <td data-col="swapFee" class="numeric fee-pct">${fmtPct(p.swapFee)}</td>
+      <td data-col="yieldApr" class="numeric"><span class="${p.daoYieldApr > 0 ? 'apr-pos' : 'muted'}">${fmtApr(p.daoYieldApr)}</span></td>
+      <td data-col="yieldDaily" class="numeric"><span class="${p.daoYieldDaily > 0 ? 'apr-pos' : 'muted'}">${p.daoYieldDaily > 0 ? fmt$(p.daoYieldDaily) : '—'}</span></td>
+      <td data-col="daoYield30d" class="numeric" title="Est. DAO Yield/day × 30"><span class="${p.daoYield30d > 0 ? 'apr-pos' : 'muted'}">${p.daoYield30d > 0 ? fmt$(p.daoYield30d) : '—'}</span></td>
+      <td data-col="usage" class="numeric"><span class="${u.cls}">${u.text}</span></td>
+      <td data-col="holders" class="numeric muted">${fmtNum(p.holders)}</td>
+      <td data-col="created"><span class="muted" title="${fmtAge(p.createdAt)}">${fmtDate(p.createdAt)}</span></td>
+    </tr>`;
+  }).join('');
+
+  // Row click is handled by a single delegated listener attached once,
+  // outside render(). See "tbody-click-delegation" block near the bottom.
+
+  // Pagination
+  const totalPages = Math.ceil(filteredPools.length / PAGE_SIZE);
+  const pag = document.getElementById('pagination');
+  pag.style.display = totalPages > 1 ? 'flex' : 'none';
+  document.getElementById('page-info').textContent =
+    `page ${currentPage + 1} / ${totalPages} · ${filteredPools.length.toLocaleString()} pools`;
+  document.getElementById('btn-prev').disabled = currentPage === 0;
+  document.getElementById('btn-next').disabled = currentPage >= totalPages - 1;
+
+  // Aggregate stats
+  const totalTvl = filteredPools.reduce((s, p) => s + p.tvl, 0);
+  const totalVol = filteredPools.reduce((s, p) => s + p.vol, 0);
+  const totalSwapFeesGross = filteredPools.reduce((s, p) => s + p.swapFees24h, 0);
+  const totalDaoSwap = filteredPools.reduce((s, p) => s + p.protocolSwapFees24h, 0);
+  const totalYieldGross = filteredPools.reduce((s, p) => s + p.yield24h, 0);
+  const totalYield = filteredPools.reduce((s, p) => s + p.protocolYield24h, 0);
+  const totalDaoTotal = totalDaoSwap + totalYield;
+  const totalDaoYield30d = filteredPools.reduce((s, p) => s + p.daoYield30d, 0);
+  const swap30dReady = filteredPools.every(p => p.daoSwap30dStatus === 'ok' || p.daoSwap30dStatus === 'err');
+  const totalDaoSwap30d = filteredPools.reduce((s, p) => s + (p.daoSwap30d || 0), 0);
+  const totalDaoTotal30d = totalDaoSwap30d + totalDaoYield30d;
+
+  document.getElementById('stat-pools').textContent = filteredPools.length.toLocaleString();
+  document.getElementById('stat-tvl').textContent = fmt$(totalTvl);
+  document.getElementById('stat-vol').textContent = fmt$(totalVol);
+  document.getElementById('stat-swap-fees-gross').textContent = fmt$Exact(totalSwapFeesGross);
+  document.getElementById('stat-dao-swap').textContent = fmt$Exact(totalDaoSwap);
+  document.getElementById('stat-yield-gross').textContent = fmt$Exact(totalYieldGross);
+  document.getElementById('stat-yield').textContent = fmt$Exact(totalYield);
+  document.getElementById('stat-dao-total').textContent = fmt$Exact(totalDaoTotal);
+  document.getElementById('stat-dao-total-30d').textContent = swap30dReady
+    ? fmt$Exact(totalDaoTotal30d)
+    : (snapshotDone > 0 ? fmt$Exact(totalDaoTotal30d) + '…' : '…');
+
+  const fmtCount = n => n.toLocaleString();
+  setVerSplit('stat-pools', ...Object.values(splitByVersion(filteredPools, () => 1)), fmtCount);
+  setVerSplit('stat-tvl', ...Object.values(splitByVersion(filteredPools, p => p.tvl)), fmt$);
+  setVerSplit('stat-vol', ...Object.values(splitByVersion(filteredPools, p => p.vol)), fmt$);
+  setVerSplit('stat-swap-fees-gross', ...Object.values(splitByVersion(filteredPools, p => p.swapFees24h)), fmt$Exact);
+  setVerSplit('stat-dao-swap', ...Object.values(splitByVersion(filteredPools, p => p.protocolSwapFees24h)), fmt$Exact);
+  setVerSplit('stat-yield-gross', ...Object.values(splitByVersion(filteredPools, p => p.yield24h)), fmt$Exact);
+  setVerSplit('stat-yield', ...Object.values(splitByVersion(filteredPools, p => p.protocolYield24h)), fmt$Exact);
+  setVerSplit('stat-dao-total', ...Object.values(splitByVersion(filteredPools, p => p.protocolSwapFees24h + p.protocolYield24h)), fmt$Exact);
+  setVerSplit(
+    'stat-dao-total-30d',
+    ...Object.values(splitByVersion(filteredPools, p => (p.daoSwap30d || 0) + p.daoYield30d)),
+    fmt$Exact
+  );
+
+  // Topbar count + footer
+  document.getElementById('topbar-count').textContent = `[${filteredPools.length}/${allPools.length}]`;
+  document.getElementById('footer-sort').textContent = `${sortKey} ${sortDir}`;
+  document.getElementById('footer-rows').textContent = filteredPools.length.toLocaleString();
+}
+
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str == null ? '' : str;
+  return d.innerHTML;
+}
+
+// Sort header clicks
+document.querySelectorAll('thead th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const key = th.dataset.sort;
+    if (sortKey === key) {
+      sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      sortKey = key;
+      sortDir = ['tvl', 'volume', 'swapFees', 'daoSwap', 'daoSwap30d', 'swapFee', 'yieldApr', 'yieldDaily', 'daoYield30d', 'usage', 'holders', 'created'].includes(key) ? 'desc' : 'asc';
+    }
+
+    document.querySelectorAll('thead th').forEach(h => {
+      h.classList.remove('sorted');
+      h.querySelector('.sort-arrow').innerHTML = '·';
+    });
+    th.classList.add('sorted');
+    th.querySelector('.sort-arrow').innerHTML = sortDir === 'asc' ? '▲' : '▼';
+
+    // Re-sort allPools, then re-filter; filteredPools picks up the new order.
+    applySorting();
+    applyFilters();
+  });
+});
+
+// Filter listeners. Only the search input gets debounced — the <select>s fire
+// change events once per interaction, so they don't need it.
+const debouncedApplyFilters = debounce(applyFilters, 150);
+['search', 'filter-chain', 'filter-type', 'filter-version', 'filter-hook', 'filter-min-tvl'].forEach(id => {
+  const el = document.getElementById(id);
+  const handler = id === 'search' ? debouncedApplyFilters : applyFilters;
+  el.addEventListener(el.tagName === 'INPUT' ? 'input' : 'change', handler);
+});
+
+// tbody-click-delegation: one listener instead of 50-per-render.
+// The <a> guard is a defensive no-op now (no links inside rows), kept in
+// case any future links are added back to the pool cell.
+document.getElementById('pool-tbody').addEventListener('click', (e) => {
+  if (e.target.closest('a')) return;
+  const tr = e.target.closest('tr[data-idx]');
+  if (!tr) return;
+  const idx = parseInt(tr.dataset.idx, 10);
+  const page = filteredPools.slice(currentPage * PAGE_SIZE, currentPage * PAGE_SIZE + PAGE_SIZE);
+  const p = page[idx];
+  if (p) window.open(poolUrl(p), '_blank');
+});
+
+// Pagination
+document.getElementById('btn-prev').addEventListener('click', () => {
+  if (currentPage > 0) { currentPage--; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+});
+document.getElementById('btn-next').addEventListener('click', () => {
+  const totalPages = Math.ceil(filteredPools.length / PAGE_SIZE);
+  if (currentPage < totalPages - 1) { currentPage++; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+});
+
+// Refresh
+document.getElementById('btn-refresh').addEventListener('click', loadData);
+
+// Hotkeys: / = focus search, R = refresh, C = csv
+document.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.key === '/') { e.preventDefault(); document.getElementById('search').focus(); }
+  else if (e.key === 'r' || e.key === 'R') { loadData(); }
+  else if (e.key === 'c' || e.key === 'C') { exportCsv(); }
+});
+
+// CSV export (exports currently filtered pools, respecting sort order)
+function csvEscape(val) {
+  if (val === null || val === undefined) return '';
+  const s = String(val);
+  if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function exportCsv() {
+  if (!filteredPools.length) {
+    alert('No pools to export. Adjust your filters and try again.');
+    return;
+  }
+  const headers = [
+    'Pool Name', 'Tokens', 'Type', 'Chain', 'Version', 'Hook',
+    'Address', 'TVL (USD)', 'Volume 24h (USD)',
+    'Swap Fees 24h (USD)', 'DAO Swap 24h (USD)', 'DAO Swap 30d (USD)', 'DAO Yield 24h (USD)', 'DAO Fees 24h (USD)',
+    'LP Yield 24h (USD)', 'Surplus 24h (USD)',
+    'Swap Fee (%)', 'DAO Yield APR (%)', 'LP Yield APR (%)', 'Total APR (%)',
+    'DAO Yield/day (USD)', 'DAO Yield 30d est. (USD)',
+    'Usage (Vol/TVL %)', 'Holders', 'Balancer URL', 'Created (UTC)',
+  ];
+  const rows = filteredPools.map(p => [
+    p.name,
+    p.tokenSymbols,
+    p.type.replace(/_/g, ' '),
+    (CHAIN_INFO[p.chain] && CHAIN_INFO[p.chain].name) || p.chain,
+    'v' + p.protocolVersion,
+    p.hookType ? p.hookType.replace(/_/g, ' ') : '',
+    p.address,
+    p.tvl.toFixed(2),
+    p.vol.toFixed(2),
+    p.swapFees24h.toFixed(2),
+    p.protocolSwapFees24h.toFixed(2),
+    p.daoSwap30d == null ? '' : p.daoSwap30d.toFixed(2),
+    p.protocolYield24h.toFixed(2),
+    p.daoFees24h.toFixed(2),
+    p.yield24h.toFixed(2),
+    p.surplus24h.toFixed(2),
+    (p.swapFee * 100).toFixed(4),
+    (p.daoYieldApr * 100).toFixed(4),
+    (p.lpYieldApr * 100).toFixed(4),
+    (p.totalApr * 100).toFixed(4),
+    p.daoYieldDaily.toFixed(2),
+    p.daoYield30d.toFixed(2),
+    p.tvl > 0 ? (p.usage * 100).toFixed(2) : '',
+    p.holders,
+    poolUrl(p),
+    fmtDate(p.createdAt),
+  ]);
+
+  const csv = [headers, ...rows]
+    .map(row => row.map(csvEscape).join(','))
+    .join('\n');
+
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+  a.href = url;
+  a.download = `balancer-pools-${stamp}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById('btn-export').addEventListener('click', exportCsv);
+
+async function loadData() {
+  const loading = document.getElementById('loading');
+  const table = document.getElementById('pool-table');
+  const error = document.getElementById('error');
+  const topbar = document.getElementById('topbar');
+
+  loading.style.display = 'block';
+  table.style.display = 'none';
+  error.style.display = 'none';
+  topbar.classList.add('loading');
+  document.getElementById('topbar-status-text').textContent = 'SYNC…';
+
+  try {
+    snapshotCache.clear();
+    const gen = ++snapshotFetchGen; // cancels any in-flight 30d fetch from a prior refresh
+    const raw = await fetchPools();
+    allPools = raw
+      .filter(p => !HIDDEN_POOL_TYPES.has(p.type) && !HIDDEN_CHAINS.has(p.chain))
+      .map(processPool);
+    populateFilters();
+    applySorting();   // make sure allPools matches the current sortKey/sortDir
+    applyFilters();
+
+    loading.style.display = 'none';
+    table.style.display = 'table';
+    topbar.classList.remove('loading');
+    document.getElementById('topbar-status-text').textContent = 'OK';
+    const now = new Date();
+    document.getElementById('stat-time').textContent = now.toTimeString().slice(0, 8);
+    const pad = n => String(n).padStart(2, '0');
+    const localStamp =
+      `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ` +
+      `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    document.getElementById('topbar-time').textContent = localStamp;
+
+    // Background: 30d DAO swap from snapshots (does not block the table).
+    loadDaoSwap30d(allPools, gen).catch(e => console.warn('30d load failed', e));
+  } catch (e) {
+    loading.style.display = 'none';
+    error.style.display = 'block';
+    error.textContent = '> ERROR: ' + e.message;
+    topbar.classList.remove('loading');
+    document.getElementById('topbar-status-text').textContent = 'ERR';
+    console.error(e);
+  }
+}
+
+/* ===== Column show/hide ===== */
+// Order/labels mirror the table header. "name" (Pool) is the identity column
+// and is intentionally not toggleable.
+const COLUMNS = [
+  { key: 'type', label: 'Type' },
+  { key: 'chain', label: 'Chain' },
+  { key: 'version', label: 'Ver' },
+  { key: 'hook', label: 'Hook' },
+  { key: 'tvl', label: 'TVL' },
+  { key: 'volume', label: 'Vol 24h' },
+  { key: 'swapFees', label: 'Swap Fees 24h' },
+  { key: 'daoSwap', label: 'DAO Swap 24h' },
+  { key: 'daoSwap30d', label: 'DAO Swap 30d' },
+  { key: 'swapFee', label: 'Swap Fee' },
+  { key: 'yieldApr', label: 'DAO Yield APR' },
+  { key: 'yieldDaily', label: 'DAO Yield/day' },
+  { key: 'daoYield30d', label: 'DAO Yield 30d ≈' },
+  { key: 'usage', label: 'Usage (Vol/TVL)' },
+  { key: 'holders', label: 'Holders' },
+  { key: 'created', label: 'Created' },
+];
+const COLS_KEY = 'bpe.hiddenCols.v1';
+let hiddenCols = new Set();
+try { const s = JSON.parse(localStorage.getItem(COLS_KEY)); if (Array.isArray(s)) hiddenCols = new Set(s); } catch (e) {}
+
+const colStyle = document.createElement('style');
+document.head.appendChild(colStyle);
+
+function applyColVisibility() {
+  // One CSS rule hides both <th> and <td> for each hidden column; survives re-renders.
+  colStyle.textContent = [...hiddenCols]
+    .map(k => `[data-col="${k}"]{display:none}`)
+    .join('');
+  try { localStorage.setItem(COLS_KEY, JSON.stringify([...hiddenCols])); } catch (e) {}
+  // Reflect count on the button
+  const btn = document.getElementById('btn-cols');
+  const shown = COLUMNS.length - [...hiddenCols].filter(k => COLUMNS.some(c => c.key === k)).length;
+  btn.textContent = hiddenCols.size ? `[ COLS ${shown}/${COLUMNS.length} ▾ ]` : '[ COLS ▾ ]';
+}
+
+function buildColsMenu() {
+  const list = document.getElementById('cols-list');
+  list.innerHTML = COLUMNS.map(c =>
+    `<label><input type="checkbox" data-colkey="${c.key}" ${hiddenCols.has(c.key) ? '' : 'checked'}> ${c.label}</label>`
+  ).join('');
+  list.querySelectorAll('input[data-colkey]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const k = cb.dataset.colkey;
+      if (cb.checked) hiddenCols.delete(k); else hiddenCols.add(k);
+      applyColVisibility();
+    });
+  });
+}
+
+document.getElementById('btn-cols').addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.getElementById('cols-menu').classList.toggle('open');
+});
+document.getElementById('cols-menu').addEventListener('click', (e) => e.stopPropagation());
+document.addEventListener('click', () => document.getElementById('cols-menu').classList.remove('open'));
+document.getElementById('cols-reset').addEventListener('click', () => {
+  hiddenCols.clear();
+  buildColsMenu();
+  applyColVisibility();
+});
+
+buildColsMenu();
+applyColVisibility();
+
+// Initial load
+loadData();
+</script>
+</body>
+</html>
