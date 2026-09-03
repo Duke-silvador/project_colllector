@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ateş — Waldbrand-Monitor Deutschland &amp; Türkiye</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='.9em' font-size='56'%3E🔥%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#0B1220;
+    --panel:#131C2B;
+    --panel-2:#1A2536;
+    --line:rgba(232,237,245,.12);
+    --text:#E8EDF5;
+    --muted:#8496AE;
+    --ember-1:#FFD166;
+    --ember-2:#F4813F;
+    --ember-3:#E23E2E;
+    --ember-core:#FFF3D6;
+    --sans:'IBM Plex Sans',system-ui,-apple-system,Segoe UI,sans-serif;
+    --display:'Bricolage Grotesque','IBM Plex Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--ink);color:var(--text);font-family:var(--sans);
+    font-size:14px;line-height:1.45;overflow:hidden;
+  }
+  button,input,select{font-family:inherit;font-size:inherit;color:inherit}
+  :focus-visible{outline:2px solid var(--ember-1);outline-offset:2px}
+
+  /* ---------- shell ---------- */
+  .shell{display:grid;grid-template-columns:376px 1fr;height:100dvh}
+  .rail{
+    background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;min-height:0;
+  }
+  .stage{position:relative;min-width:0}
+  #map{position:absolute;inset:0;background:#0A0F18}
+
+  /* ---------- header ---------- */
+  .brand{padding:18px 20px 14px;border-bottom:1px solid var(--line)}
+  .brand h1{
+    font-family:var(--display);font-weight:800;font-size:26px;letter-spacing:-.02em;
+    margin:0;line-height:1;
+  }
+  .brand h1 span{color:var(--ember-2)}
+  .brand p{margin:6px 0 0;color:var(--muted);font-size:12px;letter-spacing:.04em;text-transform:uppercase}
+  .livedot{
+    display:inline-block;width:7px;height:7px;border-radius:50%;
+    background:var(--ember-3);margin-right:7px;vertical-align:middle;
+  }
+  .livedot.on{animation:breathe 2.4s ease-in-out infinite}
+  @keyframes breathe{0%,100%{opacity:.35;box-shadow:0 0 0 0 rgba(226,62,46,.5)}50%{opacity:1;box-shadow:0 0 0 5px rgba(226,62,46,0)}}
+
+  /* ---------- scroll body ---------- */
+  .rail-body{overflow-y:auto;padding:16px 20px 24px;flex:1;min-height:0;scrollbar-width:thin}
+  .rail-body::-webkit-scrollbar{width:8px}
+  .rail-body::-webkit-scrollbar-thumb{background:var(--panel-2);border-radius:8px}
+
+  .block{margin-bottom:22px}
+  .block > h2{
+    font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--muted);margin:0 0 10px;
+    display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+  }
+  label.field{display:block;margin-bottom:10px}
+  label.field > span{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+  input[type=text],input[type=password],input[type=date],select{
+    width:100%;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:7px;padding:9px 10px;font-family:var(--mono);font-size:12.5px;
+  }
+  input::placeholder{color:#5C6C82}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+  .btn{
+    background:var(--panel-2);border:1px solid var(--line);border-radius:7px;
+    padding:9px 12px;cursor:pointer;font-weight:500;transition:border-color .15s,background .15s;
+  }
+  .btn:hover{border-color:rgba(232,237,245,.3)}
+  .btn.primary{
+    background:linear-gradient(180deg,var(--ember-2),var(--ember-3));
+    border-color:transparent;color:#1B0E08;font-weight:600;
+  }
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.wide{width:100%}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn-row{display:flex;gap:8px;margin-top:4px}
+  .btn-row .btn{flex:1}
+
+  .hint{font-size:11.5px;color:var(--muted);margin:8px 0 0}
+  .hint a{color:var(--ember-1)}
+  .osm-dark{filter:grayscale(1) invert(1) brightness(.64) contrast(1.3)}
+
+  /* ---------- stats ---------- */
+  .stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .stat{background:var(--panel);padding:11px 12px}
+  .stat b{display:block;font-family:var(--display);font-size:22px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+  .stat small{color:var(--muted);font-size:11px;font-family:var(--mono);letter-spacing:.04em}
+  .split{display:flex;gap:8px;margin-top:8px}
+  .split div{
+    flex:1;border:1px solid var(--line);border-radius:8px;padding:8px 10px;
+    display:flex;align-items:baseline;justify-content:space-between;cursor:pointer;
+  }
+  .split div:hover{border-color:rgba(232,237,245,.3)}
+  .split .flag{font-family:var(--mono);font-size:11px;letter-spacing:.1em;color:var(--muted)}
+  .split .val{font-family:var(--display);font-weight:700;font-size:17px}
+
+  /* ---------- signature: FRP-Spektrum ---------- */
+  .spectrum{border:1px solid var(--line);border-radius:9px;padding:12px 12px 8px;background:var(--panel-2)}
+  #hist{display:block;width:100%;height:64px}
+  .spectrum .scale{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px}
+  input[type=range]{width:100%;margin:10px 0 0;accent-color:var(--ember-2);background:transparent}
+  .thresh{font-family:var(--mono);font-size:12px;color:var(--ember-1)}
+
+  /* ---------- clusters ---------- */
+  ol.clusters{list-style:none;margin:0;padding:0;counter-reset:c}
+  ol.clusters li{
+    border-bottom:1px solid var(--line);padding:9px 2px;cursor:pointer;
+    display:grid;grid-template-columns:1fr auto;gap:4px 10px;align-items:center;
+  }
+  ol.clusters li:hover{background:rgba(244,129,63,.07)}
+  ol.clusters li:last-child{border-bottom:none}
+  .cl-name{font-weight:600}
+  .cl-sub{grid-column:1;font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .cl-frp{grid-row:1/3;font-family:var(--mono);font-size:13px;text-align:right;color:var(--ember-1)}
+  .empty{color:var(--muted);font-size:12.5px;padding:6px 0}
+
+  /* ---------- legend + map overlays ---------- */
+  .legend{
+    position:absolute;left:14px;bottom:22px;z-index:500;background:rgba(19,28,43,.92);
+    border:1px solid var(--line);border-radius:9px;padding:10px 12px;backdrop-filter:blur(6px);
+  }
+  .legend b{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+  .ramp{display:flex;height:8px;border-radius:4px;overflow:hidden;margin:7px 0 5px;width:190px}
+  .ramp i{flex:1}
+  .legend .scale{display:flex;justify-content:space-between;font-family:var(--mono);font-size:10px;color:var(--muted)}
+  .toast{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:600;
+    background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--ember-2);
+    padding:10px 14px;border-radius:8px;max-width:min(560px,86vw);font-size:13px;
+    box-shadow:0 10px 30px rgba(0,0,0,.45);display:none;
+  }
+  .toast.show{display:block}
+  .basemap-switch{
+    position:absolute;right:12px;top:12px;z-index:500;display:flex;gap:1px;
+    background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;
+  }
+  .basemap-switch button{background:var(--panel);border:0;padding:7px 11px;font-size:12px;cursor:pointer}
+  .basemap-switch button[aria-pressed=true]{background:var(--ember-2);color:#1B0E08;font-weight:600}
+  .region-switch{
+    position:absolute;left:60px;top:12px;z-index:500;display:flex;gap:1px;
+    background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden;
+  }
+  .region-switch button{background:var(--panel);border:0;padding:7px 12px;font-size:12px;cursor:pointer;font-family:var(--mono);letter-spacing:.06em}
+  .region-switch button:hover{background:var(--panel-2)}
+
+  /* ---------- leaflet skin ---------- */
+  .leaflet-container{background:#0A0F18;font-family:var(--sans)}
+  .leaflet-popup-content-wrapper{background:var(--panel);color:var(--text);border-radius:10px;border:1px solid var(--line)}
+  .leaflet-popup-tip{background:var(--panel)}
+  .leaflet-popup-content{margin:12px 14px;font-size:13px;min-width:210px}
+  .leaflet-control-zoom a{background:var(--panel);color:var(--text);border-color:var(--line)}
+  .leaflet-control-zoom a:hover{background:var(--panel-2)}
+  .leaflet-control-attribution{background:rgba(11,18,32,.8);color:var(--muted)}
+  .leaflet-control-attribution a{color:var(--muted)}
+  .pop-title{font-family:var(--display);font-weight:700;font-size:16px;margin-bottom:2px}
+  .pop-grid{display:grid;grid-template-columns:auto 1fr;gap:2px 12px;font-family:var(--mono);font-size:11.5px;margin-top:8px}
+  .pop-grid span:nth-child(odd){color:var(--muted)}
+  .pop-wx{margin-top:9px;border-top:1px solid var(--line);padding-top:8px;font-family:var(--mono);font-size:11.5px}
+  .pop-btn{margin-top:9px;width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:6px;cursor:pointer;font-size:12px}
+
+  @media (max-width:860px){
+    .shell{grid-template-columns:1fr;grid-template-rows:52vh 48vh}
+    .stage{order:-1}
+    .brand{padding:12px 16px 10px}
+    .brand h1{font-size:21px}
+    .rail-body{padding:12px 16px 20px}
+    .legend{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <div class="brand">
+      <h1>ATEŞ<span>.</span></h1>
+      <p><span class="livedot" id="livedot"></span><span id="statusline">Bereit — geschützter NASA-Zugang</span></p>
+    </div>
+
+    <div class="rail-body">
+
+      <section class="block">
+        <h2>Datenquelle</h2>
+        <p class="hint" style="margin:0 0 12px">NASA FIRMS wird sicher über die Netlify Function geladen. Der API-Key bleibt auf dem Server.</p>
+        <div class="row">
+          <label class="field">
+            <span>Sensor</span>
+            <select id="source">
+              <option value="ALL_VIIRS" selected>Alle VIIRS (meiste Überflüge)</option>
+              <option value="VIIRS_NOAA20_NRT">VIIRS NOAA-20</option>
+              <option value="VIIRS_SNPP_NRT">VIIRS Suomi-NPP</option>
+              <option value="VIIRS_NOAA21_NRT">VIIRS NOAA-21</option>
+              <option value="MODIS_NRT">MODIS Aqua/Terra</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Zeitraum</span>
+            <select id="days">
+              <option value="1">letzte 24 h</option>
+              <option value="2">letzte 48 h</option>
+              <option value="3" selected>letzte 3 Tage</option>
+              <option value="5">letzte 5 Tage</option>
+            </select>
+          </label>
+        </div>
+        <label class="field">
+          <span>Gebiet</span>
+          <select id="area">
+            <option value="both" selected>Deutschland + Türkiye</option>
+            <option value="de">Deutschland</option>
+            <option value="tr">Türkiye</option>
+            <option value="med">Östliches Mittelmeer</option>
+            <option value="view">Aktueller Kartenausschnitt</option>
+          </select>
+        </label>
+        <div class="btn-row">
+          <button class="btn primary" id="load">Brände laden</button>
+          <button class="btn" id="demo" title="Synthetische Testdaten ohne API-Key">Demo</button>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12.5px;color:var(--muted)">
+          <input type="checkbox" id="autorefresh" style="accent-color:var(--ember-2)"> alle 10 Minuten neu laden
+        </label>
+        <p class="hint">Jede Kombination aus Sensor und Gebiet ist eine eigene FIRMS-Anfrage — „Alle VIIRS" mit beiden Ländern sind also 6 von 5.000 Transaktionen je 10 Minuten.</p>
+        <p class="hint">Anfragen sind auf den Kartenbereich Deutschland–Türkiye begrenzt und werden zum Schutz des NASA-Kontingents zwischengespeichert.</p>
+      </section>
+
+      <section class="block">
+        <h2>Lage <span id="obstime" class="thresh"></span></h2>
+        <div class="stats">
+          <div class="stat"><b id="s-count">–</b><small>Detektionen</small></div>
+          <div class="stat"><b id="s-high">–</b><small>hohe Konfidenz</small></div>
+          <div class="stat"><b id="s-frp">–</b><small>max. FRP (MW)</small></div>
+          <div class="stat"><b id="s-sum">–</b><small>Σ FRP (MW)</small></div>
+        </div>
+        <div class="split" id="split">
+          <div data-region="DE"><span class="flag">DEUTSCHLAND</span><span class="val" id="s-de">–</span></div>
+          <div data-region="TR"><span class="flag">TÜRKİYE</span><span class="val" id="s-tr">–</span></div>
+        </div>
+      </section>
+
+      <section class="block">
+        <h2>FRP-Spektrum <span class="thresh" id="threshLabel">ab 0 MW</span></h2>
+        <div class="spectrum">
+          <canvas id="hist" width="640" height="128" aria-label="Verteilung der Strahlungsleistung"></canvas>
+          <div class="scale"><span>schwach</span><span>Feuerintensität (log)</span><span>stark</span></div>
+          <input type="range" id="thresh" min="0" max="100" value="0" aria-label="Mindest-FRP">
+        </div>
+        <p class="hint">Filtert schwache Signale (Industrie, Gasfackeln, Brandrodung) aus der Karte.</p>
+      </section>
+
+      <section class="block">
+        <h2>Hotspot-Cluster</h2>
+        <ol class="clusters" id="clusters"><li class="empty">Noch keine Daten geladen.</li></ol>
+      </section>
+
+      <section class="block">
+        <h2>Wetterkontext <span class="thresh">Open-Meteo</span></h2>
+        <p class="hint" style="margin-top:0">Ohne API-Key: Im Popup lassen sich Temperatur, Luftfeuchte, Niederschlag und Wind am Brandort abrufen.</p>
+      </section>
+
+      <section class="block">
+        <h2>Export</h2>
+        <div class="btn-row">
+          <button class="btn" id="expGeo">GeoJSON</button>
+          <button class="btn" id="expCsv">CSV</button>
+        </div>
+        <p class="hint">Exportiert nur die aktuell gefilterten Punkte — direkt in QGIS ladbar (EPSG:4326).</p>
+      </section>
+
+    </div>
+  </aside>
+
+  <main class="stage">
+    <div id="map"></div>
+    <div class="region-switch" role="group" aria-label="Kartenausschnitt wechseln">
+      <button id="go-de">DE</button>
+      <button id="go-tr">TR</button>
+      <button id="go-both">BEIDE</button>
+    </div>
+    <div class="basemap-switch" role="group" aria-label="Kartenhintergrund">
+      <button id="bm-dark" aria-pressed="true">Karte</button>
+      <button id="bm-sat" aria-pressed="false">Satellit</button>
+    </div>
+    <div class="legend">
+      <b>Fire Radiative Power</b>
+      <div class="ramp"><i style="background:#FFD166"></i><i style="background:#F4A03F"></i><i style="background:#F4813F"></i><i style="background:#E23E2E"></i><i style="background:#FFF3D6"></i></div>
+      <div class="scale"><span>&lt;5</span><span>20</span><span>50</span><span>100</span><span>MW+</span></div>
+    </div>
+    <div class="toast" id="toast"></div>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+(function(){
+"use strict";
+
+/* ---------------------------------------------------------------- Karte */
+var map = L.map('map',{zoomControl:true, preferCanvas:true, worldCopyJump:true})
+            .setView([39.0,35.2], 6);
+
+var osmAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>-Mitwirkende';
+var dark = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+  maxZoom:19, attribution:osmAttribution, className:'osm-dark'
+}).addTo(map);
+var sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{
+  maxZoom:19, attribution:'Esri, Maxar, Earthstar Geographics'
+});
+
+document.getElementById('bm-dark').onclick = function(){ swapBase(true); };
+document.getElementById('bm-sat').onclick  = function(){ swapBase(false); };
+function swapBase(isDark){
+  if(isDark){ map.removeLayer(sat); dark.addTo(map); }
+  else { map.removeLayer(dark); sat.addTo(map); }
+  document.getElementById('bm-dark').setAttribute('aria-pressed', String(isDark));
+  document.getElementById('bm-sat').setAttribute('aria-pressed', String(!isDark));
+}
+
+var fireLayer = L.layerGroup().addTo(map);
+
+/* ------------------------------------------------------------- Zustand */
+var ALL = [];        // alle geladenen Detektionen
+var SHOWN = [];      // nach FRP-Schwelle gefiltert
+var timer = null;
+var BOX = {                       // west, süd, ost, nord
+  de: [5.7, 47.2, 15.2, 55.2],
+  tr: [25.6, 35.7, 44.9, 42.2],
+  med:[18.0, 30.0, 45.0, 43.0]
+};
+function bboxStr(k){ return BOX[k].join(','); }
+function inBox(k, lat, lon){
+  var b = BOX[k];
+  return lon >= b[0] && lon <= b[2] && lat >= b[1] && lat <= b[3];
+}
+function regionOf(lat, lon){
+  if(inBox('de', lat, lon)) return 'DE';
+  if(inBox('tr', lat, lon)) return 'TR';
+  return '';
+}
+
+var VIEWS = {
+  de:   [[47.2,5.7],[55.2,15.2]],
+  tr:   [[35.7,25.6],[42.2,44.9]],
+  both: [[35.7,5.7],[55.2,44.9]]
+};
+function goTo(k){ map.fitBounds(VIEWS[k], {padding:[20,20]}); }
+document.getElementById('go-de').onclick   = function(){ goTo('de'); };
+document.getElementById('go-tr').onclick   = function(){ goTo('tr'); };
+document.getElementById('go-both').onclick = function(){ goTo('both'); };
+goTo('both');
+
+/* -------------------------------------------------------------- Utils */
+function toast(msg){
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._h); t._h = setTimeout(function(){ t.classList.remove('show'); }, 7000);
+}
+function status(txt, live){
+  document.getElementById('statusline').textContent = txt;
+  document.getElementById('livedot').classList.toggle('on', !!live);
+}
+function num(v){ var n = parseFloat(v); return isFinite(n) ? n : 0; }
+
+function frpColor(f){
+  if(f >= 100) return '#FFF3D6';
+  if(f >= 50)  return '#E23E2E';
+  if(f >= 20)  return '#F4813F';
+  if(f >= 5)   return '#F4A03F';
+  return '#FFD166';
+}
+function frpRadius(f, z){
+  var base = 3 + Math.min(9, Math.log(1 + f) * 2.1);
+  return base * (z >= 9 ? 1.35 : 1);
+}
+function confLabel(c){
+  if(c === 'h') return 'hoch';
+  if(c === 'n') return 'nominal';
+  if(c === 'l') return 'niedrig';
+  var n = parseFloat(c);
+  if(isFinite(n)) return n + ' %' + (n >= 80 ? ' (hoch)' : n >= 30 ? ' (nominal)' : ' (niedrig)');
+  return c || '–';
+}
+function isHigh(c){
+  if(c === 'h') return true;
+  var n = parseFloat(c);
+  return isFinite(n) && n >= 80;
+}
+function acqDate(d){ // "2026-08-12", "1342" -> Date (UTC)
+  var t = ('0000' + (d.acq_time||'0')).slice(-4);
+  return new Date(d.acq_date + 'T' + t.slice(0,2) + ':' + t.slice(2) + ':00Z');
+}
+function fmtLocal(dt, region){
+  var opts = {timeZone: region === 'DE' ? 'Europe/Berlin' : 'Europe/Istanbul',
+              day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'};
+  if(region === 'DE') opts.timeZoneName = 'short';
+  try{
+    return dt.toLocaleString('de-DE', opts) + (region === 'DE' ? '' : ' TRT');
+  }catch(e){ return dt.toISOString().slice(0,16).replace('T',' ') + ' UTC'; }
+}
+
+/* -------------------------------------------------------- CSV-Parsing */
+function parseCSV(text){
+  var lines = text.trim().split(/\r?\n/);
+  if(lines.length < 2) return [];
+  var head = lines[0].split(',').map(function(s){ return s.trim(); });
+  var out = [];
+  for(var i=1;i<lines.length;i++){
+    if(!lines[i]) continue;
+    var cells = lines[i].split(',');
+    var o = {};
+    for(var j=0;j<head.length;j++) o[head[j]] = (cells[j]||'').trim();
+    var lat = parseFloat(o.latitude), lon = parseFloat(o.longitude);
+    if(!isFinite(lat) || !isFinite(lon)) continue;
+    o.lat = lat; o.lon = lon;
+    o.frp = num(o.frp);
+    o.bright = num(o.bright_ti4 || o.brightness);
+    out.push(o);
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------- Laden */
+function areaParams(){          // liefert eine Liste von Gebieten -> je ein Request
+  var a = document.getElementById('area').value;
+  if(a === 'both')  return [bboxStr('de'), bboxStr('tr')];
+  if(a === 'view'){
+    var b = map.getBounds();
+    return [[b.getWest(), b.getSouth(), b.getEast(), b.getNorth()]
+             .map(function(v){ return v.toFixed(2); }).join(',')];
+  }
+  return [bboxStr(a)];
+}
+
+function load(){
+  var src   = document.getElementById('source').value;
+  var days  = document.getElementById('days').value;
+  var areas = areaParams();
+  var srcs  = src === 'ALL_VIIRS'
+            ? ['VIIRS_NOAA20_NRT','VIIRS_SNPP_NRT','VIIRS_NOAA21_NRT']
+            : [src];
+
+  var jobs = [];
+  srcs.forEach(function(s){ areas.forEach(function(a){ jobs.push({s:s, a:a}); }); });
+
+  status('Lade FIRMS-Daten (' + jobs.length + ' Abfrage' + (jobs.length > 1 ? 'n' : '') + ') …', true);
+  document.getElementById('load').disabled = true;
+
+  Promise.all(jobs.map(function(j){
+    var params = new URLSearchParams({source:j.s, area:j.a, days:days});
+    var url = '/api/firms?' + params.toString();
+    return fetch(url).then(function(r){
+      return r.text().then(function(body){
+        if(!r.ok){
+          try{ throw new Error(JSON.parse(body).error || ('HTTP ' + r.status)); }
+          catch(e){ if(e instanceof SyntaxError) throw new Error('HTTP ' + r.status); throw e; }
+        }
+        return body;
+      });
+    }).then(function(txt){
+      if(/transaction limit/i.test(txt)) throw new Error('Kontingent erschöpft — in 10 Minuten erneut versuchen');
+      return parseCSV(txt);
+    });
+  }))
+  .then(function(sets){
+    var seen = {};
+    ALL = [];
+    sets.forEach(function(rows){
+      rows.forEach(function(d){
+        var k = d.lat.toFixed(4) + '|' + d.lon.toFixed(4) + '|' + d.acq_date + d.acq_time + '|' + (d.satellite||'');
+        if(seen[k]) return;                      // Überlappung der Boxen entfernen
+        seen[k] = 1;
+        d.region = regionOf(d.lat, d.lon);
+        ALL.push(d);
+      });
+    });
+    afterLoad((src === 'ALL_VIIRS' ? 'VIIRS ×3' : src) + ' · ' + days + ' Tage');
+  })
+  .catch(function(e){
+    status('Laden fehlgeschlagen', false);
+    toast('FIRMS antwortet nicht: ' + e.message);
+  })
+  .then(function(){ document.getElementById('load').disabled = false; });
+}
+
+function afterLoad(label){
+  if(!ALL.length){
+    status('Keine Detektionen im Gebiet', false);
+    SHOWN = []; render(); toast('FIRMS meldet für dieses Gebiet und den Zeitraum keine Hitzeanomalien.');
+    return;
+  }
+  document.getElementById('thresh').value = 0;
+  status(ALL.length + ' Detektionen · ' + label, true);
+  drawHist(); applyThreshold(); fitToData();
+}
+
+function fitToData(){
+  if(!SHOWN.length) return;
+  var b = L.latLngBounds(SHOWN.map(function(d){ return [d.lat, d.lon]; }));
+  map.fitBounds(b.pad(0.15), {maxZoom:9});
+}
+
+/* ------------------------------------------------- Schwelle & Filter */
+var threshEl = document.getElementById('thresh');
+threshEl.addEventListener('input', applyThreshold);
+
+function currentThreshold(){
+  var maxF = ALL.reduce(function(m,d){ return Math.max(m, d.frp); }, 0);
+  var v = +threshEl.value / 100;
+  return v === 0 ? 0 : Math.round((Math.exp(v * Math.log(1 + maxF)) - 1) * 10) / 10;
+}
+function applyThreshold(){
+  var t = currentThreshold();
+  document.getElementById('threshLabel').textContent = 'ab ' + t + ' MW';
+  SHOWN = ALL.filter(function(d){ return d.frp >= t; });
+  render();
+}
+
+/* ------------------------------------------------------------ Render */
+function render(){
+  fireLayer.clearLayers();
+  var z = map.getZoom();
+  var recentCut = Date.now() - 6*3600*1000;
+
+  SHOWN.forEach(function(d){
+    var dt = acqDate(d);
+    var fresh = dt.getTime() > recentCut;
+    var m = L.circleMarker([d.lat, d.lon], {
+      radius: frpRadius(d.frp, z),
+      color: fresh ? '#FFF3D6' : frpColor(d.frp),
+      weight: fresh ? 1.6 : 0.6,
+      opacity: fresh ? .95 : .5,
+      fillColor: frpColor(d.frp),
+      fillOpacity: .72
+    });
+    m.bindPopup(popupHTML(d, dt), {maxWidth:280});
+    m.on('popupopen', function(e){ wireWeather(e.popup, d); });
+    fireLayer.addLayer(m);
+  });
+
+  stats(); clusters();
+}
+map.on('zoomend', function(){ if(SHOWN.length) render(); });
+
+function popupHTML(d, dt){
+  return '<div class="pop-title">' + Math.round(d.frp) + ' MW</div>'
+    + '<div style="color:var(--muted);font-size:12px">' + (d.satellite || d.instrument || 'Satellit') + ' · ' + fmtLocal(dt, d.region) + '</div>'
+    + '<div class="pop-grid">'
+    + '<span>Koordinaten</span><span>' + d.lat.toFixed(4) + ', ' + d.lon.toFixed(4) + '</span>'
+    + '<span>Konfidenz</span><span>' + confLabel(d.confidence) + '</span>'
+    + '<span>Helligkeit</span><span>' + d.bright.toFixed(1) + ' K</span>'
+    + '<span>Pixel</span><span>' + (d.scan||'?') + ' × ' + (d.track||'?') + ' km</span>'
+    + '<span>Überflug</span><span>' + (d.daynight === 'N' ? 'Nacht' : 'Tag') + '</span>'
+    + '</div>'
+    + '<button class="pop-btn" data-wx="1">Wetter am Brandort laden</button><div class="pop-wx" style="display:none"></div>';
+}
+
+function weatherLabel(code){
+  if(code === 0) return 'klar';
+  if(code === 1) return 'überwiegend klar';
+  if(code === 2) return 'teilweise bewölkt';
+  if(code === 3) return 'bedeckt';
+  if(code === 45 || code === 48) return 'Nebel';
+  if(code >= 51 && code <= 57) return 'Nieselregen';
+  if(code >= 61 && code <= 67) return 'Regen';
+  if(code >= 71 && code <= 77) return 'Schnee';
+  if(code >= 80 && code <= 82) return 'Regenschauer';
+  if(code >= 85 && code <= 86) return 'Schneeschauer';
+  if(code >= 95) return 'Gewitter';
+  return 'Wetterlage unbekannt';
+}
+
+function wireWeather(popup, d){
+  var el = popup.getElement(); if(!el) return;
+  var btn = el.querySelector('[data-wx]'); if(!btn) return;
+  btn.onclick = function(){
+    btn.disabled = true; btn.textContent = 'Lade …';
+    var params = new URLSearchParams({
+      latitude:d.lat,
+      longitude:d.lon,
+      current:'temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m',
+      wind_speed_unit:'ms',
+      timezone:'auto'
+    });
+    fetch('https://api.open-meteo.com/v1/forecast?' + params.toString())
+      .then(function(r){
+        if(!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function(w){
+        var c = w.current;
+        if(!c) throw new Error('keine aktuellen Daten');
+        var box = el.querySelector('.pop-wx');
+        box.style.display = 'block';
+        box.innerHTML = Math.round(c.temperature_2m) + ' °C · ' + Math.round(c.relative_humidity_2m) + ' % rF<br>'
+          + 'Wind ' + Number(c.wind_speed_10m).toFixed(1) + ' m/s aus ' + Math.round(c.wind_direction_10m) + '°'
+          + ' · Böen ' + Number(c.wind_gusts_10m).toFixed(1) + ' m/s<br>'
+          + 'Niederschlag ' + Number(c.precipitation).toFixed(1) + ' mm · ' + weatherLabel(c.weather_code)
+          + '<br><small>Quelle: Open-Meteo · Modellwert</small>';
+        btn.remove();
+      })
+      .catch(function(e){ btn.disabled = false; btn.textContent = 'Wetter nicht verfügbar (' + e.message + ')'; });
+  };
+}
+
+/* ------------------------------------------------------------- Stats */
+function stats(){
+  var n = SHOWN.length;
+  var high = SHOWN.filter(function(d){ return isHigh(d.confidence); }).length;
+  var max = SHOWN.reduce(function(m,d){ return Math.max(m, d.frp); }, 0);
+  var sum = SHOWN.reduce(function(s,d){ return s + d.frp; }, 0);
+  document.getElementById('s-count').textContent = n ? n.toLocaleString('de-DE') : '–';
+  document.getElementById('s-high').textContent  = n ? high.toLocaleString('de-DE') : '–';
+  document.getElementById('s-frp').textContent   = n ? Math.round(max).toLocaleString('de-DE') : '–';
+  document.getElementById('s-sum').textContent   = n ? Math.round(sum).toLocaleString('de-DE') : '–';
+
+  var de = SHOWN.filter(function(d){ return d.region === 'DE'; }).length;
+  var tr = SHOWN.filter(function(d){ return d.region === 'TR'; }).length;
+  document.getElementById('s-de').textContent = n ? de.toLocaleString('de-DE') : '–';
+  document.getElementById('s-tr').textContent = n ? tr.toLocaleString('de-DE') : '–';
+
+  var newest = 0, newestRegion = '';
+  SHOWN.forEach(function(d){
+    var t = acqDate(d).getTime();
+    if(t > newest){ newest = t; newestRegion = d.region; }
+  });
+  document.getElementById('obstime').textContent = newest ? 'zuletzt ' + fmtLocal(new Date(newest), newestRegion) : '';
+}
+document.getElementById('split').addEventListener('click', function(e){
+  var box = e.target.closest('[data-region]'); if(!box) return;
+  goTo(box.getAttribute('data-region') === 'DE' ? 'de' : 'tr');
+});
+
+/* --------------------------------------------------------- Histogramm */
+function drawHist(){
+  var c = document.getElementById('hist'), ctx = c.getContext('2d');
+  var W = c.width, H = c.height;
+  ctx.clearRect(0,0,W,H);
+  if(!ALL.length) return;
+  var maxF = ALL.reduce(function(m,d){ return Math.max(m, d.frp); }, 0) || 1;
+  var BINS = 40, bins = new Array(BINS).fill(0);
+  ALL.forEach(function(d){
+    var p = Math.log(1 + d.frp) / Math.log(1 + maxF);
+    bins[Math.min(BINS-1, Math.floor(p * BINS))]++;
+  });
+  var peak = Math.max.apply(null, bins) || 1;
+  var bw = W / BINS;
+  for(var i=0;i<BINS;i++){
+    var h = (bins[i] / peak) * (H - 6);
+    var frpAt = Math.exp((i/BINS) * Math.log(1 + maxF)) - 1;
+    ctx.fillStyle = frpColor(frpAt);
+    ctx.globalAlpha = .85;
+    ctx.fillRect(i*bw + 1, H - h, bw - 2, h);
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ----------------------------------------------------------- Cluster */
+var PROV = [["Adana",37.00,35.32],["Adıyaman",37.76,38.28],["Afyonkarahisar",38.76,30.54],["Ağrı",39.72,43.05],["Aksaray",38.37,34.03],["Amasya",40.65,35.83],["Ankara",39.93,32.86],["Antalya",36.89,30.71],["Ardahan",41.11,42.70],["Artvin",41.18,41.82],["Aydın",37.85,27.84],["Balıkesir",39.65,27.89],["Bartın",41.64,32.34],["Batman",37.88,41.13],["Bayburt",40.26,40.23],["Bilecik",40.14,29.98],["Bingöl",38.88,40.50],["Bitlis",38.40,42.11],["Bolu",40.74,31.61],["Burdur",37.72,30.29],["Bursa",40.19,29.06],["Çanakkale",40.15,26.41],["Çankırı",40.60,33.62],["Çorum",40.55,34.95],["Denizli",37.78,29.09],["Diyarbakır",37.91,40.24],["Düzce",40.84,31.16],["Edirne",41.68,26.56],["Elazığ",38.68,39.22],["Erzincan",39.75,39.49],["Erzurum",39.90,41.27],["Eskişehir",39.78,30.52],["Gaziantep",37.07,37.38],["Giresun",40.91,38.39],["Gümüşhane",40.46,39.48],["Hakkâri",37.57,43.74],["Hatay",36.20,36.16],["Iğdır",39.92,44.04],["Isparta",37.76,30.55],["İstanbul",41.01,28.98],["İzmir",38.42,27.14],["Kahramanmaraş",37.58,36.93],["Karabük",41.20,32.63],["Karaman",37.18,33.22],["Kars",40.60,43.10],["Kastamonu",41.38,33.78],["Kayseri",38.73,35.49],["Kırıkkale",39.85,33.52],["Kırklareli",41.74,27.22],["Kırşehir",39.15,34.16],["Kilis",36.72,37.12],["Kocaeli",40.77,29.95],["Konya",37.87,32.48],["Kütahya",39.42,29.99],["Malatya",38.35,38.31],["Manisa",38.62,27.43],["Mardin",37.31,40.74],["Mersin",36.81,34.64],["Muğla",37.22,28.36],["Muş",38.73,41.49],["Nevşehir",38.62,34.71],["Niğde",37.97,34.68],["Ordu",40.98,37.88],["Osmaniye",37.07,36.25],["Rize",41.02,40.52],["Sakarya",40.78,30.40],["Samsun",41.29,36.33],["Siirt",37.93,41.94],["Sinop",42.03,35.15],["Sivas",39.75,37.02],["Şanlıurfa",37.16,38.80],["Şırnak",37.52,42.46],["Tekirdağ",40.98,27.51],["Tokat",40.31,36.55],["Trabzon",41.00,39.72],["Tunceli",39.11,39.55],["Uşak",38.68,29.41],["Van",38.49,43.38],["Yalova",40.65,29.27],["Yozgat",39.82,34.81],["Zonguldak",41.46,31.79]];
+
+var ORTE_DE = [["Berlin",52.52,13.40],["Hamburg",53.55,9.99],["München",48.14,11.58],["Köln",50.94,6.96],["Frankfurt a. M.",50.11,8.68],["Stuttgart",48.78,9.18],["Düsseldorf",51.23,6.78],["Leipzig",51.34,12.37],["Dortmund",51.51,7.47],["Essen",51.46,7.01],["Bremen",53.08,8.80],["Dresden",51.05,13.74],["Hannover",52.37,9.73],["Nürnberg",49.45,11.08],["Bielefeld",52.02,8.53],["Bonn",50.73,7.10],["Münster",51.96,7.63],["Karlsruhe",49.01,8.40],["Mannheim",49.49,8.47],["Augsburg",48.37,10.90],["Wiesbaden",50.08,8.24],["Braunschweig",52.27,10.52],["Kiel",54.32,10.14],["Chemnitz",50.83,12.92],["Aachen",50.78,6.08],["Halle (Saale)",51.48,11.97],["Magdeburg",52.13,11.63],["Freiburg",47.99,7.85],["Mainz",49.99,8.25],["Lübeck",53.87,10.69],["Erfurt",50.98,11.03],["Rostock",54.09,12.13],["Kassel",51.31,9.50],["Potsdam",52.40,13.06],["Saarbrücken",49.24,6.99],["Cottbus",51.76,14.33],["Schwerin",53.63,11.41],["Görlitz",51.15,14.99],["Lüneburg",53.25,10.41],["Regensburg",49.02,12.10],["Würzburg",49.79,9.94],["Osnabrück",52.28,8.05],["Oldenburg",53.14,8.21],["Ingolstadt",48.77,11.43],["Ulm",48.40,9.99],["Heilbronn",49.14,9.22],["Trier",49.75,6.64],["Jena",50.93,11.59],["Bayreuth",49.95,11.58],["Passau",48.57,13.46],["Konstanz",47.66,9.18],["Flensburg",54.78,9.44],["Emden",53.37,7.21],["Siegen",50.87,8.02],["Fulda",50.55,9.68],["Gießen",50.58,8.68],["Paderborn",51.72,8.75],["Hamm",51.68,7.82],["Frankfurt (Oder)",52.35,14.55],["Eberswalde",52.83,13.82],["Zittau",50.90,14.81]];
+
+function nearestProvince(lat, lon, region){
+  var list = region === 'DE' ? ORTE_DE : PROV;
+  var limit = region === 'DE' ? 70 : 130;
+  var best = null, bd = Infinity;
+  for(var i=0;i<list.length;i++){
+    var dy = (list[i][1] - lat) * 111;
+    var dx = (list[i][2] - lon) * 111 * Math.cos(lat * Math.PI/180);
+    var d = Math.sqrt(dx*dx + dy*dy);
+    if(d < bd){ bd = d; best = list[i][0]; }
+  }
+  return bd < limit ? {name:best, dist:Math.round(bd)} : null;
+}
+
+function clusters(){
+  var el = document.getElementById('clusters');
+  if(!SHOWN.length){ el.innerHTML = '<li class="empty">Keine Punkte über der aktuellen Schwelle.</li>'; return; }
+  var cells = {};
+  SHOWN.forEach(function(d){
+    var k = Math.round(d.lat/0.15) + '|' + Math.round(d.lon/0.15);
+    if(!cells[k]) cells[k] = {n:0, frp:0, lat:0, lon:0, newest:0, region:d.region};
+    var c = cells[k];
+    c.n++; c.frp += d.frp; c.lat += d.lat; c.lon += d.lon;
+    c.newest = Math.max(c.newest, acqDate(d).getTime());
+  });
+  var list = Object.keys(cells).map(function(k){
+    var c = cells[k];
+    return {n:c.n, frp:c.frp, lat:c.lat/c.n, lon:c.lon/c.n, newest:c.newest, region:c.region};
+  }).sort(function(a,b){ return b.frp - a.frp; }).slice(0,8);
+
+  el.innerHTML = '';
+  list.forEach(function(c){
+    var p = nearestProvince(c.lat, c.lon, c.region);
+    var tag = c.region ? '<span style="color:var(--muted);font-family:var(--mono);font-size:10px"> ' + c.region + '</span>' : '';
+    var li = document.createElement('li');
+    li.innerHTML = '<div class="cl-name">' + (p ? p.name + (p.dist > 25 ? ' (ca. ' + p.dist + ' km)' : '') : c.lat.toFixed(2) + ', ' + c.lon.toFixed(2)) + tag + '</div>'
+      + '<div class="cl-frp">' + Math.round(c.frp) + ' MW</div>'
+      + '<div class="cl-sub">' + c.n + ' ' + (c.n === 1 ? 'Punkt' : 'Punkte') + ' · ' + fmtLocal(new Date(c.newest), c.region) + '</div>';
+    li.onclick = function(){ map.setView([c.lat, c.lon], 11); };
+    el.appendChild(li);
+  });
+}
+
+/* ------------------------------------------------------------ Export */
+function download(name, mime, text){
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], {type:mime}));
+  a.download = name; a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+}
+document.getElementById('expGeo').onclick = function(){
+  if(!SHOWN.length){ toast('Nichts zu exportieren — zuerst Daten laden.'); return; }
+  var fc = {type:'FeatureCollection', features: SHOWN.map(function(d){
+    return {type:'Feature', geometry:{type:'Point', coordinates:[d.lon, d.lat]},
+      properties:{frp:d.frp, brightness:d.bright, confidence:d.confidence,
+        acq_date:d.acq_date, acq_time:d.acq_time, satellite:d.satellite||'', daynight:d.daynight||''}};
+  })};
+  download('firms_' + new Date().toISOString().slice(0,10) + '.geojson', 'application/geo+json', JSON.stringify(fc));
+};
+document.getElementById('expCsv').onclick = function(){
+  if(!SHOWN.length){ toast('Nichts zu exportieren — zuerst Daten laden.'); return; }
+  var cols = ['latitude','longitude','frp','bright','confidence','acq_date','acq_time','satellite','daynight'];
+  var rows = [cols.join(',')].concat(SHOWN.map(function(d){
+    return [d.lat, d.lon, d.frp, d.bright, d.confidence, d.acq_date, d.acq_time, d.satellite||'', d.daynight||''].join(',');
+  }));
+  download('firms_' + new Date().toISOString().slice(0,10) + '.csv', 'text/csv', rows.join('\n'));
+};
+
+/* ----------------------------------------------------- Demo & Refresh */
+document.getElementById('load').onclick = load;
+document.getElementById('demo').onclick = function(){
+  var seeds = [
+    [36.62,29.12,18],[36.85,30.20,14],[37.05,28.32,12],[38.30,26.95,10],
+    [36.35,36.05,8],[40.30,29.55,7],[37.40,35.80,9],
+    [52.85,13.75,4],[53.10,10.35,3],[51.60,14.10,3],[48.95,11.90,2]   // Brandenburg, Heide, Lausitz, Bayern
+  ];
+  var now = Date.now(), out = [];
+  seeds.forEach(function(s, i){
+    var count = 2 + Math.floor(Math.random() * s[2]);
+    for(var k=0;k<count;k++){
+      var t = new Date(now - Math.random()*3*24*3600*1000);
+      var la = s[0] + (Math.random()-0.5)*0.35, lo = s[1] + (Math.random()-0.5)*0.35;
+      out.push({
+        lat: la, lon: lo, region: regionOf(la, lo),
+        frp: Math.round(Math.pow(Math.random(), 2.4) * (i===0?420:(i<7?120:35)) * 10)/10 + 1,
+        bright: 300 + Math.random()*80,
+        confidence: Math.random() > 0.55 ? 'h' : (Math.random() > 0.4 ? 'n' : 'l'),
+        acq_date: t.toISOString().slice(0,10),
+        acq_time: t.toISOString().slice(11,13) + t.toISOString().slice(14,16),
+        satellite: 'DEMO', daynight: Math.random() > 0.5 ? 'D' : 'N'
+      });
+    }
+  });
+  ALL = out;
+  afterLoad('Demo-Daten — nicht real');
+  toast('Demo-Modus: synthetische Punkte zum Testen der Oberfläche.');
+};
+
+document.getElementById('autorefresh').onchange = function(e){
+  clearInterval(timer);
+  if(e.target.checked){
+    timer = setInterval(load, 600000);
+    toast('Automatische Aktualisierung alle 10 Minuten aktiv.');
+  }
+};
+
+status('Bereit — Brände laden oder Demo starten', false);
+})();
+</script>
+</body>
+</html>
