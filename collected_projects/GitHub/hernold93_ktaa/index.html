@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>קטע שכתבתי</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@400;500;700&family=Heebo:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EDEEF0;
+    --surface:#FFFFFF;
+    --ink:#191C22;
+    --muted:#5F6672;
+    --line:#DCDFE4;
+    --accent:#2F5D50;
+    --accent-soft:#E4EBE8;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Heebo',system-ui,sans-serif;
+    font-size:16px;
+    line-height:1.6;
+    -webkit-text-size-adjust:100%;
+  }
+  a{color:var(--accent);text-decoration:none}
+  a:hover{text-decoration:underline}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:2px}
+
+  .wrap{max-width:640px;margin:0 auto;padding:0 20px}
+
+  header{border-bottom:1px solid var(--line);background:var(--surface)}
+  .bar{display:flex;align-items:baseline;justify-content:space-between;gap:16px;padding:18px 0}
+  .brand{font-family:'Frank Ruhl Libre',Georgia,serif;font-size:24px;font-weight:700;color:var(--ink)}
+  .brand:hover{text-decoration:none}
+  nav{display:flex;gap:16px;align-items:baseline;font-size:15px}
+
+  main{padding:32px 0 80px}
+
+  h1,h2,h3{font-family:'Frank Ruhl Libre',Georgia,serif;font-weight:700;line-height:1.25;margin:0}
+
+  /* ---- פיד ---- */
+  .lead{padding-bottom:28px;margin-bottom:8px;border-bottom:1px solid var(--line)}
+  .lead h2{font-size:30px;margin-bottom:10px}
+  .item{padding:22px 0;border-bottom:1px solid var(--line)}
+  .item h3{font-size:20px;margin-bottom:6px}
+  .item h3 a{color:var(--ink)}
+  .excerpt{
+    font-family:'Frank Ruhl Libre',Georgia,serif;
+    font-size:17px;line-height:1.75;color:#2C3038;
+    margin:0 0 8px;white-space:pre-wrap;
+  }
+  .meta{font-size:13.5px;color:var(--muted)}
+  .meta a{color:var(--muted);text-decoration:underline;text-underline-offset:2px}
+
+  /* ---- עמוד קטע ---- */
+  .piece h1{font-size:28px;margin-bottom:8px}
+  .piece .body{
+    font-family:'Frank Ruhl Libre',Georgia,serif;
+    font-size:18px;line-height:1.85;white-space:pre-wrap;
+    margin:24px 0 32px;
+  }
+  .rule{border:0;border-top:1px solid var(--line);margin:32px 0}
+
+  .comment{padding:16px 0;border-bottom:1px solid var(--line)}
+  .comment p{margin:0 0 6px;white-space:pre-wrap}
+
+  /* ---- טפסים ---- */
+  label{display:block;font-size:14px;color:var(--muted);margin-bottom:6px}
+  input,textarea,select{
+    width:100%;font-family:inherit;font-size:16px;color:var(--ink);
+    background:var(--surface);border:1px solid var(--line);border-radius:4px;
+    padding:10px 12px;margin-bottom:18px;
+  }
+  textarea{font-family:'Frank Ruhl Libre',Georgia,serif;font-size:17px;line-height:1.75;resize:vertical}
+  input:focus,textarea:focus,select:focus{border-color:var(--accent);outline:none}
+  button{
+    font-family:inherit;font-size:16px;font-weight:500;cursor:pointer;
+    background:var(--accent);color:#fff;border:0;border-radius:4px;padding:11px 22px;
+  }
+  button:hover{background:#264A40}
+  button.ghost{background:none;color:var(--accent);padding:0;font-size:14px}
+  button.ghost:hover{background:none;text-decoration:underline}
+  button[disabled]{opacity:.5;cursor:default}
+
+  .tabs{display:flex;gap:20px;margin-bottom:24px;font-size:15px}
+  .tabs button{background:none;color:var(--muted);padding:0 0 6px;border-bottom:2px solid transparent;border-radius:0}
+  .tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+  .tabs button:hover{background:none}
+
+  .note{background:var(--accent-soft);border-radius:4px;padding:14px 16px;font-size:14.5px;margin-bottom:24px}
+  .error{color:#8C2F26;font-size:14.5px;margin-bottom:16px}
+  .empty{color:var(--muted);padding:40px 0;text-align:center}
+  .quiet{color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap bar">
+    <a class="brand" href="#/">קטע שכתבתי</a>
+    <nav id="nav"></nav>
+  </div>
+</header>
+
+<main class="wrap" id="app"></main>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+/* ============================================================
+   1. הדבק כאן את שני הערכים מ-Supabase → Settings → API
+   ============================================================ */
+const SUPABASE_URL = 'https://tietxwcddvzzkzwuuyqd.supabase.co/rest/v1/';
+const SUPABASE_ANON_KEY = 'sb_publishable_g5tKuNzV5UST6RMAPcAwOQ_x1IXUg_G';
+
+const db = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const app = document.getElementById('app');
+const nav = document.getElementById('nav');
+let me = null;          // { id, pen_name }
+const GENRES = ['פרוזה','שירה','סיפור קצר','פרק מספר','מחשבה','אחר'];
+
+/* ---------- עזרים ---------- */
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+const when = ts => new Date(ts).toLocaleDateString('he-IL',
+  { day:'numeric', month:'long', year:'numeric' });
+
+const cut = (t,n) => t.length > n ? t.slice(0,n).trimEnd() + '…' : t;
+
+const go = hash => { location.hash = hash; };
+
+function show(html){ app.innerHTML = html; }
+
+/* ---------- מצב התחברות ---------- */
+async function loadMe(){
+  const { data:{ session } } = await db.auth.getSession();
+  if (!session) { me = null; return; }
+  const { data } = await db.from('profiles')
+    .select('id, pen_name').eq('id', session.user.id).single();
+  me = data ?? { id: session.user.id, pen_name: 'כותב/ת' };
+}
+
+function paintNav(){
+  nav.innerHTML = me
+    ? `<a href="#/new">קטע חדש</a>
+       <a href="#/author/${me.id}">${esc(me.pen_name)}</a>
+       <button class="ghost" id="out">יציאה</button>`
+    : `<a href="#/enter">כניסה</a>`;
+  const out = document.getElementById('out');
+  if (out) out.onclick = async () => {
+    await db.auth.signOut(); me = null; paintNav(); go('#/'); route();
+  };
+}
+
+/* ---------- פיד ---------- */
+async function viewFeed(){
+  show('<p class="quiet">טוען…</p>');
+  const { data, error } = await db.from('pieces')
+    .select('id, title, body, genre, created_at, profiles(id, pen_name)')
+    .order('created_at', { ascending:false }).limit(30);
+
+  if (error) return show(`<p class="error">לא הצלחנו לטעון את הקטעים. ${esc(error.message)}</p>`);
+
+  if (!data.length) return show(`
+    <div class="empty">
+      <h2 style="font-size:26px;margin-bottom:10px">עוד לא פורסם כאן כלום</h2>
+      <p>הקטע הראשון יהיה שלך.</p>
+      <p style="margin-top:20px"><a href="#/new">פרסמו קטע</a></p>
+    </div>`);
+
+  const [first, ...rest] = data;
+  show(`
+    <article class="lead">
+      <h2><a href="#/piece/${first.id}" style="color:var(--ink)">${esc(first.title)}</a></h2>
+      <p class="excerpt">${esc(cut(first.body, 420))}</p>
+      <p class="meta">${authorLine(first)}</p>
+    </article>
+    ${rest.map(p => `
+      <article class="item">
+        <h3><a href="#/piece/${p.id}">${esc(p.title)}</a></h3>
+        <p class="excerpt">${esc(cut(p.body, 180))}</p>
+        <p class="meta">${authorLine(p)}</p>
+      </article>`).join('')}
+  `);
+}
+
+function authorLine(p){
+  const a = p.profiles;
+  const g = p.genre ? ` · ${esc(p.genre)}` : '';
+  return `<a href="#/author/${a?.id ?? ''}">${esc(a?.pen_name ?? 'כותב/ת')}</a> · ${when(p.created_at)}${g}`;
+}
+
+/* ---------- עמוד קטע ---------- */
+async function viewPiece(id){
+  show('<p class="quiet">טוען…</p>');
+  const { data:p, error } = await db.from('pieces')
+    .select('id, title, body, genre, created_at, author_id, profiles(id, pen_name)')
+    .eq('id', id).single();
+  if (error || !p) return show('<p class="error">הקטע הזה לא נמצא.</p>');
+
+  const { data:cs } = await db.from('comments')
+    .select('id, body, created_at, author_id, profiles(id, pen_name)')
+    .eq('piece_id', id).order('created_at');
+
+  show(`
+    <article class="piece">
+      <h1>${esc(p.title)}</h1>
+      <p class="meta">${authorLine(p)}</p>
+      <div class="body">${esc(p.body)}</div>
+      ${me && me.id === p.author_id
+        ? `<button class="ghost" id="del">מחיקת הקטע</button>` : ''}
+    </article>
+
+    <hr class="rule">
+    <h3 style="font-size:19px;margin-bottom:4px">משוב</h3>
+    <p class="quiet" style="margin:0 0 18px">כתבו מה עבד, מה צרם, ואיפה איבדתם עניין.</p>
+
+    <div id="comments">
+      ${(cs ?? []).length ? cs.map(c => `
+        <div class="comment">
+          <p>${esc(c.body)}</p>
+          <p class="meta"><a href="#/author/${c.profiles?.id ?? ''}">${esc(c.profiles?.pen_name ?? '')}</a> · ${when(c.created_at)}</p>
+        </div>`).join('')
+        : '<p class="quiet" style="padding:8px 0 20px">אין עדיין משוב.</p>'}
+    </div>
+
+    ${me ? `
+      <div style="margin-top:24px">
+        <label for="cbody">המשוב שלך</label>
+        <textarea id="cbody" rows="4" placeholder="מה עבד בשבילך בקטע הזה?"></textarea>
+        <p class="error" id="cerr" hidden></p>
+        <button id="csend">שליחת משוב</button>
+      </div>`
+      : `<p class="note" style="margin-top:24px"><a href="#/enter">היכנסו</a> כדי להגיב.</p>`}
+  `);
+
+  const del = document.getElementById('del');
+  if (del) del.onclick = async () => {
+    if (!confirm('למחוק את הקטע? אי אפשר לשחזר.')) return;
+    await db.from('pieces').delete().eq('id', p.id);
+    go('#/');
+  };
+
+  const send = document.getElementById('csend');
+  if (send) send.onclick = async () => {
+    const body = document.getElementById('cbody').value.trim();
+    const err = document.getElementById('cerr');
+    err.hidden = true;
+    if (body.length < 3) { err.textContent = 'כתבו משהו קודם.'; err.hidden = false; return; }
+    send.disabled = true;
+    const { error } = await db.from('comments')
+      .insert({ piece_id: p.id, author_id: me.id, body });
+    send.disabled = false;
+    if (error) { err.textContent = error.message; err.hidden = false; return; }
+    viewPiece(id);
+  };
+}
+
+/* ---------- עמוד כותב ---------- */
+async function viewAuthor(id){
+  show('<p class="quiet">טוען…</p>');
+  const { data:prof } = await db.from('profiles')
+    .select('id, pen_name, bio').eq('id', id).single();
+  if (!prof) return show('<p class="error">הכותב/ת לא נמצאו.</p>');
+
+  const { data:ps } = await db.from('pieces')
+    .select('id, title, body, genre, created_at, profiles(id, pen_name)')
+    .eq('author_id', id).order('created_at', { ascending:false });
+
+  show(`
+    <h1 style="font-size:26px">${esc(prof.pen_name)}</h1>
+    ${prof.bio ? `<p class="quiet" style="margin-top:6px">${esc(prof.bio)}</p>` : ''}
+    <p class="quiet" style="margin:6px 0 24px">${(ps ?? []).length} קטעים</p>
+    ${(ps ?? []).length ? ps.map(p => `
+      <article class="item">
+        <h3><a href="#/piece/${p.id}">${esc(p.title)}</a></h3>
+        <p class="excerpt">${esc(cut(p.body, 150))}</p>
+        <p class="meta">${when(p.created_at)}${p.genre ? ' · ' + esc(p.genre) : ''}</p>
+      </article>`).join('')
+      : '<p class="quiet">עוד לא פורסמו קטעים.</p>'}
+  `);
+}
+
+/* ---------- קטע חדש ---------- */
+function viewNew(){
+  if (!me) return go('#/enter');
+  show(`
+    <h1 style="font-size:24px;margin-bottom:20px">קטע חדש</h1>
+    <label for="t">כותרת</label>
+    <input id="t" maxlength="120">
+    <label for="g">סוג</label>
+    <select id="g">${GENRES.map(x => `<option>${x}</option>`).join('')}</select>
+    <label for="b">הקטע</label>
+    <textarea id="b" rows="16" placeholder="הדביקו או כתבו כאן."></textarea>
+    <p class="error" id="err" hidden></p>
+    <button id="save">פרסום</button>
+  `);
+
+  document.getElementById('save').onclick = async () => {
+    const title = document.getElementById('t').value.trim();
+    const body  = document.getElementById('b').value.trim();
+    const genre = document.getElementById('g').value;
+    const err   = document.getElementById('err');
+    err.hidden = true;
+    if (!title || body.length < 20) {
+      err.textContent = 'צריך כותרת, וקטע באורך של 20 תווים לפחות.';
+      err.hidden = false; return;
+    }
+    const btn = document.getElementById('save');
+    btn.disabled = true;
+    const { data, error } = await db.from('pieces')
+      .insert({ author_id: me.id, title, body, genre }).select('id').single();
+    btn.disabled = false;
+    if (error) { err.textContent = error.message; err.hidden = false; return; }
+    go('#/piece/' + data.id);
+  };
+}
+
+/* ---------- כניסה והרשמה ---------- */
+function viewEnter(mode = 'in'){
+  show(`
+    <div class="tabs">
+      <button id="tin"  class="${mode==='in' ?'on':''}">כניסה</button>
+      <button id="tup" class="${mode==='up'?'on':''}">הרשמה</button>
+    </div>
+    ${mode==='up' ? `<label for="pn">שם כותב/ת</label><input id="pn" maxlength="40">` : ''}
+    <label for="em">אימייל</label>
+    <input id="em" type="email" autocomplete="email">
+    <label for="pw">סיסמה</label>
+    <input id="pw" type="password" autocomplete="${mode==='up'?'new-password':'current-password'}">
+    <p class="error" id="err" hidden></p>
+    <button id="btn">${mode==='up' ? 'פתיחת חשבון' : 'כניסה'}</button>
+  `);
+
+  document.getElementById('tin').onclick = () => viewEnter('in');
+  document.getElementById('tup').onclick = () => viewEnter('up');
+
+  document.getElementById('btn').onclick = async () => {
+    const email = document.getElementById('em').value.trim();
+    const password = document.getElementById('pw').value;
+    const err = document.getElementById('err');
+    const btn = document.getElementById('btn');
+    err.hidden = true;
+    if (!email || password.length < 6) {
+      err.textContent = 'אימייל וסיסמה באורך 6 תווים לפחות.'; err.hidden = false; return;
+    }
+    btn.disabled = true;
+    let res;
+    if (mode === 'up') {
+      const pen_name = document.getElementById('pn').value.trim();
+      if (!pen_name) { err.textContent='בחרו שם כותב/ת.'; err.hidden=false; btn.disabled=false; return; }
+      res = await db.auth.signUp({ email, password, options:{ data:{ pen_name } } });
+    } else {
+      res = await db.auth.signInWithPassword({ email, password });
+    }
+    btn.disabled = false;
+    if (res.error) { err.textContent = res.error.message; err.hidden = false; return; }
+    await loadMe(); paintNav(); go('#/');
+  };
+}
+
+/* ---------- ניתוב ---------- */
+function route(){
+  const h = location.hash || '#/';
+  const [, seg, arg] = h.split('/');
+  window.scrollTo(0,0);
+  if (seg === 'piece')  return viewPiece(arg);
+  if (seg === 'author') return viewAuthor(arg);
+  if (seg === 'new')    return viewNew();
+  if (seg === 'enter')  return viewEnter('in');
+  return viewFeed();
+}
+
+window.addEventListener('hashchange', route);
+await loadMe();
+paintNav();
+route();
+</script>
+</body>
+</html>
