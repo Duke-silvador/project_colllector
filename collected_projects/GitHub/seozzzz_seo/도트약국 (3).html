@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>도트약국: 조제타임!</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/quiple/galmuri@1.1/dist/web/galmuri.css">
+<style>
+  :root{
+    --bg-outer:#12101f;
+    --bg-outer2:#1c1830;
+    --screen:#1a1638;
+    --panel:#2a2450;
+    --panel2:#352d60;
+    --line:#000000;
+    --white:#f4f1ff;
+    --pink:#ff5da2;
+    --pink-d:#c8397a;
+    --cyan:#4be3d1;
+    --cyan-d:#2fae9f;
+    --yellow:#ffd23f;
+    --yellow-d:#d4a418;
+    --red:#ff4d5e;
+    --red-d:#b52f3c;
+    --green:#7cff6b;
+    --green-d:#4bbf3d;
+  }
+  *{box-sizing:border-box; -webkit-font-smoothing:none; image-rendering:pixelated;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    font-family:'Galmuri9','Galmuri11', monospace;
+    background:
+      repeating-linear-gradient(45deg, var(--bg-outer) 0 10px, var(--bg-outer2) 10px 20px);
+    color:var(--white);
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:16px;
+  }
+  .pixel-font{ font-family:'Press Start 2P', monospace; }
+
+  .cabinet{
+    width:100%;
+    max-width:480px;
+    background:var(--panel2);
+    padding:10px;
+    border:6px solid var(--line);
+    box-shadow:
+      0 0 0 3px var(--pink),
+      0 0 0 6px var(--line),
+      10px 10px 0 rgba(0,0,0,0.5);
+    position:relative;
+  }
+  .marquee{
+    background:var(--pink);
+    border:3px solid var(--line);
+    text-align:center;
+    padding:10px 6px;
+    margin-bottom:10px;
+    box-shadow:4px 4px 0 var(--line);
+  }
+  .marquee .t1{
+    font-family:'Press Start 2P', monospace;
+    font-size:15px;
+    color:var(--white);
+    text-shadow:2px 2px 0 var(--pink-d);
+    letter-spacing:1px;
+  }
+  .marquee .t2{
+    font-family:'Press Start 2P', monospace;
+    font-size:8px;
+    color:var(--yellow);
+    margin-top:6px;
+    letter-spacing:1px;
+  }
+
+  .screen{
+    background:var(--screen);
+    border:4px solid var(--line);
+    box-shadow:inset 0 0 0 3px var(--cyan), 4px 4px 0 var(--line);
+    position:relative;
+    overflow:hidden;
+    min-height:420px;
+  }
+  .screen::before{
+    content:"";
+    position:absolute; inset:0;
+    background:repeating-linear-gradient(0deg, rgba(0,0,0,0.18) 0 2px, transparent 2px 4px);
+    pointer-events:none;
+    z-index:5;
+  }
+
+  /* ---------- START ---------- */
+  #startScreen{ padding:20px 16px 22px; text-align:center; position:relative; z-index:1;}
+  #startScreen h2{
+    font-family:'Press Start 2P', monospace;
+    font-size:11px;
+    line-height:1.9;
+    color:var(--yellow);
+    margin:6px 0 14px;
+    text-shadow:2px 2px 0 var(--yellow-d);
+  }
+  .rule-card{
+    background:var(--panel);
+    border:3px solid var(--line);
+    box-shadow:3px 3px 0 var(--line);
+    padding:10px 12px;
+    margin:0 0 12px;
+    text-align:left;
+    font-size:12.5px;
+    line-height:1.9;
+  }
+  .rule-card b{color:var(--pink);}
+  .rule-card b.blue{color:var(--cyan);}
+  #medicineGuide{ display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin-bottom:16px; }
+  .guide-item{
+    background:var(--panel); border:2px solid var(--line); box-shadow:2px 2px 0 var(--line);
+    padding:6px 2px; font-size:8.5px; line-height:1.4;
+  }
+  .guide-item .em{font-size:16px;display:block; filter:none;}
+
+  .arcade-btn{
+    font-family:'Press Start 2P', monospace;
+    font-size:13px;
+    background:var(--cyan);
+    color:var(--line);
+    border:3px solid var(--line);
+    padding:12px 26px;
+    cursor:pointer;
+    box-shadow:4px 4px 0 var(--cyan-d), 4px 4px 0 3px var(--line);
+    transition:transform .05s;
+  }
+  .arcade-btn:active{ transform:translate(3px,3px); box-shadow:1px 1px 0 var(--cyan-d), 1px 1px 0 3px var(--line); }
+  .blink{ animation:blink 1s steps(1) infinite; }
+  @keyframes blink{ 50%{ opacity:0.25; } }
+
+  .start-btn-row{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .manual-btn{
+    background:var(--yellow);
+    box-shadow:4px 4px 0 var(--yellow-d), 4px 4px 0 3px var(--line);
+    font-size:11px;
+  }
+  .manual-btn:active{ box-shadow:1px 1px 0 var(--yellow-d), 1px 1px 0 3px var(--line); }
+
+  /* ---------- MANUAL ---------- */
+  #manualScreen{ padding:14px 12px 18px; position:relative; z-index:1; max-height:560px; overflow-y:auto; }
+  .manual-header{
+    display:flex; justify-content:space-between; align-items:center;
+    margin-bottom:12px; position:sticky; top:0; background:var(--screen); padding-bottom:8px; z-index:2;
+  }
+  .manual-title{ font-family:'Press Start 2P', monospace; font-size:12px; color:var(--yellow); }
+  .back-btn{
+    font-family:'Press Start 2P', monospace; font-size:9px; background:var(--panel); color:var(--white);
+    border:3px solid var(--line); box-shadow:3px 3px 0 var(--line); padding:8px 10px; cursor:pointer;
+  }
+  .back-btn:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 var(--line); }
+  .m-section-title{
+    font-family:'Press Start 2P', monospace; font-size:10px;
+    background:var(--cyan); color:var(--line); display:inline-block;
+    padding:7px 10px; border:3px solid var(--line); box-shadow:3px 3px 0 var(--line);
+    margin:14px 0 10px;
+  }
+  .m-section-title.compound{ background:var(--yellow); }
+  .m-section-title.complex{ background:var(--pink); color:var(--white); }
+  .m-med-guide{ display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin-top:6px; }
+  .m-guide-item{
+    background:var(--panel2); border:2px solid var(--line); box-shadow:2px 2px 0 var(--line);
+    padding:6px 2px; text-align:center; font-size:8px; line-height:1.4;
+  }
+  .m-guide-item .em{ font-size:16px; display:block; margin-bottom:2px; }
+  .m-card-list{ display:flex; flex-direction:column; gap:6px; }
+  .m-card{
+    background:var(--panel); border:2px solid var(--line); box-shadow:2px 2px 0 var(--line);
+    padding:8px 10px; display:flex; justify-content:space-between; align-items:center; gap:8px;
+  }
+  .m-card .symptom{ font-size:11.5px; line-height:1.5; flex:1; }
+  .m-card .arrow{ color:var(--cyan); font-family:'Press Start 2P', monospace; font-size:10px; flex:none; }
+  .m-card .answer{ font-size:11px; color:var(--yellow); text-align:right; line-height:1.6; flex:none; max-width:36%; }
+
+  /* ---------- GAME ---------- */
+  #gameScreen{ padding:10px 12px 14px; position:relative; z-index:1; min-height:400px;}
+  .topbar{
+    display:flex; justify-content:space-between; align-items:center;
+    font-family:'Press Start 2P', monospace;
+    font-size:9px;
+    padding:2px 2px 10px;
+    color:var(--white);
+  }
+  #hearts{ font-size:14px; letter-spacing:3px; }
+  .stat{ display:flex; flex-direction:column; align-items:center; min-width:50px;}
+  .stat span.label{font-size:7px; color:var(--cyan); margin-bottom:4px;}
+  .stat span.val{font-size:12px; color:var(--yellow);}
+  #comboBadge{ color:var(--pink); font-size:8px; height:12px; margin-top:3px;}
+
+  .pause-btn{
+    font-family:'Press Start 2P', monospace;
+    font-size:11px;
+    background:var(--panel);
+    color:var(--white);
+    border:2px solid var(--line);
+    box-shadow:2px 2px 0 var(--line);
+    padding:8px 10px;
+    cursor:pointer;
+  }
+  .pause-btn:active{ transform:translate(1px,1px); box-shadow:1px 1px 0 var(--line); }
+
+  #pauseOverlay{
+    position:absolute; inset:0;
+    background:rgba(10,8,24,0.88);
+    display:flex; align-items:center; justify-content:center;
+    z-index:10;
+  }
+  #pauseOverlay[hidden]{ display:none; }
+  .pause-box{
+    background:var(--panel);
+    border:3px solid var(--line);
+    box-shadow:5px 5px 0 var(--line);
+    padding:24px 28px;
+    display:flex; flex-direction:column; align-items:center; gap:14px;
+  }
+  .pause-title{
+    font-family:'Press Start 2P', monospace;
+    font-size:16px; color:var(--yellow);
+    text-shadow:2px 2px 0 var(--yellow-d);
+    margin-bottom:4px;
+  }
+  .quit-btn{
+    background:var(--red);
+    box-shadow:4px 4px 0 var(--red-d), 4px 4px 0 3px var(--line);
+  }
+  .quit-btn:active{ box-shadow:1px 1px 0 var(--red-d), 1px 1px 0 3px var(--line); }
+
+  .stage-row{
+    display:flex; align-items:center; gap:6px;
+    margin-bottom:10px;
+  }
+  .stage-label{ font-size:8px; color:var(--cyan); font-family:'Press Start 2P',monospace; flex:none; }
+  .stage-track{
+    flex:1; height:10px; background:#000; border:2px solid var(--line); overflow:hidden;
+  }
+  .stage-fill{
+    height:100%; width:0%; background:var(--pink); transition:width .3s steps(5);
+  }
+  .stage-count{ font-size:8px; color:var(--yellow); font-family:'Press Start 2P',monospace; flex:none; }
+
+  #levelUpOverlay{
+    position:absolute; inset:0;
+    background:rgba(10,8,24,0.9);
+    align-items:center; justify-content:center;
+    z-index:11;
+  }
+  #levelUpOverlay[hidden]{ display:none; }
+  #levelUpOverlay:not([hidden]){ display:flex; }
+  .levelup-box{
+    text-align:center;
+    animation:levelPop .3s steps(4);
+  }
+  .levelup-t1{
+    font-family:'Press Start 2P', monospace; font-size:14px; color:var(--green);
+    text-shadow:2px 2px 0 var(--green-d);
+    margin-bottom:14px;
+  }
+  .levelup-t2{
+    font-family:'Press Start 2P', monospace; font-size:20px; color:var(--yellow);
+    text-shadow:3px 3px 0 var(--yellow-d);
+  }
+  @keyframes levelPop{
+    0%{ transform:scale(0.5); opacity:0; }
+    100%{ transform:scale(1); opacity:1; }
+  }
+
+  #ticketArea{ min-height:150px; display:flex; align-items:center; justify-content:center; margin-bottom:10px; }
+  .ticket{
+    background:var(--panel); width:100%; max-width:320px; border:3px solid var(--line);
+    box-shadow:4px 4px 0 var(--line);
+    padding:12px 14px 14px; position:relative;
+  }
+  .ticket-head{ display:flex; align-items:center; gap:10px; border-bottom:2px dashed var(--cyan); padding-bottom:8px; margin-bottom:8px; }
+  .patient-emoji{
+    font-size:28px; background:var(--screen); border:2px solid var(--line);
+    width:46px;height:46px; display:flex;align-items:center;justify-content:center; flex:none;
+  }
+  .patient-info{ font-size:9px; color:var(--cyan); font-family:'Press Start 2P',monospace; line-height:1.6;}
+  .patient-info b{ font-size:10px; color:var(--yellow); display:block;}
+  .symptom-line{ font-size:14px; line-height:1.6; text-align:center; padding:4px 2px 10px; color:var(--white);}
+  .patience-track{ height:12px; background:#000; border:2px solid var(--line); overflow:hidden; }
+  .patience-fill{ height:100%; width:100%; background:var(--green); transition:width .1s linear, background .2s; }
+  .stamp{
+    position:absolute; top:32%; left:50%; transform:translate(-50%,-50%) rotate(-10deg) scale(0.4);
+    font-family:'Press Start 2P', monospace; font-size:14px; padding:8px 12px; border:3px solid; opacity:0; pointer-events:none;
+    white-space:nowrap; background:var(--screen);
+  }
+  .stamp.show{ animation:stampIn .3s steps(3) forwards; }
+  .stamp.ok{ color:var(--green); border-color:var(--green); }
+  .stamp.no{ color:var(--red); border-color:var(--red); }
+  @keyframes stampIn{
+    0%{ opacity:0; transform:translate(-50%,-50%) rotate(-10deg) scale(0.4); }
+    60%{ opacity:1; transform:translate(-50%,-50%) rotate(-10deg) scale(1.1); }
+    100%{ opacity:1; transform:translate(-50%,-50%) rotate(-10deg) scale(1); }
+  }
+  .answer-reveal{ font-size:10px; color:var(--red); text-align:center; margin-top:6px; line-height:1.6;}
+
+  #shelfLabel{
+    font-family:'Press Start 2P', monospace; font-size:9px; color:var(--yellow);
+    margin:0 0 8px 2px; display:flex; justify-content:space-between; align-items:center;
+  }
+  #selCount{ font-size:8px; color:var(--cyan); }
+  #shelf{ display:grid; grid-template-columns:repeat(4,1fr); gap:5px; margin-bottom:10px; }
+  .med-btn{
+    background:var(--panel); border:2px solid var(--line); box-shadow:2px 2px 0 var(--line);
+    padding:7px 2px 5px; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer;
+    font-size:8.5px; color:var(--white); transition:transform .06s;
+  }
+  .med-btn .em{font-size:18px;}
+  .med-btn:active{ transform:translate(1px,1px); box-shadow:1px 1px 0 var(--line); }
+  .med-btn:disabled{ opacity:0.4; cursor:default; }
+  .med-btn.selected{ background:var(--cyan); color:var(--line); border-color:var(--line); box-shadow:2px 2px 0 var(--cyan-d);}
+
+  .action-row{ display:flex; gap:8px; }
+  .action-row button{
+    flex:1; font-family:'Press Start 2P', monospace; font-size:10.5px; border:3px solid var(--line); padding:10px 4px; cursor:pointer;
+  }
+  #clearBtn{ background:var(--panel); color:var(--white); box-shadow:3px 3px 0 var(--line); }
+  #clearBtn:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 var(--line); }
+  #submitBtn{ background:var(--pink); color:var(--white); box-shadow:3px 3px 0 var(--pink-d), 3px 3px 0 3px var(--line);}
+  #submitBtn:active{ transform:translate(2px,2px); box-shadow:1px 1px 0 var(--pink-d), 1px 1px 0 3px var(--line); }
+  #submitBtn:disabled{ opacity:0.4; }
+
+  .floatpts{
+    position:absolute; font-family:'Press Start 2P', monospace; font-size:13px; color:var(--yellow);
+    animation:floatUp .7s steps(6) forwards; pointer-events:none; left:50%; top:10%;
+  }
+  @keyframes floatUp{ from{ opacity:1; transform:translate(-50%,0); } to{ opacity:0; transform:translate(-50%,-32px); } }
+  .shake{ animation:shake .3s steps(4); }
+  @keyframes shake{ 0%,100%{transform:translateX(0);} 25%{transform:translateX(-5px);} 75%{transform:translateX(5px);} }
+
+  /* ---------- GAME OVER ---------- */
+  #gameOverScreen{ padding:30px 20px; text-align:center; position:relative; z-index:1;}
+  #gameOverScreen h2{
+    font-family:'Press Start 2P', monospace; color:var(--red); font-size:16px; margin-bottom:16px;
+    text-shadow:2px 2px 0 var(--red-d);
+  }
+  .final-stats{
+    background:var(--panel); border:3px solid var(--line); box-shadow:4px 4px 0 var(--line);
+    padding:16px; margin:16px 0 20px; font-size:12px; line-height:2.3; text-align:left;
+  }
+  .final-stats b{ color:var(--yellow); font-family:'Press Start 2P',monospace; font-size:12px; float:right;}
+  #newBest{
+    color:var(--green); font-family:'Press Start 2P', monospace; font-size:10px;
+    margin-bottom:10px;
+    display:none;
+  }
+</style>
+</head>
+<body>
+<div class="cabinet">
+  <div class="marquee">
+    <div class="t1">도트약국</div>
+    <div class="t2">▶ PHARMACY RUSH ◀</div>
+  </div>
+
+  <div class="screen">
+    <!-- START -->
+    <div id="startScreen">
+      <h2>증상을 잘 듣고<br>약을 섞어 조제하라!</h2>
+      <div class="rule-card">
+        💊 약을 <b class="blue">여러 개 선택</b>후 <b class="blue">조제하기</b> 실행<br>
+        🧪 복합 증상은 약을 <b>섞어서</b> 처방해야 함<br>
+        ⏳ 게이지 소진 전에 조제 완료<br>
+        ❤️ 오답/시간초과 시 LIFE 감소
+      </div>
+      <div id="medicineGuide"></div>
+      <div class="start-btn-row">
+        <button id="startBtn" class="arcade-btn"><span class="blink">▶</span> START</button>
+        <button id="manualBtn" class="arcade-btn manual-btn">📖 매뉴얼</button>
+      </div>
+    </div>
+
+    <!-- MANUAL -->
+    <div id="manualScreen" hidden>
+      <div class="manual-header">
+        <span class="manual-title">처방 매뉴얼</span>
+        <button id="manualBackBtn" class="back-btn">◀ 뒤로</button>
+      </div>
+      <div id="manualBody" class="manual-body"></div>
+    </div>
+
+    <!-- GAME -->
+    <div id="gameScreen" hidden>
+      <div class="topbar">
+        <div class="stat"><span class="label">LIFE</span><span id="hearts">❤️❤️❤️</span></div>
+        <div class="stat"><span class="label">SCORE</span><span class="val" id="scoreVal">0</span><span id="comboBadge"></span></div>
+        <div class="stat"><span class="label">LV</span><span class="val" id="levelVal">1</span></div>
+        <button id="pauseBtn" class="pause-btn">❚❚</button>
+      </div>
+
+      <div class="stage-row">
+        <span class="stage-label">STAGE 진행도</span>
+        <div class="stage-track"><div class="stage-fill" id="stageFill"></div></div>
+        <span class="stage-count" id="stageCount">0/5</span>
+      </div>
+
+      <div id="ticketArea"></div>
+
+      <div id="shelfLabel">MED SHELF <span id="selCount"></span></div>
+      <div id="shelf"></div>
+      <div class="action-row">
+        <button id="clearBtn">CLEAR</button>
+        <button id="submitBtn" disabled>조제하기</button>
+      </div>
+
+      <div id="pauseOverlay" hidden>
+        <div class="pause-box">
+          <div class="pause-title">PAUSED</div>
+          <button id="resumeBtn" class="arcade-btn">▶ 계속하기</button>
+          <button id="quitBtn" class="arcade-btn quit-btn">■ 그만하기</button>
+        </div>
+      </div>
+
+      <div id="levelUpOverlay" hidden>
+        <div class="levelup-box">
+          <div class="levelup-t1" id="levelUpT1">STAGE CLEAR!</div>
+          <div class="levelup-t2" id="levelUpT2">LEVEL 2</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GAME OVER -->
+    <div id="gameOverScreen" hidden>
+      <h2>GAME OVER</h2>
+      <div id="newBest">★ NEW RECORD ★</div>
+      <div class="final-stats">
+        SCORE <b id="finalScore">0</b><br>
+        처방 성공 <b id="finalServed">0</b><br>
+        MAX COMBO <b id="finalCombo">0</b><br>
+        BEST <b id="finalBest">0</b>
+      </div>
+      <button id="restartBtn" class="arcade-btn"><span class="blink">▶</span> RETRY</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const MEDICINES = [
+    { id:'fever',       em:'🌡️', name:'해열제' },
+    { id:'pain',        em:'💊', name:'진통제' },
+    { id:'stomach',     em:'🍵', name:'소화제' },
+    { id:'cough',       em:'🍯', name:'기침약' },
+    { id:'antihist',    em:'🌼', name:'항히스타민제' },
+    { id:'ointment',    em:'🩹', name:'연고' },
+    { id:'patch',       em:'🩺', name:'파스' },
+    { id:'diarrhea',    em:'🚽', name:'지사제' },
+    { id:'constipation',em:'🧻', name:'변비약' },
+    { id:'sleep',       em:'🌙', name:'수면유도제' },
+    { id:'antiseptic',  em:'🧴', name:'소독약' },
+    { id:'eyedrops',    em:'👁️', name:'인공눈물' },
+    { id:'antacid',     em:'🫙', name:'위산억제제' },
+    { id:'vitamin',     em:'🍊', name:'비타민' },
+    { id:'magnesium',   em:'⚡', name:'마그네슘' },
+    { id:'probiotic',   em:'🦠', name:'정장제' },
+  ];
+  const MED_BY_ID = {};
+  MEDICINES.forEach(m=>MED_BY_ID[m.id]=m);
+
+  const ANIMALS = ['🐶','🐱','🐰','🐻','🦊','🐼','🐨','🐵','🐷','🐸','🐹','🐔','🐮','🦁'];
+
+  const SIMPLE = [
+    { symptom:'열이 펄펄 나요...', need:['fever'] },
+    { symptom:'머리가 지끈지끈 아파요', need:['pain'] },
+    { symptom:'속이 더부룩하고 체한 것 같아요', need:['stomach'] },
+    { symptom:'콜록콜록, 기침이 안 멈춰요', need:['cough'] },
+    { symptom:'재채기가 나고 콧물이 흘러요', need:['antihist'] },
+    { symptom:'놀다가 무릎이 긁혔어요', need:['ointment'] },
+    { symptom:'어깨랑 목이 뻐근하게 결려요', need:['patch'] },
+    { symptom:'배탈이 나서 화장실을 자주 가요', need:['diarrhea'] },
+    { symptom:'변비 때문에 며칠째 힘들어요', need:['constipation'] },
+    { symptom:'요즘 밤에 잠이 잘 안 와요', need:['sleep'] },
+    { symptom:'상처를 소독하고 싶어요', need:['antiseptic'] },
+    { symptom:'눈이 뻑뻑하고 건조해요', need:['eyedrops'] },
+    { symptom:'속이 쓰리고 신물이 올라와요', need:['antacid'] },
+    { symptom:'요즘 너무 피곤하고 기력이 없어요', need:['vitamin'] },
+    { symptom:'눈꺼풀이 자꾸 파르르 떨려요', need:['magnesium'] },
+    { symptom:'장이 예민해서 자주 아파요', need:['probiotic'] },
+  ];
+  const COMPOUND = [
+    { symptom:'열도 나고 머리도 지끈거려요', need:['fever','pain'] },
+    { symptom:'기침도 하고 콧물도 나요', need:['cough','antihist'] },
+    { symptom:'체했는지 속도 안좋고 머리도 아파요', need:['stomach','pain'] },
+    { symptom:'어깨도 결리고 요즘 너무 피곤해요', need:['patch','vitamin'] },
+    { symptom:'상처가 나서 소독하고 연고도 발라야해요', need:['antiseptic','ointment'] },
+    { symptom:'속쓰림도 있고 변비도 있어요', need:['antacid','constipation'] },
+    { symptom:'잠도 안오고 눈도 뻑뻑해요', need:['sleep','eyedrops'] },
+    { symptom:'설사도 하고 장도 계속 예민해요', need:['diarrhea','probiotic'] },
+  ];
+  const COMPLEX = [
+    { symptom:'몸살감기예요, 열나고 기침나고 콧물도 나요', need:['fever','cough','antihist'] },
+    { symptom:'체하고 머리아프고 속도 쓰려요', need:['stomach','pain','antacid'] },
+    { symptom:'무리했더니 어깨 결리고 피곤하고 눈도 떨려요', need:['patch','vitamin','magnesium'] },
+    { symptom:'넘어져서 상처 소독하고 연고 바르고 파스도 붙여야해요', need:['antiseptic','ointment','patch'] },
+  ];
+
+  function poolForLevel(level){
+    let w;
+    if(level<=1) w=[1,0,0];
+    else if(level===2) w=[0.75,0.25,0];
+    else if(level===3) w=[0.55,0.35,0.10];
+    else if(level===4) w=[0.35,0.4,0.25];
+    else w=[0.2,0.45,0.35];
+    const r = Math.random();
+    if(r < w[0]) return SIMPLE;
+    if(r < w[0]+w[1]) return COMPOUND;
+    return COMPLEX;
+  }
+
+  const guideEl = document.getElementById('medicineGuide');
+  MEDICINES.forEach(m=>{
+    const d = document.createElement('div');
+    d.className = 'guide-item';
+    d.innerHTML = `<span class="em">${m.em}</span>${m.name}`;
+    guideEl.appendChild(d);
+  });
+
+  const startScreen = document.getElementById('startScreen');
+  const gameScreen = document.getElementById('gameScreen');
+  const overScreen = document.getElementById('gameOverScreen');
+  const manualScreen = document.getElementById('manualScreen');
+  const manualBody = document.getElementById('manualBody');
+  const ticketArea = document.getElementById('ticketArea');
+  const shelfEl = document.getElementById('shelf');
+  const heartsEl = document.getElementById('hearts');
+  const scoreEl = document.getElementById('scoreVal');
+  const levelEl = document.getElementById('levelVal');
+  const comboBadge = document.getElementById('comboBadge');
+  const selCountEl = document.getElementById('selCount');
+  const clearBtn = document.getElementById('clearBtn');
+  const submitBtn = document.getElementById('submitBtn');
+
+  let score=0, hearts=3, combo=0, bestCombo=0, served=0, level=1;
+  let patience=100, patienceMax=100, timerId=null, currentSymptom=null;
+  let answering=false;
+  let selected = new Set();
+  const BASE_TIME = 9000;
+  let timerStart=0, elapsedBeforePause=0, isPaused=false;
+  const pauseBtn = document.getElementById('pauseBtn');
+  const pauseOverlay = document.getElementById('pauseOverlay');
+  const resumeBtn = document.getElementById('resumeBtn');
+  const quitBtn = document.getElementById('quitBtn');
+
+  const STAGE_SIZE = 5;
+  let stageProgress = 0;
+  const stageFill = document.getElementById('stageFill');
+  const stageCount = document.getElementById('stageCount');
+  const levelUpOverlay = document.getElementById('levelUpOverlay');
+  const levelUpT2 = document.getElementById('levelUpT2');
+
+  function updateStageBar(){
+    stageFill.style.width = Math.round((stageProgress/STAGE_SIZE)*100)+'%';
+    stageCount.textContent = stageProgress+'/'+STAGE_SIZE;
+  }
+
+  function showLevelUp(){
+    levelUpT2.textContent = 'LEVEL ' + level;
+    levelUpOverlay.hidden = false;
+  }
+
+  function buildShelf(){
+    shelfEl.innerHTML='';
+    MEDICINES.forEach(m=>{
+      const btn=document.createElement('button');
+      btn.className='med-btn';
+      btn.id='med-'+m.id;
+      btn.innerHTML=`<span class="em">${m.em}</span>${m.name}`;
+      btn.addEventListener('click',()=>toggleSelect(m.id, btn));
+      shelfEl.appendChild(btn);
+    });
+  }
+
+  function toggleSelect(id, btn){
+    if(answering) return;
+    if(selected.has(id)){ selected.delete(id); btn.classList.remove('selected'); }
+    else { selected.add(id); btn.classList.add('selected'); }
+    selCountEl.textContent = selected.size>0 ? selected.size+' SEL' : '';
+    submitBtn.disabled = selected.size===0;
+  }
+
+  function clearSelection(){
+    if(answering) return;
+    selected.clear();
+    document.querySelectorAll('.med-btn').forEach(b=>b.classList.remove('selected'));
+    selCountEl.textContent='';
+    submitBtn.disabled = true;
+  }
+
+  function renderHearts(){
+    heartsEl.textContent = '❤️'.repeat(hearts) + '🖤'.repeat(3-hearts);
+  }
+
+  function levelTime(needCount){
+    const base = Math.max(4200, BASE_TIME - (level-1)*500);
+    return base + (needCount-1)*2600;
+  }
+
+  function spawnPatient(){
+    answering=false;
+    clearSelection();
+    const pool = poolForLevel(level);
+    currentSymptom = pool[Math.floor(Math.random()*pool.length)];
+    const animal = ANIMALS[Math.floor(Math.random()*ANIMALS.length)];
+    patienceMax = levelTime(currentSymptom.need.length);
+    patience = patienceMax;
+
+    ticketArea.innerHTML = `
+      <div class="ticket" id="ticket">
+        <div class="ticket-head">
+          <div class="patient-emoji">${animal}</div>
+          <div class="patient-info"><b>NEW PATIENT</b>WAITING...</div>
+        </div>
+        <div class="symptom-line">"${currentSymptom.symptom}"</div>
+        <div class="patience-track"><div class="patience-fill" id="patienceFill"></div></div>
+      </div>`;
+
+    elapsedBeforePause = 0;
+    timerStart = performance.now();
+    isPaused = false;
+    runTimerLoop();
+  }
+
+  function runTimerLoop(){
+    const fill = document.getElementById('patienceFill');
+    clearInterval(timerId);
+    timerId = setInterval(()=>{
+      if(isPaused) return;
+      const elapsed = elapsedBeforePause + (performance.now()-timerStart);
+      const ratio = Math.max(0, 1 - elapsed/patienceMax);
+      if(fill){
+        fill.style.width = (ratio*100)+'%';
+        fill.style.background = ratio>0.5 ? 'var(--green)' : (ratio>0.22 ? 'var(--yellow)' : 'var(--red)');
+      }
+      patience = ratio*patienceMax;
+      if(ratio<=0){
+        clearInterval(timerId);
+        if(!answering) missAnswer();
+      }
+    },80);
+  }
+
+  function pauseGame(){
+    if(isPaused || answering) return;
+    isPaused = true;
+    elapsedBeforePause += performance.now()-timerStart;
+    clearInterval(timerId);
+    pauseOverlay.hidden = false;
+  }
+
+  function resumeGame(){
+    if(!isPaused) return;
+    isPaused = false;
+    timerStart = performance.now();
+    pauseOverlay.hidden = true;
+    runTimerLoop();
+  }
+
+  function quitGame(){
+    isPaused = false;
+    clearInterval(timerId);
+    pauseOverlay.hidden = true;
+    gameScreen.hidden = true;
+    startScreen.hidden = false;
+  }
+
+  function setShelfEnabled(enabled){
+    document.querySelectorAll('.med-btn').forEach(b=>b.disabled=!enabled);
+    submitBtn.disabled = !enabled || selected.size===0;
+    clearBtn.disabled = !enabled;
+  }
+
+  function correctAnswerText(){
+    return currentSymptom.need.map(id=>MED_BY_ID[id].name).join(' + ');
+  }
+
+  function stampAndNext(ok, leveledUp){
+    clearInterval(timerId);
+    const ticket = document.getElementById('ticket');
+    const stamp = document.createElement('div');
+    stamp.className = 'stamp show ' + (ok?'ok':'no');
+    stamp.textContent = ok ? 'CLEAR!' : 'MISS!';
+    ticket.appendChild(stamp);
+
+    if(!ok){
+      const reveal = document.createElement('div');
+      reveal.className='answer-reveal';
+      reveal.textContent = '정답: ' + correctAnswerText();
+      ticket.appendChild(reveal);
+      gameScreen.classList.add('shake');
+      setTimeout(()=>gameScreen.classList.remove('shake'),340);
+    }
+    setShelfEnabled(false);
+
+    const baseDelay = ok ? 650 : 1200;
+    setTimeout(()=>{
+      if(hearts<=0){ endGame(); return; }
+      if(leveledUp){
+        showLevelUp();
+        setTimeout(()=>{
+          levelUpOverlay.hidden = true;
+          spawnPatient();
+          setShelfEnabled(true);
+        }, 1400);
+      } else {
+        spawnPatient();
+        setShelfEnabled(true);
+      }
+    }, baseDelay);
+  }
+
+  function floatScore(txt){
+    const f=document.createElement('div');
+    f.className='floatpts';
+    f.textContent=txt;
+    document.getElementById('ticket').appendChild(f);
+    setTimeout(()=>f.remove(),700);
+  }
+
+  function setsEqual(a,b){
+    if(a.size !== b.size) return false;
+    for(const v of a) if(!b.has(v)) return false;
+    return true;
+  }
+
+  function submitAnswer(){
+    if(answering || selected.size===0) return;
+    answering = true;
+    const needSet = new Set(currentSymptom.need);
+    if(setsEqual(selected, needSet)){
+      combo++;
+      bestCombo = Math.max(bestCombo, combo);
+      served++;
+      const speedBonus = Math.round((patience/patienceMax)*8);
+      const comboMult = 1 + Math.min(combo-1, 6)*0.2;
+      const base = 10*currentSymptom.need.length;
+      const gained = Math.round((base+speedBonus) * comboMult);
+      score += gained;
+      floatScore('+'+gained);
+      comboBadge.textContent = combo>1 ? ('x'+combo+' COMBO') : '';
+
+      stageProgress++;
+      let leveledUp = false;
+      if(stageProgress >= STAGE_SIZE){
+        level++;
+        levelEl.textContent = level;
+        stageProgress = 0;
+        leveledUp = true;
+      }
+      updateStageBar();
+      scoreEl.textContent = score;
+      stampAndNext(true, leveledUp);
+    } else {
+      combo=0;
+      comboBadge.textContent='';
+      hearts--;
+      renderHearts();
+      stampAndNext(false);
+    }
+  }
+
+  function missAnswer(){
+    if(answering) return;
+    answering = true;
+    combo=0;
+    comboBadge.textContent='';
+    hearts--;
+    renderHearts();
+    stampAndNext(false);
+  }
+
+  async function getBest(){
+    try{
+      const r = await window.storage.get('pharmacy-highscore', false);
+      return r ? parseInt(r.value,10)||0 : 0;
+    }catch(e){ return 0; }
+  }
+  async function setBest(v){
+    try{ await window.storage.set('pharmacy-highscore', String(v), false); }catch(e){}
+  }
+
+  async function endGame(){
+    clearInterval(timerId);
+    gameScreen.hidden = true;
+    overScreen.hidden = false;
+    document.getElementById('finalScore').textContent = score;
+    document.getElementById('finalServed').textContent = served;
+    document.getElementById('finalCombo').textContent = bestCombo;
+    const best = await getBest();
+    if(score > best){
+      await setBest(score);
+      document.getElementById('finalBest').textContent = score;
+      document.getElementById('newBest').style.display='block';
+    } else {
+      document.getElementById('finalBest').textContent = best;
+    }
+  }
+
+  function startGame(){
+    score=0; hearts=3; combo=0; bestCombo=0; served=0; level=1; answering=false;
+    stageProgress=0;
+    scoreEl.textContent='0'; levelEl.textContent='1'; comboBadge.textContent='';
+    updateStageBar();
+    renderHearts();
+    startScreen.hidden = true;
+    overScreen.hidden = true;
+    pauseOverlay.hidden = true;
+    levelUpOverlay.hidden = true;
+    isPaused = false;
+    gameScreen.hidden = false;
+    buildShelf();
+    spawnPatient();
+  }
+
+  function medAnswer(need){
+    return need.map(id=>MED_BY_ID[id].em+' '+MED_BY_ID[id].name).join('<br>+ ');
+  }
+
+  function buildManual(){
+    let html = '<div class="m-section-title">📋 약품 목록 (16종)</div><div class="m-med-guide">';
+    MEDICINES.forEach(m=>{
+      html += `<div class="m-guide-item"><span class="em">${m.em}</span>${m.name}</div>`;
+    });
+    html += '</div>';
+
+    function section(title, cls, list){
+      let s = `<div class="m-section-title ${cls}">${title}</div><div class="m-card-list">`;
+      list.forEach(item=>{
+        s += `<div class="m-card"><div class="symptom">"${item.symptom}"</div><div class="arrow">→</div><div class="answer">${medAnswer(item.need)}</div></div>`;
+      });
+      s += '</div>';
+      return s;
+    }
+    html += section('🩹 단일 증상 (약 1개)', '', SIMPLE);
+    html += section('🧪 복합 증상 (약 2개)', 'compound', COMPOUND);
+    html += section('🚑 중증 증상 (약 3개)', 'complex', COMPLEX);
+    manualBody.innerHTML = html;
+  }
+  buildManual();
+
+  document.getElementById('startBtn').addEventListener('click', startGame);
+  document.getElementById('restartBtn').addEventListener('click', startGame);
+  clearBtn.addEventListener('click', clearSelection);
+  submitBtn.addEventListener('click', submitAnswer);
+  document.getElementById('manualBtn').addEventListener('click', ()=>{
+    startScreen.hidden = true;
+    manualScreen.hidden = false;
+  });
+  document.getElementById('manualBackBtn').addEventListener('click', ()=>{
+    manualScreen.hidden = true;
+    startScreen.hidden = false;
+  });
+  pauseBtn.addEventListener('click', pauseGame);
+  resumeBtn.addEventListener('click', resumeGame);
+  quitBtn.addEventListener('click', quitGame);
+})();
+</script>
+</body>
+</html>
