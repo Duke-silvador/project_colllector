@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Paidégua Game: A Aventura da Onça em Belém do Pará</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background-color: #080c14;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      touch-action: none;
+    }
+    canvas {
+      max-width: 100vw;
+      max-height: 100vh;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      image-rendering: pixelated;
+      touch-action: none;
+    }
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #facc15;
+      text-align: center;
+      z-index: 10;
+    }
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(250, 204, 21, 0.2);
+      border-top-color: #facc15;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Barra de atalhos para Desktop */
+    #controls-bar {
+      position: fixed;
+      bottom: 8px;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(250, 204, 21, 0.35);
+      border-radius: 20px;
+      padding: 6px 18px;
+      color: #cbd5e1;
+      font-size: 12px;
+      z-index: 50;
+      pointer-events: none;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    }
+    #controls-bar kbd {
+      background: #334155;
+      color: #facc15;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-weight: bold;
+      font-family: monospace;
+    }
+
+    /* Controles Virtuais Touch para Celulares e Tablets */
+    #touch-controls {
+      display: none;
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 99;
+    }
+
+    /* Ativa os controles touch em telas com toque ou menores que 960px */
+    @media (hover: none) and (pointer: coarse), (max-width: 960px) {
+      #touch-controls {
+        display: block;
+      }
+      #controls-bar {
+        display: none;
+      }
+    }
+
+    .touch-group {
+      position: absolute;
+      bottom: 18px;
+      display: flex;
+      gap: 14px;
+      pointer-events: auto;
+    }
+
+    .touch-left {
+      left: 18px;
+      align-items: center;
+    }
+
+    .touch-right {
+      right: 18px;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .touch-btn {
+      background: rgba(15, 23, 42, 0.72);
+      border: 2px solid rgba(250, 204, 21, 0.85);
+      border-radius: 50%;
+      color: #facc15;
+      font-weight: bold;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6), inset 0 0 8px rgba(250, 204, 21, 0.15);
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+      transition: transform 0.08s ease, background 0.08s ease;
+    }
+
+    .touch-btn.active, .touch-btn:active {
+      background: rgba(250, 204, 21, 0.38);
+      transform: scale(0.92);
+      border-color: #ffffff;
+      color: #ffffff;
+    }
+
+    .touch-btn-dpad {
+      width: 58px;
+      height: 58px;
+      font-size: 22px;
+    }
+
+    .touch-btn-duck {
+      width: 58px;
+      height: 58px;
+      font-size: 16px;
+    }
+
+    .touch-btn-jump {
+      width: 72px;
+      height: 72px;
+      font-size: 18px;
+      border-color: #facc15;
+      background: rgba(20, 30, 50, 0.82);
+    }
+
+    .btn-sub {
+      font-size: 9px;
+      letter-spacing: 0.5px;
+      opacity: 0.9;
+      margin-top: -2px;
+    }
+
+    .touch-top-bar {
+      position: absolute;
+      top: 14px;
+      right: 16px;
+      pointer-events: auto;
+    }
+
+    .touch-btn-top {
+      background: rgba(15, 23, 42, 0.75);
+      border: 1.5px solid rgba(250, 204, 21, 0.7);
+      border-radius: 16px;
+      color: #facc15;
+      padding: 6px 14px;
+      font-size: 12px;
+      font-weight: bold;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      cursor: pointer;
+      touch-action: none;
+    }
+    .touch-btn-top:active, .touch-btn-top.active {
+      background: rgba(250, 204, 21, 0.35);
+      transform: scale(0.94);
+    }
+  </style>
+  <script src="wasm_exec.js"></script>
+</head>
+<body>
+  <div id="loading">
+    <div class="spinner"></div>
+    <h2 style="font-size: 1.3rem; margin-bottom: 6px;">🐆 Paidégua Game</h2>
+    <p style="color: #94a3b8; font-size: 0.9rem;">Carregando WebAssembly (Belém do Pará)...</p>
+  </div>
+
+  <!-- Controles Virtuais Touch na tela do celular -->
+  <div id="touch-controls">
+    <div class="touch-top-bar">
+      <button id="btn-touch-pause" class="touch-btn-top" aria-label="Pausa">⏸ PAUSA</button>
+    </div>
+
+    <div class="touch-group touch-left">
+      <button id="btn-touch-left" class="touch-btn touch-btn-dpad" aria-label="Recuar">◄</button>
+      <button id="btn-touch-right" class="touch-btn touch-btn-dpad" aria-label="Adiantar">►</button>
+    </div>
+
+    <div class="touch-group touch-right">
+      <button id="btn-touch-duck" class="touch-btn touch-btn-duck" aria-label="Abaixar">
+        ▼<span class="btn-sub">BAIXO</span>
+      </button>
+      <button id="btn-touch-jump" class="touch-btn touch-btn-jump" aria-label="Pular">
+        ▲<span class="btn-sub">PULO</span>
+      </button>
+    </div>
+  </div>
+
+  <div id="controls-bar">
+    <kbd>← / →</kbd> Adiantar/Voltar | <kbd>ESPAÇO / ↑</kbd> Pular (2x Pulo Duplo) | <kbd>↓</kbd> Abaixar | <kbd>ENTER</kbd> Iniciar | <kbd>ESC</kbd> Pausa
+  </div>
+
+  <script>
+    const go = new Go();
+    const loadingElem = document.getElementById('loading');
+
+    if (!WebAssembly.instantiateStreaming) {
+      WebAssembly.instantiateStreaming = async (resp, importObject) => {
+        const source = await (await resp).arrayBuffer();
+        return await WebAssembly.instantiate(source, importObject);
+      };
+    }
+
+    WebAssembly.instantiateStreaming(fetch("game.wasm"), go.importObject).then((result) => {
+      if (loadingElem) loadingElem.style.display = 'none';
+      go.run(result.instance);
+      window.focus();
+    }).catch((err) => {
+      console.error(err);
+      if (loadingElem) {
+        loadingElem.innerHTML = "<p style='color: #ef4444; font-weight: bold;'>Erro ao carregar o jogo: " + err + "</p>";
+      }
+    });
+
+    // Objeto global de chaves virtuais lido nativamente pelo Go (WASM)
+    window._virtualKeys = {
+      ArrowLeft: false,
+      ArrowRight: false,
+      Jump: false,
+      JustJump: false,
+      ArrowDown: false,
+      JustDuck: false,
+      Enter: false,
+      Escape: false,
+      ArrowUp: false
+    };
+
+    function setVirtual(key, state) {
+      if (window._virtualKeys) {
+        window._virtualKeys[key] = state;
+        if (key === 'Jump' && state) {
+          window._virtualKeys['JustJump'] = true;
+        }
+        if (key === 'ArrowDown' && state) {
+          window._virtualKeys['JustDuck'] = true;
+        }
+      }
+    }
+
+    // Helper para despachar teclas do teclado a partir de eventos touch
+    function triggerKey(code, key, keyCode, type) {
+      const event = new KeyboardEvent(type, {
+        code: code,
+        key: key,
+        keyCode: keyCode,
+        which: keyCode,
+        bubbles: true,
+        cancelable: true
+      });
+      window.dispatchEvent(event);
+      document.dispatchEvent(event);
+      const canvas = document.querySelector('canvas');
+      if (canvas) canvas.dispatchEvent(event);
+    }
+
+    function bindTouchButton(elemId, code, key, keyCode, vKey) {
+      const btn = document.getElementById(elemId);
+      if (!btn) return;
+
+      const onStart = (e) => {
+        e.preventDefault();
+        btn.classList.add('active');
+        if (vKey) setVirtual(vKey, true);
+        triggerKey(code, key, keyCode, 'keydown');
+      };
+
+      const onEnd = (e) => {
+        e.preventDefault();
+        btn.classList.remove('active');
+        if (vKey) setVirtual(vKey, false);
+        triggerKey(code, key, keyCode, 'keyup');
+      };
+
+      btn.addEventListener('touchstart', onStart, { passive: false });
+      btn.addEventListener('touchend', onEnd, { passive: false });
+      btn.addEventListener('touchcancel', onEnd, { passive: false });
+      btn.addEventListener('mousedown', onStart);
+      btn.addEventListener('mouseup', onEnd);
+      btn.addEventListener('mouseleave', onEnd);
+    }
+
+    // Vincula os botões virtuais às teclas
+    bindTouchButton('btn-touch-left', 'ArrowLeft', 'ArrowLeft', 37, 'ArrowLeft');
+    bindTouchButton('btn-touch-right', 'ArrowRight', 'ArrowRight', 39, 'ArrowRight');
+    bindTouchButton('btn-touch-jump', 'Space', ' ', 32, 'Jump');
+    bindTouchButton('btn-touch-duck', 'ArrowDown', 'ArrowDown', 40, 'ArrowDown');
+    bindTouchButton('btn-touch-pause', 'Escape', 'Escape', 27, 'Escape');
+
+    // Toque em qualquer área vazia inicia ou confirma o jogo
+    window.addEventListener('touchstart', (e) => {
+      if (!e.target.closest('#touch-controls')) {
+        setVirtual('Enter', true);
+        triggerKey('Enter', 'Enter', 13, 'keydown');
+        setTimeout(() => {
+          setVirtual('Enter', false);
+          triggerKey('Enter', 'Enter', 13, 'keyup');
+        }, 80);
+      }
+    }, { passive: true });
+
+    window.addEventListener('click', (e) => {
+      window.focus();
+      if (!e.target.closest('#touch-controls')) {
+        setVirtual('Enter', true);
+        triggerKey('Enter', 'Enter', 13, 'keydown');
+        setTimeout(() => {
+          setVirtual('Enter', false);
+          triggerKey('Enter', 'Enter', 13, 'keyup');
+        }, 80);
+      }
+    });
+  </script>
+</body>
+</html>
