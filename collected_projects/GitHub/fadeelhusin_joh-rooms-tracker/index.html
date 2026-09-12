@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#2a241d">
+<link rel="apple-touch-icon" href="icon.png">
+<title>JOH Room Tracker</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header>
+  <div class="brand"><h1>JOH Room Tracker</h1></div>
+  <div class="sub">Jeddah Opera House (S4-01-056) &middot; Room identity &amp; location &middot; local</div>
+  <button id="syncPill" class="syncpill" onclick="SyncUI.open()">&#9881;&#65039; Set up sync</button>
+  <div id="searchbar">
+    <input id="q" type="search" placeholder="Room no. or name&hellip;" autocomplete="off">
+    <select id="fl"><option value="">Level</option></select>
+    <select id="fa"><option value="">Type</option></select>
+  </div>
+</header>
+<main id="app"><div class="emptystate">Loading room data&hellip;</div></main>
+
+<nav id="tabbar">
+  <button data-tab="rooms" class="active"><span class="ic">&#127963;&#65039;</span>Rooms</button>
+  <button data-tab="plan"><span class="ic">&#128506;&#65039;</span>Plan</button>
+  <button data-tab="rfis"><span class="ic">&#128203;</span>RFIs</button>
+  <button data-tab="library"><span class="ic">&#128218;</span>Library</button>
+</nav>
+
+<!-- global room-schedule upload input -->
+<input type="file" id="scheduleInput" accept=".xlsx,.xls,.csv" style="display:none">
+<!-- item-library upload input (category set just before opening) -->
+<input type="file" id="libraryInput" accept=".xlsx,.xls,.csv" style="display:none">
+
+<!-- Sync settings modal -->
+<div id="syncOverlay" class="modalOverlay">
+  <div class="modalBox">
+    <div class="modalHead">Sync settings<button class="modalX" onclick="SyncUI.close()">&times;</button></div>
+    <div class="modalBody">
+      <div id="syncStatusBox" class="card small" style="margin-bottom:12px"></div>
+      <div class="fld"><label>GitHub personal access token</label><input id="syncToken" type="password" placeholder="ghp_&hellip;" autocomplete="off"></div>
+      <div class="fld2col">
+        <div class="fld"><label>Repository owner</label><input id="syncOwner" type="text" placeholder="fadeelhusin"></div>
+        <div class="fld"><label>Repository name</label><input id="syncRepo" type="text" placeholder="joh-rooms-tracker"></div>
+      </div>
+      <div class="fld"><label>Branch</label><input id="syncBranch" type="text" placeholder="main"></div>
+      <div class="fld"><label>Your name (engineer — tags your notes &amp; edits)</label><input id="syncUserName" type="text" placeholder="e.g. Fadeel"></div>
+      <div class="rfi-hint">The token is saved only on this device (browser local storage) and is sent only to api.github.com. Create a fine-grained token scoped to just this one repository, with "Contents" set to Read and write, nothing else. Data syncs to a <code>tracker-data/</code> folder in the repo automatically whenever this device is online.</div>
+    </div>
+    <div class="modalFoot">
+      <button class="btn ghost" onclick="SyncUI.disconnect()">Disconnect</button>
+      <button class="btn ghost" onclick="SyncUI.close()">Cancel</button>
+      <button class="btn" onclick="SyncUI.save()">Save &amp; sync</button>
+    </div>
+  </div>
+</div>
+
+<!-- Room Document / RFI Response modal (shared) -->
+<div id="attOverlay" class="modalOverlay">
+  <div class="modalBox">
+    <div class="modalHead" id="attTitle_"><span id="attTitleText">Add attachment</span> <span class="modalRoom" id="attCtxLabel"></span><button class="modalX" onclick="AttachUI.close()">&times;</button></div>
+    <div class="modalBody">
+      <div class="fld" id="attRefWrap"><label id="attRefLabel">Reference no.</label><input id="attRef" type="text"></div>
+      <div class="fld" id="attTitleWrap"><label>Title / description</label><input id="attTitleField" type="text"></div>
+      <div class="fld2col" id="attDateWrap">
+        <div class="fld"><label>Date</label><input id="attDate" type="date"></div>
+        <div class="fld" id="attByWrap"><label>Responded by</label><input id="attBy" type="text" placeholder="Your name"></div>
+      </div>
+      <div class="fld"><label id="attNoteLabel">Notes</label><textarea id="attNote" rows="3"></textarea></div>
+      <div class="fld"><label>Files</label>
+        <div style="display:flex;gap:8px">
+          <button class="btn ghost" type="button" onclick="document.getElementById('attCamInput').click()">&#128247; Take photo</button>
+          <button class="btn ghost" type="button" onclick="document.getElementById('attUploadInput').click()">&#128193; Upload files</button>
+        </div>
+        <div id="attFileStrip" class="photostrip"></div>
+        <div class="rfi-hint">PDFs, drawing scans, or photos &mdash; add as many as you need.</div>
+        <input type="file" id="attCamInput" accept="image/*" capture="environment" style="display:none">
+        <input type="file" id="attUploadInput" accept=".pdf,image/*" multiple style="display:none">
+      </div>
+      <div class="fld"><label>Links</label>
+        <div style="display:flex;gap:6px">
+          <input id="attLinkUrl" type="text" placeholder="https://&hellip;" style="flex:2">
+          <input id="attLinkLabel" type="text" placeholder="Label (optional)" style="flex:1">
+          <button class="btn ghost" type="button" onclick="AttachUI.addLink()">+ Add</button>
+        </div>
+        <div id="attLinkStrip"></div>
+        <div class="rfi-hint">Drive, SharePoint, or any shared link &mdash; add as many as you need.</div>
+      </div>
+    </div>
+    <div class="modalFoot">
+      <button class="btn ghost" onclick="AttachUI.close()">Cancel</button>
+      <button class="btn" onclick="AttachUI.submit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- RFI modal (built once, reused for any room) -->
+<div id="rfiOverlay" class="modalOverlay">
+  <div class="modalBox">
+    <div class="modalHead">New RFI <span class="modalRoom" id="rfiRoomLabel"></span><button class="modalX" onclick="RFIUI.close()">&times;</button></div>
+    <div class="modalBody">
+      <div class="fld"><label>Issue type</label>
+        <div class="chipwrap" id="rfiCatChips"></div>
+      </div>
+      <div class="fld"><label>Describe the problem</label>
+        <textarea id="rfiDesc" rows="3" placeholder="What's wrong, where exactly in the room, and any reference (drawing no., element)…"></textarea>
+      </div>
+      <div class="fld2col">
+        <div class="fld"><label>Raised by</label><input id="rfiBy" type="text" placeholder="Your name"></div>
+        <div class="fld"><label>Priority</label>
+          <div class="chipwrap" id="rfiPriChips"></div>
+        </div>
+      </div>
+      <div class="fld"><label>Photos</label>
+        <div style="display:flex;gap:8px">
+          <button class="btn ghost" type="button" onclick="document.getElementById('rfiCamInput').click()">&#128247; Take photo</button>
+          <button class="btn ghost" type="button" onclick="document.getElementById('rfiUploadInput').click()">&#128193; Upload</button>
+        </div>
+        <div id="rfiPhotoStrip" class="photostrip"></div>
+        <input type="file" id="rfiCamInput" accept="image/*" capture="environment" style="display:none">
+        <input type="file" id="rfiUploadInput" accept="image/*" multiple style="display:none">
+      </div>
+    </div>
+    <div class="modalFoot">
+      <button class="btn ghost" onclick="RFIUI.close()">Cancel</button>
+      <button class="btn" onclick="RFIUI.submit()">Submit RFI</button>
+    </div>
+  </div>
+</div>
+
+<!-- lightbox for viewing an RFI photo full-size -->
+<div id="lbOverlay" class="modalOverlay" onclick="Lightbox.close()">
+  <img id="lbImg" src="" alt="">
+</div>
+
+<script src="data.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="schedule.js"></script>
+<script src="library.js"></script>
+<script src="files.js"></script>
+<script src="docs.js"></script>
+<script src="clearance.js"></script>
+<script src="rfi.js"></script>
+<script src="sync.js"></script>
+<script src="viewer.js"></script>
+<script src="prog-data.js"></script>
+<script src="fin-data.js"></script>
+<script src="roominfo-data.js"></script>
+<script src="export-data.js"></script>
+<script src="exporter.js"></script>
+<script src="progress.js"></script>
+<script src="notes.js"></script>
+<script src="app.js"></script>
+<button id="updateFilesBtn" onclick="Exporter.updateFiles()"
+  style="position:fixed;right:14px;bottom:74px;z-index:900;background:#1565c0;color:#fff;border:none;
+  border-radius:26px;padding:12px 18px;font-size:13px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.35);cursor:pointer">
+  &#128190; Update Excel Files</button>
+</body>
+</html>
