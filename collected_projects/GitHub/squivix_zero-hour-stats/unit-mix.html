@@ -1,0 +1,671 @@
+<meta charset="utf-8">
+<title>Zero Hour Stats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="common.css">
+<style>
+  /* mix over time: a line per unit or class, a point per bin, a seat-count strip under them */
+  .tl svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .tl svg.zoomable { cursor: grab; touch-action: none; }
+  .tl .grid { stroke: var(--line); stroke-width: 1; }
+  .tl .ax { font-size: 11px; fill: var(--muted); }
+  .tl text.zhint { fill: var(--ink); }
+  .tl .ctitle { font-size: 11px; font-weight: 600; fill: var(--ink-2); }
+  .tl .legend + svg { margin-top: 18px; }
+  .tl .ar { fill: var(--c); stroke: var(--surface); stroke-width: 1; opacity: .9; }
+  .tl .ar.oth { opacity: .45; }
+  .tl .band rect { fill: transparent; }
+  /* the spinner over the chart while its bins are recounted: the old chart dims under it */
+  .tl-wrap { position: relative; min-height: 80px; }
+  .tl-wrap .busy[hidden] { display: none; }
+  .tl-wrap .busy { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .tl-wrap:has(.busy:not([hidden])) .tl { opacity: .3; pointer-events: none; }
+  .tl .band line { stroke: var(--ink); stroke-width: 1; opacity: 0; }
+  .tl .band:hover line { opacity: .35; }
+  #tip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--c); margin-right: 6px; vertical-align: middle; }
+  .tl .seats { fill: var(--ink); opacity: .18; }
+  .tl .mk line { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 3 3; opacity: .55; }
+  .tl .mk rect { fill: transparent; }
+  .tl .mk text { font-size: 10px; fill: var(--ink-2); }
+  .tl .mk:hover line { opacity: 1; stroke-dasharray: none; }
+  .tl .mk:hover text { fill: var(--ink); font-weight: 600; }
+  .tl .seatlbl { font-size: 10px; fill: var(--muted); }
+  .tl .legend { margin-top: 10px; }
+  .tl .legend small { color: var(--muted); }
+  .tl .legend .lg { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+  .tl .legend .lg:hover { color: var(--ink); }
+  .tl .legend .lg.off { color: var(--muted); text-decoration: line-through; }
+  .tl .legend .lg.off i { opacity: .3; }
+</style>
+<script>document.documentElement.dataset.theme = (function () { try { return localStorage.getItem("zh-theme"); } catch (e) { return null; } })() || "light";</script>
+
+<header>
+  <h1 class="disp"><a href="unit-mix.html">ZERO HOUR <span>STATS</span></a></h1>
+  <nav><a href="unit-mix.html" aria-current="page">Unit mix</a><a href="winrates.html">Win rates</a><a href="buildorders.html">Build orders</a><a href="posture.html">Opening posture</a><a href="combat.html">Combat</a></nav>
+  <button class="print" type="button" title="print the charts and active filters; choose &quot;Save as PDF&quot; as the destination">Export PDF</button>
+  <button class="theme" type="button" title="switch between dark and light"></button>
+  <div class="sub">What players train, by faction and matchup: every unit that came out of production in the library's games</div>
+  <div class="stamp" id="stamp"></div>
+</header>
+
+<div class="app">
+  <aside id="rail"></aside>
+  <main>
+    <div class="active" id="active"></div>
+    <div class="tiles" id="tiles"></div>
+
+    <section class="card">
+      <div class="card-h">
+        <h2 class="disp" id="chart-title">Units Built</h2>
+        <div class="spacer"></div>
+        <div class="ctl"><span class="lbl">Metric</span><div class="seg" id="metric"></div></div>
+        <div class="ctl"><span class="lbl">Show</span><div class="seg" id="topn"></div></div>
+        <div class="ctl"><div class="seg" id="viewmode"></div></div>
+      </div>
+      <div id="chart"></div>
+      <div class="foot">
+        <span class="base-key"><i></i> whole corpus (no player, map or source filters)</span>
+        <span id="foot-note"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2 class="disp">Army Mix</h2><div class="spacer"></div><span class="hint">by unit class; selection vs the whole corpus</span></div>
+      <div class="mix-rows" id="mix"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-h">
+        <h2 class="disp">Mix over Time</h2>
+        <div class="spacer"></div>
+        <div class="ctl"><span class="lbl">Group</span><div class="seg" id="tgroup"></div></div>
+        <div class="ctl"><span class="lbl">Bins</span><div class="seg" id="tbin"></div></div>
+        <div class="ctl"><span class="lbl">Show</span><div class="seg" id="tmetric"></div></div>
+        <div class="ctl"><span class="lbl">Style</span><div class="seg" id="tstyle"></div></div>
+        <div class="ctl"><span class="lbl">Marks</span><div class="seg" id="tmarks"></div></div>
+      </div>
+      <div class="tl-wrap"><div class="tl" id="tchart"></div><div class="busy" id="tbusy" hidden></div></div>
+      <div class="foot"><span id="time-note"></span></div>
+    </section>
+  </main>
+</div>
+<div id="tip" hidden></div>
+
+<div id="loading" class="loading"><div class="disp">ZERO HOUR <span>STATS</span></div><div class="spin"></div><div class="msg">loading unit mix&hellip;</div></div>
+<script>document.querySelector("#loading .spin").style.animationDelay = -(Date.now() % 800) + "ms"; window.ZH_DATASET = 'library'; window.ZH_COLS = [];</script>
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script src="common.js"></script>
+<script>
+window.ZH_READY.then(function (Z) {
+  const { D, F, CLASSES, CLS_COLOR, TOTAL_PG, $, esc, fmtPct, fmtInt, fmtMoney, fmtMoneyK, seg } = Z;
+
+  const METRICS = [
+    ['share', 'Share of units', v => fmtPct(v)],
+    ['pergame', 'Per game', v => v.toFixed(2)],
+    ['games', '% of games', v => fmtPct(v)],
+    ['spend', 'Share of spend', v => fmtPct(v)],
+  ];
+  const DEFAULT = { view: 'units', metric: 'share', top: 30, table: false, tgroup: 'units', tbin: '30', tmetric: 'share', tstyle: 'area', tmarks: '1', thide: [] };
+  const S = Z.loadPage('zh-units-page', 2, DEFAULT);
+
+  // --- aggregation -------------------------------------------------------
+  function aggregate(filterPop) {
+    const units = new Map();   // key -> {n, raw, cls, cost, count, present, spend, sides (side bits)}
+    // the loop's accumulators stay plain locals: nothing below the loop closes over them (a captured
+    // counter lives in a heap context, and 3M increments through one cost 100 ms)
+    let games = 0, total = 0, spend = 0, ne = 0;
+    const M = Z.mask(), cap = M.length;   // a word of filter bits per seat, in this same order
+    // one entry per player-game, in typed arrays; the medians come out by selection, not a sort
+    const elos = new Float64Array(cap), perUnits = new Float64Array(cap), perSpend = new Float64Array(cap), lengths = new Float64Array(cap);
+    const NC = CLASSES.length + 1, byClsA = new Float64Array(NC), spendClsA = new Float64Array(NC);
+    const unitsView = S.view === 'units', clsOn = new Uint8Array(NC);
+    for (const c of F.classes) clsOn[Z.CLS_INDEX[c]] = 1;
+    const showCap = Z.showCaptured(), mergeAll = F.merge === 'all';
+    const NT = D.templates.length, slot = new Array(NT * 2).fill(null);   // template (+NT when captured) -> its row: the string key is built once per template
+    let si = 0;
+    for (const g of D.games) {
+      const base = Z.inSample(g);   // baseline = uniform sample only
+      for (let i = 0; i < g.p.length; i++) {
+        const m = M[si++], p = g.p[i];
+        if (filterPop ? (m & Z.M_ALL) !== Z.M_ALL : !(base && (m & Z.M_SEAT))) continue;
+        games++;
+        if (p.e != null) elos[ne++] = p.e;
+        const list = unitsView ? p.u : p.b;
+        let myUnits = 0, mySpend = 0;
+        lengths[games - 1] = g.t;
+        for (let j = 0; j < list.length; j += 2) {   // flat [template, count, ...] runs
+          const ti = list[j], n = list[j + 1], t = D.templates[ti];
+          if (t.challenge) continue;   // Boss / challenge-mode tech
+          const ci = unitsView ? t.ci : NC - 1;
+          if (unitsView && !clsOn[ci]) continue;
+          const captured = !((t.own >> p.f) & 1);   // built from a stolen structure: listed apart, and only for a single faction
+          if (captured && !showCap) continue;
+          const sidx = captured ? ti + NT : ti;
+          let u = slot[sidx];
+          if (!u) {
+            const k = captured ? Z.keyOf(t) + '\u0000captured' : Z.keyOf(t);
+            u = units.get(k);
+            if (!u) { u = { key: k, n: (mergeAll ? t.n : t.m) + (captured ? ' (captured)' : ''), raw: t.raw, cls: unitsView ? t.cls : 'structure', cost: t.cost, count: 0, present: 0, spend: 0, sides: 0, captured, last: -1 }; units.set(k, u); }
+            slot[sidx] = u;
+          }
+          const sp = n * t.cost;
+          u.count += n; u.spend += sp; u.sides |= t.sb;
+          if (u.last !== games) { u.last = games; u.present++; }   // once per player-game
+          total += n; spend += sp; myUnits += n; mySpend += sp;
+          byClsA[ci] += n; spendClsA[ci] += sp;
+        }
+        perUnits[games - 1] = myUnits; perSpend[games - 1] = mySpend;
+      }
+    }
+    const G = games, T = total, SP = spend;
+    const rows = [...units.values()].map(u => ({
+      ...u,
+      share: T ? u.count / T : 0,
+      pergame: G ? u.count / G : 0,
+      games: G ? u.present / G : 0,
+      spend: SP ? u.spend / SP : 0,
+    }));
+    const byCls = {}, spendCls = {};
+    CLASSES.forEach((c, i) => { byCls[c[0]] = byClsA[i]; spendCls[c[0]] = spendClsA[i]; });
+    byCls.structure = byClsA[NC - 1]; spendCls.structure = spendClsA[NC - 1];
+    const stat = (a, n) => ({ n, median: Z.select(a, n, .5), mean: Z.mean(a.subarray(0, n)) });
+    return { rows, games: G, total: T, spendTotal: SP, byCls, spendCls, elos: stat(elos, ne), perUnits: stat(perUnits, G), perSpend: stat(perSpend, G), lengths: stat(lengths, G) };
+  }
+  // --- rendering ---------------------------------------------------------
+  function renderControls() {
+    seg($('metric'), METRICS.map(m => [m[0], m[1]]), S.metric, 'data-metric');
+    seg($('topn'), [[20, '20'], [40, '40'], [0, 'all']], S.top, 'data-top');
+    seg($('viewmode'), [['units', 'Units'], ['structures', 'Structures'], ['table', 'Table']], S.table ? 'table' : S.view, 'data-view');
+  }
+
+  function renderTiles(sel) {
+    const top = [...sel.rows].sort((a, b) => b.count - a.count)[0];
+    const rich = [...sel.rows].sort((a, b) => b.spend - a.spend)[0];
+    const thing = S.view === 'units' ? 'units' : 'structures';
+    const n = sel.games;
+    const row = (k, med, avg) => `<tr><th>${k}</th><td class="m">${med}</td><td class="a">${avg}</td></tr>`;
+    const dash = '\u2014';
+    $('tiles').innerHTML = `
+      <div class="tile"><div class="lbl">Player-game pairs</div><div class="v">${fmtInt(n)}</div><div class="d">${fmtPct(n / (TOTAL_PG || 1))} of the dataset</div></div>
+      <div class="tile"><div class="lbl">Average game</div>
+        <table class="kv">
+          <tr><th></th><td class="h">median</td><td class="h">mean</td></tr>
+          ${row(thing, n ? fmtInt(sel.perUnits.median) : dash, n ? sel.perUnits.mean.toFixed(1) : dash)}
+          ${row('spend', n ? fmtMoneyK(sel.perSpend.median) : dash, n ? fmtMoneyK(sel.perSpend.mean) : dash)}
+          ${row('length', n ? sel.lengths.median.toFixed(1) + ' min' : dash, n ? sel.lengths.mean.toFixed(1) + ' min' : dash)}
+          ${row('ELO', sel.elos.n ? fmtInt(sel.elos.median) : dash, sel.elos.n ? fmtInt(Math.round(sel.elos.mean)) : dash)}
+        </table></div>
+      <div class="tile"><div class="lbl">Most built</div><div class="v">${top ? esc(top.n) : dash}</div><div class="d">${top ? fmtPct(top.share) + ' of ' + thing + ', in ' + fmtPct(top.games) + ' of games' : 'no games match'}</div></div>
+      <div class="tile"><div class="lbl">Most spent on</div><div class="v">${rich ? esc(rich.n) : dash}</div><div class="d">${rich ? fmtPct(rich.spend) + ' of spend, ' + fmtMoney(rich.spend * sel.spendTotal / (n || 1)) + ' per game' : 'no games match'}</div></div>`;
+  }
+
+  function renderChart(sel, all) {
+    const metric = METRICS.find(m => m[0] === S.metric);
+    const fmt = metric[2];
+    $('chart-title').textContent = S.view === 'units' ? 'Units Built' : 'Structures Placed';
+    const baseByKey = new Map(all.rows.map(r => [r.key, r]));
+    let rows = [...sel.rows].sort((a, b) => b[S.metric] - a[S.metric]);
+    if (S.top) rows = rows.slice(0, S.top);
+    if (!rows.length) { $('chart').innerHTML = '<div class="empty">No player-games match these filters.</div>'; $('foot-note').textContent = ''; return; }
+    const max = Math.max(...rows.map(r => Math.max(r[S.metric], (baseByKey.get(r.key) || {})[S.metric] || 0)));
+    if (S.table) {
+      $('chart').innerHTML = `<div class="tbl-wrap"><table><thead><tr>
+        <th class="l">${S.view === 'units' ? 'Unit' : 'Structure'}</th><th class="l">Class</th><th>Cost</th><th>Built</th><th>Share</th><th>Per Game</th><th>% of Games</th><th>Share of Spend</th><th>Corpus Share</th><th>Corpus per Game</th></tr></thead><tbody>
+        ${rows.map(r => { const b = baseByKey.get(r.key) || {}; return `<tr><td class="l">${esc(r.n)}${F.merge !== 'none' ? '' : ` <span class="d">${esc(r.raw)}</span>`}</td><td class="l d">${r.cls}</td><td>${fmtMoney(r.cost)}</td><td>${fmtInt(r.count)}</td><td>${fmtPct(r.share)}</td><td>${r.pergame.toFixed(2)}</td><td>${fmtPct(r.games)}</td><td>${fmtPct(r.spend)}</td><td class="d">${b.share == null ? '\u2014' : fmtPct(b.share)}</td><td class="d">${b.pergame == null ? '\u2014' : b.pergame.toFixed(2)}</td></tr>`; }).join('')}
+        </tbody></table></div>`;
+    } else {
+      $('chart').innerHTML = `<div class="bars">${rows.map((r, i) => {
+        const b = baseByKey.get(r.key);
+        const w = max ? (r[S.metric] / max * 100) : 0;
+        const bw = b && max ? (b[S.metric] / max * 100) : null;
+        return `<div class="row" data-i="${i}">
+          <div class="name"><i style="--c:${CLS_COLOR[r.cls]}"></i><span title="${esc(r.raw)}">${esc(r.n)}</span></div>
+          <div class="track"><div class="bar" style="--c:${CLS_COLOR[r.cls]};width:${w.toFixed(2)}%"></div>${bw == null ? '' : `<div class="base" style="left:${bw.toFixed(2)}%"></div>`}</div>
+          <div class="val">${fmt(r[S.metric])}${S.metric === 'share' || S.metric === 'spend' ? `<small>${fmtInt(r.count)}</small>` : ''}</div>
+        </div>`; }).join('')}</div>`;
+      Z.tips($('chart'), '.row', el => { const r = rows[+el.dataset.i]; return tipHtml(r, baseByKey.get(r.key)); });
+    }
+    const shown = Math.min(rows.length, sel.rows.length);
+    $('foot-note').textContent = `${shown} of ${sel.rows.length} ${S.view === 'units' ? 'unit' : 'structure'} types shown \u00b7 sorted by ${metric[1].toLowerCase()} \u00b7 counts are units that came out of production (structures: placed), from the pack`;
+  }
+
+  const sidesOf = bits => { let n = 0; for (let b = bits; b; b >>= 1) n += b & 1; return n; };
+  function tipHtml(r, b) {
+    const row = (l, v, bv) => `<tr><th class="l">${l}</th><td>${v}</td><td class="d">${bv}</td></tr>`;
+    return `<b>${esc(r.n)}</b> <span class="d">\u00b7 ${r.cls}${r.cost ? ' \u00b7 ' + fmtMoney(r.cost) : ''}</span><div class="raw">${esc(r.raw)}${sidesOf(r.sides) > 1 ? ' (+' + (sidesOf(r.sides) - 1) + ' variants)' : ''}</div>
+      <table><tr><th></th><th>Selection</th><th>Corpus</th></tr>
+      ${row('built', fmtInt(r.count), b ? fmtInt(b.count) : '\u2014')}
+      ${row('share', fmtPct(r.share), b ? fmtPct(b.share) : '\u2014')}
+      ${row('per game', r.pergame.toFixed(2), b ? b.pergame.toFixed(2) : '\u2014')}
+      ${row('% of games', fmtPct(r.games), b ? fmtPct(b.games) : '\u2014')}
+      ${row('share of spend', fmtPct(r.spend), b ? fmtPct(b.spend) : '\u2014')}</table>`;
+  }
+
+  function renderMix(sel, all) {
+    const clsOn = S.view === 'units' ? CLASSES.filter(c => F.classes.includes(c[0])) : [['structure', 'Structures', 'var(--s-str)']];
+    const bar = (agg, field, total) => `<div class="mix">${clsOn.map(([k, l, c]) => {
+      const v = agg[field][k] || 0; const pct = total ? v / total * 100 : 0;
+      return pct ? `<div style="--c:${c};flex:${pct.toFixed(3)} 0 0" title="${l} ${pct.toFixed(1)}%"></div>` : ''; }).join('')}</div>`;
+    const legend = (agg, field, total) => `<div class="legend">${clsOn.map(([k, l, c]) => `<span><i style="--c:${c}"></i>${l} ${total ? fmtPct((agg[field][k] || 0) / total) : '\u2014'}</span>`).join('')}</div>`;
+    const block = (title, agg, field, total) => `<div class="mix-row"><div class="lbl">${title}<b>${field === 'byCls' ? 'by count' : 'by build cost'}</b></div>${bar(agg, field, total)}${legend(agg, field, total)}</div>`;
+    $('mix').innerHTML = block('Selection', sel, 'byCls', sel.total) + block('Whole corpus', all, 'byCls', all.total)
+      + block('Selection', sel, 'spendCls', sel.spendTotal) + block('Whole corpus', all, 'spendCls', all.spendTotal);
+  }
+
+  // --- mix over time -------------------------------------------------------
+  // Its data is a second, smaller export (data/library-time-*): per game, each seat's
+  // [template index, bucket, count, ...] for units out of production, the same for structures
+  // placed, every finished structure's [template index, stood s, gone s | -1] span, and every
+  // unit's [template index, came out s, gone s | -1] span, fetched the first time the section draws. A seat's timeline is known to the end of its game (or to
+  // `c` seconds on an older export cut at a cap).
+  const TBINS = [['5', '5 s'], ['15', '15 s'], ['30', '30 s'], ['60', '1 min'], ['120', '2 min'], ['300', '5 min'], ['thirds', 'Thirds']];
+  const TPAL = ['#3987e5', '#d95926', '#199e70', '#c98500', '#9085e9', '#e0499a', '#3fb8c9', '#8a6d3b', '#6bbf3a', '#b04a2f', '#5b5fc7', '#cf9a1f'];
+  const OTHER_C = '#898781', TOP_UNITS = 12;
+  // the timelines live in a worker (timeworker.js): it fetches and parses the shards (~50 MB of JSON for the
+  // library: two seconds of freezes after the page was ready when the page did it) and counts the bins per
+  // selection (~300 ms); the page keeps a summary, sends the population once and a mask per count
+  let TIME = null, timeErr = null, timeLoading = null, timeW = null;
+  const timeReply = new Map();   // job -> the count's resolver
+  function loadTime() {
+    if (timeLoading) return timeLoading;
+    timeLoading = new Promise(res => {
+      try { timeW = new Worker('timeworker.js'); } catch (e) { timeErr = e; res(); return; }
+      timeW.onerror = e => { if (!TIME) { timeErr = new Error(e.message || 'the timeline worker failed'); res(); } for (const r of timeReply.values()) r({ type: 'error', message: e.message || 'the timeline worker failed' }); timeReply.clear(); };
+      timeW.onmessage = e => {
+        const d = e.data;
+        if (d.type === 'loaded') { TIME = { stamp: d.stamp, bucket: d.bucket, cap: d.cap, games: d.games }; timeW.postMessage(timeCtx()); res(); }
+        else if (d.type === 'progress') { if (d.job == null ? !TIME : d.job === countJob) timeBusy(d.phase === 'load' ? 'loading timelines\u2026' : d.phase === 'parse' ? 'parsing timelines\u2026' : 'counting the bins\u2026', d.at); }
+        else if (d.type === 'error' && d.job == null) { timeErr = new Error(d.message); res(); }
+        else { const r = timeReply.get(d.job); if (r) { timeReply.delete(d.job); r(d); } }
+      };
+      timeW.postMessage({ type: 'load', dataset: window.ZH_DATASET || 'units', base: window.ZH_DATA_BASE, shards: D.subset && D.subset.shards });   // a draw by shard: the time shards are cut the same way, so only those
+    });
+    return timeLoading;
+  }
+  // the population the worker counts over, in the mask's seat order: per game its match id, minutes and seats,
+  // per seat its faction, per template the bits the count tests (challenge, class, owners, milestone kinds)
+  function timeCtx() {
+    const NG = D.games.length, NT = D.templates.length;
+    let NS = 0; for (const g of D.games) NS += g.p.length;
+    const gm = new Float64Array(NG), gt = new Float64Array(NG), np = new Uint8Array(NG), sf = new Int8Array(NS);
+    let si = 0;
+    D.games.forEach((g, i) => { gm[i] = g.m; gt[i] = g.t == null ? NaN : g.t; np[i] = g.p.length; for (const p of g.p) sf[si++] = p.f; });
+    const tch = new Uint8Array(NT), tci = new Uint8Array(NT), town = new Uint32Array(NT);
+    D.templates.forEach((t, ti) => { tch[ti] = t.challenge ? 1 : 0; tci[ti] = t.ci; town[ti] = t.own; });
+    if (!markOf) window.ZH_MARKOF = markOf = Uint16Array.from(D.templates, t => MARKS.reduce((m, mk, i) => m | (mk[2](t) ? 1 << i : 0), 0));   // (console hook)
+    return { type: 'ctx', TMAX_S, gm, gt, np, sf, tch, tci, town, markOf, NMARKS: MARKS.length, MARK_MAX, M_ALL: Z.M_ALL };
+  }
+
+  function renderTimeControls() {
+    seg($('tgroup'), [['units', 'Units'], ['classes', 'Classes']], S.tgroup, 'data-tgroup');
+    seg($('tbin'), TBINS, S.tbin, 'data-tbin');
+    seg($('tmetric'), [['share', 'Share'], ['perseat', 'Per seat']], S.tmetric, 'data-tmetric');
+    seg($('tstyle'), [['area', 'Areas'], ['columns', 'Columns']], S.tstyle === 'columns' ? 'columns' : 'area', 'data-tstyle');
+    seg($('tmarks'), [['1', 'Shown'], ['0', 'Hidden']], S.tmarks, 'data-tmarks');
+  }
+
+  const fmtClock = sec => Math.floor(sec / 60) + ':' + String(Math.round(sec % 60)).padStart(2, '0');
+  // milestones marked on the chart: for each kind of building, the median time the selection's seats
+  // had their 1st, 2nd ... nth standing (up to MARK_MAX), while enough seats had that many (MARK_MIN)
+  const MARKS = [
+    ['Barracks', 'Barracks', t => t.r === 'prod' && /Barracks/.test(t.raw)],
+    ['WF', 'War Factory / Arms Dealer', t => t.r === 'prod' && /WarFactory|ArmsDealer/.test(t.raw)],
+    ['Airfield', 'Airfield', t => t.r === 'prod' && /Airfield/.test(t.raw)],
+    ['Tech building', 'Tech building (Strategy Center, Propaganda Center, Palace)', t => t.r === 'tech', 1],   // the first only, unnumbered
+    ['Supply', 'Supply Center / Stash', t => t.r === 'supply'],
+    ['Particle Cannon', 'Particle Cannon', t => /ParticleCannon/.test(t.raw)],
+    ['Nuke', 'Nuclear Missile', t => /NuclearMissile/.test(t.raw)],   // SupW's copy has no role tag, so by name
+    ['SCUD Storm', 'SCUD Storm', t => /ScudStorm/.test(t.raw)],
+  ];
+  const markMax = mk => mk[3] || MARK_MAX, markLabel = (mk, nth, full) => (markMax(mk) === 1 ? '' : ord(nth + 1) + ' ') + (full ? mk[1] : mk[0]);
+  const MARK_MAX = 12, MARK_MIN = (known) => Math.max(1, Math.min(known * .5, Math.max(20, known * .02)));   // ordinals drawn (any number that enough seats reach - the user, 2026-09-13), and how many seats an nth needs to be drawn: 20 (2% of large selections), or half of a small one, down to the one seat of a single game
+  const ord = n => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
+  const TMAX_S = D.games.reduce((m, g) => Math.max(m, (g.t || 0) * 60), 0);   // the longest game in seconds: the bin arrays' size
+  let markOf = null;   // template index -> bitmask of the MARKS it counts for, built once
+  let TVIEW = null;    // the timeline's window of bins {v0, v1, nb, bs}; reset when the bins change
+  let timeJob = 0;   // the latest renderTime call; earlier ones still waiting to draw are dropped
+  // the chart's busy state: the app's progress element, its percentage from the worker's progress messages
+  let busyMsg = null;
+  const timeBusy = (msg, frac) => { const b = $('tbusy'); b.hidden = msg == null; if (msg == null) { busyMsg = null; return; } if (msg !== busyMsg || !b.firstChild) { b.innerHTML = Z.progressHTML(msg, frac); busyMsg = msg; } else Z.progressSet(b, msg, frac); };
+  function renderTime() {
+    renderTimeControls();
+    const box = $('tchart'), note = $('time-note');
+    if (!TIME) {
+      box.innerHTML = '';
+      timeBusy(timeErr ? null : 'loading timelines\u2026');
+      if (timeErr) box.innerHTML = `<div class="empty">Timelines are not in this export: ${esc(timeErr.message)}</div>`;
+      note.textContent = '';
+      if (!timeErr) loadTime().then(renderTime);
+      return;
+    }
+    // counting the bins blocks the page for a while on a big selection: put the spinner up over the old
+    // chart, let the browser paint it (a frame, then a task), then count. A hidden tab never gets the
+    // frame, so a plain timer draws there instead
+    const job = ++timeJob;
+    timeBusy('counting the bins\u2026');
+    let drawn = false;
+    const go = () => {
+      if (drawn || job !== timeJob) return;
+      drawn = true;
+      let done = true;
+      try { done = drawTime(job); } finally { if (done && job === timeJob) timeBusy(null); }
+    };
+    requestAnimationFrame(() => setTimeout(go, 0));
+    setTimeout(go, 150);
+  }
+  let TCOUNT = null, countJob = 0;   // the last count: {key, series, seats, ...}
+  // the count over the selection, by the worker: the seat mask and the binning go over, the bins per group come
+  // back (see timeworker.js count()). Groups are numbered here per template under the grouping (a class, or the
+  // merged name; the captured copy at gid + ng) and named at the reply, in drawTime's shape: per series a Map
+  // key -> {key, n, cls, c, tot, v}. Resolves to the count, or {error} when the worker failed
+  function countTime(key, o) {
+    const { thirds, BS, BK, clsOn, showCap, byCls, mergeAll } = o;
+    const job = ++countJob, NT = D.templates.length, gid = new Int32Array(NT), groups = [], byKey = new Map();
+    D.templates.forEach((t, ti) => {
+      const k = byCls ? t.cls : Z.keyOf(t);
+      let gi = byKey.get(k);
+      if (gi == null) { gi = groups.length; byKey.set(k, gi); groups.push({ key: k, n: byCls ? (CLASSES.find(c => c[0] === t.cls) || [])[1] || t.cls : mergeAll ? t.n : t.m, cls: t.cls, c: byCls ? CLS_COLOR[t.cls] : null }); }
+      gid[ti] = gi;
+    });
+    const ng = groups.length;
+    return new Promise(res => {
+      timeReply.set(job, d => {
+        if (d.type === 'error') { res({ error: d.message }); return; }
+        const series = {};
+        for (const sk in d.series) {
+          const gs = new Map();
+          for (const [gi, tot, v] of d.series[sk]) {
+            const base = groups[gi % ng], captured = gi >= ng;
+            if (byCls && captured) {   // a class counts its captured units with its own
+              let u = gs.get(base.key);
+              if (!u) gs.set(base.key, { ...base, tot, v });
+              else { u.tot += tot; for (let b = 0; b < v.length; b++) u.v[b] += v[b]; }
+              continue;
+            }
+            const k = base.key + (captured ? ' captured' : '');
+            const u = gs.get(k);
+            if (!u) gs.set(k, { key: k, n: base.n + (captured ? ' (captured)' : ''), cls: base.cls, c: base.c, tot, v });
+            else { u.tot += tot; for (let b = 0; b < v.length; b++) u.v[b] += v[b]; }
+          }
+          series[sk] = { groups: gs };
+        }
+        window.ZH_TIME = { TIME, count: TCOUNT = { key, series, seats: d.seats, seatsSel: d.seatsSel, known: d.known, capped: d.capped, unknown: d.unknown, noSpans: d.noSpans, markT: d.markT, markF: d.markF } };   // console hook: the last count
+        res(TCOUNT);
+      });
+      timeW.postMessage({ type: 'count', job, key, mask: Z.mask(), thirds, BS, BK, clsOn, showCap, gid, ng });
+    });
+  }
+  function drawTime(job) {
+    const box = $('tchart'), note = $('time-note');
+    if (TIME.stamp !== D.stamp) { box.innerHTML = '<div class="empty">The timeline shards are from another export than the unit data; refresh and republish both.</div>'; note.textContent = ''; return true; }
+    const BK = TIME.bucket;   // seconds per bucket in the data
+    if (!TBINS.some(b => b[0] === S.tbin)) S.tbin = DEFAULT.tbin;
+    const thirds = S.tbin === 'thirds', BS = thirds ? 0 : +S.tbin;   // seconds per bin
+    const clsOn = new Uint8Array(CLASSES.length + 1);
+    for (const c of F.classes) clsOn[Z.CLS_INDEX[c]] = 1;
+    const showCap = Z.showCaptured(), byCls = S.tgroup === 'classes', mergeAll = F.merge === 'all';
+    const NT = D.templates.length;
+    // two series over the same seats and bins (the user, 2026-09-13: "Not one graph. Two"): ALIVE - every unit
+    // the seat owned, counted in each bin whose midpoint its span covers ("the unit mix of all units alive at
+    // that point in the game"); MADE - what came out of production in the bin. Each is key -> {n, c, cls,
+    // tot, v: count per bin}; the Share / Per seat buttons apply to both
+    // the count over the selection's seats is kept while the selection and the binning hold: the Share / Per seat
+    // switch, a hidden band, a zoom or a pan redraw without recounting (the count was ~350 ms of every click)
+    const countKey = JSON.stringify([Z.maskKey(), S.tbin, S.tgroup, F.classes, F.merge, showCap]);
+    if (!TCOUNT || TCOUNT.key !== countKey) {   // the worker counts; the spinner stays up, a newer job drops this one
+      countTime(countKey, { thirds, BS, BK, clsOn, showCap, byCls, mergeAll }).then(c => {
+        if (job !== timeJob) return;
+        if (c.error) { box.innerHTML = `<div class="empty">The timelines could not be counted: ${esc(c.error)}</div>`; note.textContent = ''; }
+        else if (!drawTime(job)) return;
+        timeBusy(null);
+      });
+      return false;
+    }
+    const { series, seatsSel, known, capped, unknown, noSpans, markT, markF } = TCOUNT;
+    const seats = TCOUNT.seats;   // seats known per bin: the denominator, as long as the last bin any seat reaches
+    if (!known) {
+      box.innerHTML = `<div class="empty">No timed seats in this selection. Timelines exist for ${fmtInt(TIME.games)} games so far${TIME.cap ? ' (the build-order sample, first ' + Math.round(TIME.cap / 60) + ' minutes)' : ''}; the rest come with the next read of the corpus.</div>`;
+      note.textContent = '';
+      return true;
+    }
+    // bins to draw: while enough seats are still in them (the tail is a handful of long games)
+    const peak = Math.max(...seats), floor = Math.max(1, Math.min(30, peak * .5));   // bins are drawn while this many seats are still playing: 30 (an absolute floor, the user 2026-09-13: more games reach further), or half of a small selection, so a single game draws to its end
+    let nb = seats.length;
+    if (!thirds) { nb = 0; for (let b = 0; b < seats.length; b++) if (seats[b] >= floor) nb = b + 1; }
+    // groups: every class; the TOP_UNITS most built in the drawn bins, the rest as other. A unit keeps one
+    // colour across both charts: the palette is handed out by key, the alive chart first
+    const hidden = new Set(S.thide || []), colourOf = new Map();
+    let nextC = 0;
+    const takeColour = key => { let c = colourOf.get(key); if (!c) { c = TPAL[nextC++ % TPAL.length]; colourOf.set(key, c); } return c; };
+    const sumTo = u => { let t = 0; for (let b = 0; b < nb && b < u.v.length; b++) t += u.v[b]; return t; };
+    const finish = (sr, kind) => {
+      const alive = kind === 'alive';
+      let list = [...sr.groups.values()].map(u => ({ ...u, shown: sumTo(u), lbl: alive ? u.tot : sumTo(u) })).filter(u => u.shown > 0).sort((a, b) => b.shown - a.shown);
+      if (byCls) {
+        list.sort((a, b) => Z.CLS_INDEX[a.cls] - Z.CLS_INDEX[b.cls]);
+      } else if (list.length > TOP_UNITS + 1) {
+        const rest = list.slice(TOP_UNITS), other = { key: 'other', n: 'other (' + rest.length + ' more)', c: OTHER_C, tot: 0, v: new Float64Array(rest[0].v.length), shown: 0, lbl: 0 };
+        for (const u of rest) { other.shown += u.shown; other.lbl += u.lbl; for (let b = 0; b < u.v.length; b++) other.v[b] += u.v[b]; }
+        list = list.slice(0, TOP_UNITS);
+        list.forEach(u => { u.c = takeColour(u.key); });
+        list.push(other);
+      } else list.forEach(u => { u.c = takeColour(u.key); });
+      // a legend click hides a band; shares are then of what is still shown
+      const vis = list.filter(u => !hidden.has(u.key));
+      const totals = new Float64Array(nb);
+      for (const u of vis) for (let b = 0; b < nb && b < u.v.length; b++) totals[b] += u.v[b];
+      return { kind, alive, list, vis, totals };
+    };
+    const SA = finish(series.alive, 'alive'), SL = finish(series.lost, 'lost'), SM = finish(series.made, 'made');
+    // Share: stacked to 100% of the bin (both charts). Per seat: units alive per seat still playing (above) and
+    // the production rate, units made per seat per minute in the bin, as stacked columns (below) - a count of
+    // new units is a rate, not a composition (the user, 2026-09-13)
+    const perSeat = S.tmetric === 'perseat', binMin = thirds ? 1 : BS / 60;
+    const val = (sr, u, b) => { const n = b < u.v.length ? u.v[b] : 0; return !perSeat ? n / sr.totals[b] : sr.alive ? n / seats[b] : n / seats[b] / binMin; };   // per seat: a count (alive) or a rate (lost, made)
+    const binLabel = b => thirds ? ['early', 'mid', 'late'][b] : fmtClock(b * BS);
+    const binSpan = b => thirds ? ['first third of the game', 'second third', 'last third'][b] : fmtClock(b * BS) + '\u2013' + fmtClock((b + 1) * BS);
+    const fmtRate = v => +v.toFixed(2) + (thirds ? '' : '/min');
+    const fmtV = (sr, v) => !perSeat ? fmtPct(v) : sr.alive ? v.toFixed(2) : fmtRate(v);
+    const nice = m => { const p = Math.pow(10, Math.floor(Math.log10(m))), f = m / p; return ([1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find(r => f <= r) || 10) * p; };
+    // --- draw: three charts on one window - alive above (the zoom readout in its top row), made and lost
+    // below, the milestones over each; stacked areas with a point per bin, or columns for the rate; a hover band
+    // per bin. The view is a window of bins [v0, v1) (TVIEW, fractional): the wheel zooms about the cursor,
+    // a drag pans, a double click switches windows (the user, 2026-09-13: "zoom in which adjusts the axes,
+    // and drag around"); the x axis re-ticks to the window and the per-seat y axes to the bins in it
+    const PW = 900, L = 46, R = 8, XA = 20, ST = 26, ROW = 12, W = PW - L - R;   // XA = x labels, ST = the seat strip, ROW = one label row
+    const median = a => { if (!a.length) return null; const s = Float64Array.from(a); return Z.select(s, s.length, .5); };   // by selection: a sort per milestone was 25 ms a click
+    // milestones: median over the seats that got that far, on the chart's own clock (or game fraction, in
+    // thirds), in bin units; each median is over the seats that got that far, and the seats placing a 5th
+    // are the fast expanders, whose 5th can sit before everyone's 3rd: that is selection, not timing, so
+    // the ordinals stop at the first that comes out earlier than the one before
+    const marksAll = [], minSeats = MARK_MIN(known);
+    MARKS.forEach((mk, mi) => {
+      let prev = -1;
+      for (let nth = 0; nth < markMax(mk); nth++) {
+        const src = thirds ? markF[mi][nth] : markT[mi][nth];
+        if (src.length < minSeats) break;   // fewer seats reach each next one; stop at the first too rare
+        const med = median(src), vb = thirds ? med * 3 : med / BS;
+        if (vb > nb) break;   // past the drawn bins
+        if (med <= prev) break;
+        prev = med;
+        const label = markLabel(mk, nth);
+        marksAll.push({ id: mi * MARK_MAX + nth, n: label, full: markLabel(mk, nth, true), med, vb, seats: src.length, share: src.length / known, w: label.length * 5.4 + 6 });
+      }
+    });
+    const bins = []; for (let b = 0; b < nb; b++) if (seats[b]) bins.push(b);
+    // the default window is the first 15 minutes (the whole timeline when it is shorter, or in thirds)
+    const defV1 = thirds ? nb : Math.min(nb, 900 / BS);   // fractional: the view is not tied to bin edges
+    if (thirds || !TVIEW || TVIEW.nb !== nb || TVIEW.bs !== BS) TVIEW = { v0: 0, v1: defV1, nb, bs: BS };
+    let marks = [];
+    const draw = () => {
+      const v0 = TVIEW.v0, v1 = TVIEW.v1, span = v1 - v0, cw = W / span;
+      const x = b => L + (b + .5 - v0) * cw, xe = b => L + (b - v0) * cw;   // a bin's centre and its left edge
+      const zoomed = v0 > 0 || v1 < nb;
+      const b0 = Math.max(0, Math.floor(v0)), b1 = Math.min(nb, Math.ceil(v1));
+      marks = marksAll.map(mk => ({ ...mk, px: xe(mk.vb) })).filter(mk => mk.px >= L && mk.px <= PW - R).sort((a, b) => a.px - b.px);
+      // labels take the lowest row where they do not overlap the previous label in that row, so two marks at
+      // the same moment stack instead of colliding; each line starts under its own label
+      const rowEnd = [];
+      for (const mk of marks) {
+        let r = 0;
+        while (r < rowEnd.length && rowEnd[r] > mk.px - mk.w / 2) r++;
+        mk.row = r; rowEnd[r] = mk.px + mk.w / 2;
+      }
+      // x ticks: a round clock step that gives at most 16 labels over the window
+      const xticks = [];
+      if (thirds) { for (let b = 0; b < nb; b++) xticks.push([x(b), binLabel(b), 'middle']); }
+      else {
+        const step = [15, 30, 60, 120, 300, 600, 900, 1200, 1800, 3600].map(sec => sec / BS).find(st => st >= 1 && span / st <= 16) || Math.max(1, Math.ceil(span / 16));
+        for (let b = Math.ceil(v0 / step) * step; b <= v1 && b <= nb; b += step) {
+          const px = xe(b), endLbl = b === nb && v1 >= nb;
+          if (px < L - 1 || px > PW - R + 1) continue;
+          xticks.push([px, fmtClock(b * BS) + (endLbl && TIME.cap && nb * BS >= TIME.cap ? ' \u00b7 the sample\u2019s timelines end here' : ''), endLbl ? 'end' : px > PW - 40 ? 'end' : 'start']);
+        }
+      }
+      const gapC = span > 60 ? 0 : span > 24 ? 1 : 2;   // between the rate columns
+      // one chart: its top rows (the readout row on the alive chart, then the mark rows),
+      // the stack, the x axis, and the seat strip
+      const chart = (sr, id, title) => {
+        const withMarks = S.tmarks !== '0', HR = sr.alive && !thirds ? ROW : 0;   // the alive chart carries the readout row; the marks go on all three, the Marks switch shows and hides them together (the user, 2026-09-14)
+        const T = 6 + HR + (withMarks ? ROW * Math.max(1, rowEnd.length) : ROW), H = 246, PH = T + H + XA + ST;   // a row for the title when there are no marks
+        const columns = S.tstyle === 'columns', rateY = !sr.alive && perSeat;   // the Style switch: stacked areas or stacked columns, the same on all three (the user, 2026-09-14; until then made was always columns, lost columns for its rate)
+        let ymax = 1;
+        if (perSeat) { ymax = 0; for (let b = b0; b < b1; b++) if (seats[b]) ymax = Math.max(ymax, sr.totals[b] / seats[b] / (rateY ? binMin : 1)); ymax = !ymax ? 1 : rateY ? nice(ymax * 1.05) : Math.ceil(ymax * 1.05 * 2) / 2; }
+        const y = v => T + H - v / ymax * H;
+        // areas stack from the bottom in legend order (most built first, other on top); the edges of the
+        // chart hold the first and last bins' values so the fill reaches the axes
+        const xs = bins.map(x); if (xs.length) { xs.unshift(xe(0)); xs.push(xe(nb)); }
+        const edge = a => a.length ? [a[0], ...a, a[a.length - 1]] : a;
+        let lower = edge(bins.map(() => 0));
+        const areas = sr.vis.map(u => {
+          const up = edge(bins.map((b, i) => lower[i + 1] + (sr.totals[b] ? val(sr, u, b) : 0)));   // lower carries the edge copies at 0 and the end
+          let out;
+          if (columns) out = bins.map((b, i) => {   // one rect per bin, stacked in the same order
+            if (b < b0 || b >= b1 || up[i + 1] === lower[i + 1]) return '';
+            const top = y(up[i + 1]), h = y(lower[i + 1]) - top;
+            return `<rect class="ar${u.key === 'other' ? ' oth' : ''}" style="--c:${u.c}" x="${(xe(b) + gapC / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${Math.max(1, cw - gapC).toFixed(1)}" height="${h.toFixed(1)}"/>`;
+          }).join('');
+          else {
+            const top = xs.map((px, i) => px.toFixed(1) + ',' + y(up[i]).toFixed(1));
+            const bottom = xs.map((px, i) => px.toFixed(1) + ',' + y(lower[i]).toFixed(1)).reverse();
+            out = `<polygon class="ar${u.key === 'other' ? ' oth' : ''}" style="--c:${u.c}" points="${top.join(' ')} ${bottom.join(' ')}"/>`;
+          }
+          lower = up;
+          return out;
+        });
+        const yt = [0, .25, .5, .75, 1].map(f => [f * ymax, !perSeat ? fmtPct(f * ymax) : rateY ? fmtRate(f * ymax) : (f * ymax).toFixed(1)]);
+        const xl = xticks.map(([px, l, anchor]) => `<text class="ax" x="${px.toFixed(1)}" y="${T + H + 14}" text-anchor="${anchor}">${l}</text>`);
+        const sy0 = T + H + XA + 4, sh = ST - 6, gap = span > 40 ? 1 : 2;
+        const strip = seats.slice(0, nb).map((n, b) => b < b0 || b >= b1 ? '' : `<rect class="seats" x="${(xe(b) + gap / 2).toFixed(1)}" y="${(sy0 + sh - n / peak * sh).toFixed(1)}" width="${Math.max(1, cw - gap).toFixed(1)}" height="${(n / peak * sh).toFixed(1)}"/>`).join('');
+        const bands = [];
+        for (let b = b0; b < b1; b++) if (seats[b]) bands.push(`<g class="band" data-c="${id}" data-b="${b}"><rect x="${xe(b).toFixed(1)}" y="${T}" width="${cw.toFixed(1)}" height="${H}"/><line x1="${x(b).toFixed(1)}" x2="${x(b).toFixed(1)}" y1="${T}" y2="${T + H}"/></g>`);
+        const markSvg = withMarks ? marks.map(mk => { const ty = 8 + HR + mk.row * ROW; return `<g class="mk" data-m="${mk.id}"><line x1="${mk.px.toFixed(1)}" x2="${mk.px.toFixed(1)}" y1="${ty + 3}" y2="${T + H}"/><rect x="${(mk.px - mk.w / 2).toFixed(1)}" y="${ty - 9}" width="${mk.w.toFixed(1)}" height="12"/><rect x="${(mk.px - 5).toFixed(1)}" y="${ty + 3}" width="10" height="${T + H - ty - 3}"/><text x="${mk.px.toFixed(1)}" y="${ty}" text-anchor="middle">${esc(mk.n)}</text></g>`; }).join('') : '';
+        return `<svg viewBox="0 0 ${PW} ${PH}" role="img" aria-label="${title}" class="${thirds ? '' : 'zoomable'}${zoomed ? ' zoomed' : ''}">
+          <defs><clipPath id="tclip-${id}"><rect x="${L}" y="0" width="${W}" height="${PH}"/></clipPath></defs>
+          ${yt.map(([v, l]) => `<line class="grid" x1="${L}" x2="${PW - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}"/><text class="ax" x="${L - 6}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end">${l}</text>`).join('')}
+          <g clip-path="url(#tclip-${id})">${areas.join('')}${xl.join('')}${strip}${bands.join('')}${markSvg}</g>
+          <text class="ctitle" x="${L}" y="${T - 4}">${title}</text>
+          <text class="seatlbl" x="${L - 6}" y="${sy0 + sh - 2}" text-anchor="end">seats</text>
+          <text class="seatlbl" x="${PW - R}" y="${sy0 + sh - 2}" text-anchor="end">${fmtInt(seats[b0] || 0)} \u2192 ${fmtInt(seats[b1 - 1] || 0)}</text>
+          ${HR ? `<text class="ax zhint" x="${PW - R}" y="10" text-anchor="end">${fmtClock(v0 * BS)} \u2013 ${fmtClock(Math.min(v1, nb) * BS)}${zoomed ? ' \u00b7 double-click for the whole game' : defV1 < nb ? ' \u00b7 double-click for the first 15 minutes' : ''} \u00b7 ${box.classList.contains('armed') ? 'wheel to zoom' : 'ctrl + wheel, or click, to zoom'}</text>` : ''}
+        </svg>
+        <div class="legend">${sr.list.map(u => `<button type="button" class="lg${hidden.has(u.key) ? ' off' : ''}" data-tkey="${esc(u.key)}" title="${hidden.has(u.key) ? 'show' : 'hide'} ${esc(u.n)}"><i style="--c:${u.c}"></i>${esc(u.n)} <small>${fmtInt(u.lbl)}</small></button>`).join('')}</div>`;
+      };
+      const per = thirds ? ' per seat, per third' : ' per seat, per minute';
+      box.innerHTML = chart(SA, 'a', 'Alive') + chart(SM, 'm', 'Made' + (perSeat ? per : '')) + chart(SL, 'l', 'Lost' + (perSeat ? per : ''));
+      Z.tips(box, 'g.band', el => {
+        const b = +el.dataset.b, sr = { a: SA, l: SL, m: SM }[el.dataset.c];
+        const rows = sr.vis.map(u => [u, sr.totals[b] ? val(sr, u, b) : 0]).filter(r => r[1] > 0).sort((a, c) => c[1] - a[1]);
+        return `<b>${sr.alive ? (thirds ? 'midway through the ' + binSpan(b) : 'alive at ' + fmtClock((b + .5) * BS)) : esc(binSpan(b))}</b> <span class="d">\u00b7 ${fmtInt(seats[b])} seats, ${fmtInt(sr.totals[b])} units ${sr.alive ? 'alive' : sr.kind}</span>
+          <table>${rows.map(([u, v]) => `<tr><th class="l"><i class="sw" style="--c:${u.c}"></i>${esc(u.n)}</th><td>${fmtV(sr, v)}</td><td class="d">${fmtInt(b < u.v.length ? u.v[b] : 0)}</td></tr>`).join('')}</table>`;
+      });
+      Z.tips(box, 'g.mk', el => {
+        const mk = marks.find(m => m.id === +el.dataset.m);
+        return `<b>${esc(mk.full)}</b><div>median ${thirds ? fmtPct(mk.med) + ' of the way into the game' : 'at ' + fmtClock(mk.med)}</div>
+          <div class="d">among the ${fmtPct(mk.share)} of timed seats (${fmtInt(mk.seats)}) that had that many standing${TIME.cap ? ' inside their known window' : ''} \u00b7 finished buildings, net of losses: a rebuild after a loss is the same nth again</div>`;
+      });
+    };
+    draw();
+    // the view's handlers live on the box (the svgs are rebuilt on every draw); one set per box, and a wheel
+    // or drag on either chart moves both
+    if (!box._zoom) {
+      box._zoom = true;
+      const chartX = e => { const svg = e.target.closest('svg') || box.querySelector('svg'); if (!svg) return null; const r = svg.getBoundingClientRect(); return (e.clientX - r.left) / r.width * PW; };
+      const clampView = (v0, spanNew) => { const s = Math.min(TVIEW.nb, Math.max(2, spanNew)); const a = Math.min(Math.max(0, v0), TVIEW.nb - s); return { v0: a, v1: a + s }; };
+      // the wheel zooms with ctrl / cmd held, or once the chart has been clicked (until the pointer leaves), so
+      // scrolling the page past it does not zoom it (the user, 2026-09-13)
+      let armed = false;
+      box.addEventListener('pointerleave', () => { if (!armed) return; armed = false; box.classList.remove('armed'); if (box._draw) box._draw(); });
+      box.addEventListener('wheel', e => {
+        if (!box._draw || !box.querySelector('svg.zoomable') || e.target.closest('.legend')) return;
+        if (!armed && !e.ctrlKey && !e.metaKey) return;
+        const px = chartX(e); if (px == null) return;
+        e.preventDefault();
+        const span = TVIEW.v1 - TVIEW.v0, f = e.deltaY < 0 ? 1 / 1.25 : 1.25, at = TVIEW.v0 + (px - L) / W * span;
+        const ns = span * f, v = clampView(at - (px - L) / W * ns, ns);
+        TVIEW.v0 = v.v0; TVIEW.v1 = v.v1; box._draw();
+      }, { passive: false });
+      let drag = null;
+      box.addEventListener('pointerdown', e => { if (e.button !== 0 || !box.querySelector('svg.zoomable') || e.target.closest('.legend')) return; drag = { x: e.clientX, v0: TVIEW.v0, moved: false }; box.setPointerCapture(e.pointerId); });
+      box.addEventListener('pointermove', e => {
+        if (!drag) return;
+        const svg = box.querySelector('svg'); if (!svg) return;
+        const dx = (e.clientX - drag.x) / svg.getBoundingClientRect().width * PW;
+        if (!drag.moved && Math.abs(dx) < 3) return;
+        drag.moved = true;
+        const span = TVIEW.v1 - TVIEW.v0, v = clampView(drag.v0 - dx / W * span, span);
+        if (v.v0 !== TVIEW.v0) { TVIEW.v0 = v.v0; TVIEW.v1 = v.v1; box._draw(); }
+      });
+      const endDrag = e => { if (drag && !drag.moved && e.type === 'pointerup' && !armed) { armed = true; box.classList.add('armed'); box._draw(); } if (drag && drag.moved) box.classList.remove('dragging'); drag = null; };
+      box.addEventListener('pointerup', endDrag); box.addEventListener('pointercancel', endDrag);
+      box.addEventListener('dblclick', e => { if (!box.querySelector('svg.zoomable') || e.target.closest('.legend')) return; const full = TVIEW.v0 === 0 && TVIEW.v1 === TVIEW.nb; TVIEW.v0 = 0; TVIEW.v1 = full ? defV1 : TVIEW.nb; box._draw(); });
+    }
+    box._draw = draw;
+    const parts = [`timelines known for ${fmtInt(known)} of ${fmtInt(seatsSel)} selected player-games`];
+    if (TIME.cap) parts.push(`${fmtInt(capped)} of them only for the first ${Math.round(TIME.cap / 60)} minutes (the build-order sample; the rest of the corpus is not read for minutes yet)`);
+    parts.push(perSeat ? `alive: units per seat still playing, at each bin\u2019s midpoint; made and lost: ${thirds ? 'units per seat, in each third of its game' : 'units per seat per minute, by bin'}` : 'stacked to 100%: each band is a unit\u2019s share of what was alive at the bin\u2019s midpoint, made in the bin, or lost (killed or captured away) in the bin');
+    if (noSpans) parts.push(`${fmtInt(noSpans)} timed seats are from an export without unit spans: their made counts come from 15 s runs and they are missing from alive and lost`);
+    parts.push(thirds ? 'each seat\u2019s own game cut in three' : `bins of ${BS < 60 ? BS + ' s' : BS / 60 + ' min'} from the game start`);
+    if (!thirds && nb < seats.length) parts.push(`drawn while at least ${Math.ceil(floor)} seat${Math.ceil(floor) === 1 ? ' is' : 's are'} still in the bin`);
+    if (S.tmarks !== '0') parts.push(`marks = median time a seat's nth building of a kind stood (finished, net of losses), while at least ${fmtInt(Math.ceil(minSeats))} seat${Math.ceil(minSeats) === 1 ? '' : 's'} had that many`);
+    parts.push('every unit the seat owned, free ones included, from the pack\u2019s object table');
+    if (!thirds) parts.push('ctrl + wheel (or click the chart, then wheel) to zoom, drag to pan, double-click to switch between the first 15 minutes and the whole game');
+    note.textContent = parts.join(' \u00b7 ');
+    return true;
+  }
+
+  // the baseline is the same whatever the filters say: keep it per view/merge/classes/captured-shown
+  const baseline = new Map();
+  function baselineAgg() {
+    const key = [S.view, F.merge, S.view === 'units' ? [...F.classes].sort().join(',') : '', Z.showCaptured() ? 1 : 0].join('|');
+    let all = baseline.get(key);
+    if (!all) { all = aggregate(false); if (baseline.size >= 8) baseline.delete(baseline.keys().next().value); baseline.set(key, all); }
+    return all;
+  }
+
+  function render() {
+    const sel = aggregate(true), all = baselineAgg();
+    Z.renderActive(); renderTiles(sel); renderChart(sel, all); renderMix(sel, all); renderControls(); renderTime();
+    Z.persistPage('zh-units-page', 2, S);
+  }
+
+  Z.bind(render, d => {
+    if (d.tgroup || d.tbin || d.tmetric || d.tstyle || d.tmarks || d.tkey != null) {   // the time section's own buttons redraw it alone
+      if (d.tgroup) S.tgroup = d.tgroup; else if (d.tbin) S.tbin = d.tbin; else if (d.tmetric) S.tmetric = d.tmetric; else if (d.tstyle) S.tstyle = d.tstyle; else if (d.tmarks) S.tmarks = d.tmarks;
+      else { const h = new Set(S.thide || []); if (h.has(d.tkey)) h.delete(d.tkey); else h.add(d.tkey); S.thide = [...h]; }
+      renderTime(); Z.persistPage('zh-units-page', 2, S);
+      return false;
+    }
+    if (d.metric) S.metric = d.metric;
+    else if (d.top != null) S.top = +d.top;
+    else if (d.view) { if (d.view === 'table') S.table = true; else { S.table = false; S.view = d.view; } }
+    else return false;
+    return true;
+  });
+}).catch(function (err) {
+  console.error(err);
+  const v = document.getElementById('loading');
+  if (v) v.innerHTML = '<div class="disp">ZERO HOUR <span>STATS</span></div><div class="msg">the dataset did not load: ' + String(err).replace(/[<&]/g, ' ') + '<br>run <code>./stats units</code> and republish</div>';
+});
+</script>

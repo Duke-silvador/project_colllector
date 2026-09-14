@@ -1,0 +1,1048 @@
+<meta charset="utf-8">
+<title>Zero Hour Stats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="common.css">
+<script>document.documentElement.dataset.theme = (function () { try { return localStorage.getItem("zh-theme"); } catch (e) { return null; } })() || "light";</script>
+<style>
+  :root { --pA: #e2603f; --pG: #d8b23a; --pD: #4f93d8; --win: #2f8f5b; --lose: #c8503a; --usa: #5a93d9; --china: #d9573f; --gla: #c2a24a; }
+  :root[data-theme="light"] { --pA: #c9482a; --pG: #a8861a; --pD: #2f6fb8; --usa: #3d78c2; --china: #bf4630; --gla: #9a7d2a; }
+  /* the point cloud */
+  .space { position: relative; display: flex; flex-direction: column; height: min(70vh, 640px); min-height: 360px; border-radius: 4px; background: var(--ground); border: 1px solid var(--line); overflow: hidden; }
+  .space.drag { cursor: grabbing; }
+  .space canvas { display: block; width: 100%; flex: 1 1 0; min-height: 0; cursor: grab; }   /* basis 0: the backing store's size must not feed back into the layout */
+  .space.drag canvas { cursor: grabbing; }
+  .space.fly, .space.fly canvas { cursor: all-scroll; }   /* the right button held: the camera flies (WASD) and looks where the mouse goes */
+  .space .mkl { position: absolute; transform: translate(-50%, -100%); margin-top: -9px; font-size: 12px; font-weight: 600; font-family: "Barlow Condensed", system-ui, sans-serif; letter-spacing: .03em; pointer-events: none; white-space: nowrap; color: var(--ink); text-shadow: 0 0 6px var(--ground), 0 0 3px var(--ground), 0 0 2px var(--ground); }
+  .space .axl { position: absolute; transform: translate(-50%, -50%); font-size: 16px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; font-family: "Barlow Condensed", system-ui, sans-serif; pointer-events: none; white-space: nowrap; text-shadow: 0 0 6px var(--ground), 0 0 3px var(--ground); }
+  .space .strip { display: flex; align-items: center; gap: 8px 16px; padding: 6px 10px; border-top: 1px solid var(--line); background: var(--surface); }
+  .space .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--ink-2); flex: 1; }
+  .space .legend span[data-cat] { cursor: pointer; }
+  .space .legend span[data-cat]:hover { color: var(--ink); }
+  .space .legend span.off { opacity: .45; text-decoration: line-through; }
+  .space .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--c); margin-right: 5px; vertical-align: -1px; }
+  .space .legend .grad { display: inline-block; width: 70px; height: 9px; border-radius: 2px; vertical-align: -1px; margin: 0 5px; }
+  .space .note { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .space .reset, .space .full, .space .turn { position: absolute; top: 8px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 3px; padding: 3px 8px; color: var(--ink-2); font-size: 12px; cursor: pointer; z-index: 1; }
+  .space .reset { right: 10px; }
+  .space .full { right: 96px; }
+  .space .turn { right: 190px; min-width: 96px; }
+  .space .turn[aria-pressed="true"] { color: var(--accent); border-color: var(--accent); }
+  /* full screen: the cloud takes the viewport (an overlay, not the Fullscreen API: that hides the tooltip, which lives outside the element, and is refused inside some frames) */
+  .space.fullscreen { position: fixed; inset: 0; z-index: 50; height: auto; min-height: 0; border-radius: 0; border: 0; }
+  .space.fullscreen .legend { font-size: 13px; }
+  .space.fullscreen .axl { font-size: 20px; }
+  body.has-fullscreen { overflow: hidden; }
+  body.has-fullscreen #tip { z-index: 60; }   /* the tooltip lives outside the overlay */
+  .custom { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .custom[hidden] { display: none; }
+  .custom .lbl { margin-right: 2px; }
+  .custom input { background: var(--surface); color: var(--ink); border: 1px solid var(--line-strong); border-radius: 3px; padding: 3px 6px; font: inherit; font-size: 12px; }
+  .custom input[type=number] { width: 56px; }
+  .custom input[type=search] { width: 220px; }
+  /* the callout: a blue panel the button belongs to (the user, 2026-09-14: the plain hint read as unclear) */
+  #relhint { background: color-mix(in srgb, var(--s-inf) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--s-inf) 45%, var(--line-strong)); border-radius: 4px; padding: 10px 12px; gap: 14px; }
+  #relhint .hint { flex: 1; font-size: 14px; color: var(--ink); }
+  #relhint .seg { border-color: color-mix(in srgb, var(--s-inf) 60%, var(--line-strong)); }
+  #relhint button { white-space: nowrap; font-size: 14px; color: var(--ink); background: color-mix(in srgb, var(--s-inf) 22%, var(--surface)); }
+  #relhint button:hover { background: color-mix(in srgb, var(--s-inf) 36%, var(--surface)); }
+  .custom .pin { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; padding: 2px 6px; border: 1px solid var(--line-strong); border-radius: 3px; }
+  .custom .pin button { background: none; border: 0; color: var(--muted); cursor: pointer; font: inherit; padding: 0 2px; }
+  /* posture profiles: three histograms with the tercile switches */
+  .profiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px 28px; }
+  .prof h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; display: flex; align-items: baseline; gap: 10px; }
+  .prof h3 i { width: 10px; height: 10px; border-radius: 2px; background: var(--c); align-self: center; }
+  .prof h3 small { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: auto; }
+  .prof svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .prof .bin { fill: var(--c); opacity: .55; }
+  .prof .bin.dim { opacity: .18; }
+  .prof .wr { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+  .prof .wrp { fill: var(--ink); }
+  .prof .ax { font-size: 10px; fill: var(--muted); }
+  .prof .grid { stroke: var(--line); stroke-width: 1; }
+  .prof .mid { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 3 3; }
+  .prof .terc { display: flex; gap: 4px; margin-top: 8px; align-items: center; }
+  .prof .terc .lbl { margin-right: 4px; }
+ font-size: 11px; color: var(--muted); }
+  /* components */
+  .cmps { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 6px 32px; }
+  .cmprow { display: grid; grid-template-columns: 8px minmax(0, 1fr) 70px 110px; gap: 8px; align-items: center; height: 24px; font-size: 13px; }
+  .cmprow i { width: 8px; height: 8px; border-radius: 2px; background: var(--c); }
+  .cmprow .n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cmprow .n small { color: var(--muted); }
+  .cmprow .v { text-align: right; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+  .cmprow .sb { position: relative; height: 12px; }
+  .cmprow .sb::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--line-strong); }
+  .cmprow .sb b { position: absolute; top: 2px; bottom: 2px; background: var(--c); border-radius: 1px; min-width: 1px; }
+  .tile .agd { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; }
+  .tile .agd div { font-size: 12px; color: var(--ink-2); min-width: 0; }
+  .tile .agd b { display: block; font-size: 20px; font-weight: 600; color: var(--c); line-height: 1.1; }
+  #tip { max-width: min(420px, calc(100vw - 24px)); }
+  #tip .agd { display: flex; gap: 12px; margin-top: 4px; }
+  #tip .agd b { color: var(--c); }
+  .cmprow { grid-template-columns: 8px minmax(0, 1fr) 120px 110px; }
+  .cmprow .v small { color: var(--muted); font-size: 11px; margin-left: 4px; }
+  /* factions side by side: one compass per side, three axes at 120 degrees, rings on the panel's own scale */
+  #fscale { width: 130px; accent-color: var(--accent); vertical-align: middle; }
+  #fscale-v { min-width: 44px; }
+  #fscale-reset { background: none; border: 1px solid var(--line); border-radius: 3px; padding: 2px 7px; color: var(--muted); font-size: 11px; letter-spacing: .04em; cursor: pointer; }
+  #fscale-reset:hover { color: var(--ink); border-color: var(--line-strong); }
+  .facs-wrap { position: relative; }
+  .facs-wrap .full { position: absolute; top: 0; right: 0; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 3px; padding: 3px 8px; color: var(--ink-2); font-size: 12px; cursor: pointer; z-index: 1; }
+  /* the panels share the row and sit centred; a lone panel keeps a third of it rather than the whole */
+  .facs { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 24px; padding-top: 4px; }
+  .facs .panel { flex: 1 1 380px; max-width: 520px; min-width: 0; }
+  .facs-wrap.fullscreen { position: fixed; inset: 0; z-index: 50; background: var(--ground); display: flex; flex-direction: column; justify-content: center; padding: 24px 40px; overflow: auto; }
+  .facs-wrap.fullscreen .full { top: 12px; right: 16px; }
+  .facs-wrap.fullscreen .facs { gap: 12px 48px; }
+  .facs-wrap.fullscreen .facs .panel { max-width: min(calc((100% - 96px) / 3), calc((100vh - 120px) * 320 / 320)); }
+  .facs-wrap.fullscreen .facs .panel h3 { font-size: 22px; }
+  .facs-wrap.fullscreen .facs .panel h3 small { font-size: 15px; }
+  .facs-wrap.fullscreen .facs .panel svg { font-size: 1.25em; }
+  .facs-wrap.fullscreen .fs-note { max-width: 900px; margin: 12px auto 0; color: var(--muted); font-size: 13px; text-align: center; }
+  .facs-wrap .fs-note { display: none; }
+  .facs-wrap.fullscreen .fs-note { display: block; }
+  .facs .panel h3 { margin: 0 0 2px; font-size: 18px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; }
+  .facs .panel h3 i { width: 12px; height: 12px; border-radius: 50%; background: var(--c); align-self: center; }
+  .facs .panel h3 small { margin-left: auto; color: var(--muted); font-weight: 400; font-size: 13px; }
+  .facs svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .facs .ring { fill: none; stroke: var(--line); stroke-width: 1; }
+  .facs .rl { font-size: 10px; fill: var(--muted); }
+  .facs .ax { stroke: var(--line-strong); stroke-width: 1; stroke-dasharray: 3 3; }
+  .facs .lab { font-size: 12px; font-weight: 600; fill: var(--c); }
+  .facs .nm { font-size: 11px; fill: var(--ink-2); paint-order: stroke; stroke: var(--ground); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+  .facs .nm.side { font-weight: 600; fill: var(--ink); }
+  .facs .ctr { fill: none; stroke: var(--ink); opacity: .5; }
+  .facs .pt { stroke: var(--ground); stroke-width: 1.5; cursor: default; }
+  .facs .pt.side { stroke: var(--ink); }
+  .facs .pt:hover { stroke: var(--accent); stroke-width: 2; }
+  .facs .pt.clip { stroke: var(--accent); stroke-dasharray: 2 2; }
+  .facs .base { fill: none; stroke-width: 1.5; stroke-dasharray: 2 2; opacity: .8; }
+  .facs .arr { stroke-width: 1.5; opacity: .8; }
+  .facs .arr.head { stroke: none; }
+</style>
+
+<header>
+  <h1 class="disp"><a href="unit-mix.html">ZERO HOUR <span>STATS</span></a></h1>
+  <nav><a href="unit-mix.html">Unit mix</a><a href="winrates.html">Win rates</a><a href="buildorders.html">Build orders</a><a href="posture.html" aria-current="page">Opening posture</a><a href="combat.html">Combat</a></nav>
+  <button class="print" type="button" title="print the charts and active filters; choose &quot;Save as PDF&quot; as the destination">Export PDF</button>
+  <button class="theme" type="button" title="switch between dark and light"></button>
+  <div class="sub">The opening, not the game: each seat's build order to 4:00 scored aggressive, greedy or defensive from where the money went and when things moved (the seat's opening record, read from the library pack), in standard deviations within its faction &mdash; <a href="scores.html">how the scores are made</a></div>
+  <div class="stamp" id="stamp"></div>
+</header>
+
+<div class="app">
+  <aside id="rail"></aside>
+  <main>
+    <div class="active" id="active"></div>
+    <div class="tiles" id="tiles"></div>
+
+    <section class="card">
+      <div class="card-h">
+        <h2 class="disp">Opening Posture Triangle</h2>
+        <div class="spacer"></div>
+        <div class="ctl"><span class="lbl">Colour</span><div class="seg" id="colour"></div></div>
+        <div class="ctl"><span class="lbl">Seats</span><div class="seg" id="dots"></div></div>
+        <div class="ctl"><span class="lbl">Others</span><div class="seg" id="ghost"></div></div>
+        <div class="ctl"><span class="lbl">Marks</span><div class="seg" id="marks"></div></div>
+        <div class="ctl"><span class="lbl">Relative to</span><div class="seg" id="rel"></div></div>
+      </div>
+      <div class="custom" id="mkctl" hidden><span class="hint">Map marks:</span><span class="lbl">top</span><input type="number" id="mkn" min="1" max="60" step="1" title="the most-played maps in the selection"><span class="lbl">add</span><input type="search" id="mkq" list="mkmaps" placeholder="search a map to mark"><datalist id="mkmaps"></datalist><span id="mkpins"></span></div>
+      <div class="custom" id="relhint" hidden><span class="hint">Relative to the faction, every faction&rsquo;s mark is its own mean: all at the centre. To compare factions, score everyone together.</span><div class="seg"><button type="button" data-rel="a">Relative to everyone</button></div></div>
+      <div class="custom" id="muctl" hidden><span class="hint">Matchup marks:</span><span class="lbl">top</span><input type="number" id="mun" min="1" max="60" step="1" title="the most-played general-vs-general matchups in the selection"><span class="lbl">add</span><input type="search" id="muq" list="mumu" placeholder="search a matchup (SWG v Tank, USA v China)"><datalist id="mumu"></datalist><span id="mupins"></span></div>
+      <div class="space" id="space"><canvas id="gl"></canvas><div class="strip"><div class="legend" id="legend"></div><div class="note">drag to pan &middot; wheel to zoom &middot; hover a point</div></div><button class="turn" type="button" title="turn the cloud slowly">Turn</button><button class="full" type="button" title="fill the screen (Esc leaves)">Full screen</button><button class="reset" type="button" id="reset">Reset view</button></div>
+      <div class="foot"><span id="space-note"></span><a class="how" href="scores.html">how the opening scores are made &rarr;</a></div>
+    </section>
+
+    <section class="card">
+      <div class="card-h">
+        <h2 class="disp">Factions' Openings Side by Side</h2>
+        <div class="spacer"></div>
+        <div class="ctl"><span class="lbl">Split</span><div class="seg" id="fsplit"></div></div>
+        <div class="ctl"><span class="lbl">Scale</span><input type="range" id="fscale" min="0" max="1" step="0.002" title="what the rim of every panel stands for"><span class="lbl" id="fscale-v"></span><button type="button" id="fscale-reset" title="back to 2 SD">Reset</button></div>
+        <span class="hint">a compass per side, a dot per faction at the mean opening scores of its seats; the rail's Matchup filter narrows it</span>
+      </div>
+      <div class="facs-wrap" id="facs-wrap"><button class="full" type="button" title="fill the screen (Esc leaves)">Full screen</button><div class="facs" id="facs"></div><div class="fs-note" id="facs-fsnote"></div></div>
+      <div class="foot"><span id="facs-note"></span></div>
+    </section>
+
+    <section class="card" id="card-space2" style="scroll-margin-top: 56px">
+      <div class="card-h">
+        <h2 class="disp">Build Orders Space</h2>
+        <div class="spacer"></div>
+        <div class="ctl"><span class="lbl">Colour</span><div class="seg" id="colour2"></div></div>
+        <span class="hint">every seat's opening vector (the budget, the signals, what was placed, sent and made) in three dimensions</span>
+      </div>
+      <div class="space" id="space2"><canvas id="gl2"></canvas><div class="strip"><div class="legend" id="legend2"></div><div class="note">drag to turn &middot; wheel to zoom &middot; right button + WASD to fly &middot; hover a point</div></div><button class="turn" type="button" title="turn the cloud slowly">Turn</button><button class="full" type="button" title="fill the screen (Esc leaves)">Full screen</button><button class="reset" type="button" id="reset2">Reset view</button></div>
+      <div class="foot"><span id="space2-note"></span></div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2 class="disp">Opening Score Profiles</h2><div class="spacer"></div><span class="hint">the spread of each opening score and the win rate along it; low / mid / high (terciles) filter the whole page</span></div>
+      <div class="profiles" id="profiles"></div>
+    </section>
+
+
+
+    <section class="card">
+      <div class="card-h"><h2 class="disp">Signals</h2><div class="spacer"></div><span class="hint">what the opening scores are made of: each signal's weight in its block (first principal component, clipped at zero) and its raw mean, selection against sample</span></div>
+      <div class="tbl-wrap"><table id="sigs"></table></div>
+      <div class="foot"><span id="sigs-note"></span><a class="how" href="scores.html">how the opening scores are made &rarr;</a></div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2 class="disp">Opening Budget Lines</h2><div class="spacer"></div><span class="hint">dollars per seat on each line by 4:00, its share of the budget, and the same per faction</span></div>
+      <div class="cmps" id="cmps"></div>
+      <div class="tbl-wrap" id="cmp-facs" style="margin-top:14px"></div>
+      <div class="foot"><span id="cmp-note"></span></div>
+    </section>
+  </main>
+</div>
+<div id="tip" hidden></div>
+
+<div id="loading" class="loading"><div class="disp">ZERO HOUR <span>STATS</span></div><div class="spin"></div><div class="msg">loading opening postures&hellip;</div></div>
+<script>document.querySelector("#loading .spin").style.animationDelay = -(Date.now() % 800) + "ms"; window.ZH_DATASET = 'library'; window.ZH_COLS = ['posture'];</script>
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script src="common.js"></script>
+<script>
+window.ZH_READY.then(function (Z) {
+  const { D, F, $, esc, fmtPct, fmtInt, fmtMoney, seg, wilson, shortName, ELO, pidOf } = Z;
+  const LINES = D.lines || [];                // [{k, p, n}] a budget line and the posture it is for
+  const NL = LINES.length;
+  const SIGNALS = D.signals || [];            // [{k, p, s, n}] the inputs of the scores, with their block and sign
+  const NS = SIGNALS.length, SIG_I = Object.fromEntries(SIGNALS.map((g, i) => [g.k, i]));
+  const WEIGHTS = D.weights || {}, COHER = D.coherence || {};
+  const POST = [['A', 'Aggressive', '--pA'], ['G', 'Greedy', '--pG'], ['D', 'Defensive', '--pD']];
+  const ALL4 = [...POST, ['U', 'Uncommitted', '--muted']];
+  // a block's weights, in SIGNALS order of its members
+  const blockW = P => { const w = WEIGHTS[P] || []; let j = 0; return SIGNALS.map(g => g.p === P ? (w[j++] || 0) : null); };
+  // a block's definition is its signals, heaviest first
+  const WINDOW = D.window || 240;
+  const wlabel = w => `${Math.floor(w / 60)}:${String(w % 60).padStart(2, '0')}`;
+  const COLOURS = [['faction', 'Faction'], ['side', 'Side'], ['result', 'Result'], ['lean', 'Leaning'], ['spend', 'Spent'], ['fastwin', 'Time won'], ['oppatt', 'Opp. attacks'], ['elo', 'ELO'], ['cash', 'Cash']];
+  const MARKS = [['none', 'None'], ['map', 'Maps'], ['matchup', 'Matchups'], ['faction', 'Factions']];
+  const CLUSTER_COLORS = ['#5a93d9', '#e2603f', '#d8b23a', '#4fb08a', '#b57bd6', '#e08bb0', '#8fa3b8', '#c98a3a'];
+  const DEFAULT = { marks: 'none', mkn: 15, mkpin: [], mun: 15, mupin: [], dots: true, colour: 'faction', colour2: 'faction', ghost: true, rel: 'f', fm: 'a', fs: 'own', fsc: { a: 2, sh: 20 }, hid: { 1: [], 2: [] }, post: { A: null, G: null, D: null }, };
+  const S = Z.loadPage('zh-posture-page', 2, DEFAULT);
+  if (S.fm === 'f') S.fm = 'a';
+  if (!S.hid || !S.hid[1] || !S.hid[2]) S.hid = { 1: [], 2: [] };
+  if (!S.fsc || !S.fsc.a || !S.fsc.sh) S.fsc = { a: 2, sh: 20 };   // the shift-from-usual measure went; a saved page may still name it
+  for (const k in DEFAULT) if (S[k] === undefined) S[k] = JSON.parse(JSON.stringify(DEFAULT[k]));
+  if (!COLOURS.some(c => c[0] === S.colour)) S.colour = 'faction';
+
+  // --- seat arrays, in the rail's seat order ------------------------------
+  let NSEATS = 0;
+  for (const g of D.games) NSEATS += g.p.length;
+  const HAS = new Uint8Array(NSEATS), FAC = new Int16Array(NSEATS), WON = new Int8Array(NSEATS).fill(-1), OPP = new Int16Array(NSEATS).fill(-1);
+  const SH = new Float32Array(NSEATS * 4);     // shares of everything spent: A, G, D, U (trivia now: three of the signals)
+  // the scores, A G D, in SD within the faction / the side / everyone ("Relative to"); HASTRI when the seat was scored
+  const PSC = { f: new Float32Array(NSEATS * 3), s: new Float32Array(NSEATS * 3), a: new Float32Array(NSEATS * 3) };
+  const HASTRI = new Uint8Array(NSEATS);
+  const SIG = new Float32Array(NSEATS * NS).fill(NaN);   // raw signal values
+  const SPENT = new Float32Array(NSEATS), DL = new Float32Array(NSEATS * NL);
+  const FW = new Float32Array(NSEATS), OA = new Int8Array(NSEATS), AN = new Int8Array(NSEATS);   // held out: minutes to the win (0 when not won), opponent attacks met, own attack sorties
+  const SEAT_G = new Int32Array(NSEATS), SEAT_I = new Int8Array(NSEATS);
+  const LP = LINES.map(l => 'AGDU'.indexOf(l.p));
+  {
+    let si = 0;
+    D.games.forEach((g, gi) => g.p.forEach((p, i) => {
+      SEAT_G[si] = gi; SEAT_I[si] = i;
+      const o = g.p.find((q, j) => j !== i && q.d); if (o) OPP[si] = o.f;
+      if (p.d) {
+        HAS[si] = 1; FAC[si] = p.f;
+        let tot = 0; const by = [0, 0, 0, 0];
+        for (let k = 0; k < NL; k++) { const v = p.d[k] || 0; DL[si * NL + k] = v; tot += v; by[LP[k]] += v; }
+        SPENT[si] = tot;
+        for (let k = 0; k < 4; k++) SH[si * 4 + k] = tot ? by[k] / tot : 0;
+        if (p.po) { HASTRI[si] = 1; for (let k = 0; k < 3; k++) { PSC.f[si * 3 + k] = p.po[k]; PSC.s[si * 3 + k] = (p.ps || p.po)[k]; PSC.a[si * 3 + k] = (p.pa || p.po)[k]; } }
+        if (p.c) for (let k = 0; k < NS; k++) if (p.c[k] != null) SIG[si * NS + k] = p.c[k];
+        if (p.h) { FW[si] = p.h[0]; OA[si] = p.h[1]; AN[si] = p.h[2]; }
+        WON[si] = p.o == null ? -1 : p.o;
+      }
+      si++;
+    }));
+  }
+  // the three scores as a composition (the normal CDF of each, closed to one): the triangle, the
+  // mix colour and the leaning read it; a seat at its group's mean sits at one third each
+  const erf = x => { const t = 1 / (1 + .3275911 * Math.abs(x)); const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - .284496736) * t + .254829592) * t * Math.exp(-x * x); return x < 0 ? -y : y; };
+  const PHI = z => .5 * (1 + erf(z / Math.SQRT2));
+  const TRI_SET = { f: new Float32Array(NSEATS * 3), s: new Float32Array(NSEATS * 3), a: new Float32Array(NSEATS * 3) };
+  for (const r of ['f', 's', 'a']) for (let si = 0; si < NSEATS; si++) if (HASTRI[si]) {
+    const u = [0, 1, 2].map(k => PHI(PSC[r][si * 3 + k])), t = u[0] + u[1] + u[2] || 1;
+    for (let k = 0; k < 3; k++) TRI_SET[r][si * 3 + k] = u[k] / t;
+  }
+  let TRI = TRI_SET[S.rel] || TRI_SET.f;
+  const scoreOf = (si, k) => (PSC[S.rel] || PSC.f)[si * 3 + k];
+  // tercile cuts on each score: per faction, per side, or over everyone ("Relative to")
+  const SIDE_OF = f => (D.factions[f] || {}).side || '?';
+  const cutsOf = (idx, arr) => [0, 1, 2].map(k => { const v = idx.map(si => arr[si * 3 + k]).sort((a, b) => a - b); return [v[Math.floor(v.length / 3)], v[Math.floor(2 * v.length / 3)]]; });
+  const TERCS = { f: {}, s: {}, a: {} };
+  {
+    const byF = new Map(), byS = new Map(), all = [];
+    for (let si = 0; si < NSEATS; si++) if (HASTRI[si]) { if (!byF.has(FAC[si])) byF.set(FAC[si], []); byF.get(FAC[si]).push(si); const sd = SIDE_OF(FAC[si]); if (!byS.has(sd)) byS.set(sd, []); byS.get(sd).push(si); all.push(si); }
+    const ca = cutsOf(all, PSC.a);
+    const cs = new Map([...byS].map(([sd, idx]) => [sd, cutsOf(idx, PSC.s)]));
+    for (const [f, idx] of byF) { TERCS.f[f] = cutsOf(idx, PSC.f); TERCS.s[f] = cs.get(SIDE_OF(f)); TERCS.a[f] = ca; }
+  }
+  const tercOf = (si, k) => { const c = TERCS[S.rel][FAC[si]]; if (!c || !HASTRI[si]) return 'mid'; const v = scoreOf(si, k); return v <= c[k][0] ? 'lo' : v > c[k][1] ? 'hi' : 'mid'; };
+  // the reference mean share of a seat's group, for "vs the faction" readings
+  const GMEAN = { f: new Map(), s: new Map(), a: null };
+  {
+    const acc = (m, key, si) => { let a = m.get(key); if (!a) { a = [0, 0, 0, 0, 0]; m.set(key, a); } for (let k = 0; k < 4; k++) a[k] += SH[si * 4 + k]; a[4]++; };
+    const all = [0, 0, 0, 0, 0];
+    for (let si = 0; si < NSEATS; si++) if (HAS[si]) { acc(GMEAN.f, FAC[si], si); acc(GMEAN.s, SIDE_OF(FAC[si]), si); for (let k = 0; k < 4; k++) all[k] += SH[si * 4 + k]; all[4]++; }
+    for (const m of [GMEAN.f, GMEAN.s]) for (const a of m.values()) for (let k = 0; k < 4; k++) a[k] /= a[4] || 1;
+    for (let k = 0; k < 4; k++) all[k] /= all[4] || 1;
+    GMEAN.a = all;
+  }
+  const refMean = si => S.rel === 'f' ? GMEAN.f.get(FAC[si]) : S.rel === 's' ? GMEAN.s.get(SIDE_OF(FAC[si])) : GMEAN.a;
+  // the page's own condition: score terciles
+  const SI_OF = new Map();
+  { let si = 0; for (const g of D.games) for (const p of g.p) SI_OF.set(p, si++); }
+  function only(p, g) {
+    const si = SI_OF.get(p);
+    if (!HAS[si]) return false;
+    for (let k = 0; k < 3; k++) { const want = S.post[POST[k][0]]; if (want && tercOf(si, k) !== want) return false; }
+    return true;
+  }
+
+  // --- colours ------------------------------------------------------------
+  // a variable's value, kept until the theme changes (getComputedStyle per seat was ~100 ms of every click)
+  const CSS_MEMO = new Map(), FAC_MEMO = [];
+  new MutationObserver(() => { CSS_MEMO.clear(); FAC_MEMO.length = 0; }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  const css = v => { let c = CSS_MEMO.get(v); if (c == null) { c = getComputedStyle(document.documentElement).getPropertyValue(v).trim(); CSS_MEMO.set(v, c); } return c; };
+  const hex = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+  const mix = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+  const SIDE_COLOR = { USA: '--usa', China: '--china', GLA: '--gla' };
+  const SIDES = ['USA', 'China', 'GLA'];
+  const SIDE_OF_SHORT = Object.fromEntries(Object.values(D.factions).map(f => [shortName(f), f.side]));
+  function factionColor(f) { return FAC_MEMO[f] || (FAC_MEMO[f] = factionColor0(f)); }
+  function factionColor0(f) {
+    const fac = D.factions[f]; if (!fac) return [.5, .5, .5];
+    const base = hex(css(SIDE_COLOR[fac.side] || '--muted'));
+    const gi = Object.keys(D.factions).filter(id => D.factions[id].side === fac.side).indexOf(String(f));
+    return gi === 0 ? base : gi === 1 ? mix(base, [1, 1, 1], .3) : gi === 2 ? mix(base, [0, 0, 0], .3) : mix(base, [1, .8, .3], .35);
+  }
+  const RAMP = t => { t = Math.max(0, Math.min(1, t)); return t < .5 ? mix([.36, .55, .8], [.72, .72, .68], t * 2) : mix([.72, .72, .68], [.9, .38, .25], (t - .5) * 2); };   // blue - neutral - red
+  const TW_LO = (() => { const v = Array.from(FW).filter(x => x > 0).sort((a, b) => a - b); return [v[Math.floor(v.length * .05)] || 0, v[Math.floor(v.length * .95)] || 1]; })();   // minutes to the win, 5th to 95th percentile of winners
+  const SPENT_LO = (() => { const v = Array.from(SPENT).filter((x, si) => HAS[si]).sort((a, b) => a - b); return [v[Math.floor(v.length * .05)] || 0, v[Math.floor(v.length * .95)] || 1]; })();
+  const LEAN_GAP = 0.10;   // a seat leans to its largest score when its composition beats the next by this many points
+  function lean(si) { if (!HASTRI[si]) return -1; let best = -1, bv = -1, second = -1; for (let k = 0; k < 3; k++) { const v = TRI[si * 3 + k]; if (v > bv) { second = bv; bv = v; best = k; } else if (v > second) second = v; } return bv - second >= LEAN_GAP ? best : -1; }
+  function seatColor(si, mode) {
+    if (mode === 'faction') return factionColor(FAC[si]);
+    if (mode === 'side') return PAL.side[SIDE_OF(FAC[si])] || [.5, .5, .5];
+    if (mode === 'result') return WON[si] === 1 ? [.17, .83, .54] : WON[si] === 0 ? [1, .42, .24] : [.5, .5, .48, .3];
+    if (mode === 'lean') { const l = lean(si); return l < 0 ? [.55, .55, .52] : PAL.post[l]; }
+    if (mode === 'spend') return RAMP((SPENT[si] - SPENT_LO[0]) / Math.max(1, SPENT_LO[1] - SPENT_LO[0]));
+    if (mode === 'fastwin') return FW[si] > 0 ? RAMP(1 - (FW[si] - TW_LO[0]) / Math.max(.1, TW_LO[1] - TW_LO[0])) : WON[si] === 0 ? [.5, .5, .48, .3] : [.5, .5, .48, .2];
+    if (mode === 'oppatt') return RAMP(Math.min(OA[si], 4) / 4);
+    if (mode === 'elo') { const p = D.games[SEAT_G[si]].p[SEAT_I[si]]; return p.ei == null || p.ei < 0 ? [.5, .5, .5] : RAMP(p.ei / (ELO.length - 1)); }
+    if (mode === 'cash') { const g = D.games[SEAT_G[si]]; const i = Z.CASH.findIndex(([v]) => v === g.c); return i < 0 ? [.5, .5, .5] : hex(CLUSTER_COLORS[i % 8]); }
+    return [.6, .6, .6];
+  }
+  // the legend entry a seat belongs to under a colour mode (null: on a gradient, not toggleable)
+  function catOf(si, mode) {
+    if (mode === 'faction') return String(FAC[si]);
+    if (mode === 'side') return SIDE_OF(FAC[si]);
+    if (mode === 'result') return WON[si] === 1 ? 'won' : WON[si] === 0 ? 'lost' : 'none';
+    if (mode === 'lean') { const l = lean(si); return l < 0 ? 'bal' : POST[l][0]; }
+    if (mode === 'mix') return HASTRI[si] ? null : 'unscored';
+    if (mode === 'fastwin') return FW[si] > 0 ? null : 'nowin';
+    if (mode === 'elo') { const p = D.games[SEAT_G[si]].p[SEAT_I[si]]; return p.ei == null || p.ei < 0 ? 'unrated' : null; }
+    if (mode === 'cash') { const g = D.games[SEAT_G[si]]; const i = Z.CASH.findIndex(([v]) => v === g.c); return i < 0 ? 'other' : String(i); }
+    return null;
+  }
+  const hidKey = (mode, cat) => mode + ':' + cat;
+  const isHidden = (n, si, mode) => { const h = S.hid[n]; if (!h.length) return false; const c = catOf(si, mode); return c != null && h.includes(hidKey(mode, c)); };
+  const PAL = { post: [], side: {}, neutral: [.5, .5, .48] };
+  const NEUTRAL_DARK = [.5, .5, .48], NEUTRAL_LIGHT = [.62, .62, .58];
+  function refreshPalette() { PAL.post = POST.map(P => hex(css(P[2]))); for (const s of SIDES) PAL.side[s] = hex(css(SIDE_COLOR[s])); PAL.neutral = document.documentElement.dataset.theme === 'light' ? NEUTRAL_LIGHT : NEUTRAL_DARK; }
+  // the mix: the three committed shares blend the three hues; nothing committed stays neutral
+  function mixColor(si) {
+    if (!HASTRI[si]) return PAL.neutral;
+    let r = 0, g = 0, b = 0;
+    for (let k = 0; k < 3; k++) { const w = TRI[si * 3 + k], c = PAL.post[k]; r += w * c[0]; g += w * c[1]; b += w * c[2]; }
+    return [r, g, b];
+  }
+  const rgb = c => `rgb(${c.map(v => Math.round(v * 255)).join(',')})`;
+  const relWord = () => S.rel === 's' ? 'side' : S.rel === 'a' ? 'sample' : 'faction';
+  const pts = v => `${(v * 100).toFixed(0)}%`;
+  const spts = v => (v > 0 ? '+' : v < 0 ? '\u2212' : '') + (Math.abs(v) * 100).toFixed(0) + ' pts';
+  const sd = v => (v > 0 ? '+' : v < 0 ? '\u2212' : '') + Math.abs(v).toFixed(2);
+  const clock = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const mmss = m => clock(Math.round(m * 60));
+  // a seat's signals worth a word: the timing ones as clock times (earliness = (W - t) / W), the counts when not zero
+  const sigv = (si, k) => { const i = SIG_I[k]; return i == null ? NaN : SIG[si * NS + i]; };
+  const atClock = e => clock(Math.round(WINDOW * (1 - e)));
+  function sigWords(si) {
+    const w = [];
+    const t = (k, label) => { const e = sigv(si, k); if (e > 0) w.push(`${label} ${atClock(e)}`); };
+    t('att_early', 'first attack'); t('raid_early', 'first raid'); t('eco2_early', '2nd income'); t('eco3_early', '3rd income'); t('cap_early', 'capture upgrade'); t('def_early', 'first defense');
+    const n = (k, label) => { const v = sigv(si, k); if (v > 0) w.push(`${label} ${v % 1 ? v.toFixed(2) : v}`); };
+    n('attacks', 'attacks'); n('tricks', 'trick sorties'); n('raids', 'raids'); n('expansions', 'expansions'); n('cap_orders', 'capture orders'); n('defenses', 'defenses'); n('boxed', 'boxed supplies');
+    const pb = sigv(si, 'posts_base'); if (pb === pb) w.push(`${pts(pb)} of posts in base`);
+    if (sigv(si, 'one_supply') > 0) w.push('one income source'); if (sigv(si, 'cc_kept') > 0) w.push('CC kept');
+    if (sigv(si, 'fwd_reach') > 0) w.push(`reach ${sigv(si, 'fwd_reach').toFixed(2)}`);
+    return w.join(' \u00b7 ');
+  }
+  function seatTip(si) {
+    const g = D.games[SEAT_G[si]], p = g.p[SEAT_I[si]], opp = g.p.find((q, j) => (p.om >> j) & 1);
+    const name = q => q.pl != null ? esc(D.players[q.pl].n) : '<i>unresolved</i>';
+    const fac = q => q && q.f != null && D.factions[q.f] ? shortName(D.factions[q.f]) : '?';
+    return `<b>${name(p)}</b> <span class="d">${fac(p)} vs ${fac(opp)} ${opp ? name(opp) : ''}</span>
+      ${HASTRI[si] ? `<div class="agd">${POST.map((P, k) => `<span style="--c:var(${P[2]})">${P[1]} <b>${sd(scoreOf(si, k))}</b></span>`).join('')}</div><div class="d">SD within the ${relWord()} \u00b7 ${sigWords(si)}</div>` : '<div class="d">not scored</div>'}
+      <div class="d">budget: ${ALL4.map((P, k) => `<span style="color:var(${P[2]})">${P[1].toLowerCase()} ${pts(SH[si * 4 + k])}</span>`).join(' \u00b7 ')}</div>
+      <div class="d">${fmtMoney(SPENT[si])} spent by ${wlabel(WINDOW)} \u00b7 ${g.mp != null ? esc(D.maps[g.mp].n) : 'unknown map'} \u00b7 ${g.c != null ? Z.fmtCash(g.c) : '?'} \u00b7 ${g.t != null ? Math.round(g.t) + ' min' : 'untimed'} \u00b7 ${WON[si] === 1 ? 'won' : WON[si] === 0 ? 'lost' : 'no result'}${p.e != null ? ` \u00b7 ${Math.round(p.e)} ELO` : ''}${p.cs != null ? ` \u00b7 CC sold ${clock(p.cs)}` : ''}${p.we != null ? ` \u00b7 scored to ${clock(p.we)} (game over)` : ''}</div>`;
+  }
+
+  // --- the point cloud (WebGL, no library) --------------------------------
+  // one factory, two clouds: the posture axes and the opening-vector projection share the
+  // shaders, the camera, the picking and the ghosting; each has its own view
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const M4 = {
+    mul(a, b) { const o = new Float32Array(16); for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { let s = 0; for (let k = 0; k < 4; k++) s += a[k * 4 + j] * b[i * 4 + k]; o[i * 4 + j] = s; } return o; },
+    persp(fov, asp, n, f) { const t = 1 / Math.tan(fov / 2); return new Float32Array([t / asp, 0, 0, 0, 0, t, 0, 0, 0, 0, (f + n) / (n - f), -1, 0, 0, 2 * f * n / (n - f), 0]); },
+    rotX(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([1, 0, 0, 0, 0, c, s, 0, 0, -s, c, 0, 0, 0, 0, 1]); },
+    rotY(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]); },
+    trans(x, y, z) { return new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1]); },
+    apply(m, v) { const x = v[0], y = v[1], z = v[2]; return [m[0] * x + m[4] * y + m[8] * z + m[12], m[1] * x + m[5] * y + m[9] * z + m[13], m[2] * x + m[6] * y + m[10] * z + m[14], m[3] * x + m[7] * y + m[11] * z + m[15]]; },
+  };
+  const VIEW0 = { yaw: -0.6, pitch: 0.45, dist: 3.4, px: 0, py: 0, tx: 0, ty: 0, tz: 0 };   // tx/ty/tz: the point the cloud turns about, which the flight moves
+  const TANH = Math.tan(0.35);   // half the vertical field of view of M4.persp(0.7, ...)
+  function makeCloud(space, canvas, noteEl, colourOf, hiddenOf) {
+    const gl = canvas.getContext('webgl', { antialias: true, alpha: true, premultipliedAlpha: false });
+    const view = { ...VIEW0, auto: !reduced };
+    let prog = null, bufPos = null, bufCol = null, bufSize = null, bufAxis = null, nPts = 0, nAxis = 0;
+    let MVP = null, W = 1, H = 1, DPR = 1, ORDER = new Int32Array(0), SEL_COUNT = 0;
+    const C = { coord: new Float32Array(NSEATS * 3), names: ['', '', ''], colors: [null, null, null], explain: '', box: true, view, space, groups: null, marks: [], flat: false, edges: null, corners: null };
+    let bufMkPos = null, bufMkCol = null, bufMkSize = null, nMk = 0;
+    function shader(type, src) { const sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; }
+    if (gl) {
+      prog = gl.createProgram();
+      gl.attachShader(prog, shader(gl.VERTEX_SHADER, 'attribute vec3 aPos; attribute vec4 aCol; attribute float aSize; uniform mat4 uMVP; uniform float uScale; varying vec4 vCol; void main() { gl_Position = uMVP * vec4(aPos, 1.0); gl_PointSize = aSize * uScale / gl_Position.w; vCol = aCol; }'));
+      gl.attachShader(prog, shader(gl.FRAGMENT_SHADER, 'precision mediump float; varying vec4 vCol; uniform float uRound; void main() { vec2 c = gl_PointCoord - 0.5; float d = dot(c, c); if (uRound > 0.5 && d > 0.25) discard; float a = uRound > 0.5 ? smoothstep(0.25, 0.16, d) : 1.0; gl_FragColor = vec4(vCol.rgb, vCol.a * a); }'));
+      gl.linkProgram(prog);
+      bufPos = gl.createBuffer(); bufCol = gl.createBuffer(); bufSize = gl.createBuffer(); bufAxis = gl.createBuffer();
+      gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.disable(gl.DEPTH_TEST);
+    }
+    // flat: a top-down look at the x-y plane that pans instead of turning (the triangle)
+    const mvp = () => C.flat ? M4.mul(M4.persp(0.7, W / H, 0.02, 50), M4.trans(view.px, view.py, -view.dist)) : M4.mul(M4.persp(0.7, W / H, 0.1, 50), M4.mul(M4.trans(0, 0, -view.dist), M4.mul(M4.rotX(view.pitch), M4.mul(M4.rotY(view.yaw), M4.trans(-view.tx, -view.ty, -view.tz)))));
+    // scale a value column to the box: -1..1 spans the 1st to 99th percentile; the
+    // tails run past the walls (clipped at 1.6) rather than piling up on them
+    C.scale = (valueOf, idx) => {
+      for (let k = 0; k < 3; k++) {
+        const v = idx.map(si => valueOf(si, k)).sort((a, b) => a - b);
+        const lo = v[Math.floor(v.length * .01)] || 0, hi = v[Math.floor(v.length * .99)] || 1, span = Math.max(hi - lo, 1e-6);
+        for (const si of idx) C.coord[si * 3 + k] = Math.max(-1.6, Math.min(1.6, ((valueOf(si, k) - lo) / span) * 2 - 1));
+      }
+    };
+    C.upload = () => {
+      if (!gl) return;
+      const M = Z.mask(), sel = [], ghost = [];
+      for (let si = 0; si < NSEATS; si++) { if (!HAS[si] || !C.has(si) || (hiddenOf && hiddenOf(si))) continue; if ((M[si] & Z.M_ALL) === Z.M_ALL) sel.push(si); else if (S.ghost) ghost.push(si); }   // a legend entry clicked off leaves the cloud and its marks
+      // "Seats: Hide" draws the marks alone: the selection still defines them, the points are not uploaded
+      ORDER = S.dots ? new Int32Array([...ghost, ...sel]) : new Int32Array(0); nPts = ORDER.length; SEL_COUNT = S.dots ? sel.length : 0;
+      const pos = new Float32Array(nPts * 3), col = new Float32Array(nPts * 4), size = new Float32Array(nPts);
+      const big = sel.length < 1500 ? 9 : sel.length < 6000 ? 7 : 5.5;
+      const gc = document.documentElement.dataset.theme === 'light' ? [.55, .55, .52] : [.6, .6, .58];
+      ORDER.forEach((si, i) => {
+        pos[i * 3] = C.coord[si * 3]; pos[i * 3 + 1] = C.coord[si * 3 + 1]; pos[i * 3 + 2] = C.coord[si * 3 + 2];
+        const isSel = i >= ghost.length, c = isSel ? colourOf(si) : gc;
+        col[i * 4] = c[0]; col[i * 4 + 1] = c[1]; col[i * 4 + 2] = c[2]; col[i * 4 + 3] = isSel ? (c.length > 3 ? c[3] : .85) : .13;
+        size[i] = isSel ? big : big * .6;
+      });
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufPos); gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufCol); gl.bufferData(gl.ARRAY_BUFFER, col, gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufSize); gl.bufferData(gl.ARRAY_BUFFER, size, gl.STATIC_DRAW);
+      const ax = [], line = (a, b) => ax.push(...a, ...b);
+      if (C.edges) {   // a flat figure: its own outline
+        for (const [a, b] of C.edges) line(a, b);
+      } else if (C.box) {   // three axes through the origin plus the box's floor
+        line([-1, 0, 0], [1, 0, 0]); line([0, -1, 0], [0, 1, 0]); line([0, 0, -1], [0, 0, 1]);
+        for (const [a, b] of [[[-1, -1, -1], [1, -1, -1]], [[1, -1, -1], [1, -1, 1]], [[1, -1, 1], [-1, -1, 1]], [[-1, -1, 1], [-1, -1, -1]]]) line(a, b);
+      } else {       // a projection has no meaningful axes: only the floor, for orientation
+        for (const [a, b] of [[[-1, -1, -1], [1, -1, -1]], [[1, -1, -1], [1, -1, 1]], [[1, -1, 1], [-1, -1, 1]], [[-1, -1, 1], [-1, -1, -1]]]) line(a, b);
+      }
+      nAxis = ax.length / 3;
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufAxis); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(ax), gl.STATIC_DRAW);
+      // group centroids over the selected seats: the mean of a map, a faction or
+      // a matchup is what the effects live in (a map explains ~2% of a seat's
+      // aggressive score, a lot of a map's MEAN) - drawn large, with a label
+      C.marks = [];
+      if (C.groups) {
+        const agg = new Map(), agg2 = new Map();
+        const add = (m, k, si) => { let a = m.get(k); if (!a) { a = { n: 0, x: 0, y: 0, z: 0 }; m.set(k, a); } a.n++; a.x += C.coord[si * 3]; a.y += C.coord[si * 3 + 1]; a.z += C.coord[si * 3 + 2]; };
+        for (const si of sel) { const k = C.groups.key(si); if (k != null) add(agg, k, si); if (C.groups.alt) { const k2 = C.groups.alt(si); if (k2 != null) add(agg2, k2, si); } }
+        const pin = C.groups.pin || new Set();
+        const top = [...agg].filter(([k, a]) => a.n >= C.groups.min).sort((a, b) => b[1].n - a[1].n).slice(0, C.groups.max);
+        for (const m of [agg, agg2]) for (const [k, a] of m) if (pin.has(k) && !top.some(([t]) => t === k)) top.push([k, a]);   // searched groups join whatever their rank (any seat count)
+        C.marks = top.map(([k, a]) => ({ key: k, n: a.n, pos: [a.x / a.n, a.y / a.n, a.z / a.n], label: C.groups.label(k), color: C.groups.color(k) }));
+      }
+      if (!bufMkPos) { bufMkPos = gl.createBuffer(); bufMkCol = gl.createBuffer(); bufMkSize = gl.createBuffer(); }
+      nMk = C.marks.length * 2;
+      const mp = new Float32Array(nMk * 3), mc = new Float32Array(nMk * 4), ms = new Float32Array(nMk);
+      const ring = document.documentElement.dataset.theme === 'light' ? [1, 1, 1] : [.08, .09, .08];
+      C.marks.forEach((m, i) => {   // a ring under a disc: the outline keeps the mark readable on a dense cloud
+        for (const j of [i * 2, i * 2 + 1]) { mp[j * 3] = m.pos[0]; mp[j * 3 + 1] = m.pos[1]; mp[j * 3 + 2] = m.pos[2]; }
+        mc.set([...ring, 1], i * 8); mc.set([...m.color.slice(0, 3), 1], i * 8 + 4);
+        ms[i * 2] = 22; ms[i * 2 + 1] = 16;
+      });
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufMkPos); gl.bufferData(gl.ARRAY_BUFFER, mp, gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufMkCol); gl.bufferData(gl.ARRAY_BUFFER, mc, gl.STATIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufMkSize); gl.bufferData(gl.ARRAY_BUFFER, ms, gl.STATIC_DRAW);
+      noteEl.textContent = `${fmtInt(sel.length)} seats in the selection${S.dots ? '' : ' (hidden)'}${S.ghost && S.dots ? `, ${fmtInt(ghost.length)} others as ghosts` : ''}${C.marks.length ? `, ${C.marks.length} marks` : ''}${C.explain ? ` \u00b7 ${C.explain}` : ''}`;
+    };
+    C.resize = () => {
+      DPR = Math.min(2, devicePixelRatio || 1);
+      const r = canvas.getBoundingClientRect(); W = Math.max(1, r.width); H = Math.max(1, r.height);
+      canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+      if (gl) gl.viewport(0, 0, canvas.width, canvas.height);
+    };
+    const project = v => { const q = M4.apply(MVP, v); return q[3] <= 0 ? null : [(q[0] / q[3] * .5 + .5) * W, (.5 - q[1] / q[3] * .5) * H]; };
+    function labels() {
+      space.querySelectorAll('.axl, .mkl').forEach(e => e.remove());
+      for (const m of C.marks) {
+        const q = project(m.pos); if (!q) continue;
+        const el = document.createElement('div'); el.className = 'mkl'; el.textContent = `${m.label} (${fmtInt(m.n)})`;
+        el.style.left = q[0] + 'px'; el.style.top = q[1] + 'px'; el.style.color = rgb(m.color);
+        space.appendChild(el);
+      }
+      if (C.corners) {
+        // a corner zoomed off the screen keeps its label, pinned to the nearest edge with an arrow toward it,
+        // clear of the buttons along the top and the legend and note along the bottom
+        const inset = { top: chromeH('.reset'), bottom: 12 };   // the legend and the note sit in a strip under the canvas now
+        for (const [v, name, color, vertex] of C.corners) {
+          const q = project(v); if (!q) continue;
+          const c = vertex ? project(vertex) : q, off = !c || c[0] < 0 || c[0] > W || c[1] < 0 || c[1] > H;
+          const el = document.createElement('div'); el.className = 'axl'; el.textContent = name; if (color) el.style.color = `var(${color})`;
+          space.appendChild(el);
+          const hw = el.offsetWidth / 2 + 8, hh = el.offsetHeight / 2 + 6;
+          const x = Math.max(hw, Math.min(W - hw, q[0])), y = Math.max(hh + inset.top, Math.min(H - hh - inset.bottom, q[1]));
+          const dx = q[0] < x ? -1 : q[0] > x ? 1 : 0, dy = q[1] < y ? -1 : q[1] > y ? 1 : 0;
+          if (off && (dx || dy)) { const arrow = dy < 0 ? (dx < 0 ? '\u2196' : dx > 0 ? '\u2197' : '\u2191') : dy > 0 ? (dx < 0 ? '\u2199' : dx > 0 ? '\u2198' : '\u2193') : dx < 0 ? '\u2190' : '\u2192'; el.textContent = dx > 0 ? `${name} ${arrow}` : `${arrow} ${name}`; }
+          el.style.left = x + 'px'; el.style.top = y + 'px';
+        }
+        return;
+      }
+      if (!C.box) return;
+      [[1.18, 0, 0], [0, 1.18, 0], [0, 0, 1.18]].forEach((v, k) => {
+        const q = project(v); if (!q) return;
+        const el = document.createElement('div'); el.className = 'axl'; el.textContent = C.names[k] + ' \u2192';
+        el.style.left = q[0] + 'px'; el.style.top = q[1] + 'px'; if (C.colors[k]) el.style.color = `var(${C.colors[k]})`;
+        space.appendChild(el);
+      });
+    }
+    // the flat figure's home view fits its bounds (C.bounds, world x/y) into the space between the
+    // buttons along the top and the legend along the bottom; it follows resizes and full screen until
+    // the view is panned or zoomed, and Reset view brings it back
+    const chromeH = sel => { const e = space.querySelector(sel); return e && !e.hidden ? e.offsetHeight + 12 : 0; };
+    function fitFlat() {
+      const b = C.bounds; if (!b) return;
+      const top = chromeH('.reset'), bottom = 12, Hu = Math.max(40, H - top - bottom);
+      const ys = b[3] - b[1], xs = b[2] - b[0];
+      view.dist = Math.max(.06, Math.min(9, 1.06 * Math.max(ys / (2 * TANH) * H / Hu, xs / (2 * TANH) * H / W)));
+      const yc = top + Hu / 2;   // screen row the figure's middle should sit on
+      view.px = -(b[0] + b[2]) / 2;
+      view.py = (H / 2 - yc) / (H / 2) * TANH * view.dist - (b[1] + b[3]) / 2;
+    }
+    C.draw = () => {
+      if (!gl) return;
+      if (C.flat && view.fit) fitFlat();
+      MVP = mvp();
+      gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.useProgram(prog);
+      const uMVP = gl.getUniformLocation(prog, 'uMVP'), uScale = gl.getUniformLocation(prog, 'uScale'), uRound = gl.getUniformLocation(prog, 'uRound');
+      gl.uniformMatrix4fv(uMVP, false, MVP);
+      const aPos = gl.getAttribLocation(prog, 'aPos'), aCol = gl.getAttribLocation(prog, 'aCol'), aSize = gl.getAttribLocation(prog, 'aSize');
+      gl.uniform1f(uRound, 0);
+      const lc = document.documentElement.dataset.theme === 'light' ? [.55, .55, .5, .7] : [.45, .47, .42, .8];
+      gl.vertexAttrib4f(aCol, lc[0], lc[1], lc[2], lc[3]); gl.disableVertexAttribArray(aCol);
+      gl.vertexAttrib1f(aSize, 1); gl.disableVertexAttribArray(aSize);
+      gl.uniform1f(uScale, 1);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufAxis); gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.LINES, 0, nAxis);
+      gl.uniform1f(uRound, 1);
+      // the flat figure's dots stop growing past the old closest view, so a deep zoom separates seats instead of inflating them
+      gl.uniform1f(uScale, DPR * 2.2 * (C.flat ? view.dist / Math.max(view.dist, 1.4) : 1));
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufPos); gl.enableVertexAttribArray(aPos); gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufCol); gl.enableVertexAttribArray(aCol); gl.vertexAttribPointer(aCol, 4, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, bufSize); gl.enableVertexAttribArray(aSize); gl.vertexAttribPointer(aSize, 1, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.POINTS, 0, nPts);
+      if (nMk) {
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufMkPos); gl.vertexAttribPointer(aPos, 3, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufMkCol); gl.vertexAttribPointer(aCol, 4, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, bufMkSize); gl.vertexAttribPointer(aSize, 1, gl.FLOAT, false, 0, 0);
+        gl.drawArrays(gl.POINTS, 0, nMk);
+      }
+      labels();
+    };
+    function hover(e) {
+      if (!MVP || !nPts) return;
+      const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+      let best = -1, bd = 100;   // 10 px; selected seats are drawn last and win the pick
+      for (let i = ORDER.length - 1; i >= ORDER.length - SEL_COUNT && i >= 0; i--) {
+        const si = ORDER[i];
+        const q = project([C.coord[si * 3], C.coord[si * 3 + 1], C.coord[si * 3 + 2]]); if (!q) continue;
+        const d = (q[0] - mx) ** 2 + (q[1] - my) ** 2; if (d < bd) { bd = d; best = si; }
+      }
+      if (best < 0) { Z.hideTip(); return; }
+      Z.showTip(e, seatTip(best));
+    }
+    let dragging = null, flying = null;
+    // the right button held flies the camera the way Unity's scene view does (the user, 2026-09-14): the mouse
+    // looks about the eye, W/S A/D Q/E move it along its own axes, Shift hurries. The camera stays the orbit
+    // one - its eye is the orbit centre less the forward axis times the distance - so a look keeps the eye
+    // where it is by moving the centre, and a flight moves the centre with the eye
+    const KEYS = new Set();
+    let flyT = 0;
+    const axes = () => { const Ri = M4.mul(M4.rotY(-view.yaw), M4.rotX(-view.pitch)); return { fwd: M4.apply(Ri, [0, 0, -1]), right: M4.apply(Ri, [1, 0, 0]), up: M4.apply(Ri, [0, 1, 0]) }; };
+    const eye = () => { const f = axes().fwd; return [view.tx - f[0] * view.dist, view.ty - f[1] * view.dist, view.tz - f[2] * view.dist]; };
+    function fly(t) {
+      if (!flying) return;
+      const dt = Math.min(.05, (t - flyT) / 1000); flyT = t;
+      const { fwd, right, up } = axes(), v = (KEYS.has('shift') ? 3 : 1) * 1.2 * dt, m = [0, 0, 0];   // 1.2 box units a second, the box being 2 across
+      const add = (a, k) => { m[0] += a[0] * k; m[1] += a[1] * k; m[2] += a[2] * k; };
+      if (KEYS.has('w')) add(fwd, v); if (KEYS.has('s')) add(fwd, -v); if (KEYS.has('d')) add(right, v); if (KEYS.has('a')) add(right, -v); if (KEYS.has('e')) add(up, v); if (KEYS.has('q')) add(up, -v);
+      if (m[0] || m[1] || m[2]) { view.tx += m[0]; view.ty += m[1]; view.tz += m[2]; C.draw(); }
+      requestAnimationFrame(fly);
+    }
+    document.addEventListener('keydown', e => { if (!flying) return; const k = e.key.toLowerCase(); if ((k.length === 1 && 'wasdqe'.includes(k)) || k === 'shift') { KEYS.add(k); e.preventDefault(); } });
+    document.addEventListener('keyup', e => KEYS.delete(e.key.toLowerCase()));
+    space.addEventListener('contextmenu', e => { if (e.target === canvas) e.preventDefault(); });
+    // a press on one of the buttons is a click, not a drag: capturing the pointer here would
+    // retarget the click to the cloud and the button would never fire
+    space.addEventListener('pointerdown', e => {
+      if (e.target !== canvas || (e.button !== 0 && e.button !== 2) || (e.button === 2 && C.flat)) return;   // the flat figure pans; nothing to fly through
+      if (e.button === 2) { flying = [e.clientX, e.clientY]; flyT = performance.now(); requestAnimationFrame(fly); space.classList.add('fly'); } else { dragging = [e.clientX, e.clientY]; space.classList.add('drag'); }
+      view.auto = false; syncTurn(); space.setPointerCapture(e.pointerId);
+    });
+    space.addEventListener('pointermove', e => {
+      if (!dragging && !flying && e.target !== canvas) { Z.hideTip(); return; }
+      if (flying) {
+        const e0 = eye();
+        view.yaw += (e.clientX - flying[0]) * .005; view.pitch = Math.max(-1.5, Math.min(1.5, view.pitch + (e.clientY - flying[1]) * .005));
+        const f = axes().fwd; view.tx = e0[0] + f[0] * view.dist; view.ty = e0[1] + f[1] * view.dist; view.tz = e0[2] + f[2] * view.dist;
+        flying = [e.clientX, e.clientY]; C.draw(); return;
+      }
+      if (dragging) { view.fit = false; if (C.flat) { const k = 2 * TANH * view.dist / H; view.px += (e.clientX - dragging[0]) * k; view.py -= (e.clientY - dragging[1]) * k; } else { view.yaw += (e.clientX - dragging[0]) * .008; view.pitch = Math.max(-1.5, Math.min(1.5, view.pitch + (e.clientY - dragging[1]) * .008)); } dragging = [e.clientX, e.clientY]; C.draw(); return; }
+      hover(e);
+    });
+    const letGo = () => { dragging = flying = null; KEYS.clear(); space.classList.remove('drag', 'fly'); };
+    space.addEventListener('pointerup', letGo);
+    space.addEventListener('pointerleave', () => { letGo(); Z.hideTip(); });
+    // the flat figure zooms far closer (its near plane is at 0.02) and about the cursor, so a corner
+    // or a cluster can be dived into without panning after every step
+    space.addEventListener('wheel', e => {
+      if (e.target !== canvas) return;   // the strip scrolls the page like anything else
+      e.preventDefault();
+      const d0 = view.dist, d1 = Math.max(C.flat ? .06 : 1.4, Math.min(9, d0 * (e.deltaY > 0 ? 1.1 : .91)));
+      if (C.flat && d1 !== d0) {
+        const r = canvas.getBoundingClientRect(), nx = (e.clientX - r.left - W / 2) / (H / 2), ny = -(e.clientY - r.top - H / 2) / (H / 2);
+        view.px += nx * TANH * (d1 - d0); view.py += ny * TANH * (d1 - d0);
+      }
+      view.dist = d1; view.fit = false; view.auto = false; syncTurn(); C.draw();
+    }, { passive: false });
+    const turnBtn = space.querySelector('.turn');
+    const syncTurn = () => { turnBtn.textContent = view.auto ? 'Stop turning' : 'Turn'; turnBtn.setAttribute('aria-pressed', String(view.auto)); };
+    turnBtn.addEventListener('click', () => { view.auto = !view.auto; syncTurn(); C.draw(); });
+    space.querySelector('.reset').addEventListener('click', () => { Object.assign(view, VIEW0); view.fit = C.flat; view.auto = !reduced && !C.flat; syncTurn(); C.draw(); });
+    C.setFlat = () => { C.flat = true; view.fit = true; view.auto = false; turnBtn.hidden = true; space.querySelector('.note').textContent = 'drag to pan \u00b7 wheel to zoom \u00b7 hover a point'; syncTurn(); };
+    syncTurn();
+    const fullBtn = space.querySelector('.full');
+    C.setFull = on => { space.classList.toggle('fullscreen', on); document.body.classList.toggle('has-fullscreen', on); fullBtn.textContent = on ? 'Exit full screen' : 'Full screen'; C.resize(); C.draw(); };
+    fullBtn.addEventListener('click', () => C.setFull(!space.classList.contains('fullscreen')));
+    new ResizeObserver(() => { C.resize(); C.draw(); }).observe(canvas);   // the canvas, not the space: the strip under it can grow a line
+    C.resize();
+    return C;
+  }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') for (const c of CLOUDS) if (c.space.classList.contains('fullscreen')) c.setFull(false); });
+  // a slow idle turn on both until touched
+  let lastT = 0;
+  function tick(t) {
+    for (const c of CLOUDS) if (c.view.auto && !c.flat && !reduced && !document.hidden) { c.view.yaw += (t - lastT) * .00012; c.draw(); }
+    lastT = t; requestAnimationFrame(tick);
+  }
+
+  // cloud 1: the posture triangle. Corners A (left), G (right), D (top); a seat sits at the
+  // composition of its three scores (TRI_SET, per Relative to), stretched about the reference
+  // composition (setTriCoords below), so the middle is "plays like the reference"
+  const CORNER = { A: [-1, -0.577], G: [1, -0.577], D: [0, 1.155] };
+  const cloud1 = makeCloud($('space'), $('gl'), $('space-note'), si => seatColor(si, S.colour), si => isHidden(1, si, S.colour));
+  cloud1.setFlat();
+  cloud1.box = false;
+  // the outline, the three medians (along each one the ratio of the other two shares equals the
+  // reference) and a small cross at the middle: the reference itself
+  const MID = (P, Q) => [(CORNER[P][0] + CORNER[Q][0]) / 2, (CORNER[P][1] + CORNER[Q][1]) / 2];
+  cloud1.edges = [[[...CORNER.A, 0], [...CORNER.G, 0]], [[...CORNER.G, 0], [...CORNER.D, 0]], [[...CORNER.D, 0], [...CORNER.A, 0]],
+    [[...CORNER.A, 0], [...MID('G', 'D'), 0]], [[...CORNER.G, 0], [...MID('A', 'D'), 0]], [[...CORNER.D, 0], [...MID('A', 'G'), 0]],
+    [[-.05, 0, 0], [.05, 0, 0]], [[0, -.05, 0], [0, .05, 0]]];
+  cloud1.bounds = [CORNER.A[0] - .2, CORNER.A[1] - .2, CORNER.G[0] + .2, CORNER.D[1] + .2];   // x0, y0, x1, y1 around the corners and their labels
+  // [label anchor, name, colour, the vertex itself]: the arrow appears only once the vertex is off the screen
+  cloud1.corners = [[[CORNER.A[0] - .12, CORNER.A[1] - .1, 0], 'Aggressive', '--pA', [...CORNER.A, 0]], [[CORNER.G[0] + .12, CORNER.G[1] - .1, 0], 'Greedy', '--pG', [...CORNER.G, 0]], [[CORNER.D[0], CORNER.D[1] + .1, 0], 'Defensive', '--pD', [...CORNER.D, 0]]];
+  cloud1.has = si => HASTRI[si] === 1;
+  Z.tips($('space'), null, null);
+  cloud1.tip = seatTip;
+  // Centring: each share is stretched so the reference share (the faction's, the side's or
+  // everyone's mean per "Relative to") lands at one third - below the reference the share
+  // scales as v / r / 3, above it as 1/3 + (v - r) / (1 - r) * 2/3 - and the three are
+  // re-closed. Zero stays on the edge, all of it stays at the corner, the reference is the
+  // middle, and the "sent nothing out" seats stay on the outline instead of forming one
+  // line per faction inside it. Tried and rejected before this: a log-ratio (Aitchison)
+  // centring - ratios amplify the small shares, so +7 points greedy on Blue Hole read as
+  // less than +4 aggressive on Vendetta - and a plain shift, which spilled 5% of seats past
+  // the outline and drew the zero-share seats as twelve parallel lines inside it.
+  // v7: the scores are standardized within the group already, so the group's mean composition is
+  // near one third each and the stretch is close to the identity; it stays so the middle is exactly
+  // the group's mean composition and the edges keep their meaning
+  const TRI_REF = { f: new Map(), s: new Map(), a: null };
+  {
+    const acc = (m, key, si, arr) => { let a = m.get(key); if (!a) { a = [0, 0, 0, 0]; m.set(key, a); } for (let k = 0; k < 3; k++) a[k] += arr[si * 3 + k]; a[3]++; };
+    const all = new Map();
+    for (let si = 0; si < NSEATS; si++) if (HASTRI[si]) { acc(TRI_REF.f, FAC[si], si, TRI_SET.f); acc(TRI_REF.s, SIDE_OF(FAC[si]), si, TRI_SET.s); acc(all, 'a', si, TRI_SET.a); }
+    const close = a => a.slice(0, 3).map(v => v / (a[3] || 1));
+    for (const m of [TRI_REF.f, TRI_REF.s]) for (const [k, a] of m) m.set(k, close(a));
+    TRI_REF.a = close(all.get('a') || [0, 0, 0, 0]);
+  }
+  const triRef = si => S.rel === 'f' ? TRI_REF.f.get(FAC[si]) : S.rel === 's' ? TRI_REF.s.get(SIDE_OF(FAC[si])) : TRI_REF.a;
+  // a seat's centred shares, [a, g, d]
+  function triCentred(si) {
+    const r = triRef(si) || [1 / 3, 1 / 3, 1 / 3];
+    const t = [0, 1, 2].map(k => { const v = TRI[si * 3 + k], m = Math.min(Math.max(r[k], 1e-3), 1 - 1e-3); return v <= m ? v / m / 3 : 1 / 3 + (v - m) / (1 - m) * 2 / 3; });
+    const sum = t[0] + t[1] + t[2];
+    return t.map(v => v / sum);
+  }
+  let TRI_REL = null;
+  function setTriCoords() {
+    TRI_REL = S.rel;
+    TRI = TRI_SET[S.rel] || TRI_SET.f;
+    for (let si = 0; si < NSEATS; si++) if (HASTRI[si]) {
+      const [a, g, d] = triCentred(si);
+      cloud1.coord[si * 3] = CORNER.A[0] * a + CORNER.G[0] * g + CORNER.D[0] * d;
+      cloud1.coord[si * 3 + 1] = CORNER.A[1] * a + CORNER.G[1] * g + CORNER.D[1] * d;
+      cloud1.coord[si * 3 + 2] = 0;
+    }
+    cloud1.explain = `the three opening scores (SD within the ${relWord()}) as a composition: the middle is the ${relWord()}\u2019s average, a corner far above average on that posture, an edge the floor of the opposite one; hover for the numbers`;
+  }
+  setTriCoords();
+  // cloud 2: the opening vector projected (the export's projection), coloured by the posture mix
+  const PY = new Float32Array(NSEATS * 3), HASY = new Uint8Array(NSEATS);
+  { let si = 0; for (const g of D.games) for (const p of g.p) { if (p.y) { HASY[si] = 1; for (let k = 0; k < 3; k++) PY[si * 3 + k] = p.y[k]; } si++; } }
+  const PROJ = D.proj || null;
+  const COLOURS2 = [['faction', 'Faction'], ['side', 'Side'], ['mix', 'Posture mix'], ['result', 'Result'], ['spend', 'Spent'], ['elo', 'ELO']];
+  const cloud2 = makeCloud($('space2'), $('gl2'), $('space2-note'), si => S.colour2 === 'mix' ? mixColor(si) : seatColor(si, S.colour2), si => isHidden(2, si, S.colour2));
+  cloud2.has = si => HASY[si] === 1;
+  cloud2.box = false;
+  cloud2.tip = seatTip;
+  {
+    const idx = []; for (let si = 0; si < NSEATS; si++) if (HAS[si] && HASY[si]) idx.push(si);
+    cloud2.scale((si, k) => PY[si * 3 + k], idx);
+    cloud2.explain = PROJ ? `${PROJ.method === 'umap' ? `UMAP (${PROJ.n_neighbors} neighbours, min dist ${PROJ.min_dist})` : 'PCA'} of ${PROJ.cells} standardized cells after PCA to ${PROJ.pca_dims} dimensions (${fmtPct(PROJ.pca_explained)} of the variance)` : 'no projection in this export (run ./stats posture without --no-projection)';
+  }
+  const CLOUDS = [cloud1, cloud2];
+
+  // --- cards --------------------------------------------------------------
+  function selected() { const M = Z.mask(), out = []; for (let si = 0; si < NSEATS; si++) if (HAS[si] && (M[si] & Z.M_ALL) === Z.M_ALL) out.push(si); return out; }
+  function tiles(sel) {
+    const n = sel.length, nw = sel.filter(si => WON[si] >= 0).length, w = sel.filter(si => WON[si] === 1).length;
+    const mean = k => n ? sel.reduce((s, si) => s + SH[si * 4 + k], 0) / n : 0;
+    const ref = k => n ? sel.reduce((s, si) => s + refMean(si)[k], 0) / n : 0;
+    const spent = n ? sel.reduce((s, si) => s + SPENT[si], 0) / n : 0;
+    const leans = [0, 0, 0, 0]; for (const si of sel) leans[lean(si) + 1]++;
+    const total = HAS.reduce((s, v) => s + v, 0);
+    $('tiles').innerHTML = `
+      <div class="tile"><div class="lbl">Seats</div><div class="v">${fmtInt(n)}</div><div class="d">openings of ${fmtInt(total)} scored to ${wlabel(WINDOW)} or the game's end</div></div>
+      <div class="tile"><div class="lbl">Opening leaning</div><table class="kv">${POST.map((P, k) => `<tr><th style="color:var(${P[2]})">${P[1]}</th><td class="m">${n ? fmtPct(leans[k + 1] / n) : '-'}</td></tr>`).join('')}<tr><th>Balanced</th><td class="m">${n ? fmtPct(leans[0] / n) : '-'}</td></tr></table><div class="d">the opening's largest score, by ${LEAN_GAP * 100}+ points of the composition</div></div>
+      <div class="tile"><div class="lbl">Budget</div><div class="agd">${ALL4.map((P, k) => `<div style="--c:var(${P[2]})"><b>${pts(mean(k))}</b>${P[1]}<small style="display:block;color:var(--muted)">${spts(mean(k) - ref(k))}</small></div>`).join('')}</div><div class="d">share of the ${fmtMoney(spent)} spent per seat by ${wlabel(WINDOW)}, and the difference from the ${relWord()} average</div></div>
+      <div class="tile"><div class="lbl">Win rate</div><div class="v">${nw ? fmtPct(w / nw) : '-'}</div><div class="d">${fmtInt(nw)} seats with a result</div></div>`;
+  }
+  function profiles(sel) {
+    const BINS = 15, LO = -3, HI = 3, bw = (HI - LO) / BINS;
+    sel = sel.filter(si => HASTRI[si]);
+    $('profiles').innerHTML = POST.map((P, k) => {
+      const cnt = new Array(BINS).fill(0), won = new Array(BINS).fill(0), res = new Array(BINS).fill(0);
+      for (const si of sel) { const v = scoreOf(si, k); const b = Math.max(0, Math.min(BINS - 1, Math.floor((v - LO) / bw))); cnt[b]++; if (WON[si] >= 0) { res[b]++; if (WON[si] === 1) won[b]++; } }
+      const max = Math.max(1, ...cnt), w = 300, h = 110, pad = 18;
+      const x = b => pad + b * (w - 2 * pad) / BINS, bwpx = (w - 2 * pad) / BINS;
+      const bars = cnt.map((c, b) => `<rect class="bin" x="${x(b) + .5}" y="${h - 22 - c / max * (h - 34)}" width="${bwpx - 1}" height="${c / max * (h - 34)}" style="--c:var(${P[2]})" data-b="${b}" data-k="${k}"></rect>`).join('');
+      const ptsArr = res.map((r, b) => r >= 8 ? [x(b) + bwpx / 2, h - 22 - won[b] / r * (h - 34)] : null);
+      let path = '', dots = '';
+      ptsArr.forEach((p, b) => { if (!p) return; path += (path && ptsArr[b - 1] ? 'L' : 'M') + p[0] + ' ' + p[1] + ' '; dots += `<circle class="wrp" cx="${p[0]}" cy="${p[1]}" r="2"></circle>`; });
+      const tercs = [['lo', 'low'], ['mid', 'mid'], ['hi', 'high']];
+      const meanV = sel.length ? sel.reduce((s, si) => s + scoreOf(si, k), 0) / sel.length : 0;
+      return `<div class="prof"><h3 style="--c:var(${P[2]})"><i></i>${P[1]}<small>mean ${sd(meanV)} SD</small></h3>
+        <svg viewBox="0 0 ${w} ${h}" data-k="${k}">
+          <line class="grid" x1="${pad}" x2="${w - pad}" y1="${h - 22}" y2="${h - 22}"></line>
+          <line class="grid" x1="${pad}" x2="${w - pad}" y1="${h - 22 - .5 * (h - 34)}" y2="${h - 22 - .5 * (h - 34)}" stroke-dasharray="2 4"></line>
+          ${bars}<path class="wr" d="${path}"></path>${dots}
+          ${[-2, -1, 0, 1, 2].map(v => `<text class="ax" x="${x((v - LO) / bw)}" y="${h - 9}" text-anchor="middle">${v > 0 ? '+' : ''}${v}</text>`).join('')}
+          <text class="ax" x="${w - pad + 2}" y="${h - 22 - .5 * (h - 34) + 3}">50%</text>
+        </svg>
+        <div class="terc"><span class="lbl">Filter</span>${tercs.map(([v, l]) => `<button aria-pressed="${S.post[P[0]] === v}" data-post="${P[0]}" data-terc="${v}">${l}</button>`).join('')}<span class="hint">tercile within the ${relWord()}</span></div></div>`;
+    }).join('');
+    $('profiles').querySelectorAll('.terc').forEach(el => el.classList.add('seg'));
+    Z.tips($('profiles'), '.bin', el => {
+      const b = +el.dataset.b, k = +el.dataset.k, lo = LO + b * bw, hi = lo + bw;
+      let n = 0, r = 0, w = 0;
+      for (const si of sel) { const v = scoreOf(si, k); if (v >= lo && v < hi || (b === BINS - 1 && v >= hi) || (b === 0 && v < lo)) { n++; if (WON[si] >= 0) { r++; if (WON[si] === 1) w++; } } }
+      return `<b>${POST[k][1]} ${sd(lo)} to ${sd(hi)} SD</b><div class="d">${fmtInt(n)} seats${r ? ` \u00b7 wins ${fmtPct(w / r)} of ${fmtInt(r)} with a result` : ''}</div>`;
+    });
+  }
+  function signalsCard(sel) {
+    const sc = sel.filter(si => HASTRI[si]), n = sc.length;
+    const sum = new Float64Array(NS), cnt = new Float64Array(NS);
+    for (const si of sc) for (let k = 0; k < NS; k++) { const v = SIG[si * NS + k]; if (v === v) { sum[k] += v; cnt[k]++; } }
+    const rows = [];
+    for (const P of POST) {
+      const w = blockW(P[0]);
+      SIGNALS.forEach((g, i) => {
+        if (g.p !== P[0]) return;
+        rows.push(`<tr><td class="l" style="color:var(${P[2]})">${esc(g.n)}${g.s < 0 ? ' <span class="d">(counts against)</span>' : ''}</td><td>${(w[i] * 100).toFixed(0)}%</td><td>${cnt[i] ? (sum[i] / cnt[i]).toFixed(2) : '-'}</td><td class="d">${SIG_ALL[i].toFixed(2)}</td></tr>`);
+      });
+    }
+    $('sigs').innerHTML = `<thead><tr><th class="l">Signal</th><th>Weight in Its Block</th><th>Selection Mean</th><th>Sample Mean</th></tr></thead><tbody>${rows.join('')}</tbody>`;
+    $('sigs-note').textContent = `${fmtInt(n)} scored seats. Signals are rank-normalized within the faction, the block's weighted sum standardized within the ${relWord()}. Earliness runs from 0 (not by ${wlabel(WINDOW)}) to 1 (at the start). Block coherence (variance on the first component): ${POST.map(P => `${P[1].toLowerCase()} ${COHER[P[0]] ? fmtPct(COHER[P[0]].pc1) : '-'}`).join(', ')}.`;
+  }
+  const SIG_ALL = (() => { const sum = new Float64Array(NS), cnt = new Float64Array(NS); for (let si = 0; si < NSEATS; si++) if (HASTRI[si]) for (let k = 0; k < NS; k++) { const v = SIG[si * NS + k]; if (v === v) { sum[k] += v; cnt[k]++; } } return Array.from(sum, (v, k) => cnt[k] ? v / cnt[k] : 0); })();
+  function components(sel) {
+    const n = sel.length;
+    const sum = new Float64Array(NL); let tot = 0;
+    for (const si of sel) for (let k = 0; k < NL; k++) { sum[k] += DL[si * NL + k]; tot += DL[si * NL + k]; }
+    $('cmps').innerHTML = ALL4.map(P => `<div>${LINES.map((l, i) => l.p === P[0] ? `<div class="cmprow" style="--c:var(${P[2]})"><i></i><div class="n" title="${esc(l.n)}">${esc(l.n)}</div><div class="v">${n ? fmtMoney(sum[i] / n) : '-'}<small>${tot ? pts(sum[i] / tot) : ''}</small></div><div class="sb"><b style="left:50%;width:${tot ? Math.min(sum[i] / tot, .5) * 100 : 0}%"></b></div></div>` : '').join('')}</div>`).join('');
+    const byFac = new Map();
+    for (const si of sel) { let a = byFac.get(FAC[si]); if (!a) { a = { n: 0, sum: new Float64Array(NL) }; byFac.set(FAC[si], a); } a.n++; for (let k = 0; k < NL; k++) a.sum[k] += DL[si * NL + k]; }
+    const cols = [...byFac].filter(([f, a]) => a.n >= 30).sort((a, b) => a[0] - b[0]);
+    $('cmp-facs').innerHTML = cols.length > 1 ? `<table><thead><tr><th class="l">Dollars per Seat</th>${cols.map(([f]) => `<th>${esc(shortName(D.factions[f]))}</th>`).join('')}</tr></thead><tbody>${LINES.map((l, i) => `<tr><td class="l" style="color:var(${ALL4.find(p => p[0] === l.p)[2]})">${esc(l.n)}</td>${cols.map(([f, a]) => `<td>${fmtMoney(a.sum[i] / a.n)}</td>`).join('')}</tr>`).join('')}<tr><td class="l">total spent</td>${cols.map(([f, a]) => `<td>${fmtMoney(Array.from(a.sum).reduce((s, v) => s + v, 0) / a.n)}</td>`).join('')}</tr></tbody></table>` : '';
+    $('cmp-note').textContent = `${fmtInt(n)} seats, ${fmtMoney(n ? tot / n : 0)} per seat by ${wlabel(WINDOW)} at sticker prices (a supply center includes its gatherer, a tunnel its two defenders). Not in the seat record: units never moved, cash in hand; a unit posted in base and later sent out counts in both.`;
+  }
+
+  // factions side by side: one compass per side. A faction is a dot at the vector sum of its three
+  // mean values along axes at 120 degrees (aggressive lower left, greedy lower right, defensive up);
+  // each panel has its own scale, read off its rings, so four factions never huddle
+  let FTIP = new Map();   // faction -> tip html, for the dots' hover
+  // the rail's Matchup filter in words: "any GLA", "SWG, Laser"
+  const facWords = who => { const ids = Z.F[who] || []; if (!ids.length) return ''; const out = [], done = new Set(); for (const side of SIDES) { const sids = Z.FACS.filter(f => f.side === side).map(f => f.id); if (sids.every(id => ids.includes(id))) { out.push('any ' + side); sids.forEach(id => done.add(id)); } } for (const id of ids) if (!done.has(id) && D.factions[id]) out.push(shortName(D.factions[id])); return out.join(', '); };
+  // per faction (and panel) means over a set of seats: n, ns scored, wins, spent, p (scores vs everyone), sh (shares)
+  function aggFacs(seats, byOpp) {
+    const by = new Map(); const all = { n: 0, sh: [0, 0, 0] };
+    for (const si of seats) {
+      const panel = byOpp ? (OPP[si] < 0 ? null : SIDE_OF(OPP[si])) : SIDE_OF(FAC[si]); if (!panel) continue;
+      const key = FAC[si] + ':' + panel;
+      let a = by.get(key); if (!a) { a = { f: FAC[si], panel, n: 0, ns: 0, nw: 0, w: 0, spent: 0, p: [0, 0, 0], sh: [0, 0, 0] }; by.set(key, a); }
+      a.n++; all.n++; a.spent += SPENT[si]; if (WON[si] >= 0) { a.nw++; if (WON[si] === 1) a.w++; }
+      for (let k = 0; k < 3; k++) { a.sh[k] += SH[si * 4 + k]; all.sh[k] += SH[si * 4 + k]; }
+      if (HASTRI[si]) { a.ns++; for (let k = 0; k < 3; k++) a.p[k] += PSC.a[si * 3 + k]; }
+    }
+    for (const a of by.values()) { a.spent /= a.n; a.p = a.p.map(v => v / (a.ns || 1)); a.sh = a.sh.map(v => v / a.n); }
+    return { by, msh: all.sh.map(v => v / (all.n || 1)) };
+  }
+  const FBASE = {};   // split -> aggregate of every seat, computed once
+  let ALLSEATS = null;
+  const allSeats = () => { if (!ALLSEATS) { const M = Z.maskDefault(); ALLSEATS = []; for (let si = 0; si < NSEATS; si++) if (HAS[si] && (M[si] & Z.M_ALL) === Z.M_ALL) ALLSEATS.push(si); } return ALLSEATS; };   // the rail at its defaults, no page condition
+  function factionsCard(sel) {
+    seg($('fsplit'), [['own', 'Own side'], ['opp', 'Opponent side']], S.fs, 'data-fs');
+    const byOpp = S.fs === 'opp';
+    // the rim's value, on a log slider from a quarter to twice the default, with the label beside it
+    const [LO, HI] = [.25, 5], VMAX = Math.min(HI, Math.max(LO, S.fsc.a));
+    $('fscale').value = (Math.log(VMAX / LO) / Math.log(HI / LO)).toFixed(3); $('fscale-v').textContent = `${fmtNum(VMAX)} SD`;
+    const { by } = aggFacs(sel, byOpp);
+    const base = FBASE[S.fs] || (FBASE[S.fs] = aggFacs(allSeats(), byOpp));   // the unfiltered page: the dotted "usual" dot
+    const facs = [...by].filter(([key, a]) => a.n >= 30 && D.factions[a.f] && a.ns).map(([key, a]) => {
+      const b = base.by.get(key);
+      return { key, f: a.f, panel: a.panel, fac: D.factions[a.f], n: a.n, nw: a.nw, w: a.w, p: a.p, v: a.p, bv: b ? b.p : null };
+    });
+    const DIR = [[-.866, .5], [.866, .5], [0, -1]];
+    const unit = v => [v[0] * DIR[0][0] + v[1] * DIR[1][0] + v[2] * DIR[2][0], v[0] * DIR[0][1] + v[1] * DIR[1][1] + v[2] * DIR[2][1]];
+    const magOf = v => Math.hypot(...unit(v));
+    FTIP = new Map(facs.map(q => [q.key, `<b>${esc(shortName(q.fac))}</b> <span class="d">${byOpp ? `vs ${q.panel} \u00b7 ` : ''}${fmtInt(q.n)} seats${q.nw >= 5 ? ` \u00b7 wins ${fmtPct(q.w / q.nw)}` : ''}</span>
+      <div class="agd">${POST.map((P, k) => `<span style="--c:var(${P[2]})">${P[1]} <b>${sd(q.p[k])}</b></span>`).join('')}</div>
+      <div class="d">mean score, SD against everyone${magOf(q.v) > VMAX ? ' \u00b7 past the rim of the chart' : ''}</div>`]));
+    if (!facs.length) { $('facs').innerHTML = ''; $('facs-note').textContent = 'no budgeted seats in the selection'; return; }
+    const W = 320, H = 320, C = [W / 2, H / 2 + 4], REACH = 140;   // the compass fills the panel: the corner labels sit under the axis ends, not beside them
+    // one scale for every panel and every filter, the user's (Scale) and not the data's, so the panels and the
+    // arrows compare directly; a value past the rim is drawn on it, dashed
+    const STEP = [.05, .1, .2, .25, .5, 1, 2].find(x => VMAX / x <= 6) || VMAX / 4, s = REACH / VMAX;   // three to six rings at a round step
+    const place = v => { const o = unit(v), m = Math.hypot(o[0], o[1]), k = m > VMAX ? VMAX * 1.03 / m : 1; return { x: C[0] + o[0] * s * k, y: C[1] + o[1] * s * k, clip: k < 1 }; };
+    const rings = []; for (let i = 1; i * STEP <= VMAX * 1.001; i++) rings.push(Math.round(i * STEP * 1000) / 1000);
+    const tw = t => 6.6 * t.length + 6;
+    const panel = side => {
+      const pts = facs.filter(q => q.panel === side).sort((a, b) => (b.fac.general ? 0 : 1) - (a.fac.general ? 0 : 1) || b.n - a.n);
+      if (!pts.length) return '';
+      const dots = pts.map(q => { const o = place(q.v), d = { ...q, x: o.x, y: o.y, clip: o.clip, r: 6, side: false };   // one size for all: the base faction is a faction like the others
+        // the shift from usual: a dotted dot where the faction sits over the whole library, an arrow to where it sits now
+        if (q.bv) { const b = place(q.bv); if (Math.hypot(d.x - b.x, d.y - b.y) >= 3) { d.bx = b.x; d.by = b.y; } }
+        return d; });
+      // labels: the first free spot of eight around the dot, clear of the dots and the labels placed so far
+      const boxes = dots.map(q => ({ x0: q.x - q.r, y0: q.y - q.r, x1: q.x + q.r, y1: q.y + q.r }));
+      for (const q of dots) if (q.bx != null) boxes.push({ x0: q.bx - q.r, y0: q.by - q.r, x1: q.bx + q.r, y1: q.by + q.r });
+      const overlap = (b, o) => Math.max(0, Math.min(b.x1, o.x1) - Math.max(b.x0, o.x0)) * Math.max(0, Math.min(b.y1, o.y1) - Math.max(b.y0, o.y0));
+      for (const q of dots) {
+        const name = shortName(q.fac), w = tw(name), r = q.r + 3;
+        const cands = [[r, 4, 'start'], [-r, 4, 'end'], [0, -r - 3, 'middle'], [0, r + 11, 'middle'], [r, -r + 2, 'start'], [r, r + 8, 'start'], [-r, -r + 2, 'end'], [-r, r + 8, 'end']];
+        let best = null, bestArea = Infinity;
+        for (const [dx, dy, an] of cands) {
+          const x = q.x + dx, y = q.y + dy, x0 = an === 'start' ? x : an === 'end' ? x - w : x - w / 2;
+          const b = { x0, y0: y - 9, x1: x0 + w, y1: y + 3 }, area = boxes.reduce((a, o) => a + overlap(b, o), 0);
+          if (area < bestArea) { bestArea = area; best = [x, y, an, b]; if (!area) break; }
+        }
+        q.lx = best[0]; q.ly = best[1]; q.an = best[2]; boxes.push(best[3]);
+      }
+      const n = pts.reduce((a, q) => a + q.n, 0);
+      const who = byOpp ? (facWords('facs') || 'every faction') : `vs ${facWords('opp') || 'anyone'}`;
+      return `<div class="panel"><h3><i style="--c:${rgb(hex(css(SIDE_COLOR[side])))}"></i>${byOpp ? `vs ${side}` : side}<small>${esc(who)} \u00b7 ${fmtInt(n)} seats</small></h3>
+        <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${side} factions on the posture compass">
+        ${rings.map(r => `<circle class="ring" cx="${C[0]}" cy="${C[1]}" r="${(r * s).toFixed(1)}"></circle><text class="rl" x="${C[0] + 4}" y="${(C[1] - r * s - 3).toFixed(1)}">${r} SD</text>`).join('')}
+        ${DIR.map(d => `<line class="ax" x1="${C[0]}" y1="${C[1]}" x2="${(C[0] + d[0] * REACH).toFixed(1)}" y2="${(C[1] + d[1] * REACH).toFixed(1)}"></line>`).join('')}
+        ${POST.map((P, k) => { const d = DIR[k]; return `<text class="lab" style="--c:var(${P[2]})" x="${(C[0] + d[0] * REACH).toFixed(1)}" y="${(C[1] + d[1] * REACH + (k === 2 ? -8 : 16)).toFixed(1)}" text-anchor="middle">${P[1]}</text>`; }).join('')}
+        <circle class="ctr" cx="${C[0]}" cy="${C[1]}" r="3"></circle>
+        ${dots.filter(q => q.bx != null).map(q => { const col = rgb(factionColor(q.f)), dx = q.x - q.bx, dy = q.y - q.by, L = Math.hypot(dx, dy), ux = dx / L, uy = dy / L;
+          const ex = q.x - ux * (q.r + 1), ey = q.y - uy * (q.r + 1), hl = Math.min(7, Math.max(0, L - q.r - 2)), hx = ex - ux * hl, hy = ey - uy * hl;
+          return `<circle class="base" cx="${q.bx.toFixed(1)}" cy="${q.by.toFixed(1)}" r="${q.r}" stroke="${col}"></circle>`
+            + (hl > 2 ? `<line class="arr" x1="${(q.bx + ux * (q.r + 1)).toFixed(1)}" y1="${(q.by + uy * (q.r + 1)).toFixed(1)}" x2="${hx.toFixed(1)}" y2="${hy.toFixed(1)}" stroke="${col}"></line><polygon class="arr head" fill="${col}" points="${ex.toFixed(1)},${ey.toFixed(1)} ${(hx - uy * 3).toFixed(1)},${(hy + ux * 3).toFixed(1)} ${(hx + uy * 3).toFixed(1)},${(hy - ux * 3).toFixed(1)}"></polygon>` : '');
+        }).join('')}
+        ${dots.map(q => `<circle class="pt${q.side ? ' side' : ''}${q.clip ? ' clip' : ''}" data-f="${q.key}" cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="${q.r}" fill="${rgb(factionColor(q.f))}"></circle><text class="nm${q.side ? ' side' : ''}" x="${q.lx.toFixed(1)}" y="${q.ly.toFixed(1)}" text-anchor="${q.an}">${esc(shortName(q.fac))}</text>`).join('')}
+        </svg></div>`;
+    };
+    $('facs').innerHTML = SIDES.map(panel).join('');
+    $('facs-fsnote').textContent = $('facs-note').textContent = `Mean opening scores against everyone, a dot per faction: the vector sum of its three scores, so a ring is that much on one axis. One scale (the slider's) on every panel and under every filter: rings every ${fmtNum(STEP)} SD, ${fmtNum(VMAX)} at the rim; a value past it sits on the rim, dashed. Hover a dot for the numbers. Under a filter, the dotted circle is the faction with no filter set and the arrow its move. ${byOpp ? 'Split by opponent: a panel per side faced; narrow the rail\u2019s Faction filter to follow one faction across its matchups.' : 'Split by own side; the rail\u2019s Against filter picks the opponents.'}`;
+  }
+  $('facs').addEventListener('pointermove', e => { const el = e.target.closest('.pt'); if (!el) { Z.hideTip(); return; } const t = FTIP.get(el.dataset.f); if (t) Z.showTip(e, t); else Z.hideTip(); });
+  $('facs').addEventListener('pointerleave', () => Z.hideTip());
+  const fmtNum = v => String(Math.round(v * 100) / 100);
+  $('fscale-reset').addEventListener('click', () => { S.fsc.a = 2; Z.persistPage('zh-posture-page', 2, S); factionsCard(selected()); });
+  $('fscale').addEventListener('input', e => { S.fsc.a = Math.round(.25 * Math.pow(20, +e.target.value) * 100) / 100; Z.persistPage('zh-posture-page', 2, S); factionsCard(selected()); });
+  const facsFull = on => { $('facs-wrap').classList.toggle('fullscreen', on); document.body.classList.toggle('has-fullscreen', on); $('facs-wrap').querySelector('.full').textContent = on ? 'Exit full screen' : 'Full screen'; };
+  $('facs-wrap').querySelector('.full').addEventListener('click', () => facsFull(!$('facs-wrap').classList.contains('fullscreen')));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('facs-wrap').classList.contains('fullscreen')) facsFull(false); });
+
+  function render() {
+    seg($('rel'), [['f', 'Faction'], ['s', 'Side'], ['a', 'Everyone']], S.rel, 'data-rel');
+    seg($('colour'), COLOURS, S.colour, 'data-colour');
+    seg($('dots'), [[1, 'Show'], [0, 'Hide']], S.dots ? 1 : 0, 'data-dots');
+    seg($('ghost'), [[1, 'Ghost'], [0, 'Hide']], S.ghost ? 1 : 0, 'data-ghost');
+    seg($('marks'), MARKS, S.marks, 'data-marks');
+    const sideOf = f => (D.factions[f] || {}).side || '?';
+    const groups = S.marks === 'faction' ? { key: si => FAC[si], label: k => shortName(D.factions[k]), color: k => factionColor(k), min: 30, max: 12 }
+      : S.marks === 'map' ? { key: si => D.games[SEAT_G[si]].mp, label: k => k != null ? D.maps[k].n : '?', color: k => hex(CLUSTER_COLORS[(k || 0) % 8]), min: 100, max: S.mkn, pin: new Set(S.mkpin) }
+      : S.marks === 'matchup' ? { key: si => OPP[si] < 0 ? null : shortName(D.factions[FAC[si]]) + ' v ' + shortName(D.factions[OPP[si]]),
+                                   alt: si => OPP[si] < 0 ? null : sideOf(FAC[si]) + ' v ' + sideOf(OPP[si]),
+                                   label: k => k, color: k => hex(css(SIDE_COLOR[SIDE_OF_SHORT[k.split(' v ')[0]] || k.split(' v ')[0]] || '--muted')), min: 30, max: S.mun, pin: new Set(S.mupin) }
+      : null;
+    cloud1.groups = groups; cloud2.groups = groups;
+    $('mkctl').hidden = S.marks !== 'map';
+    $('mkn').value = S.mkn;
+    if (!$('mkmaps').options.length) $('mkmaps').innerHTML = D.maps.map((m, i) => `<option value="${esc(m.n)}"></option>`).join('');
+    $('mkpins').innerHTML = S.mkpin.map(i => D.maps[i] ? `<span class="pin">${esc(D.maps[i].n)}<button type="button" data-unpin="${i}" title="remove">\u00d7</button></span>` : '').join('');
+    $('muctl').hidden = S.marks !== 'matchup';
+    $('relhint').hidden = !(S.marks === 'faction' && S.rel === 'f');   // faction marks against the faction: all at the centre, by construction
+    $('mun').value = S.mun;
+    if (!$('mumu').options.length) {
+      const shorts = Object.values(D.factions).map(shortName), sides = ['USA', 'China', 'GLA'], opts = [];
+      for (const a of sides) for (const b of sides) opts.push(`${a} v ${b}`);
+      for (const a of shorts) for (const b of shorts) opts.push(`${a} v ${b}`);
+      for (const a of [...sides, ...shorts]) opts.push(`${a} mirror`);   // a second name for "X v X"; the mark keeps the first
+      $('mumu').innerHTML = opts.map(o => `<option value="${esc(o)}"></option>`).join('');
+    }
+    $('mupins').innerHTML = S.mupin.map(k => `<span class="pin">${esc(k)}<button type="button" data-muunpin="${esc(k)}" title="remove">\u00d7</button></span>`).join('');
+    seg($('colour2'), COLOURS2, S.colour2, 'data-colour2');
+    Z.renderActive(); pageChips();
+    refreshPalette();
+    if (TRI_REL !== S.rel) setTriCoords();
+    cloud1.upload(); cloud2.upload();
+    legend(); legend2();
+    cloud1.draw(); cloud2.draw();
+    const sel = selected();
+    tiles(sel); factionsCard(sel); profiles(sel); signalsCard(sel); components(sel);
+    Z.persistPage('zh-posture-page', 2, S);
+  }
+  // does this cloud hold any unscored seat? (none in the projection: every projected seat is scored)
+  const UNSCORED = { 1: false, 2: false };
+  for (let si = 0; si < NSEATS; si++) if (HAS[si] && !HASTRI[si] && HASY[si]) { UNSCORED[2] = true; break; }
+  function legendFor(mode, n) {
+    const hid = S.hid[n] || [];
+    // the seats outside the rail's selection, drawn faint: the Seats: Ghost switch, from the legend too
+    const ghosts = S.dots ? `<span data-cat="ghost" class="${S.ghost ? '' : 'off'}" title="click to ${S.ghost ? 'hide' : 'show'}"><i style="--c:${document.documentElement.dataset.theme === 'light' ? 'rgba(140,140,133,.5)' : 'rgba(153,153,148,.45)'}"></i>outside the selection (faint)</span>` : '';
+    return legendBody(mode, n, hid) + ghosts;
+  }
+  function legendBody(mode, n, hid) {
+    // an entry with a category is a toggle: click hides those seats from this cloud
+    const sw = (c, l, cat) => cat == null ? `<span><i style="--c:${c}"></i>${esc(l)}</span>` : `<span data-cat="${esc(cat)}" class="${hid.includes(hidKey(mode, cat)) ? 'off' : ''}" title="click to ${hid.includes(hidKey(mode, cat)) ? 'show' : 'hide'}"><i style="--c:${c}"></i>${esc(l)}</span>`;
+    if (mode === 'faction') return Object.entries(D.factions).filter(([id]) => HAS.some((h, si) => h && FAC[si] === +id)).map(([id, f]) => sw(rgb(factionColor(+id)), shortName(f), id)).join('');
+    if (mode === 'side') return SIDES.map(s => sw(rgb(PAL.side[s]), s, s)).join('');
+    if (mode === 'result') return sw('rgb(43,212,138)', 'won', 'won') + sw('rgb(255,107,61)', 'lost', 'lost') + sw('#7f7f7a', 'no result (faint)', 'none');
+    if (mode === 'lean') return POST.map(P => sw(`var(${P[2]})`, P[1], P[0])).join('') + sw('#8c8c88', UNSCORED[n] ? 'balanced or not scored' : 'balanced', 'bal');
+    if (mode === 'mix') return POST.map(P => sw(`var(${P[2]})`, P[1])).join('') + (UNSCORED[n] ? sw(rgb(PAL.neutral), 'not scored', 'unscored') : '') + '<span>(hues blend by the composition of the scores)</span>';
+    if (mode === 'spend') return `<span>${fmtMoney(SPENT_LO[0])}<span class="grad" style="background:linear-gradient(90deg,${rgb(RAMP(0))},${rgb(RAMP(.5))},${rgb(RAMP(1))})"></span>${fmtMoney(SPENT_LO[1])} spent by ${wlabel(WINDOW)}</span>`;
+    if (mode === 'fastwin') return `<span>won at ${mmss(TW_LO[0])}<span class="grad" style="background:linear-gradient(90deg,${rgb(RAMP(1))},${rgb(RAMP(.5))},${rgb(RAMP(0))})"></span>won at ${mmss(TW_LO[1])}</span>` + sw('#7f7f7a', 'lost or no result (faint)', 'nowin');
+    if (mode === 'oppatt') return `<span>0<span class="grad" style="background:linear-gradient(90deg,${rgb(RAMP(0))},${rgb(RAMP(.5))},${rgb(RAMP(1))})"></span>4+ opponent attack sorties met by ${wlabel(WINDOW)}</span>`;
+    if (mode === 'elo') return `<span>${ELO[0][1]}<span class="grad" style="background:linear-gradient(90deg,${rgb(RAMP(0))},${rgb(RAMP(.5))},${rgb(RAMP(1))})"></span>${ELO[ELO.length - 1][1]}</span>` + sw('#888', 'unrated', 'unrated');
+    if (mode === 'cash') return Z.CASH.map(([v], i) => sw(CLUSTER_COLORS[i % 8], Z.fmtCash(v), String(i))).join('') + sw('#888', 'other', 'other');
+    return '';
+  }
+  function legend() { $('legend').innerHTML = legendFor(S.colour, 1); }
+  function legend2() { $('legend2').innerHTML = legendFor(S.colour2, 2); }
+  // a click on a legend entry hides that category from its cloud (and its marks); a second click brings it back
+  for (const [n, cloud, mode, redraw] of [[1, cloud1, () => S.colour, legend], [2, cloud2, () => S.colour2, legend2]]) {
+    $(n === 1 ? 'legend' : 'legend2').addEventListener('click', e => {
+      const el = e.target.closest('span[data-cat]'); if (!el) return;
+      if (el.dataset.cat === 'ghost') { S.ghost = !S.ghost; render(); return; }
+      const k = hidKey(mode(), el.dataset.cat), h = S.hid[n], i = h.indexOf(k);
+      if (i < 0) h.push(k); else h.splice(i, 1);
+      Z.persistPage('zh-posture-page', 2, S); redraw(); cloud.upload(); cloud.draw();
+    });
+  }
+  // the page's own conditions join the filter strip
+  function pageChips() {
+    const parts = [];
+    for (const [k, name] of POST) if (S.post[k]) parts.push(`<span class="fchip"><span class="k">${name}</span><button class="pv" data-rmpost="${k}" title="remove">${{ lo: 'low', mid: 'mid', hi: 'high' }[S.post[k]]}</button></span>`);
+    if (!parts.length) return;
+    const A = $('active'), none = A.querySelector('.none'), clear = A.querySelector('.clear');
+    if (none) none.remove();
+    if (clear) clear.insertAdjacentHTML('beforebegin', parts.join(''));
+    else A.insertAdjacentHTML('beforeend', parts.join('') + '<button class="clear" data-clearall="1">clear all</button>');
+  }
+
+  Z.bind(render, d => {
+    if (d.colour) S.colour = d.colour;
+    else if (d.colour2) S.colour2 = d.colour2;
+    else if (d.ghost !== undefined) S.ghost = d.ghost === '1';
+    else if (d.dots !== undefined) S.dots = d.dots === '1';
+    else if (d.marks) S.marks = d.marks;
+    else if (d.fs) S.fs = d.fs;
+    else if (d.unpin !== undefined) S.mkpin = S.mkpin.filter(i => i !== +d.unpin);
+    else if (d.muunpin !== undefined) S.mupin = S.mupin.filter(k => k !== d.muunpin);
+    else if (d.rel) { S.rel = d.rel; setTriCoords(); Z.update(() => {}); return false; }   // the triangle recentres, the terciles move: through the mask
+    else if (d.rmpost) { S.post[d.rmpost] = null; Z.update(() => {}); return false; }
+    else if (d.post) { S.post[d.post] = S.post[d.post] === d.terc ? null : d.terc; Z.update(() => {}); return false; }
+    else return false;
+    return true;
+  }, { hide: ['classes'], only, onlyKey: () => JSON.stringify([S.post, S.rel]) });
+  document.querySelector('main').addEventListener('click', e => { if (e.target.closest('[data-clearall]')) { S.post = { A: null, G: null, D: null }; } }, true);
+  $('mkn').addEventListener('change', e => { S.mkn = Math.max(1, Math.min(60, +e.target.value || 15)); render(); });
+  $('mkq').addEventListener('change', e => {
+    const q = e.target.value.trim().toLowerCase(); if (!q) return;
+    let i = D.maps.findIndex(m => m.n.toLowerCase() === q); if (i < 0) i = D.maps.findIndex(m => m.n.toLowerCase().includes(q));
+    if (i >= 0 && !S.mkpin.includes(i)) S.mkpin.push(i);
+    e.target.value = ''; render();
+  });
+  $('mun').addEventListener('change', e => { S.mun = Math.max(1, Math.min(60, +e.target.value || 15)); render(); });
+  $('muq').addEventListener('change', e => {
+    const words = e.target.value.toLowerCase().split(/[\s,]+/).filter(w => w && w !== 'v' && w !== 'vs'); if (!words.length) return;
+    const opts = [...$('mumu').options].map(o => o.value).filter(o => !o.endsWith(' mirror'));
+    if (words.length === 2 && 'mirror'.startsWith(words[1]) && words[1].length >= 3) words[1] = words[0];   // "Air mirror": Air v Air
+    let hit = opts.find(o => o.toLowerCase() === words.join(' v '));
+    if (!hit) hit = opts.find(o => { const [a, b] = o.toLowerCase().split(' v '); return words.length === 2 && a.startsWith(words[0]) && b.startsWith(words[1]); });
+    if (hit && !S.mupin.includes(hit)) S.mupin.push(hit);
+    e.target.value = ''; render();
+  });
+  // the theme switch repaints the clouds (the palette is read from CSS)
+  new MutationObserver(() => { refreshPalette(); cloud1.upload(); cloud2.upload(); legend(); legend2(); cloud1.draw(); cloud2.draw(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  requestAnimationFrame(tick);
+  // arrived by a link to a card (the Build Orders tab's): the page was built behind the veil, so scroll to it now
+  if (location.hash) { const t = document.getElementById(location.hash.slice(1)); if (t) setTimeout(() => t.scrollIntoView({ block: 'start' }), 0); }
+}).catch(function (err) {
+  console.error(err);
+  const v = document.getElementById('loading');
+  if (v) v.innerHTML = '<div class="disp">ZERO HOUR <span>STATS</span></div><div class="msg">the dataset did not load: ' + String(err).replace(/[<&]/g, ' ') + '<br>run <code>./stats posture</code> and republish</div>';
+});
+</script>

@@ -1,0 +1,704 @@
+<meta charset="utf-8">
+<title>Zero Hour Stats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="common.css">
+<script>document.documentElement.dataset.theme = (function () { try { return localStorage.getItem("zh-theme"); } catch (e) { return null; } })() || "light";</script>
+<style>
+  :root { --win: #2f8f5b; --lose: #c8503a; }
+  /* ratio bars: centred on even (1.0), log scale, ahead to the right */
+  .lift { display: grid; grid-template-columns: 190px minmax(0, 1fr) 160px; gap: 10px; align-items: center; height: 24px; cursor: pointer; }
+  .lift:hover .lt, .row.pick:hover .track { background: var(--raised); }
+  #tip { max-width: min(480px, calc(100vw - 24px)); }   /* the unit tip is a three-column table */
+  .tile .pickable { cursor: pointer; text-decoration: underline dotted; text-underline-offset: 4px; text-decoration-color: var(--ink-2); }
+  .tile .pickable:hover, .tile .pickable.on { text-decoration-style: solid; text-decoration-color: currentColor; }
+  .lift .name { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 13px; }
+  .lift .name i { width: 8px; height: 8px; border-radius: 2px; background: var(--c); flex: none; }
+  .lift .name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lt { position: relative; height: 16px; border-radius: 2px; }
+  .lt::after { content: ''; position: absolute; left: 50%; top: -3px; bottom: -3px; width: 1px; background: var(--line-strong); }
+  .lt .b { position: absolute; top: 0; bottom: 0; background: var(--win); }
+  .lt .b.lo { background: var(--lose); border-radius: 3px 0 0 3px; }
+  .lt .b.hi { border-radius: 0 3px 3px 0; }
+  .lt .base { z-index: 1; }
+  .lift .v { text-align: right; font-size: 13px; white-space: nowrap; }
+  .lift .v small, .row .val small { color: var(--muted); font-size: 11px; margin-left: 4px; }
+  .lift.thin .b, .row.thin .bar { opacity: .35; }
+  .lift.thin .v, .row.thin .val { color: var(--muted); }
+  .lift.on .name span, .row.on .name span { font-weight: 600; }
+  .lift.on .name::after, .row.on .name::after { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
+  .row { cursor: pointer; }
+  .scale { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); }
+  .scale i { width: 90px; height: 8px; border-radius: 2px; display: inline-block; background: linear-gradient(90deg, var(--lose), var(--raised) 50%, var(--win)); }
+  /* the matchup card: two lists side by side */
+  .duo { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 18px 32px; }
+  .duo .lbl { margin-bottom: 8px; }
+  .duo .lift { grid-template-columns: 150px minmax(0, 1fr) 110px; }
+  .duo .sub { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  .duo .bars.more { overflow-y: auto; padding-right: 4px; }   /* past the top 12 the pane keeps its height and scrolls */
+  #chart.more { overflow-y: auto; padding-right: 4px; }   /* past the top rows the pane keeps its height and scrolls */
+  .more-row { display: flex; gap: 8px; justify-content: center; padding: 8px 0 2px; }
+  .note { color: var(--muted); font-size: 12px; line-height: 1.45; margin-top: 10px; }
+  /* the versus card: two units face to face, one row per question */
+  .vs-pick { display: flex; align-items: center; gap: 6px; }
+  .vs-pick .combo { position: relative; width: 220px; }
+  .vs-pick .combo .search { width: 100%; }
+  .vs-pick .cargo { max-width: 170px; padding: 4px 6px; font-size: 13px; }
+  .vs-pick .cargo[hidden] { display: none; }
+  .vs-pick .menu { position: absolute; z-index: 5; top: calc(100% + 3px); left: 0; min-width: 100%; max-height: 320px; overflow-y: auto; background: var(--tip); border: 1px solid var(--line-strong); border-radius: 4px; padding: 4px 0; box-shadow: 0 6px 24px rgba(0,0,0,.35); scrollbar-width: thin; }
+  .vs-pick .menu .grp { padding: 6px 10px 2px; font-family: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .vs-pick .menu .opt { display: flex; align-items: center; gap: 8px; padding: 3px 10px; font-size: 13px; white-space: nowrap; cursor: pointer; }
+  .vs-pick .menu .opt i { width: 8px; height: 8px; border-radius: 2px; background: var(--c); flex: none; }
+  .vs-pick .menu .opt:hover, .vs-pick .menu .opt.hot { background: var(--raised); }
+  .vs-pick .menu .opt.on { font-weight: 600; }
+  .vs-pick .menu .none { padding: 6px 10px; font-size: 12px; color: var(--muted); }
+  .vs-pick .swap { background: none; border: 1px solid var(--line-strong); border-radius: 3px; color: var(--ink-2); padding: 2px 8px; cursor: pointer; font-size: 14px; }
+  .vs-pick .swap:hover { color: var(--ink); border-color: var(--accent); }
+  .vs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, auto) minmax(0, 1fr); column-gap: 18px; align-items: baseline; }
+  .vs .head { font-family: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif; font-size: 24px; font-weight: 600; line-height: 1.1; padding-bottom: 10px; border-bottom: 1px solid var(--line); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .vs .head i { width: 9px; height: 9px; border-radius: 2px; background: var(--c); flex: none; }
+  .vs .head span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vs .head.r { justify-content: flex-end; }
+  .vs .head small { color: var(--muted); font-size: 12px; font-family: "IBM Plex Sans", system-ui, sans-serif; font-weight: 400; flex: none; }
+  .vs .mid { text-align: center; color: var(--muted); font-size: 12px; padding: 4px 0; align-self: center; }
+  .vs .mid.top { padding-bottom: 10px; border-bottom: 1px solid var(--line); margin-bottom: 8px; align-self: end; }
+  .vs .mid .track { position: relative; height: 10px; border-radius: 2px; background: var(--raised); margin-top: 4px; overflow: hidden; }
+  .vs .mid .track .b { position: absolute; top: 0; bottom: 0; background: var(--win); }
+  .vs .mid .track::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--line-strong); }
+  .vs .mid .big { color: var(--ink); font-size: 20px; font-weight: 600; font-family: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif; letter-spacing: .01em; }
+  .vs .cell { padding: 4px 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .vs .cell.r { text-align: right; }
+  .vs .cell small { color: var(--muted); font-size: 12px; margin-left: 6px; }
+  .vs .cell.win { color: var(--win); }
+  .vs .empty { grid-column: 1 / -1; }
+  .tile .v.good { color: var(--win); }
+  .tile .v.bad { color: var(--lose); }
+  .tbl-wrap td.g { color: var(--win); }
+  .tbl-wrap td.r { color: var(--lose); }
+</style>
+
+<header>
+  <h1 class="disp"><a href="unit-mix.html">ZERO HOUR <span>STATS</span></a></h1>
+  <nav><a href="unit-mix.html">Unit mix</a><a href="winrates.html">Win rates</a><a href="buildorders.html">Build orders</a><a href="posture.html">Opening posture</a><a href="combat.html" aria-current="page">Combat</a></nav>
+  <button class="print" type="button" title="print the charts and active filters; choose &quot;Save as PDF&quot; as the destination">Export PDF</button>
+  <button class="theme" type="button" title="switch between dark and light"></button>
+  <div class="sub">What units do once built &mdash; kills, deaths and the value they trade, from re-simulated replays</div>
+  <div class="stamp" id="stamp"></div>
+</header>
+
+<div class="app">
+  <aside id="rail"></aside>
+  <main>
+    <div class="active" id="active"></div>
+    <div class="tiles" id="tiles"></div>
+
+    <section class="card">
+      <div class="card-h">
+        <h2 class="disp" id="chart-title">Exchange</h2>
+        <div class="spacer"></div>
+        <div class="ctl"><span class="lbl">Metric</span><div class="seg" id="metric"></div></div>
+        <div class="ctl"><span class="lbl">Damage</span><div class="seg" id="damage"></div></div>
+        <div class="ctl"><div class="seg" id="viewmode"></div></div>
+      </div>
+      <div id="chart"></div>
+      <div class="foot">
+        <span class="base-key"><i></i> whole sample (no filters)</span>
+        <span id="foot-note"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2 class="disp" id="mu-title">Matchups</h2><div class="spacer"></div><span class="scale">loses <i></i> wins</span>
+        <div class="vs-pick"><div class="combo" id="mu-pick"><input class="search" type="search" placeholder="find a unit&hellip;" aria-label="pick a unit" autocomplete="off" spellcheck="false"><div class="menu" hidden></div></div></div>
+      </div>
+      <div class="duo" id="duo"></div>
+      <div class="foot"><span id="mu-note"></span></div>
+    </section>
+
+    <section class="card">
+      <div class="card-h">
+        <h2 class="disp">Versus</h2>
+        <div class="spacer"></div>
+        <div class="vs-pick">
+          <div class="combo" id="vs-a"><input class="search" type="search" placeholder="find a unit&hellip;" aria-label="first unit" autocomplete="off" spellcheck="false"><div class="menu" hidden></div></div>
+          <select class="fsel cargo" id="vs-la" data-side="0" aria-label="first unit's cargo" title="what rode inside" hidden></select>
+          <button type="button" class="swap" id="vs-swap" title="swap the two">&#x21C4;</button>
+          <select class="fsel cargo" id="vs-lb" data-side="1" aria-label="second unit's cargo" title="what rode inside" hidden></select>
+          <div class="combo" id="vs-b"><input class="search" type="search" placeholder="find a unit&hellip;" aria-label="second unit" autocomplete="off" spellcheck="false"><div class="menu" hidden></div></div>
+        </div>
+      </div>
+      <div class="vs" id="vs"></div>
+      <div class="foot"><span id="vs-note"></span></div>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2 class="disp">Value Traded by Class</h2><div class="spacer"></div><span class="hint">what the selection destroyed and lost, by the class of the unit hit</span></div>
+      <div class="mix-rows" id="mix"></div>
+    </section>
+  </main>
+</div>
+<div id="tip" hidden></div>
+
+<div id="loading" class="loading"><div class="disp">ZERO HOUR <span>STATS</span></div><div class="spin"></div><div class="msg">loading combat&hellip;</div></div>
+<script>document.querySelector("#loading .spin").style.animationDelay = -(Date.now() % 800) + "ms"; window.ZH_DATASET = 'combat';</script>
+<script src="config.js"></script>
+<script src="data.js"></script>
+<script src="common.js"></script>
+<script>
+window.ZH_READY.then(function (Z) {
+  const { D, F, CLASSES, CLS_COLOR, TOTAL_PG, $, esc, fmtPct, fmtInt, fmtMoney, fmtMoneyK, seg } = Z;
+  const CT = D.ctemplates || [];
+  // what the field calls a unit (the user, 2026-09-14): shown under the new name, the old one kept on "o" so a search finds both
+  const RENAME = [['Tunnel Defender', 'RPG Trooper']];
+  const rename = t => { for (const [from, to] of RENAME) if (t.n && t.n.includes(from)) { t.o = [t.n, t.o].filter(Boolean).join(' + '); t.n = t.n.split(from).join(to); if (t.m) t.m = t.m.split(from).join(to); } };
+  CT.forEach(rename);
+  (D.loads || []).forEach(l => l && rename(l));
+  // a combat template's name under the rail's Naming switch, and its class index; keyOf reads t.m / t.n / t.raw
+  const NC = CLASSES.length + 1, STRUCT = NC - 1;
+  const CLS_IDX = Object.fromEntries(CLASSES.map((c, i) => [c[0], i]));
+  CT.forEach(t => { t.ci = t.cls === 'structure' ? STRUCT : (CLS_IDX[t.cls] == null ? CLS_IDX.other : CLS_IDX[t.cls]); });
+  // a package (Humvee + MD) is its hull on the field: its exposure is read off the hull's template
+  const BY_RAW = new Map(CT.map((t, i) => [t.raw, i]));
+  CT.forEach(t => { t.bi = t.base && t.base !== t.raw && BY_RAW.has(t.base) ? BY_RAW.get(t.base) : -1; });
+  // damage runs are stored per game as flat [attacker seat, victim seat, attacker, victim, gross, net, kills, hits, cargo $,
+  // attacker load, victim load] - cargo $ is the value of the riders a dying hull takes with it, priced rider by rider;
+  // the loads index D.loads (0 = nothing aboard): the cargo of the hull the shot came from, or that was hit, where the
+  // hull's riders fight as units of their own, so a hull and its exact cargo can be read back together as one unit
+  const CB = 11, CS = 3;
+  const LOADS = D.loads || [null];
+
+  const METRICS = [
+    ['ratio', 'Value ratio', v => v == null ? '\u2014' : v.toFixed(2) + '\u00d7', 'ratio'],
+    ['kd', 'K/D', v => v == null ? '\u2014' : v.toFixed(2), 'ratio'],
+    ['dest', '$ destroyed', v => fmtMoney(v), 'money'],
+    ['lost', '$ lost', v => fmtMoney(v), 'money'],
+    ['net', 'Trade surplus', v => (v < 0 ? '\u2212' : '') + fmtMoney(Math.abs(v)), 'signed'],
+    ['kills', 'Kills', v => fmtInt(v), 'count'],
+    ['deaths', 'Deaths', v => fmtInt(v), 'count'],
+    ['permin', '$ destroyed per unit-min', v => fmtMoney(v), 'money'],
+  ];
+  const DAMAGE = [['gross', 'Gross'], ['netrep', 'Net of repair']];
+  const DEFAULT = { view: 'units', metric: 'ratio', dmg: 'netrep', table: false, pick: null, vs: [null, null], vsl: ['', ''] };
+  const S = Z.loadPage('zh-combat-page', 2, DEFAULT);   // v2: net of repair is the default
+  if (!Array.isArray(S.vsl) || S.vsl.length !== 2) S.vsl = ['', ''];
+  // a unit needs some exposure before its ratio means anything: fewer player-games than this,
+  // or less value traded, and it is drawn faint and sorted after the rest
+  const MIN_GAMES = 5, MIN_TRADED = 5000;
+
+  // --- aggregation -------------------------------------------------------
+  // rows: per unit key (under the Naming switch), what it took off enemy units and what was taken
+  // off it, gross and net, over the seats that pass the filters (attacker side counts a seat's
+  // rows as attacker, loss side as victim). Pairs: per (attacker, victim) key for the matchup card.
+  function aggregate(filterPop) {
+    const M = Z.mask(), unitsView = S.view === 'units';
+    const clsOn = new Uint8Array(NC);
+    if (unitsView) for (const c of F.classes) clsOn[CLS_IDX[c]] = 1; else clsOn[STRUCT] = 1;
+    // under Combat units only a template that cannot remove hit points is out of everything: rows,
+    // totals, the per-game medians, the class mix. The class filter shapes the rows alone.
+    const nc = ti => F.noncombat && CT[ti].nc;
+    const tOn = ti => clsOn[CT[ti].ci] && !nc(ti);
+    // a unit a seat's own menus cannot queue came from a captured structure: its own row, and only
+    // with a single faction picked (else those fights are left out), as on the unit-mix page
+    const showCap = Z.showCaptured();
+    const NT = CT.length, keyIx = new Int32Array(NT * 2).fill(-1);   // template (+NT when captured) -> row index under the current naming
+    const rows = [], byKey = new Map();
+    const rowOf = (ti, cap) => {
+      const ix = cap ? ti + NT : ti;
+      let i = keyIx[ix];
+      if (i >= 0) return i;
+      const t = CT[ti], k = Z.keyOf(t) + (cap ? '\u0000captured' : '');
+      i = byKey.get(k);
+      if (i == null) { i = rows.length; byKey.set(k, i); rows.push({ key: k, n: (F.merge === 'all' ? t.n : t.m) + (cap ? ' (captured)' : ''), o: t.o, raw: t.raw, bi: t.bi, cls: t.cls, ci: t.ci, cost: t.cost, sticker: t.sticker, captured: !!cap, dest: 0, destN: 0, lost: 0, lostN: 0, kills: 0, deaths: 0, min: 0, present: 0, seen: new Set(), sides: 0 }); }
+      keyIx[ix] = i;
+      return i;
+    };
+    // "a|v" -> [gross, net, kills], twice: pairsA from the selection's side as attacker (its unit a hit
+    // an enemy v), pairsV from its side as victim (an enemy a hit its unit v) - the opponents' seats are
+    // usually outside the selection, so a unit's losses cannot be read from the attacker map
+    const pairsA = new Map(), pairsV = new Map();
+    const addPair = (map, pk, gv, nv, k) => { let pr = map.get(pk); if (!pr) { pr = [0, 0, 0]; map.set(pk, pr); } pr[0] += gv; pr[1] += nv; pr[2] += k; };
+    // the cargo a hull row was seen with, weighted by value traded - a rider's fight is booked on its hull
+    // (a rider row's base is the hull it fought from) - for the versus card's cargo picker
+    const addLoad = (ti, cap, li, gv) => {
+      const t = CT[ti], hi = t.bi >= 0 && t.raw.includes('@') ? t.bi : ti;
+      if (!tOn(hi)) return;
+      const r = rows[rowOf(hi, cap)], m = r.loads || (r.loads = new Map());
+      m.set(li, (m.get(li) || 0) + gv);
+    };
+    let games = 0, kills = 0, dest = 0, destN = 0, ne = 0;
+    const cap = M.length, elos = new Float64Array(cap), perKills = new Float64Array(cap), perDest = new Float64Array(cap), lengths = new Float64Array(cap);
+    const byCls = new Float64Array(NC), lostCls = new Float64Array(NC), byClsN = new Float64Array(NC), lostClsN = new Float64Array(NC);
+    const ons = new Array(D.games.length).fill(null);   // per game, the seats that passed - versus() reads the games again
+    let si = 0, gi = -1;
+    for (const g of D.games) {
+      gi++;
+      const base = Z.inSample(g), s0 = si, np = g.p.length;
+      let any = false;
+      const on = new Uint8Array(np);
+      for (let i = 0; i < np; i++) {
+        const m = M[si++];
+        const ok = filterPop ? (m & Z.M_ALL) === Z.M_ALL : !!(base && (m & Z.M_SEAT));
+        if (!ok) continue;
+        on[i] = 1; any = true;
+        const p = g.p[i];
+        games++;
+        if (p.e != null) elos[ne++] = p.e;
+        lengths[games - 1] = g.t;
+        p._gi = games - 1;
+      }
+      if (!any) continue;
+      ons[gi] = on;
+      const cb = g.cb || [];
+      for (let j = 0; j < cb.length; j += CB) {
+        const sp = cb[j], vp = cb[j + 1], ati = cb[j + 2], vti = cb[j + 3], gr = cb[j + 4], nt = cb[j + 5], k = cb[j + 6], vc = cb[j + 8], al = cb[j + 9], vl = cb[j + 10];
+        const vt = CT[vti], price = vt.cost + vc;
+        const gv = gr / 1000 * price, nv = nt / 1000 * price;
+        const ca = on[sp] && Z.captured(CT[ati], g.p[sp]), cv = on[vp] && Z.captured(CT[vti], g.p[vp]);
+        if (on[sp] && !nc(ati) && !(ca && !showCap)) {   // this seat's unit did the damage
+          if (tOn(ati)) {
+            const r = rows[rowOf(ati, ca)];
+            r.dest += gv; r.destN += nv; r.kills += k;
+            r.seen.add(g.p[sp]._gi);
+            addPair(pairsA, rowOf(ati, ca) + '|' + rowOf(vti, false), gv, nv, k);   // the other side's unit by its plain row
+          }
+          if (al) addLoad(ati, ca, al, gv);
+          kills += k; dest += gv; destN += nv;
+          perKills[g.p[sp]._gi] += k; perDest[g.p[sp]._gi] += gv;
+          byCls[vt.ci] += gv; byClsN[vt.ci] += nv;
+        }
+        if (on[vp] && !nc(vti) && !(cv && !showCap)) {   // this seat's unit took the damage
+          if (tOn(vti)) {
+            const r = rows[rowOf(vti, cv)];
+            r.lost += gv; r.lostN += nv; r.deaths += k;
+            r.seen.add(g.p[vp]._gi);
+            addPair(pairsV, rowOf(ati, false) + '|' + rowOf(vti, cv), gv, nv, k);
+          }
+          if (vl) addLoad(vti, cv, vl, gv);
+          lostCls[vt.ci] += gv; lostClsN[vt.ci] += nv;
+        }
+      }
+      const cs = g.cs || [];
+      for (let j = 0; j < cs.length; j += CS) {
+        if (!on[cs[j]]) continue;
+        const cc = Z.captured(CT[cs[j + 1]], g.p[cs[j]]);
+        if (tOn(cs[j + 1]) && !(cc && !showCap)) rows[rowOf(cs[j + 1], cc)].min += cs[j + 2] / 10;
+      }
+    }
+    const netOn = S.dmg === 'netrep';
+    for (const r of rows) if (r.bi >= 0) { const b = byKey.get(Z.keyOf(CT[r.bi]) + (r.captured ? '\u0000captured' : '')); if (b != null) r.min = rows[b].min; }
+    for (const r of rows) {
+      r.present = r.seen.size;   // player-games the unit fought in, on either side
+      const d = netOn ? r.destN : r.dest, l = netOn ? r.lostN : r.lost;
+      r.d = d; r.l = l;
+      r.ratio = l > 0 ? d / l : (d > 0 ? Infinity : null);
+      r.kd = r.deaths > 0 ? r.kills / r.deaths : (r.kills > 0 ? Infinity : null);
+      r.net = d - l;
+      r.permin = r.min > 0 ? d / r.min : 0;
+      r.thin = r.present < MIN_GAMES || d + l < MIN_TRADED;
+      r.metric = { ratio: r.ratio, kd: r.kd, dest: d, lost: l, net: r.net, kills: r.kills, deaths: r.deaths, permin: r.permin };
+    }
+    const stat = (a, n) => ({ n, median: Z.select(a, n, .5), mean: Z.mean(a.subarray(0, n)) });
+    const rowIx = (ti, cap) => { const ix = cap ? ti + NT : ti; return keyIx[ix] >= 0 ? keyIx[ix] : (byKey.get(Z.keyOf(CT[ti]) + (cap ? '\u0000captured' : '')) ?? -1); };
+    // per row, the row of the hull a rider fought from (MD (in Humvee) -> Humvee), else -1
+    const hullRow = Int32Array.from(rows, r => r.raw.includes('@') && r.bi >= 0 ? rowIx(r.bi, r.captured) : -1);
+    return { rows, byKey, rowIx, hullRow, ons, pairsA, pairsV, games, kills, dest: netOn ? destN : dest, byCls: netOn ? byClsN : byCls, lostCls: netOn ? lostClsN : lostCls,
+      elos: stat(elos, ne), perKills: stat(perKills, games), perDest: stat(perDest, games), lengths: stat(lengths, games) };
+  }
+
+  // --- rendering ---------------------------------------------------------
+  function renderControls() {
+    seg($('metric'), METRICS.map(m => [m[0], m[1]]), S.metric, 'data-metric');
+    seg($('damage'), DAMAGE, S.dmg, 'data-dmg');
+    seg($('viewmode'), [['units', 'Units'], ['structures', 'Structures'], ['table', 'Table']], S.table ? 'table' : S.view, 'data-view');
+  }
+  const solid = r => !r.thin && r.metric.ratio != null && isFinite(r.metric.ratio);
+  const dash = '\u2014';
+
+  function renderTiles(sel) {
+    const n = sel.games;
+    const fights = sel.rows.filter(r => solid(r) && r.d > 0 && r.l > 0 && r.cls !== 'economy');   // things that both hit and got hit, and are meant to
+    const best = [...fights].sort((a, b) => b.ratio - a.ratio)[0];
+    const worst = [...fights].sort((a, b) => a.ratio - b.ratio)[0];
+    const lethal = [...sel.rows].sort((a, b) => b.d - a.d)[0];
+    const row = (k, med, avg) => `<tr><th>${k}</th><td class="m">${med}</td><td class="a">${avg}</td></tr>`;
+    // a named unit is a pick, like a bar in the chart
+    const unit = r => `<span class="pickable ${S.pick === r.key ? 'on' : ''}" data-key="${esc(r.key)}" title="click to pick ${esc(r.n)}">${esc(r.n)}</span>`;
+    $('tiles').innerHTML = `
+      <div class="tile"><div class="lbl">Player-game pairs</div><div class="v">${fmtInt(n)}</div><div class="d">${fmtPct(n / (TOTAL_PG || 1))} of the sample</div></div>
+      <div class="tile"><div class="lbl">Average game</div>
+        <table class="kv">
+          <tr><th></th><td class="h">median</td><td class="h">mean</td></tr>
+          ${row('kills', n ? fmtInt(sel.perKills.median) : dash, n ? sel.perKills.mean.toFixed(1) : dash)}
+          ${row('destroyed', n ? fmtMoneyK(sel.perDest.median) : dash, n ? fmtMoneyK(sel.perDest.mean) : dash)}
+          ${row('length', n ? sel.lengths.median.toFixed(1) + ' min' : dash, n ? sel.lengths.mean.toFixed(1) + ' min' : dash)}
+          ${row('ELO', sel.elos.n ? fmtInt(sel.elos.median) : dash, sel.elos.n ? fmtInt(Math.round(sel.elos.mean)) : dash)}
+        </table></div>
+      <div class="tile"><div class="lbl">Best trade</div><div class="v good">${best ? unit(best) : dash}</div><div class="d">${best ? best.ratio.toFixed(2) + '\u00d7 \u2014 ' + fmtMoney(best.d) + ' destroyed for ' + fmtMoney(best.l) + ' lost' : 'not enough games'}</div></div>
+      <div class="tile"><div class="lbl">Worst trade</div><div class="v bad">${worst ? unit(worst) : dash}</div><div class="d">${worst ? worst.ratio.toFixed(2) + '\u00d7 \u2014 ' + fmtMoney(worst.d) + ' destroyed for ' + fmtMoney(worst.l) + ' lost' : 'not enough games'}</div></div>
+      <div class="tile"><div class="lbl">Most destructive</div><div class="v">${lethal && lethal.d ? unit(lethal) : dash}</div><div class="d">${lethal && lethal.d ? fmtMoney(lethal.d) + ' destroyed, ' + fmtInt(lethal.kills) + ' kills' : 'no games match'}</div></div>`;
+  }
+
+  // ratio bars are log-scaled around 1 so 2x and 0.5x sit the same distance from the centre; SPAN = the ratio at the edge
+  const SPAN = Math.log(8);
+  const ratioBar = (v, cls) => {
+    if (v == null) return '';
+    const x = Math.max(-1, Math.min(1, Math.log(v) / SPAN)) * 50;
+    return x >= 0 ? `<div class="b hi ${cls}" style="left:50%;width:${x.toFixed(2)}%"></div>` : `<div class="b lo ${cls}" style="right:50%;width:${(-x).toFixed(2)}%"></div>`;
+  };
+  const ratioTick = v => v == null || !isFinite(v) ? '' : `<div class="base" style="left:${(50 + Math.max(-1, Math.min(1, Math.log(v) / SPAN)) * 50).toFixed(2)}%"></div>`;
+
+  let CHART_ROWS = 30, CHART_H = 0;   // a "show more" adds 100 a click; the pane keeps its 30-row height and scrolls
+  function renderChart(sel, all) {
+    const metric = METRICS.find(m => m[0] === S.metric), fmt = metric[2], kind = metric[3];
+    $('chart-title').textContent = S.view === 'units' ? 'Exchange by Unit' : 'Exchange by Structure';
+    const baseByKey = new Map(all.rows.map(r => [r.key, r]));
+    const val = r => r.metric[S.metric];
+    let rows = sel.rows.filter(r => r.d + r.l > 0 || r.kills + r.deaths > 0);
+    if (kind === 'ratio') rows.sort((a, b) => (a.thin - b.thin) || ((val(b) == null ? -1 : val(b) === Infinity ? 1e9 : val(b)) - (val(a) == null ? -1 : val(a) === Infinity ? 1e9 : val(a))));
+    else rows.sort((a, b) => val(b) - val(a));
+    const total = rows.length;
+    rows = rows.slice(0, CHART_ROWS);
+    if (!rows.length) { const el = $('chart'); el.classList.remove('more'); el.style.maxHeight = ''; el.innerHTML = '<div class="empty">No player-games match these filters.</div>'; $('foot-note').textContent = ''; return; }
+    if (S.table) {
+      const c = v => v == null ? dash : v === Infinity ? '\u221e' : v.toFixed(2);
+      $('chart').innerHTML = `<div class="tbl-wrap"><table><thead><tr>
+        <th class="l">${S.view === 'units' ? 'Unit' : 'Structure'}</th><th class="l">Class</th><th>Cost</th><th>Games</th><th>Unit-min</th><th>Kills</th><th>Deaths</th><th>K/D</th><th>$ Destroyed</th><th>$ Lost</th><th>Ratio</th><th>Surplus</th><th>$/unit-min</th><th>Sample Ratio</th></tr></thead><tbody>
+        ${rows.map(r => { const b = baseByKey.get(r.key); return `<tr class="${r.thin ? 'thin' : ''}"><td class="l">${esc(r.n)}${F.merge !== 'none' ? '' : ` <span class="d">${esc(r.raw)}</span>`}</td><td class="l d">${r.cls}</td><td>${fmtMoney(r.cost)}${r.sticker !== r.cost ? `<small class="d"> of ${fmtMoney(r.sticker)}</small>` : ''}</td><td>${fmtInt(r.present)}</td><td>${fmtInt(Math.round(r.min))}</td><td>${fmtInt(r.kills)}</td><td>${fmtInt(r.deaths)}</td><td>${c(r.kd)}</td><td>${fmtMoney(r.d)}</td><td>${fmtMoney(r.l)}</td><td class="${r.ratio > 1 ? 'g' : r.ratio < 1 ? 'r' : ''}">${c(r.ratio)}</td><td class="${r.net > 0 ? 'g' : r.net < 0 ? 'r' : ''}">${METRICS[4][2](r.net)}</td><td>${fmtMoney(r.permin)}</td><td class="d">${b ? c(b.ratio) : dash}</td></tr>`; }).join('')}
+        </tbody></table></div>`;
+    } else if (kind === 'ratio') {
+      $('chart').innerHTML = `<div class="bars">${rows.map((r, i) => {
+        const v = val(r), b = baseByKey.get(r.key);
+        return `<div class="lift ${r.thin ? 'thin' : ''} ${S.pick === r.key ? 'on' : ''}" data-i="${i}" data-key="${esc(r.key)}">
+          <div class="name"><i style="--c:${CLS_COLOR[r.cls]}"></i><span title="${esc(r.raw)}">${esc(r.n)}</span></div>
+          <div class="lt">${ratioBar(v == null ? null : v === Infinity ? 8 : v)}${b ? ratioTick(b.metric[S.metric]) : ''}</div>
+          <div class="v">${v === Infinity ? '\u221e' : fmt(v)}<small>${S.metric === 'kd' ? fmtInt(r.kills) + '/' + fmtInt(r.deaths) : fmtMoney(r.d) + ' / ' + fmtMoney(r.l)}</small></div>
+        </div>`; }).join('')}</div>`;
+    } else {
+      const abs = r => Math.abs(val(r));
+      const max = Math.max(...rows.map(r => Math.max(abs(r), Math.abs((baseByKey.get(r.key) || { metric: {} }).metric[S.metric] || 0))));
+      $('chart').innerHTML = `<div class="bars">${rows.map((r, i) => {
+        const v = val(r), b = baseByKey.get(r.key), bv = b ? b.metric[S.metric] : null;
+        const w = max ? abs(r) / max * 100 : 0, bw = bv != null && max ? Math.abs(bv) / max * 100 : null;
+        const c = kind === 'signed' ? (v >= 0 ? 'var(--win)' : 'var(--lose)') : CLS_COLOR[r.cls];
+        return `<div class="row ${r.thin ? 'thin' : ''} ${S.pick === r.key ? 'on' : ''}" data-i="${i}" data-key="${esc(r.key)}">
+          <div class="name"><i style="--c:${CLS_COLOR[r.cls]}"></i><span title="${esc(r.raw)}">${esc(r.n)}</span></div>
+          <div class="track"><div class="bar" style="--c:${c};width:${w.toFixed(2)}%"></div>${bw == null ? '' : `<div class="base" style="left:${bw.toFixed(2)}%"></div>`}</div>
+          <div class="val">${fmt(v)}${S.metric === 'kills' || S.metric === 'deaths' ? '' : `<small>${fmtInt(r.present)} g</small>`}</div>
+        </div>`; }).join('')}</div>`;
+    }
+    const el = $('chart');
+    if (rows.length <= 30) { el.classList.remove('more'); el.style.maxHeight = ''; CHART_H = el.offsetHeight; }
+    else { el.classList.add('more'); el.style.maxHeight = (CHART_H || 900) + 'px'; }
+    const more = (total > rows.length ? '<button class="chip" data-more="chart">Show more</button>' : '') + (rows.length > 30 ? '<button class="chip" data-less="chart">Top 30</button>' : '');
+    if (more) el.insertAdjacentHTML('beforeend', `<div class="more-row">${more}</div>`);
+    Z.tips($('chart'), '.lift, .row', el => { const r = rows[+el.dataset.i]; return tipHtml(r, baseByKey.get(r.key)); });
+    const shown = Math.min(rows.length, sel.rows.length);
+    $('foot-note').textContent = `${shown} of ${sel.rows.length} ${S.view === 'units' ? 'unit' : 'structure'} types shown \u00b7 sorted by ${metric[1].toLowerCase()} \u00b7 ${S.dmg === 'netrep' ? 'damage net of repair' : 'gross damage'}${F.noncombat ? ' \u00b7 combat units only' : ''} \u00b7 faint rows have under ${MIN_GAMES} games or ${fmtMoney(MIN_TRADED)} traded`;
+  }
+
+  function tipHtml(r, b) {
+    const c = v => v == null ? dash : v === Infinity ? '\u221e' : v.toFixed(2);
+    const row = (l, v, bv) => `<tr><th class="l">${l}</th><td>${v}</td><td class="d">${bv}</td></tr>`;
+    return `<b>${esc(r.n)}</b> <span class="d">\u00b7 ${r.cls}${r.cost ? ' \u00b7 ' + fmtMoney(r.cost) + (r.sticker !== r.cost ? ' of ' + fmtMoney(r.sticker) + ' (its free units carry the rest)' : '') : ''}</span><div class="raw">${esc(r.raw)}</div>
+      <table><tr><th></th><th>Selection</th><th>Sample</th></tr>
+      ${row('games', fmtInt(r.present), b ? fmtInt(b.present) : dash)}
+      ${row('unit-minutes', fmtInt(Math.round(r.min)), b ? fmtInt(Math.round(b.min)) : dash)}
+      ${row('kills / deaths', fmtInt(r.kills) + ' / ' + fmtInt(r.deaths), b ? fmtInt(b.kills) + ' / ' + fmtInt(b.deaths) : dash)}
+      ${row('K/D', c(r.kd), b ? c(b.kd) : dash)}
+      ${row('$ destroyed', fmtMoney(r.d), b ? fmtMoney(b.d) : dash)}
+      ${row('$ lost', fmtMoney(r.l), b ? fmtMoney(b.l) : dash)}
+      ${row('value ratio', c(r.ratio), b ? c(b.ratio) : dash)}
+      ${row('gross \u2192 net', fmtMoney(r.dest) + ' \u2192 ' + fmtMoney(r.destN) + ' destroyed', fmtMoney(r.lost) + ' \u2192 ' + fmtMoney(r.lostN) + ' lost')}</table>
+      <div class="d">click to see its matchups</div>`;
+  }
+
+  // the matchup card: for the picked unit, what it took value off and what took value off it, with the
+  // exchange each way. A pair's ratio is what A took off B over what B took off A, within the selection.
+  let DUO_ROWS = { took: 12, gave: 12 }, DUO_H = { took: 0, gave: 0 };   // a "show more" adds 50 a click; each side keeps its height and scrolls
+  function renderMatchups(sel) {
+    let key = S.pick;
+    if (key == null || !sel.byKey.has(key)) {
+      const top = [...sel.rows].sort((a, b) => (b.d + b.l) - (a.d + a.l))[0];
+      key = top ? top.key : null;
+    }
+    if (key == null) { $('mu-title').textContent = 'Matchups'; $('duo').innerHTML = '<div class="empty">No player-games match these filters.</div>'; $('mu-note').textContent = ''; $('mu-pick').dataset.key = ''; $('mu-pick').querySelector('.search').value = ''; return; }
+    const ai = sel.byKey.get(key), a = sel.rows[ai];
+    const netOn = S.dmg === 'netrep', pick = pr => netOn ? pr[1] : pr[0];
+    const took = new Map();   // other row index -> [value A took off it, value it took off A, A's kills of it, its kills of A]
+    for (const [pk, pr] of sel.pairsA) {
+      const [x, y] = pk.split('|').map(Number);
+      if (x === ai) { const o = took.get(y) || [0, 0, 0, 0]; o[0] += pick(pr); o[2] += pr[2]; took.set(y, o); }
+    }
+    for (const [pk, pr] of sel.pairsV) {
+      const [x, y] = pk.split('|').map(Number);
+      if (y === ai) { const o = took.get(x) || [0, 0, 0, 0]; o[1] += pick(pr); o[3] += pr[2]; took.set(x, o); }
+    }
+    const list = [...took].map(([o, v]) => ({ r: sel.rows[o], v }));
+    const ratio = v => v[1] > 0 ? v[0] / v[1] : (v[0] > 0 ? Infinity : null);
+    const half = (title, sortKey, lines, total, side) => `<div><div class="lbl">${title}</div><div class="bars" id="${side}-bars">${lines.length ? lines.map((x, i) => {
+      const rt = ratio(x.v);
+      return `<div class="lift ${x.thin ? 'thin' : ''}" data-o="${esc(x.r.key)}" data-t="${sortKey}" data-i="${i}">
+        <div class="name"><i style="--c:${CLS_COLOR[x.r.cls]}"></i><span title="${esc(x.r.raw)}">${esc(x.r.n)}</span></div>
+        <div class="lt">${ratioBar(rt == null ? null : rt === Infinity ? 8 : rt)}</div>
+        <div class="v">${rt == null ? dash : rt === Infinity ? '\u221e' : rt.toFixed(2) + '\u00d7'}<small>${fmtMoney(x.v[sortKey === 'took' ? 0 : 1])}</small></div>
+      </div>`; }).join('') : '<div class="empty">nothing in the selection</div>'}</div>${(total > lines.length || lines.length > 12) ? `<div class="more-row">${total > lines.length ? `<button class="chip" data-more="${side}">Show more</button>` : ''}${lines.length > 12 ? `<button class="chip" data-less="${side}">Top 12</button>` : ''}</div>` : ''}</div>`;
+    for (const x of list) x.thin = x.v[0] + x.v[1] < MIN_TRADED / 4;
+    const tookAll = list.filter(x => x.v[0] > 0).sort((a, b) => b.v[0] - a.v[0]);
+    const gaveAll = list.filter(x => x.v[1] > 0).sort((a, b) => b.v[1] - a.v[1]);
+    const tookList = tookAll.slice(0, DUO_ROWS.took);
+    const gaveList = gaveAll.slice(0, DUO_ROWS.gave);
+    $('mu-title').textContent = a.n;
+    $('mu-pick').dataset.key = a.key; $('mu-pick').querySelector('.search').value = a.n;
+    $('duo').innerHTML = half(`What ${esc(a.n)} took value off`, 'took', tookList, tookAll.length, 'took') + half(`What took value off ${esc(a.n)}`, 'gave', gaveList, gaveAll.length, 'gave');
+    const lists = { took: tookList, gave: gaveList };
+    for (const [side, rows] of [['took', tookList], ['gave', gaveList]]) {
+      const el = $(side + '-bars'); if (!el) continue;
+      if (rows.length <= 12) { el.classList.remove('more'); el.style.maxHeight = ''; DUO_H[side] = el.offsetHeight; }
+      else { el.classList.add('more'); el.style.maxHeight = (DUO_H[side] || 400) + 'px'; }
+    }
+    Z.tips($('duo'), '.lift', el => {
+      const x = lists[el.dataset.t][+el.dataset.i], rt = ratio(x.v);
+      return `<b>${esc(a.n)}</b> vs <b>${esc(x.r.n)}</b><table>
+        <tr><th class="l">${esc(a.n)} took off ${esc(x.r.n)}</th><td>${fmtMoney(x.v[0])}</td><td class="d">${fmtInt(x.v[2])} kills</td></tr>
+        <tr><th class="l">${esc(x.r.n)} took off ${esc(a.n)}</th><td>${fmtMoney(x.v[1])}</td><td class="d">${fmtInt(x.v[3])} kills</td></tr>
+        <tr><th class="l">Exchange</th><td>${rt == null ? dash : rt === Infinity ? '\u221e' : rt.toFixed(2) + '\u00d7'}</td><td class="d">${S.dmg === 'netrep' ? 'net of repair' : 'gross'}</td></tr></table>
+        <div class="d">click to pick ${esc(x.r.n)}</div>`;
+    });
+    $('mu-note').textContent = `${fmtMoney(a.d)} destroyed and ${fmtMoney(a.l)} lost by ${a.n} over ${fmtInt(a.present)} player-games \u00b7 the bar is the exchange between the two, ahead to the right \u00b7 the value under it is what ${a.n} ${'took'} off that unit (left) or lost to it (right)`;
+  }
+
+  // --- versus: two units face to face ---------------------------------------
+  // Everything the two did to each other in the selection's games. A fight is in when either
+  // side's seat passes the filters (under "played USA", a Humvee's hits on a Technical count from the
+  // USA seat and the Technical's on the Humvee from the same seat's losses), so the two directions
+  // are read off the same games whichever unit is named first.
+  // With cargo picked for a unit, the unit is the hull and what rode inside it: a rider row's fights count
+  // as the hull's, and with an exact load only the fights where the hull carried that load. A package
+  // taken down is its hull going down - the riders it took with it are in the value lost, not in the count.
+  function versus(sel, ia, ib) {
+    const netOn = S.dmg === 'netrep';
+    const [la, lb] = S.vsl;
+    const is = (x, li, i, c) => c === '' ? x === i : (x === i || sel.hullRow[x] === i) && (c === '*' || (li > 0 && LOADS[li].k === c));
+    const o = { ab: { v: 0, k: 0, hp: 0, hits: 0 }, ba: { v: 0, k: 0, hp: 0, hits: 0 }, games: 0 };
+    let gi = -1;
+    for (const g of D.games) {
+      gi++;
+      const on = sel.ons[gi];
+      if (!on) continue;
+      const cb = g.cb || [];
+      let met = false;
+      for (let j = 0; j < cb.length; j += CB) {
+        if (!on[cb[j]] && !on[cb[j + 1]]) continue;
+        // a unit is its captured row from its own seat's side of the fight; the enemy's units are plain rows
+        const x = sel.rowIx(cb[j + 2], on[cb[j]] && Z.captured(CT[cb[j + 2]], g.p[cb[j]])), y = sel.rowIx(cb[j + 3], on[cb[j + 1]] && Z.captured(CT[cb[j + 3]], g.p[cb[j + 1]]));
+        let d, iv;
+        if (is(x, cb[j + 9], ia, la) && is(y, cb[j + 10], ib, lb)) { d = o.ab; iv = ib; }
+        else if (is(x, cb[j + 9], ib, lb) && is(y, cb[j + 10], ia, la)) { d = o.ba; iv = ia; }
+        else continue;
+        const vt = CT[cb[j + 3]], pm = netOn ? cb[j + 5] : cb[j + 4];
+        d.v += pm / 1000 * (vt.cost + cb[j + 8]); d.hits += cb[j + 7];
+        if (y === iv) { d.k += cb[j + 6]; d.hp += pm / 1000; }
+        met = true;
+      }
+      if (met) o.games++;
+    }
+    return o;
+  }
+
+  function renderVersus(sel) {
+    // a hull with nobody aboard ("Humvee (empty)") is a row of the exchange list, not a unit to compare: the
+    // versus panel reads the plain hull with "hull only" for that (the user, 2026-09-14)
+    const cmp = r => !/ \(empty\)$/.test(r.n);
+    const list = sel.rows.filter(cmp).sort((a, b) => a.n.localeCompare(b.n));
+    for (const r of list) if (!r.hay) r.hay = Z.searchText(r);
+    const byCls = new Map();
+    for (const r of list) { if (!byCls.has(r.cls)) byCls.set(r.cls, []); byCls.get(r.cls).push(r); }
+    // defaults: the picked (or busiest) unit against the unit it traded most with
+    const has = k => k != null && sel.byKey.has(k) && cmp(sel.rows[sel.byKey.get(k)]);
+    let [ka, kb] = S.vs;
+    if (!has(ka)) ka = has(S.pick) ? S.pick : ([...list].sort((a, b) => (b.d + b.l) - (a.d + a.l))[0] || {}).key;
+    if (has(ka) && !has(kb)) {
+      const ia = sel.byKey.get(ka), tot = new Map();
+      for (const [pk, pr] of sel.pairsA) { const [x, y] = pk.split('|').map(Number); if (x === ia && y !== ia) tot.set(y, (tot.get(y) || 0) + pr[0]); }
+      for (const [pk, pr] of sel.pairsV) { const [x, y] = pk.split('|').map(Number); if (y === ia && x !== ia) tot.set(x, (tot.get(x) || 0) + pr[0]); }
+      const best = [...tot].filter(([i]) => cmp(sel.rows[i])).sort((p, q) => q[1] - p[1])[0];
+      kb = best ? sel.rows[best[0]].key : null;
+    }
+    S.vs = [ka, kb];
+    COMBO.list = list; COMBO.byCls = byCls;
+    comboShow($('vs-a'), ka); comboShow($('vs-b'), kb);
+    cargoShow($('vs-la'), has(ka) ? sel.rows[sel.byKey.get(ka)] : null, 0); cargoShow($('vs-lb'), has(kb) ? sel.rows[sel.byKey.get(kb)] : null, 1);
+    if (!has(ka) || !has(kb)) { $('vs').innerHTML = '<div class="empty">Pick two units.</div>'; $('vs-note').textContent = ''; return; }
+    // the unit as picked: with cargo, the hull plus what rode inside, priced together
+    const packed = (r, c) => {
+      if (!c || !r.loads) return r;
+      const ld = c === '*' ? null : LOADS.find(l => l && l.k === c);
+      if (c !== '*' && !ld) return r;
+      return { ...r, n: r.n + ' + ' + (ld ? ld.n : 'riders'), cost: r.cost + (ld ? ld.cost : 0), raw: r.raw + (ld ? ' + ' + ld.k : ' + riders') };
+    };
+    const a = packed(sel.rows[sel.byKey.get(ka)], S.vsl[0]), b = packed(sel.rows[sel.byKey.get(kb)], S.vsl[1]);
+    const o = versus(sel, sel.byKey.get(ka), sel.byKey.get(kb));
+    const ab = o.ab, ba = o.ba;
+    if (ka === kb || !o.games) {
+      $('vs').innerHTML = `<div class="empty">${ka === kb ? 'Pick two different units.' : `${esc(a.n)} and ${esc(b.n)} never traded damage in the selection.`}</div>`;
+      $('vs-note').textContent = ''; return;
+    }
+    const fx = (v, d = 2) => v == null ? dash : v === Infinity ? '\u221e' : v.toFixed(d);
+    const ratio = (x, y) => y > 0 ? x / y : (x > 0 ? Infinity : null);
+    const trade = ratio(ab.v, ba.v);                       // $ A took off B per $ B took off A
+    const kd = ratio(ab.k, ba.k);
+    // HP-equivalents: gross/net permille of the victim's max HP over 1000 = whole units' worth
+    const perB = ratio(ba.hp, ab.hp), perA = ratio(ab.hp, ba.hp);   // As lost per B taken down, and the reverse
+    // in dollars, from the value actually lost (a package's riders included), not the sticker price
+    const costPerB = ratio(ba.v, ab.hp), costPerA = ratio(ab.v, ba.hp);
+    // the bar reaches toward whoever is ahead - left for the unit on the left - so it reads as a tug of war,
+    // not as the exchange chart's ahead-is-right convention
+    const bar = v => {
+      if (v == null) return '<div class="track"></div>';
+      const x = Math.max(-1, Math.min(1, Math.log(v === Infinity ? 8 : v) / SPAN)) * 50;
+      return `<div class="track">${x >= 0 ? `<div class="b" style="right:50%;width:${x.toFixed(2)}%"></div>` : `<div class="b" style="left:50%;width:${(-x).toFixed(2)}%"></div>`}</div>`;
+    };
+    const cell = (html, side, win) => `<div class="cell ${side} ${win ? 'win' : ''}">${html}</div>`;
+    const money = v => v == null ? dash : v === Infinity ? '\u221e' : fmtMoney(v);
+    const units = (v, name) => v == null ? dash : v === Infinity ? '\u221e' : `${fx(v, v >= 10 ? 0 : 1)}<small>${esc(name)}</small>`;
+    const rows = [
+      [cell(money(ab.v), 'r', ab.v > ba.v), 'took off the other', cell(money(ba.v), 'l', ba.v > ab.v)],
+      [cell(fmtInt(ab.k), 'r', ab.k > ba.k), 'kills of the other', cell(fmtInt(ba.k), 'l', ba.k > ab.k)],
+      [cell(units(ab.hp, b.n), 'r', ab.hp > ba.hp), 'of the other destroyed, in whole units of HP', cell(units(ba.hp, a.n), 'l', ba.hp > ab.hp)],
+      [cell(units(perB, a.n), 'r', perB != null && perA != null && perB < perA), 'lost for each one of the other taken down', cell(units(perA, b.n), 'l', perB != null && perA != null && perA < perB)],
+      [cell(money(costPerB), 'r', costPerB != null && costPerA != null && costPerB < costPerA), 'spent for each one of the other taken down', cell(money(costPerA), 'l', costPerB != null && costPerA != null && costPerA < costPerB)],
+      [cell(fmtInt(ab.hits), 'r', false), 'hits landed', cell(fmtInt(ba.hits), 'l', false)],
+    ];
+    $('vs').innerHTML = `
+      <div class="head"><i style="--c:${CLS_COLOR[a.cls]}"></i><span title="${esc(a.raw)}">${esc(a.n)}</span><small>${fmtMoney(a.cost)}</small></div>
+      <div class="mid top"><div class="big">${trade == null ? dash : trade === Infinity ? '\u221e' : fx(trade) + '\u00d7'}</div>${bar(trade)}<div>value traded, ${esc(a.n)}'s way \u00b7 K/D ${fx(kd)} \u00b7 the bar leans to whoever is ahead</div></div>
+      <div class="head r"><small>${fmtMoney(b.cost)}</small><span title="${esc(b.raw)}">${esc(b.n)}</span><i style="--c:${CLS_COLOR[b.cls]}"></i></div>
+      ${rows.map(([l, m, r]) => l + `<div class="mid">${m}</div>` + r).join('')}`;
+    const cargoNote = S.vsl[0] || S.vsl[1] ? ' \u00b7 a hull with cargo is the hull and its riders together: their fire from inside and their loss when it goes down, in the fights where it carried that load; taken down means the hull' : '';
+    $('vs-note').textContent = `${fmtInt(o.games)} games where ${a.n} and ${b.n} hit each other \u00b7 ${S.dmg === 'netrep' ? 'net of repair' : 'gross'} \u00b7 a unit "taken down" is its full HP removed: ${units(perB, a.n).replace(/<[^>]+>/g, ' ')} per ${b.n} reads as ${a.n} losing ${fx(perB, 1)} of its own HP for every ${b.n}'s worth it removed - the exchange as played, not a duel${cargoNote}`;
+  }
+
+  // the cargo picker beside a unit: shown for a hull whose riders fought from inside it, listing the loads
+  // it was seen with (busiest first), with the hull alone and the hull with whatever rode inside on top
+  function cargoShow(sl, r, side) {
+    const loads = r && r.loads ? [...r.loads].sort((p, q) => q[1] - p[1]) : [];
+    if (!loads.length) { sl.hidden = true; if (S.vsl[side]) S.vsl[side] = ''; return; }
+    const cur = S.vsl[side];
+    const opts = [['', 'hull only'], ['*', 'with any cargo']].concat(loads.map(([li]) => [LOADS[li].k, '+ ' + LOADS[li].n]));
+    if (cur && cur !== '*' && !opts.some(([k]) => k === cur)) opts.push([cur, '+ ' + cur + ' (not in the selection)']);
+    sl.innerHTML = opts.map(([k, l]) => `<option value="${esc(k)}" ${k === cur ? 'selected' : ''}>${esc(l)}</option>`).join('');
+    sl.hidden = false;
+  }
+
+  // the versus pickers: a search box whose dropdown lists the units on the chart, grouped by class,
+  // narrowed as you type; arrows + enter pick, escape and blur restore the current choice
+  const COMBO = { list: [], byCls: new Map() };
+  const CLS_LABEL = Object.fromEntries(CLASSES.map(([k, l]) => [k, l]));
+  function comboShow(box, key) {
+    const r = key == null ? null : COMBO.list.find(x => x.key === key);
+    box.dataset.key = r ? r.key : '';
+    box.querySelector('.search').value = r ? r.n : '';
+  }
+  function comboMenu(box, q) {
+    const menu = box.querySelector('.menu'), needle = q.trim();
+    const hit = r => !needle || Z.searchHit(r.hay, needle);   // display name, old name, template and nicknames
+    let html = '', n = 0;
+    for (const [c, rs] of COMBO.byCls) {
+      const m = rs.filter(hit);
+      if (!m.length) continue;
+      html += `<div class="grp">${esc(CLS_LABEL[c] || c)}</div>` + m.map(r => { n++; return `<div class="opt ${r.key === box.dataset.key ? 'on' : ''}" data-key="${esc(r.key)}"><i style="--c:${CLS_COLOR[r.cls]}"></i>${esc(r.n)}</div>`; }).join('');
+    }
+    menu.innerHTML = html || '<div class="none">no unit matches</div>';
+    menu.hidden = false;
+    const hot = menu.querySelector('.opt.on') || menu.querySelector('.opt');
+    if (hot) { hot.classList.add('hot'); if (n > 12) hot.scrollIntoView({ block: 'nearest' }); }
+  }
+  function comboBind(box, onChoose) {
+    const input = box.querySelector('.search'), menu = box.querySelector('.menu');
+    const choose = key => { onChoose(key); menu.hidden = true; input.blur(); render(); };
+    const move = d => {
+      const opts = [...menu.querySelectorAll('.opt')]; if (!opts.length) return;
+      let i = opts.findIndex(o => o.classList.contains('hot'));
+      opts.forEach(o => o.classList.remove('hot'));
+      i = (i + d + opts.length) % opts.length;
+      opts[i].classList.add('hot'); opts[i].scrollIntoView({ block: 'nearest' });
+    };
+    input.addEventListener('focus', () => { input.select(); comboMenu(box, ''); });
+    input.addEventListener('input', () => comboMenu(box, input.value));
+    input.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); if (menu.hidden) comboMenu(box, input.value); else move(1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
+      else if (e.key === 'Enter') { const hot = menu.querySelector('.opt.hot'); if (hot) choose(hot.dataset.key); }
+      else if (e.key === 'Escape') { menu.hidden = true; comboShow(box, box.dataset.key || null); input.blur(); }
+    });
+    input.addEventListener('blur', () => setTimeout(() => { if (!menu.hidden) { menu.hidden = true; comboShow(box, box.dataset.key || null); } }, 150));
+    menu.addEventListener('mousedown', e => { const o = e.target.closest('.opt'); if (o) { e.preventDefault(); choose(o.dataset.key); } });
+  }
+
+  function renderMix(sel, all) {
+    const clsOn = S.view === 'units' ? CLASSES.filter(c => F.classes.includes(c[0])).map(([k, l, c]) => [CLS_IDX[k], l, c]) : [[STRUCT, 'Structures', 'var(--s-str)']];
+    const total = (a, keep) => keep.reduce((s, [i]) => s + (a[i] || 0), 0);
+    const bar = (a, keep) => { const t = total(a, keep); return `<div class="mix">${keep.map(([i, l, c]) => { const pct = t ? (a[i] || 0) / t * 100 : 0; return pct ? `<div style="--c:${c};flex:${pct.toFixed(3)} 0 0" title="${l} ${pct.toFixed(1)}%"></div>` : ''; }).join('')}</div>`; };
+    const legend = (a, keep) => { const t = total(a, keep); return `<div class="legend">${keep.map(([i, l, c]) => `<span><i style="--c:${c}"></i>${l} ${t ? fmtPct((a[i] || 0) / t) : dash}</span>`).join('')}</div>`; };
+    // every class is shown here whatever the class filter says: the card reads the whole trade
+    const keep = CLASSES.map(([k, l, c]) => [CLS_IDX[k], l, c]).concat([[STRUCT, 'Structures', 'var(--s-str)']]);
+    const block = (title, a, what) => `<div class="mix-row"><div class="lbl">${title}<b>${what}</b></div>${bar(a, keep)}${legend(a, keep)}</div>`;
+    $('mix').innerHTML = block('Selection', sel.byCls, 'destroyed') + block('Whole sample', all.byCls, 'destroyed')
+      + block('Selection', sel.lostCls, 'lost') + block('Whole sample', all.lostCls, 'lost');
+    void clsOn;
+  }
+
+  const baseline = new Map();
+  function baselineAgg() {
+    const key = [S.view, F.merge, S.dmg, F.noncombat ? 'nc' : '', S.view === 'units' ? [...F.classes].sort().join(',') : ''].join('|');
+    let all = baseline.get(key);
+    if (!all) { all = aggregate(false); if (baseline.size >= 8) baseline.delete(baseline.keys().next().value); baseline.set(key, all); }
+    return all;
+  }
+
+  function render() {
+    const sel = aggregate(true), all = baselineAgg();
+    Z.renderActive(); renderTiles(sel); renderChart(sel, all); renderMatchups(sel); renderVersus(sel); renderMix(sel, all); renderControls();
+    Z.persistPage('zh-combat-page', 2, S);
+  }
+
+  $('chart').addEventListener('click', e => {
+    const more = e.target.closest('[data-more]'); if (more) { CHART_ROWS += 100; render(); return; }
+    const less = e.target.closest('[data-less]'); if (less) { CHART_ROWS = 30; render(); return; }
+    const el = e.target.closest('[data-key]');
+    S.pick = el ? (S.pick === el.dataset.key ? null : el.dataset.key) : null;
+    render();
+  });
+  comboBind($('vs-a'), key => { S.vs = [key, S.vs[1]]; S.vsl[0] = ''; });
+  comboBind($('vs-b'), key => { S.vs = [S.vs[0], key]; S.vsl[1] = ''; });
+  comboBind($('mu-pick'), key => { S.pick = key; });
+  $('vs-swap').addEventListener('click', () => { S.vs = [S.vs[1], S.vs[0]]; S.vsl = [S.vsl[1], S.vsl[0]]; render(); });
+  for (const sl of [$('vs-la'), $('vs-lb')]) sl.addEventListener('change', () => { S.vsl[+sl.dataset.side] = sl.value; render(); });
+  $('tiles').addEventListener('click', e => {
+    const el = e.target.closest('[data-key]'); if (!el) return;
+    S.pick = S.pick === el.dataset.key ? null : el.dataset.key;
+    render();
+    if (S.pick) $('chart').closest('.card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  $('duo').addEventListener('click', e => {
+    const more = e.target.closest('[data-more]'); if (more) { DUO_ROWS[more.dataset.more] += 50; render(); return; }
+    const less = e.target.closest('[data-less]'); if (less) { DUO_ROWS[less.dataset.less] = 12; render(); return; }
+    const el = e.target.closest('[data-o]'); if (!el) return;
+    S.pick = el.dataset.o;
+    render();
+    $('chart').closest('.card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+
+  Z.bind(render, d => {
+    if (d.metric) S.metric = d.metric;
+    else if (d.dmg) S.dmg = d.dmg;
+    else if (d.view) { if (d.view === 'table') S.table = true; else { S.table = false; S.view = d.view; } }
+    else return false;
+    return true;
+  });
+}).catch(function (err) {
+  console.error(err);
+  const v = document.getElementById('loading');
+  if (v) v.innerHTML = '<div class="disp">ZERO HOUR <span>STATS</span></div><div class="msg">the dataset did not load: ' + String(err).replace(/[<&]/g, ' ') + '<br>run <code>./stats combat</code> and republish</div>';
+});
+</script>

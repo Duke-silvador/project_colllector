@@ -1,0 +1,110 @@
+<meta charset="utf-8">
+<title>Zero Hour Stats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="common.css">
+<script>document.documentElement.dataset.theme = (function () { try { return localStorage.getItem("zh-theme"); } catch (e) { return null; } })() || "light";</script>
+<style>
+  /* a reading page: one column, no rail, no data */
+  .app { grid-template-columns: 1fr; }
+  main { max-width: 880px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+  .card p { margin: 0 0 10px; line-height: 1.55; font-size: 14px; color: var(--ink); }
+  .card p:last-child { margin-bottom: 0; }
+  .card h3 { font-family: "Barlow Condensed", system-ui, sans-serif; font-size: 16px; letter-spacing: .04em; text-transform: uppercase; margin: 14px 0 6px; color: var(--ink); }
+  .card ul, .card ol { margin: 0 0 10px; padding-left: 22px; line-height: 1.55; font-size: 14px; }
+  .card li { margin: 2px 0; }
+  .card code { font-size: 12px; background: var(--raised); padding: 1px 5px; border-radius: 3px; }
+  .ex { display: inline-block; font-size: 12px; background: var(--raised); border: 1px solid var(--line); border-radius: 3px; padding: 2px 8px; margin: 1px 2px; white-space: nowrap; }
+  table.lines { border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0 12px; }
+  table.lines th, table.lines td { text-align: left; padding: 5px 10px 5px 0; border-bottom: 1px solid var(--line); vertical-align: top; white-space: normal; }
+  table.lines th { font-weight: 600; color: var(--ink-2); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  table.lines td.p { white-space: nowrap; font-weight: 600; color: var(--ink); }
+  .steps li { margin: 6px 0; }
+</style>
+
+<header>
+  <h1 class="disp"><a href="unit-mix.html">ZERO HOUR <span>STATS</span></a></h1>
+  <nav><a href="unit-mix.html">Unit mix</a><a href="winrates.html">Win rates</a><a href="buildorders.html">Build orders</a><a href="posture.html">Opening posture</a><a href="combat.html">Combat</a></nav>
+  <button class="theme" type="button" title="switch between dark and light"></button>
+  <div class="sub">How plays are detected and named &mdash; the &ldquo;Humvees &rarr; Supply Harassment&rdquo; chips on the Build orders tab and the Win rate by Play pane</div>
+</header>
+
+<div class="app">
+  <main>
+    <section class="card">
+      <div class="card-h"><h2 class="disp">In One Paragraph</h2></div>
+      <p>A <strong>play</strong> is a group of units that left for the opponent&rsquo;s side in the first five minutes and was given an order at something of the opponent&rsquo;s. It is read straight from the replay: where each unit was every ten seconds, the orders the player gave, and what died. A play is written as <em>what went</em> &rarr; <em>what it went at</em> &mdash; <span class="ex">Humvees &rarr; Supply Harassment</span> <span class="ex">Dozer Drop &rarr; Tunnel Deny</span> <span class="ex">Dragon Tank &rarr; Supply Center + 2 Power Plants</span> &mdash; with no intent guessed beyond that. A group that crossed but was given no order at anything of the opponent&rsquo;s is a move or a scout, not a play.</p>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2 class="disp">Step 1 &mdash; The Crossing</h2><div class="spacer"></div><span class="hint">a sortie: units over the three-quarter line, to 5:00</span></div>
+      <p>The map is measured along the line from the player&rsquo;s start to the opponent&rsquo;s. A unit <strong>crosses</strong> when its track passes three quarters of the way over &mdash; into the opponent&rsquo;s quarter of the map (the moment is interpolated between the ten-second samples). Units crossing within ten seconds and 300 world units of one another are one group (a <em>sortie</em>); the next unit to cross farther away or later starts another. Only the first five minutes are recorded.</p>
+      <ul>
+        <li><strong>Riders count with their carrier.</strong> A unit inside a Chinook, Helix, Technical or Humvee when the group crosses is recorded as riding it &mdash; that is how a Dozer Drop or a Terror Tech is told from the same units on foot.</li>
+        <li><strong>Two exceptions never cross.</strong> Units ordered at an enemy capturer, or at an unowned oil derrick, count as a sortie from wherever they were &mdash; a capture deny and a derrick grab happen in the middle of the map.</li>
+        <li>A lone worker, dozer, chinook or supply truck is never a play on its own: it gathers or builds.</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2 class="disp">Step 2 &mdash; What It Went At</h2><div class="spacer"></div><span class="hint">the group&rsquo;s first order at something of the opponent&rsquo;s names the target</span></div>
+      <p>The group&rsquo;s <strong>first order</strong> is looked for from 45 seconds before the crossing to 5:00, plus the order it was already carrying out when that window opened. An order at a unit or structure of theirs beats one at a spot on the ground (attack-move, force-fire); among those, the earliest wins. Their <em>units</em> count only while they stand on their half of the map &mdash; shooting a scout at home before rolling out is not the crossing&rsquo;s purpose &mdash; while their <em>structures</em>, and a deny, count wherever they stand: the forward tunnels go up in the middle. A Chinook&rsquo;s own orders never name its drop; the load&rsquo;s do. What the order was at gives the target:</p>
+      <table class="lines">
+        <thead><tr><th>Order at</th><th>Reads as</th></tr></thead>
+        <tbody>
+          <tr><td>their supply truck or chinook gathering</td><td class="p">Supply Harassment</td></tr>
+          <tr><td>their worker gathering</td><td class="p">Supply Workers &middot; met by a ground vehicle (a dozer or a supply truck too): Supply Worker Crush</td></tr>
+          <tr><td>their dozer</td><td class="p">Dozer</td></tr>
+          <tr><td>their army, past the three-quarter line</td><td class="p">Army at Opponent Base</td></tr>
+          <tr><td>their army, between the halfway and three-quarter lines</td><td class="p">Army in the Middle</td></tr>
+          <tr><td>an infantry unit of theirs that can capture, by a capturable building</td><td class="p">Capture Deny &middot; anywhere else it is their army</td></tr>
+          <tr><td>a tunnel of theirs going up, or the hole one is rebuilt from, or the worker building it</td><td class="p">Tunnel Deny</td></tr>
+          <tr><td>another structure of theirs going up outside their base (inside it, only a tech building), or the worker building it</td><td class="p">&lt;Structure&gt; Scaffold Reset</td></tr>
+          <tr><td>any other structure of theirs &mdash; finished, going up inside their base, or a defence going up anywhere</td><td class="p">the building: Supply Center &middot; War Factory &middot; Power Plant &middot; Oil Derrick &hellip;</td></tr>
+          <tr><td>a civilian building they hold</td><td class="p">Garrison Clear when the unit clears garrisons (Dragon Tank, Toxin Tractor, Toxin Rebel, Microwave Tank, a Ranger with flashbangs) &middot; else Garrisoned Building</td></tr>
+          <tr><td>an unowned oil derrick or tech building</td><td class="p">Derrick &middot; Tech Building</td></tr>
+          <tr><td>a capture order, a garrison, a chinook docking at a supply on their side</td><td class="p">Capture &middot; Garrison &middot; Opponent Supplies</td></tr>
+          <tr><td>a dozer or worker sent to build on their side</td><td class="p">Forward &lt;Structure&gt;</td></tr>
+        </tbody>
+      </table>
+      <p>An order at a <strong>spot on the ground</strong> is read by what stood within 150 world units of it: a structure of theirs going up makes its deny, otherwise the nearest structure &mdash; named like an order at it, a War Factory rather than &ldquo;Production&rdquo; &mdash; or the nearest gatherer or dozer of theirs. A crossing with no such order at all is not a play; those units show up in the Unit Mix chip instead &mdash; unless the composition names a play by itself (a Drop, a Tech, a Truck Rush, a Forward Terrorist), which then shows bare.</p>
+      <h3>What it took down beats the first order</h3>
+      <p>The first order can be incidental &mdash; a Dragon Tank&rsquo;s first target is often a truck, while its flame takes the base behind it. So if the group&rsquo;s units <strong>killed any of the opponent&rsquo;s structures by 5:00</strong>, those name the target instead, counted, up to three: <span class="ex">Dragon Tank &rarr; Supply Stash + Tunnel Network</span>. If it killed nothing but was ordered at structures, those name it. A deny that took down its one structure stays a deny, and a forward build, a capture, a garrison and a dock keep their own wording. GLA holes are rubble, not structures.</p>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2 class="disp">Step 3 &mdash; What Went</h2><div class="spacer"></div><span class="hint">the group&rsquo;s composition as it crossed</span></div>
+      <p>The units part is the composition at the crossing, most numerous first, a counted kind plural (<span class="ex">2 RPGs</span> <span class="ex">3+ Battle Masters</span>), counts capped at <em>3+</em>, generals&rsquo; variants named by the Naming switch (a Nuke Battle Master is its own play under smart naming). A few compositions have a name of their own because they are unmistakable:</p>
+      <ul>
+        <li><span class="ex">MD Drop</span> <span class="ex">Dozer Drop</span> <span class="ex">MD + Dozer Drop</span> &mdash; anything riding a Chinook, named by the load; a vehicle riding a Helix likewise (<span class="ex">Dragon Tank Drop</span>)</li>
+        <li><span class="ex">Terror Tech</span> <span class="ex">Terror + RPG Tech</span> <span class="ex">RPG + Worker Tech</span> &mdash; a Technical with a load, named by the load in a fixed order (how many rode along does not split the play); a Technical carrying nothing but workers is a <span class="ex">Worker Drop</span></li>
+        <li><span class="ex">Truck Rush</span> &mdash; supply trucks alone; <span class="ex">Forward Terrorist</span> &mdash; terrorists alone</li>
+        <li><span class="ex">Humvees</span> &mdash; Humvees with whatever rides in them, plus the Ambulance or Rangers alongside; the MDs inside do not split it</li>
+        <li><span class="ex">Gatlix</span> <span class="ex">Bunkerlix</span> &mdash; a Helix by the upgrade it carries, or a Helix firing infantry out of its bunker</li>
+        <li>everything else as it was: <span class="ex">Battle Master + Gattling Tank</span> <span class="ex">2 RPGs</span> <span class="ex">Technical</span>; a load in brackets, <span class="ex">Humvee (MD) + Paladin</span>; the record keeps the four most numerous kinds, so a fifth and beyond end in <em>+ More</em></li>
+      </ul>
+      <h3>The Humvees exceptions</h3>
+      <p>Humvees at the opponent&rsquo;s army is just Humvees being Humvees, not a play, and a second Humvees crossing is the same build continuing, not a new play &mdash; the Ambulance or Rangers catching up with them likewise. Both read as the army&rsquo;s Unit Mix instead.</p>
+    </section>
+
+    <section class="card">
+      <div class="card-h"><h2 class="disp">What to Keep in Mind</h2></div>
+      <ul>
+        <li><strong>The clock.</strong> A tab&rsquo;s &ldquo;by 3:00&rdquo; counts the plays whose crossing came before it; every sortie is recorded to 5:00, so nothing later exists here.</li>
+        <li><strong>Attempted, not successful.</strong> A play is what was sent and what it was sent at, whether or not it worked &mdash; except that structures it took down are recorded, because that is the one outcome the replay states plainly.</li>
+        <li><strong>No intent is guessed.</strong> Nothing is labelled a rush or a harass by shape; the words come from the order the player gave and what stood there. The building behind a forward build or a scaffold reset is named from the order itself, never inferred.</li>
+        <li><strong>Where the data comes from.</strong> The seat records of the library (unit tracks every ten seconds, the order stream, kill events with the killer); the wording is <code>plays.js</code>, shared by the Build orders and Win rates tabs.</li>
+      </ul>
+    </section>
+  </main>
+</div>
+<script>
+  (function () {
+    var b = document.querySelector('header .theme'); if (!b) return;
+    var SUN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+    var MOON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>';
+    function label() { var light = document.documentElement.dataset.theme === 'light'; b.innerHTML = light ? MOON : SUN; b.title = light ? 'switch to dark' : 'switch to light'; }
+    b.addEventListener('click', function () { var t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; document.documentElement.dataset.theme = t; try { localStorage.setItem('zh-theme', t); } catch (e) {} label(); });
+    label();
+  })();
+</script>
