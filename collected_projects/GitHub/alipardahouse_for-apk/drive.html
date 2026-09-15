@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drive Gallery — Ali Parda House</title>
+<style>
+:root {
+  --br:    #2c1f14;
+  --br2:   #1a1208;
+  --gold:  #b89a5e;
+  --gold2: #d4b87a;
+  --cream: #f5f0e8;
+  --cream2:#ede5d4;
+  --muted: #7a6a55;
+  --wh:    #ffffff;
+  --border:#ddd4c0;
+  --nav-h: 60px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--cream);
+  color: var(--br);
+  min-height: 100vh;
+  max-width: 600px;
+  margin: 0 auto;
+  box-shadow: 0 0 20px rgba(0,0,0,0.15);
+  padding-bottom: 40px;
+}
+
+/* ── NAV ── */
+nav {
+  position: sticky; top: 0; z-index: 200; height: var(--nav-h);
+  background: var(--br2); display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px; border-bottom: 1px solid rgba(184,154,94,.2);
+}
+.nav-brand { font-family: Georgia, serif; font-size: 18px; font-weight: 700; color: var(--wh); letter-spacing: .04em; text-decoration: none; white-space: nowrap; }
+.nav-brand em { color: var(--gold); font-style: normal; }
+.nav-hamburger { display: flex; flex-direction: column; gap: 5px; cursor: pointer; background: none; border: none; padding: 6px; z-index: 300; }
+.nav-hamburger span { width: 22px; height: 2px; background: var(--gold); border-radius: 2px; display: block; transition: all .3s; }
+.nav-hamburger.open span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.nav-hamburger.open span:nth-child(2) { opacity: 0; }
+.nav-hamburger.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+
+.mobile-nav {
+  display: none; position: fixed; top: var(--nav-h); left: 0; right: 0; max-width: 600px; margin: 0 auto;
+  background: var(--br2); z-index: 199; padding: 16px 20px 24px; border-bottom: 1px solid rgba(184,154,94,.2);
+  flex-direction: column; gap: 0; max-height: calc(100vh - var(--nav-h)); overflow-y: auto;
+}
+.mobile-nav.open { display: flex; }
+.mobile-nav a { font-size: 14px; font-weight: 300; color: rgba(255,255,255,.7); text-decoration: none; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.06); letter-spacing: .04em; }
+.mobile-nav a:last-child { border-bottom: none; }
+.mobile-nav a:hover { color: var(--gold); }
+
+/* ── HERO ── */
+.page-hero { background: var(--br); padding: 30px 16px 22px; text-align: center; }
+.page-hero .eyebrow { font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--gold); margin-bottom: 8px; }
+.page-hero h1 { font-family: Georgia, serif; font-size: 24px; font-weight: 700; color: var(--wh); line-height: 1.2; margin-bottom: 10px; }
+.page-hero h1 em { color: var(--gold); font-style: normal; }
+.page-hero p { font-size: 12.5px; color: rgba(255,255,255,.65); line-height: 1.6; }
+
+/* ── SECTION PICKER (drop zones) ── */
+.section-picker { position: sticky; top: var(--nav-h); z-index: 150; background: var(--cream2); border-bottom: 1px solid var(--border); padding: 10px 16px; }
+.section-picker-label { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; font-weight: 700; }
+.dropzone-row { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch; }
+.dropzone-row::-webkit-scrollbar { height: 4px; }
+.drop-zone {
+  flex: 0 0 auto; background: var(--wh); border: 1.5px dashed var(--border); color: var(--br);
+  padding: 8px 12px; border-radius: 8px; font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  cursor: pointer; user-select: none; transition: all .15s;
+}
+.drop-zone.hover-target { background: var(--br); border-color: var(--gold); color: var(--gold); border-style: solid; transform: scale(1.06); }
+
+/* ── GALLERY GRID ── */
+.gallery-status { padding: 16px; font-size: 13px; color: var(--muted); text-align: center; }
+.gallery-grid { padding: 12px 16px 28px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.drive-card {
+  border-radius: 8px; overflow: hidden; background: #1a1208; position: relative;
+  touch-action: pan-y; user-select: none; -webkit-user-drag: none; min-height: 160px;
+  display: flex; align-items: center; justify-content: center;
+}
+.drive-card img {
+  width: 100%; height: 160px; object-fit: cover; display: block;
+  -webkit-user-drag: none; -webkit-touch-callout: none; pointer-events: none;
+  opacity: 0; transition: opacity .3s ease-in-out;
+  text-indent: -10000px;
+}
+.drive-card img.loaded { opacity: 1; }
+
+.card-loader {
+  position: absolute; width: 24px; height: 24px;
+  border: 2px solid var(--muted); border-top-color: var(--gold);
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.drive-card.grabbing { opacity: .35; }
+.drive-card .save-btn {
+  position: absolute; top: 6px; right: 6px; background: rgba(20,14,8,.85); color: var(--gold);
+  border: 1px solid var(--gold); border-radius: 999px; font-size: 10px; font-weight: 700;
+  padding: 5px 9px; cursor: pointer; z-index: 10;
+}
+
+/* ── DRAG GHOST ── */
+.drag-ghost {
+  position: fixed; z-index: 500; width: 110px; height: 110px; border-radius: 10px; overflow: hidden;
+  pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,.5); border: 2px solid var(--gold); opacity: .95;
+}
+.drag-ghost img { width: 100%; height: 100%; object-fit: cover; opacity: 1 !important; }
+
+/* ── SAVE MODAL ── */
+.save-modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 600;
+  align-items: flex-end; justify-content: center;
+}
+.save-modal-overlay.open { display: flex; }
+.save-modal {
+  width: 100%; max-width: 600px; background: var(--cream); border-radius: 16px 16px 0 0;
+  padding: 18px 16px 24px; max-height: 70vh; overflow-y: auto;
+}
+.save-modal h3 { font-family: Georgia, serif; font-size: 17px; margin-bottom: 4px; }
+.save-modal p { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.save-modal-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-bottom: 14px; }
+.save-modal-grid button {
+  background: var(--wh); border: 1px solid var(--border); color: var(--br); padding: 10px 8px;
+  border-radius: 8px; font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.save-modal-cancel { width: 100%; background: transparent; border: 1px solid var(--muted); color: var(--muted); padding: 10px; border-radius: 8px; font-size: 13px; cursor: pointer; }
+
+/* ── TOAST ── */
+.toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
+  background: var(--br2); color: var(--gold2); padding: 12px 18px; border-radius: 999px;
+  font-size: 13px; font-weight: 600; z-index: 700; opacity: 0; transition: all .25s; max-width: 86%;
+  text-align: center; box-shadow: 0 6px 18px rgba(0,0,0,.4);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<!-- ══ NAV ══ -->
+<nav>
+  <a href="index.html" class="nav-brand">Ali Parda <em>House</em></a>
+  <button class="nav-hamburger" id="hamburgerBtn" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+</nav>
+
+<div class="mobile-nav" id="mobileNav">
+  <a href="index.html" class="mob-link">🏠 Home</a>
+  <a href="drive.html" class="mob-link">📁 Gallery (this page)</a>
+</div>
+
+<!-- ══ HERO ══ -->
+<section class="page-hero">
+  <p class="eyebrow">Connected Folder</p>
+  <h1>GitHub <em>Auto</em> Gallery</h1>
+  <p>GitHub ke <b>gallery</b> folder ki tasveerein yahan auto-fetch ho kar dikhengi. Kisi image ko neeche section par <b>drag karke drop</b> karein ya "Save" button daba kar section mein save karein.</p>
+</section>
+
+<!-- ══ SECTION / DROP ZONE PICKER ══ -->
+<div class="section-picker">
+  <div class="section-picker-label">Sections (drop images here)</div>
+  <div class="dropzone-row" id="dropzoneRow"></div>
+</div>
+
+<!-- ══ GALLERY ══ -->
+<div class="gallery-status" id="galleryStatus">Loading images from GitHub...</div>
+<div class="gallery-grid" id="galleryGrid"></div>
+
+<!-- ══ SAVE MODAL ══ -->
+<div class="save-modal-overlay" id="saveModalOverlay">
+  <div class="save-modal">
+    <h3>Save image to which section?</h3>
+    <p>Ye image us section mein hamesha ke liye add ho jaegi.</p>
+    <div class="save-modal-grid" id="saveModalGrid"></div>
+    <button type="button" class="save-modal-cancel" id="saveModalCancel">Cancel</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════
+   CONFIG — GitHub Repository Details
+   ═══════════════════════════════════════════════════════════ */
+var GITHUB_USER = "alipardahouse";
+var REPO_NAME   = "for-apk";
+var FOLDER_NAME = "gallery";
+
+/* Categories — matches index.html */
+var CATEGORIES = [
+  { key: "plain", name: "Plain" },
+  { key: "texture", name: "Texture Curtains" },
+  { key: "woodenbox", name: "Wooden Box" },
+  { key: "jhahlar", name: "Jhahlar Designs" },
+  { key: "fancy", name: "Fancy" },
+  { key: "double", name: "Double Rings" },
+  { key: "projects", name: "Our Work" },
+  { key: "jali", name: "Jali Designs" },
+  { key: "cnc", name: "CNC Box" },
+  { key: "blinds", name: "Blinds" },
+  { key: "roller", name: "Roller" },
+  { key: "vertical", name: "Vertical" },
+  { key: "wooden-blinds", name: "Wooden Blinds" },
+  { key: "zebra", name: "Zebra" },
+  { key: "pipes", name: "Pipes" },
+  { key: "brackets", name: "Brackets" },
+  { key: "stopers", name: "Stopers" },
+  { key: "rings", name: "Rings" },
+  { key: "tie", name: "Tie Huks" },
+  { key: "sofa", name: "Sofa Sets" }
+];
+
+/* ── INDEXEDDB ── */
+var APH_DB = (function() {
+  var dbInstance = null;
+  function openDB() {
+    return new Promise(function(resolve, reject) {
+      if (dbInstance) return resolve(dbInstance);
+      var req = indexedDB.open('AliPardaHouseStore', 1);
+      req.onupgradeneeded = function(e) {
+        var db = e.target.result;
+        if (!db.objectStoreNames.contains('catalog_store')) {
+          db.createObjectStore('catalog_store');
+        }
+      };
+      req.onsuccess = function(e) { dbInstance = e.target.result; resolve(dbInstance); };
+      req.onerror = function(e) { reject(e); };
+    });
+  }
+  function setItem(key, val) {
+    return openDB().then(function(db) {
+      return new Promise(function(resolve, reject) {
+        var tx = db.transaction('catalog_store', 'readwrite');
+        var store = tx.objectStore('catalog_store');
+        var req = store.put(val, key);
+        req.onsuccess = function() { resolve(); };
+        req.onerror = function(e) { reject(e); };
+      });
+    });
+  }
+  function getItem(key) {
+    return openDB().then(function(db) {
+      return new Promise(function(resolve, reject) {
+        var tx = db.transaction('catalog_store', 'readonly');
+        var store = tx.objectStore('catalog_store');
+        var req = store.get(key);
+        req.onsuccess = function() { resolve(req.result); };
+        req.onerror = function(e) { reject(e); };
+      });
+    });
+  }
+  return { setItem: setItem, getItem: getItem };
+})();
+
+/* ── NAV ── */
+var hamburgerBtn = document.getElementById('hamburgerBtn');
+var mobileNav = document.getElementById('mobileNav');
+hamburgerBtn.addEventListener('click', function(e) {
+  e.stopPropagation();
+  mobileNav.classList.toggle('open');
+  hamburgerBtn.classList.toggle('open');
+});
+document.addEventListener('click', function(e) {
+  if (mobileNav.classList.contains('open') && !mobileNav.contains(e.target) && !hamburgerBtn.contains(e.target)) {
+    mobileNav.classList.remove('open');
+    hamburgerBtn.classList.remove('open');
+  }
+});
+
+/* ── TOAST ── */
+var toastTimer = null;
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function() { t.classList.remove('show'); }, 2600);
+}
+
+/* ── BUILD DROP ZONE CHIPS ── */
+var dropzoneRow = document.getElementById('dropzoneRow');
+CATEGORIES.forEach(function(cat) {
+  var chip = document.createElement('button');
+  chip.type = 'button';
+  chip.className = 'drop-zone';
+  chip.dataset.category = cat.key;
+  chip.textContent = cat.name;
+  dropzoneRow.appendChild(chip);
+});
+
+function catName(key) {
+  var found = CATEGORIES.filter(function(c) { return c.key === key; })[0];
+  return found ? found.name : key;
+}
+
+/* ── SAVE LOGIC ── */
+function tryFetchAsDataURL(url) {
+  return fetch(url, { mode: 'cors' }).then(function(r) {
+    if (!r.ok) throw new Error('bad status');
+    return r.blob();
+  }).then(function(blob) {
+    return new Promise(function(resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function() { resolve(reader.result); };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  });
+}
+
+function persistImage(catKey, item) {
+  return APH_DB.getItem('drive_saved_images').then(function(map) {
+    map = map || {};
+    if (!map[catKey]) map[catKey] = [];
+    var exists = map[catKey].some(function(it) { return it.driveId === item.driveId; });
+    if (!exists) map[catKey].push(item);
+    return APH_DB.setItem('drive_saved_images', map);
+  });
+}
+
+function saveImageToCategory(catKey, imgObj) {
+  showToast('Saving to ' + catName(catKey) + '…');
+  tryFetchAsDataURL(imgObj.displayUrl).then(function(dataUrl) {
+    return persistImage(catKey, { src: dataUrl, alt: imgObj.name, driveId: imgObj.id, savedAt: Date.now() });
+  }).then(function() {
+    showToast('Saved permanently to "' + catName(catKey) + '" ✓');
+  }).catch(function() {
+    persistImage(catKey, { src: imgObj.displayUrl, alt: imgObj.name, driveId: imgObj.id, savedAt: Date.now() })
+      .then(function() { showToast('Saved to "' + catName(catKey) + '" ✓'); });
+  });
+}
+
+/* ── SAVE MODAL ── */
+var saveModalOverlay = document.getElementById('saveModalOverlay');
+var saveModalGrid = document.getElementById('saveModalGrid');
+var saveModalCancel = document.getElementById('saveModalCancel');
+var pendingImage = null;
+
+CATEGORIES.forEach(function(cat) {
+  var btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = cat.name;
+  btn.addEventListener('click', function() {
+    if (pendingImage) saveImageToCategory(cat.key, pendingImage);
+    closeSaveModal();
+  });
+  saveModalGrid.appendChild(btn);
+});
+saveModalCancel.addEventListener('click', closeSaveModal);
+saveModalOverlay.addEventListener('click', function(e) { if (e.target === saveModalOverlay) closeSaveModal(); });
+
+function openSaveModal(imgObj) {
+  pendingImage = imgObj;
+  saveModalOverlay.classList.add('open');
+}
+function closeSaveModal() {
+  pendingImage = null;
+  saveModalOverlay.classList.remove('open');
+}
+
+/* ── LOAD IMAGES FROM GITHUB FOLDER VIA API ── */
+var galleryGrid = document.getElementById('galleryGrid');
+var galleryStatus = document.getElementById('galleryStatus');
+
+function loadGitHubImages() {
+  var apiUrl = `https://api.github.com/repos/${GITHUB_USER}/${REPO_NAME}/contents/${FOLDER_NAME}`;
+
+  fetch(apiUrl)
+    .then(function(r) {
+      if (!r.ok) throw new Error('GitHub folder response not ok');
+      return r.json();
+    })
+    .then(function(files) {
+      var imageFiles = files.filter(function(f) {
+        return f.name.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+      });
+
+      if (!imageFiles.length) {
+        galleryStatus.textContent = 'Is folder mein koi tasveer nahi mili.';
+        return;
+      }
+
+      galleryStatus.style.display = 'none';
+      imageFiles.forEach(function(f) {
+        var rawUrl = `https://raw.githubusercontent.com/${GITHUB_USER}/${REPO_NAME}/main/${FOLDER_NAME}/${f.name}`;
+        renderCard({ id: f.sha, name: f.name, displayUrl: rawUrl });
+      });
+    })
+    .catch(function(err) {
+      console.error(err);
+      galleryStatus.style.display = 'block';
+      galleryStatus.textContent = 'Images load nahi ho saken. Check karein ke repository mein "gallery" naam ka folder mojood hai.';
+    });
+}
+
+function renderCard(imgObj) {
+  var card = document.createElement('div');
+  card.className = 'drive-card';
+
+  var loader = document.createElement('div');
+  loader.className = 'card-loader';
+  card.appendChild(loader);
+
+  var img = document.createElement('img');
+  img.alt = imgObj.name;
+  img.draggable = false;
+  img.src = imgObj.displayUrl;
+
+  img.onload = function() {
+    img.classList.add('loaded');
+    if (loader.parentNode) loader.parentNode.removeChild(loader);
+  };
+
+  img.onerror = function() {
+    if (loader.parentNode) loader.parentNode.removeChild(loader);
+  };
+
+  card.appendChild(img);
+
+  var saveBtn = document.createElement('button');
+  saveBtn.type = 'button';
+  saveBtn.className = 'save-btn';
+  saveBtn.textContent = 'Save';
+  saveBtn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    openSaveModal(imgObj);
+  });
+  card.appendChild(saveBtn);
+
+  galleryGrid.appendChild(card);
+  attachDrag(card, imgObj);
+}
+
+/* ── DRAG & DROP ── */
+var DRAG_THRESHOLD = 8;
+
+function attachDrag(card, imgObj) {
+  var startX = 0, startY = 0, dragging = false, ghost = null, activePointerId = null;
+
+  card.addEventListener('pointerdown', function(e) {
+    startX = e.clientX; startY = e.clientY; dragging = false; activePointerId = e.pointerId;
+    try { card.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+
+  card.addEventListener('pointermove', function(e) {
+    if (activePointerId === null || e.pointerId !== activePointerId) return;
+    var dx = e.clientX - startX, dy = e.clientY - startY;
+    if (!dragging) {
+      if (Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return;
+      dragging = true;
+      card.classList.add('grabbing');
+      ghost = document.createElement('div');
+      ghost.className = 'drag-ghost';
+      ghost.innerHTML = '<img src="' + imgObj.displayUrl + '">';
+      document.body.appendChild(ghost);
+    }
+    if (ghost) {
+      ghost.style.left = (e.clientX - 55) + 'px';
+      ghost.style.top = (e.clientY - 55) + 'px';
+    }
+    document.querySelectorAll('.drop-zone').forEach(function(z) { z.classList.remove('hover-target'); });
+    var under = document.elementFromPoint(e.clientX, e.clientY);
+    var zone = under ? under.closest('.drop-zone') : null;
+    if (zone) zone.classList.add('hover-target');
+  });
+
+  function endDrag(e) {
+    if (activePointerId === null || (e.pointerId !== undefined && e.pointerId !== activePointerId)) return;
+    activePointerId = null;
+    card.classList.remove('grabbing');
+    if (dragging) {
+      var under = document.elementFromPoint(e.clientX, e.clientY);
+      var zone = under ? under.closest('.drop-zone') : null;
+      if (zone) saveImageToCategory(zone.dataset.category, imgObj);
+      document.querySelectorAll('.drop-zone').forEach(function(z) { z.classList.remove('hover-target'); });
+    }
+    if (ghost) { ghost.remove(); ghost = null; }
+    dragging = false;
+  }
+
+  card.addEventListener('pointerup', endDrag);
+  card.addEventListener('pointercancel', endDrag);
+}
+
+// Start Loading Images
+loadGitHubImages();
+</script>
+</body>
+</html>
