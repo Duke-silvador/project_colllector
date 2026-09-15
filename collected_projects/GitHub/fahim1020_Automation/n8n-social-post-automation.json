@@ -1,0 +1,263 @@
+{
+  "name": "My workflow",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 7
+            },
+            {
+              "triggerAtHour": 15
+            },
+            {
+              "triggerAtHour": 22
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        0
+      ],
+      "id": "233943d9-78b7-4c04-8066-5f20729253e6",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"model\": \"openrouter/free\",\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"You are the social media content manager for SiteMotive, a web design and development studio. SiteMotive serves businesses in the UK, Bangladesh, and worldwide. Target audience includes small businesses, local businesses, startups, restaurants, shops, service businesses, freelancers, and entrepreneurs. Create content that feels natural and useful for both UK and Bangladeshi audiences. Use clear, modern, friendly English. Avoid overly corporate or robotic language. Do not invent clients, testimonials, statistics, results, or case studies. SiteMotive services include website design, website development, landing pages, e-commerce websites, website redesign, SEO, mobile responsive websites, and website performance optimization.\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Create ONE social media post for SiteMotive. The post should be suitable for both Facebook and Instagram. Choose a useful topic related to websites, online business, SEO, digital presence, marketing, conversion, website mistakes, or small business growth. Avoid repeating common topics too frequently. Make the content engaging and genuinely useful, not just promotional. Naturally mention SiteMotive when appropriate. Include a clear but non-pushy CTA. Return ONLY valid JSON with exactly these fields: topic, hook, caption, cta, hashtags, image_query. hashtags must be an array of 5-8 relevant hashtags. image_query must be a short English search query for finding a relevant royalty-free stock image.\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        192,
+        224
+      ],
+      "id": "f19232c3-9295-4286-afa1-3dbed5f1e4e4",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "ocWR0hhzix2gpfux",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://api.pexels.com/v1/search",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.image_query }}"
+            },
+            {
+              "name": "per_page",
+              "value": "{{ Math.floor(Math.random() * 10) + 1 }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        592,
+        48
+      ],
+      "id": "de4139eb-f945-4552-8d2c-25541a70423e",
+      "name": "HTTP Request1",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mb5Nwy4jdv2G5677",
+          "name": "Header Auth account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const photo = $json.photos?.[0];\n\nif (!photo) {\n  throw new Error(\"No image found from Pexels\");\n}\n\nreturn {\n  json: {\n    image_url: photo.src?.large2x || photo.src?.large || photo.src?.original,\n    image_id: photo.id,\n    photographer: photo.photographer,\n    photographer_url: photo.photographer_url\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        48
+      ],
+      "id": "f8027a45-0bd7-4b94-a114-ffc77068ef45",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.image_url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1024,
+        48
+      ],
+      "id": "79892800-1d35-401a-97a4-cc0dee71e82c",
+      "name": "HTTP Request2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const content = $json.choices[0].message.content;\n\nconst clean = content\n  .replace(/```json/g, '')\n  .replace(/```/g, '')\n  .trim();\n\nconst data = JSON.parse(clean);\n\n// Clean caption formatting\nlet caption = (data.caption || '')\n  .replace(/\\r\\n/g, '\\n')\n  .replace(/\\n{3,}/g, '\\n\\n')\n  .trim();\n\n// Add CTA\nif (data.cta) {\n  caption += `\\n\\n${data.cta.trim()}`;\n}\n\n// Add hashtags\nif (data.hashtags) {\n  const hashtags = Array.isArray(data.hashtags)\n    ? data.hashtags.join(' ')\n    : data.hashtags;\n\n  caption += `\\n\\n${hashtags.trim()}`;\n}\n\nreturn {\n  json: {\n    topic: data.topic,\n    hook: data.hook,\n    caption,\n    cta: data.cta,\n    hashtags: data.hashtags,\n    image_query: data.image_query\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        48
+      ],
+      "id": "cffc9b71-b7a0-4686-8aa5-c686bd0c9118",
+      "name": "Caption formater"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v26.0/665307759995756/photos",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "access_token",
+              "value": ""
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "source",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "caption",
+              "value": "={{ $('Caption formater').item.json.caption }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1296,
+        16
+      ],
+      "id": "dc183dfb-d480-45a7-98f9-7f326faff514",
+      "name": "Send to social "
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Caption formater",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request2": {
+      "main": [
+        [
+          {
+            "node": "Send to social ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Caption formater": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to social ": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0ddaf2f5-0925-441d-84d5-d934a7cb5790",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "813235465d8e008b1bdbbf6fdfabc771332d0f71ee4af2426c8303b4b9fa2fcf"
+  },
+  "nodeGroups": [],
+  "id": "FEi5XGTqRO6nJNcw",
+  "tags": []
+}
