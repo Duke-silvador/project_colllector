@@ -1,0 +1,1341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SonoDent AI - Real-Time Hands-Free Periodontal Voice Charting & Interactive 3D Patient Twin</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Three.js & OrbitControls CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- SonoDent Clinical Intelligence Engine -->
+  <script src="sonodent_engine.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0b1120;
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    /* Cell styling */
+    .cell-normal {
+      background-color: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.4);
+      color: #34d399;
+    }
+    .cell-warning {
+      background-color: rgba(245, 158, 11, 0.2);
+      border-color: rgba(245, 158, 11, 0.5);
+      color: #fbbf24;
+    }
+    .cell-danger {
+      background-color: rgba(239, 68, 68, 0.25);
+      border-color: rgba(239, 68, 68, 0.6);
+      color: #f87171;
+    }
+    .cell-active {
+      box-shadow: 0 0 0 2px #38bdf8, 0 0 10px rgba(56, 189, 248, 0.5);
+      z-index: 10;
+    }
+    .has-bleeding {
+      position: relative;
+    }
+    .has-bleeding::after {
+      content: '';
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background-color: #ef4444;
+      box-shadow: 0 0 4px #ef4444;
+    }
+    /* Radar pulse */
+    @keyframes pulse-ring {
+      0% { transform: scale(0.95); opacity: 0.8; }
+      50% { transform: scale(1.05); opacity: 0.4; }
+      100% { transform: scale(0.95); opacity: 0.8; }
+    }
+    .recording-pulse {
+      animation: pulse-ring 2s infinite ease-in-out;
+    }
+    /* Modal print styles */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #print-modal, #print-modal * {
+        visibility: visible;
+      }
+      #print-modal {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+        background: white !important;
+        color: black !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col bg-[#0b1120] text-slate-100 selection:bg-cyan-500 selection:text-white">
+
+  <!-- TOP HEADER / CARESTACK ENTERPRISE DROP-IN BAR -->
+  <header class="border-b border-slate-800 bg-[#0f172a]/90 backdrop-blur sticky top-0 z-40 px-4 py-2.5 flex flex-wrap items-center justify-between gap-3">
+    <div class="flex items-center space-x-3">
+      <div class="h-8 w-8 rounded bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center font-bold text-white tracking-wider text-sm shadow-md shadow-cyan-950">
+        SD
+      </div>
+      <div>
+        <div class="flex items-center space-x-2">
+          <span class="font-bold text-base tracking-tight text-white">SonoDent AI</span>
+          <span class="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-cyan-950/80 text-cyan-400 border border-cyan-800/50">
+            CareStack EHR Drop-In Module
+          </span>
+          <span class="text-[10px] uppercase font-semibold px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800/50">
+            Problem 7
+          </span>
+        </div>
+        <p class="text-xs text-slate-400 font-mono">DSOLVE 2026 // Team ctrlX: S Sidharth Unni & Arjun Unnikrishnan Pillai</p>
+      </div>
+    </div>
+
+    <!-- Live Telemetry Status Pills -->
+    <div class="flex items-center space-x-2 sm:space-x-3 text-xs font-mono">
+      <div class="hidden md:flex items-center px-2.5 py-1 rounded bg-slate-800/80 border border-slate-700/60 text-slate-300">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 mr-2 animate-pulse"></span>
+        <span>LATENCY: <strong class="text-emerald-400 font-bold" id="telemetry-latency">38ms</strong></span>
+      </div>
+      <div class="hidden lg:flex items-center px-2.5 py-1 rounded bg-slate-800/80 border border-slate-700/60 text-slate-300">
+        <span class="text-slate-400 mr-1">SECURITY:</span>
+        <strong class="text-cyan-400">100% Client-Side / Zero Cloud Leak</strong>
+      </div>
+      <div class="flex items-center px-2.5 py-1 rounded bg-slate-800/80 border border-slate-700/60 text-slate-300">
+        <span class="text-slate-400 mr-1">FPS:</span>
+        <span id="fps-counter" class="text-emerald-400 font-bold">60</span>
+      </div>
+      <button id="btn-insurance-modal" class="px-3 py-1.5 rounded bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 font-medium text-white shadow shadow-blue-950 transition text-xs flex items-center space-x-1.5">
+        <span>CDT Claim Dossier</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN DUAL-PANE WORKSPACE -->
+  <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-0 overflow-hidden">
+
+    <!-- LEFT PANE: 3D INTERACTIVE DENTAL TWIN & REAL-TIME CONTROLS (Cols 1-7) -->
+    <section class="lg:col-span-7 flex flex-col border-b lg:border-b-0 lg:border-r border-slate-800 relative bg-[#070b14]">
+      
+      <!-- 3D Canvas Container -->
+      <div class="relative w-full h-[420px] sm:h-[500px] lg:h-full min-h-[420px] flex-1">
+        <div id="three-canvas-container" class="absolute inset-0 w-full h-full"></div>
+
+        <!-- 3D Viewport Floating Overlay Controls -->
+        <div class="absolute top-3 left-3 z-20 flex flex-wrap gap-1.5">
+          <button id="cam-preset-full" class="px-2.5 py-1 rounded bg-slate-900/80 backdrop-blur border border-slate-700 hover:border-cyan-500 text-[11px] text-slate-200 transition">
+            Full Arcade
+          </button>
+          <button id="cam-preset-maxilla" class="px-2.5 py-1 rounded bg-slate-900/80 backdrop-blur border border-slate-700 hover:border-cyan-500 text-[11px] text-slate-200 transition">
+            Maxilla (Upper)
+          </button>
+          <button id="cam-preset-mandible" class="px-2.5 py-1 rounded bg-slate-900/80 backdrop-blur border border-slate-700 hover:border-cyan-500 text-[11px] text-slate-200 transition">
+            Mandible (Lower)
+          </button>
+          <button id="cam-preset-front" class="px-2.5 py-1 rounded bg-slate-900/80 backdrop-blur border border-slate-700 hover:border-cyan-500 text-[11px] text-slate-200 transition">
+            Anterior View
+          </button>
+          <button id="view-mode-toggle" class="px-2.5 py-1 rounded bg-cyan-950/80 backdrop-blur border border-cyan-700 hover:border-cyan-400 text-[11px] text-cyan-300 font-medium transition">
+            Shader: Solid Enamel
+          </button>
+        </div>
+
+        <!-- Active Tooth HUD Card Overlay -->
+        <div class="absolute bottom-3 left-3 z-20 bg-slate-900/90 backdrop-blur border border-slate-700/80 rounded-lg p-3 w-72 shadow-xl">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-1.5 mb-2">
+            <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active Probing Focus</span>
+            <span id="active-fdi-tag" class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
+              FDI 18
+            </span>
+          </div>
+          <div class="flex items-baseline justify-between mb-1">
+            <h4 id="active-tooth-name" class="font-bold text-sm text-white truncate max-w-[170px]">Maxillary Right 3rd Molar</h4>
+            <span class="font-mono text-xs text-cyan-400 font-semibold" id="active-tooth-id">Tooth #1</span>
+          </div>
+          <div class="text-[11px] text-slate-400 mb-2.5 flex items-center justify-between">
+            <span id="active-tooth-quad">Quadrant 1 (Upper Right)</span>
+            <span id="active-tooth-type" class="uppercase font-mono text-[10px] text-slate-500">Molar (3 Roots)</span>
+          </div>
+
+          <!-- 6 Probing Sites Direct Visualizer -->
+          <div class="grid grid-cols-6 gap-1 text-center font-mono">
+            <div id="badge-site-0" class="p-1 rounded bg-slate-800 border border-slate-700 text-[10px]">
+              <div class="text-[9px] text-slate-400">MB</div>
+              <div class="font-bold text-xs site-val" id="val-site-MB">2</div>
+            </div>
+            <div id="badge-site-1" class="p-1 rounded bg-slate-800 border border-slate-700 text-[10px]">
+              <div class="text-[9px] text-slate-400">B</div>
+              <div class="font-bold text-xs site-val" id="val-site-B">2</div>
+            </div>
+            <div id="badge-site-2" class="p-1 rounded bg-slate-800 border border-slate-700 text-[10px]">
+              <div class="text-[9px] text-slate-400">DB</div>
+              <div class="font-bold text-xs site-val" id="val-site-DB">2</div>
+            </div>
+            <div id="badge-site-3" class="p-1 rounded bg-slate-800 border border-slate-700 text-[10px]">
+              <div class="text-[9px] text-slate-400">ML</div>
+              <div class="font-bold text-xs site-val" id="val-site-ML">2</div>
+            </div>
+            <div id="badge-site-4" class="p-1 rounded bg-slate-800 border border-slate-700 text-[10px]">
+              <div class="text-[9px] text-slate-400">L</div>
+              <div class="font-bold text-xs site-val" id="val-site-L">2</div>
+            </div>
+            <div id="badge-site-5" class="p-1 rounded bg-slate-800 border border-slate-700 text-[10px]">
+              <div class="text-[9px] text-slate-400">DL</div>
+              <div class="font-bold text-xs site-val" id="val-site-DL">2</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3D Legend -->
+        <div class="absolute top-3 right-3 z-20 bg-slate-900/80 backdrop-blur border border-slate-800 rounded px-2.5 py-1.5 text-[10px] space-y-1">
+          <div class="flex items-center space-x-2">
+            <span class="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block"></span>
+            <span class="text-slate-300">Normal (1-3mm)</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span class="w-2.5 h-2.5 rounded-sm bg-amber-500 inline-block"></span>
+            <span class="text-slate-300">Warning (4mm)</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span class="w-2.5 h-2.5 rounded-sm bg-red-500 inline-block"></span>
+            <span class="text-slate-300">Severe Periodontitis (&ge;5mm)</span>
+          </div>
+          <div class="flex items-center space-x-2 pt-0.5 border-t border-slate-800">
+            <span class="w-2 h-2 rounded-full bg-red-500 inline-block animate-ping"></span>
+            <span class="text-red-400">Bleeding on Probing (BOP)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- VOICE & AUDIO TELEMETRY COCKPIT -->
+      <div class="border-t border-slate-800 bg-[#090d18] p-3.5">
+        <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          
+          <!-- Voice Record Button & Status -->
+          <div class="flex items-center space-x-3">
+            <button id="btn-voice-toggle" class="relative group px-4 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 active:bg-cyan-700 text-white font-semibold text-xs tracking-wide transition shadow-lg shadow-cyan-950 flex items-center space-x-2">
+              <span id="voice-indicator" class="w-2.5 h-2.5 rounded-full bg-white inline-block"></span>
+              <span id="voice-btn-text">Start Hands-Free Voice</span>
+            </button>
+
+            <!-- Audio Level Meter -->
+            <div class="flex flex-col justify-center">
+              <div class="text-[10px] font-mono text-slate-400 mb-1 flex items-center justify-between">
+                <span>MIC INPUT</span>
+                <span id="noise-gate-tag" class="text-[9px] text-cyan-400">NOISE-GATE ON</span>
+              </div>
+              <div class="w-24 sm:w-32 h-2 bg-slate-800 rounded overflow-hidden border border-slate-700">
+                <div id="audio-level-bar" class="h-full bg-cyan-400 transition-all duration-75 w-[15%]"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Noise Gate & Filter Simulator Toggle -->
+          <div class="flex items-center space-x-2">
+            <button id="btn-toggle-noise-filter" class="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] text-slate-300 transition">
+              Suction Acoustic Filter: Active
+            </button>
+            <button id="btn-voice-rollback" class="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-amber-950 hover:border-amber-700 border border-slate-700 text-[11px] text-amber-300 transition" title="Undo last voice entry">
+              Undo ("Scratch that")
+            </button>
+          </div>
+        </div>
+
+        <!-- Live Transcription Tape -->
+        <div class="mt-2.5 px-3 py-1.5 bg-slate-950/80 rounded border border-slate-800/80 flex items-center space-x-2 text-xs font-mono">
+          <span class="text-slate-500 font-semibold whitespace-nowrap">VOICE STREAM:</span>
+          <span id="transcription-tape" class="text-cyan-300 truncate font-mono">
+            Awaiting voice input. Say: "Tooth 14, 5, 4, 6, bleeding" or use demonstration presets below.
+          </span>
+        </div>
+
+        <!-- DEMO SIMULATION CONTROLS FOR JUDGING SESSIONS -->
+        <div class="mt-2.5 pt-2 border-t border-slate-800/60 flex flex-wrap items-center gap-1.5 text-[11px]">
+          <span class="text-slate-500 text-[10px] uppercase font-mono mr-1">One-Click Demos:</span>
+          <button id="demo-routine" class="px-2 py-1 rounded bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-slate-200 transition">
+            Healthy Exam (1-3mm)
+          </button>
+          <button id="demo-severe" class="px-2 py-1 rounded bg-red-950/60 hover:bg-red-900/70 border border-red-800/60 text-red-300 font-medium transition">
+            Stage III/IV Perio (Quadrant 1 &amp; 4)
+          </button>
+          <button id="demo-rollback" class="px-2 py-1 rounded bg-amber-950/60 hover:bg-amber-900/70 border border-amber-800/60 text-amber-300 transition">
+            Voice Error &amp; Correction
+          </button>
+          <button id="demo-reset" class="px-2 py-1 rounded bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-slate-400 transition ml-auto">
+            Reset Chart
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT PANE: CLINICAL TELEMETRY, 2D PERIO CHART & CDT CODING (Cols 8-12) -->
+    <section class="lg:col-span-5 flex flex-col bg-[#0b1120] overflow-y-auto max-h-[85vh] lg:max-h-full">
+      
+      <!-- CLINICAL DIAGNOSTIC CLASSIFICATION (AAP / EFP 2018 WORLD WORKSHOP) -->
+      <div class="p-4 border-b border-slate-800 bg-slate-900/50">
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center space-x-2">
+            <span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Diagnosis (AAP/EFP 2018)</span>
+            <span class="text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-800 px-1.5 py-0.5 rounded font-mono">
+              Auto-Calculated
+            </span>
+          </div>
+          <span id="badge-system-select" class="text-xs text-cyan-400 cursor-pointer hover:underline font-mono">
+            Universal (1-32)
+          </span>
+        </div>
+
+        <div class="p-3 rounded-lg bg-slate-800/60 border border-slate-700">
+          <div class="flex items-baseline justify-between mb-1">
+            <h3 id="diag-staging" class="text-base font-bold text-white">Gingival Health</h3>
+            <span id="diag-grade" class="text-xs font-mono font-semibold text-emerald-400 px-2 py-0.5 rounded bg-emerald-950/80 border border-emerald-800/60">
+              Grade A (Low Risk)
+            </span>
+          </div>
+          <p id="diag-description" class="text-xs text-slate-400 leading-relaxed">
+            Intact periodontium with minimal sulcular depth. Prophylaxis recommended.
+          </p>
+        </div>
+
+        <!-- Metric KPI Cards -->
+        <div class="grid grid-cols-4 gap-2 mt-3 text-center font-mono">
+          <div class="p-2 rounded bg-slate-800/40 border border-slate-800">
+            <div class="text-[10px] text-slate-400">BOP %</div>
+            <div id="kpi-bop" class="text-sm font-bold text-slate-200">0%</div>
+          </div>
+          <div class="p-2 rounded bg-slate-800/40 border border-slate-800">
+            <div class="text-[10px] text-slate-400">MEAN DEPTH</div>
+            <div id="kpi-mean" class="text-sm font-bold text-slate-200">2.00mm</div>
+          </div>
+          <div class="p-2 rounded bg-slate-800/40 border border-slate-800">
+            <div class="text-[10px] text-slate-400">&ge;5MM SITES</div>
+            <div id="kpi-deep" class="text-sm font-bold text-emerald-400">0</div>
+          </div>
+          <div class="p-2 rounded bg-slate-800/40 border border-slate-800">
+            <div class="text-[10px] text-slate-400">AFFECTED</div>
+            <div id="kpi-affected" class="text-sm font-bold text-slate-200">0%</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AUTOMATED CDT INSURANCE CODES BANNER -->
+      <div class="px-4 py-3 border-b border-slate-800 bg-[#090e1a]">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-slate-300 uppercase tracking-wide">CDT Insurance Billing Matrix</span>
+          <span class="text-[10px] font-mono text-emerald-400">Claim-Ready Justification</span>
+        </div>
+        <div id="cdt-code-list" class="space-y-1.5">
+          <!-- Dynamically populated by engine -->
+        </div>
+      </div>
+
+      <!-- 2D PERIODONTAL CHART (ADA FORMAT) -->
+      <div class="p-4 flex-1">
+        <div class="flex items-center justify-between mb-2.5">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-300">Periodontal Chart Grid (192 Probing Sites)</span>
+          <span class="text-[11px] text-slate-500 font-mono">Click cell to focus</span>
+        </div>
+
+        <!-- UPPER ARCH (MAXILLA: TEETH 1-16) -->
+        <div class="mb-4">
+          <div class="text-[11px] font-semibold text-cyan-400 mb-1 flex justify-between items-center">
+            <span>Maxilla (Upper Arch: 1 to 16)</span>
+            <span class="text-[10px] text-slate-400 font-mono">Right &rarr; Left</span>
+          </div>
+          <div class="overflow-x-auto border border-slate-800 rounded bg-slate-900/70 p-1">
+            <table class="w-full text-center border-collapse text-[10px] font-mono">
+              <thead>
+                <tr class="text-slate-400 border-b border-slate-800 bg-slate-950/60">
+                  <th class="p-1 w-12 text-left">Site</th>
+                  <!-- Teeth 1 to 16 -->
+                  <th class="p-1">1</th><th class="p-1">2</th><th class="p-1">3</th><th class="p-1">4</th>
+                  <th class="p-1">5</th><th class="p-1">6</th><th class="p-1">7</th><th class="p-1">8</th>
+                  <th class="p-1">9</th><th class="p-1">10</th><th class="p-1">11</th><th class="p-1">12</th>
+                  <th class="p-1">13</th><th class="p-1">14</th><th class="p-1">15</th><th class="p-1">16</th>
+                </tr>
+              </thead>
+              <tbody id="perio-table-maxilla">
+                <!-- Populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- LOWER ARCH (MANDIBLE: TEETH 17-32) -->
+        <div>
+          <div class="text-[11px] font-semibold text-cyan-400 mb-1 flex justify-between items-center">
+            <span>Mandible (Lower Arch: 17 to 32)</span>
+            <span class="text-[10px] text-slate-400 font-mono">Left &rarr; Right</span>
+          </div>
+          <div class="overflow-x-auto border border-slate-800 rounded bg-slate-900/70 p-1">
+            <table class="w-full text-center border-collapse text-[10px] font-mono">
+              <thead>
+                <tr class="text-slate-400 border-b border-slate-800 bg-slate-950/60">
+                  <th class="p-1 w-12 text-left">Site</th>
+                  <!-- Teeth 17 to 32 -->
+                  <th class="p-1">17</th><th class="p-1">18</th><th class="p-1">19</th><th class="p-1">20</th>
+                  <th class="p-1">21</th><th class="p-1">22</th><th class="p-1">23</th><th class="p-1">24</th>
+                  <th class="p-1">25</th><th class="p-1">26</th><th class="p-1">27</th><th class="p-1">28</th>
+                  <th class="p-1">29</th><th class="p-1">30</th><th class="p-1">31</th><th class="p-1">32</th>
+                </tr>
+              </thead>
+              <tbody id="perio-table-mandible">
+                <!-- Populated by JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Voice Command Reference Guide -->
+        <div class="mt-4 p-3 rounded bg-slate-900/70 border border-slate-800 text-[11px] text-slate-400">
+          <div class="font-semibold text-slate-300 mb-1.5 flex items-center justify-between">
+            <span>Operatory Voice Shorthand Grammar</span>
+            <span class="text-[10px] font-mono text-cyan-400">Sub-45ms Parser</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 font-mono text-[10px]">
+            <div>
+              <span class="text-cyan-400">&bull; Tooth selection:</span> "tooth 14", "tooth 30"
+            </div>
+            <div>
+              <span class="text-cyan-400">&bull; Rapid probing:</span> "4 3 5 4 4 6" (auto advances)
+            </div>
+            <div>
+              <span class="text-cyan-400">&bull; Surface jump:</span> "mesial", "distal", "lingual"
+            </div>
+            <div>
+              <span class="text-cyan-400">&bull; Conditions:</span> "bleeding", "blood", "pus"
+            </div>
+            <div class="col-span-2">
+              <span class="text-amber-400">&bull; Rollback:</span> "scratch that", "undo", "cancel"
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- OFFICIAL CDT INSURANCE CLAIM DOSSIER MODAL (FOR CARESTACK EHR INTEGRATION) -->
+  <div id="modal-dossier" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden" id="print-modal">
+      
+      <!-- Modal Header -->
+      <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+        <div>
+          <h3 class="font-bold text-base text-white">Periodontal Scaling &amp; Root Planing Medical Necessity Dossier</h3>
+          <p class="text-xs text-slate-400 font-mono">CareStack Cloud EHR // Pre-Authorization &amp; Claim Justification Engine</p>
+        </div>
+        <button id="btn-close-modal" class="text-slate-400 hover:text-white text-lg font-bold px-2 py-1">&times;</button>
+      </div>
+
+      <!-- Modal Body -->
+      <div class="p-6 space-y-4 overflow-y-auto flex-1 text-xs text-slate-300 font-sans leading-relaxed">
+        
+        <div class="border border-slate-700 rounded p-3 bg-slate-800/40">
+          <div class="grid grid-cols-2 gap-3 text-slate-300 font-mono text-[11px]">
+            <div><strong>Patient ID:</strong> CS-2026-88941</div>
+            <div><strong>Exam Date:</strong> <span id="dossier-date">September 17, 2026</span></div>
+            <div><strong>Provider:</strong> Dr. S. Sidharth Unni, DDS</div>
+            <div><strong>Clinic:</strong> CareStack Demonstration Operatory #1</div>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-slate-200 text-sm mb-1 uppercase tracking-wide">1. Official Periodontal Diagnostic Statement</h4>
+          <div id="dossier-diagnosis-box" class="p-3 bg-slate-950 rounded border border-slate-800 text-cyan-300 font-mono text-xs">
+            <!-- Populated dynamically -->
+          </div>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-slate-200 text-sm mb-1 uppercase tracking-wide">2. American Dental Association (ADA) CDT Codes &amp; Fees</h4>
+          <table class="w-full border border-slate-800 text-left text-[11px] font-mono">
+            <thead class="bg-slate-950 border-b border-slate-800 text-slate-400">
+              <tr>
+                <th class="p-2">Code</th>
+                <th class="p-2">Description</th>
+                <th class="p-2">Affected Sites</th>
+                <th class="p-2 text-right">Fee</th>
+              </tr>
+            </thead>
+            <tbody id="dossier-cdt-table">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-slate-200 text-sm mb-1 uppercase tracking-wide">3. Claim Adjudication Narrative (Payor Medical Necessity Text)</h4>
+          <div id="dossier-narrative-box" class="p-3 bg-slate-950 rounded border border-slate-800 text-slate-300 font-mono text-[11px] whitespace-pre-wrap leading-relaxed">
+            <!-- Narrative built by engine -->
+          </div>
+        </div>
+
+        <div class="text-[10px] text-slate-500 border-t border-slate-800 pt-2">
+          This claim narrative was compiled automatically by SonoDent AI from full-mouth 6-point voice probing telemetry. Conforms to ADA CDT 2026 guidance and AAP/EFP 2018 staging standards.
+        </div>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="px-6 py-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between">
+        <button onclick="window.print()" class="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium text-xs transition">
+          Print / Export PDF
+        </button>
+        <button id="btn-copy-narrative" class="px-3 py-1.5 rounded bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs transition">
+          Copy Claim Narrative to CareStack
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- APPLICATION JAVASCRIPT -->
+  <script>
+    (function() {
+      'use strict';
+
+      // 1. Initialize SonoDent Clinical Engine
+      const engine = new SonoDentEngine();
+
+      // 2. Three.js Dental Digital Twin Setup
+      let scene, camera, renderer, controls;
+      const toothMeshes = {};
+      const gumMeshes = [];
+      let isXRayMode = false;
+
+      // Container
+      const container = document.getElementById('three-canvas-container');
+
+      function initThree() {
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x070b14);
+
+        camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 1000);
+        camera.position.set(0, 18, 38);
+
+        renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(width, height);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.target.set(0, 0, 0);
+        controls.maxDistance = 80;
+        controls.minDistance = 8;
+
+        // Illumination
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        scene.add(ambientLight);
+
+        const keyLight = new THREE.DirectionalLight(0xffffff, 0.9);
+        keyLight.position.set(15, 25, 20);
+        scene.add(keyLight);
+
+        const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.4);
+        fillLight.position.set(-15, -10, -10);
+        scene.add(fillLight);
+
+        const rimLight = new THREE.PointLight(0x60a5fa, 0.6, 50);
+        rimLight.position.set(0, 15, -15);
+        scene.add(rimLight);
+
+        // Build 3D Dental Arches
+        createDentalArches();
+
+        // Raycaster for tooth selection
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        container.addEventListener('click', (event) => {
+          const rect = renderer.domElement.getBoundingClientRect();
+          mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+          mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+          raycaster.setFromCamera(mouse, camera);
+          const intersects = raycaster.intersectObjects(scene.children, true);
+
+          if (intersects.length > 0) {
+            let hit = intersects[0].object;
+            while (hit && !hit.userData.toothId && hit.parent) {
+              hit = hit.parent;
+            }
+            if (hit && hit.userData.toothId) {
+              selectTooth(hit.userData.toothId);
+            }
+          }
+        });
+
+        // Resize handler
+        window.addEventListener('resize', onWindowResize);
+      }
+
+      function onWindowResize() {
+        if (!container) return;
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+        renderer.setSize(width, height);
+      }
+
+      // Procedural Anatomical 3D Tooth Builder
+      function createToothMesh(toothMeta) {
+        const group = new THREE.Group();
+        group.userData = { toothId: toothMeta.id, type: toothMeta.type };
+
+        // Crown geometry based on tooth type
+        let crownGeo;
+        if (toothMeta.type === 'molar') {
+          crownGeo = new THREE.CylinderGeometry(1.2, 1.0, 1.8, 16);
+        } else if (toothMeta.type === 'premolar') {
+          crownGeo = new THREE.CylinderGeometry(0.9, 0.8, 1.6, 14);
+        } else if (toothMeta.type === 'canine') {
+          crownGeo = new THREE.ConeGeometry(0.8, 1.8, 12);
+        } else {
+          // Incisor: flattened spade-like chisel
+          crownGeo = new THREE.BoxGeometry(1.3, 1.7, 0.6);
+        }
+
+        // Standard Enamel Material
+        const crownMat = new THREE.MeshStandardMaterial({
+          color: 0xf8fafc,
+          roughness: 0.25,
+          metalness: 0.1,
+          emissive: 0x0f172a,
+          emissiveIntensity: 0.1
+        });
+
+        const crownMesh = new THREE.Mesh(crownGeo, crownMat);
+        crownMesh.position.y = 0.9;
+        group.add(crownMesh);
+
+        // Root geometries based on anatomical root count
+        const rootMat = new THREE.MeshStandardMaterial({
+          color: 0xfde047,
+          roughness: 0.5,
+          metalness: 0.05
+        });
+
+        for (let r = 0; r < toothMeta.roots; r++) {
+          const rootGeo = new THREE.ConeGeometry(0.35, 2.2, 8);
+          const rootMesh = new THREE.Mesh(rootGeo, rootMat);
+          rootMesh.rotation.x = Math.PI; // Point root downward/inward
+          const xOffset = (r - (toothMeta.roots - 1) / 2) * 0.55;
+          rootMesh.position.set(xOffset, -1.0, 0);
+          group.add(rootMesh);
+        }
+
+        // Probing Ring Indicator (Periodontal pocket depth visual halo)
+        const ringGeo = new THREE.TorusGeometry(1.25, 0.1, 8, 24);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0x10b981, transparent: true, opacity: 0.85 });
+        const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+        ringMesh.rotation.x = Math.PI / 2;
+        ringMesh.position.y = 0;
+        group.add(ringMesh);
+
+        // Bleeding Marker Particle Sphere (pulsing indicator)
+        const bleedGeo = new THREE.SphereGeometry(0.28, 8, 8);
+        const bleedMat = new THREE.MeshBasicMaterial({ color: 0xef4444 });
+        const bleedMesh = new THREE.Mesh(bleedGeo, bleedMat);
+        bleedMesh.position.set(0, 1.6, 0.9);
+        bleedMesh.visible = false;
+        group.add(bleedMesh);
+
+        group.userData.crown = crownMesh;
+        group.userData.ring = ringMesh;
+        group.userData.bleed = bleedMesh;
+
+        return group;
+      }
+
+      // Arrange 32 teeth along elliptical dental arch curve (Maxilla & Mandible)
+      function createDentalArches() {
+        const metadata = window.TEETH_METADATA;
+
+        // Maxillary Arch (Teeth 1-16): Ellipse in X-Z plane, Y = +2.5
+        // Mandibular Arch (Teeth 17-32): Ellipse in X-Z plane, Y = -2.5
+        const maxillaA = 13.0; // arch width radius
+        const maxillaB = 15.0; // arch depth radius
+        const mandibleA = 12.2;
+        const mandibleB = 14.0;
+
+        // Build Upper Arch (1 to 16)
+        for (let i = 1; i <= 16; i++) {
+          const meta = metadata.find(t => t.id === i);
+          const mesh = createToothMesh(meta);
+
+          // Angle from Right 3rd Molar (t=1) to Left 3rd Molar (t=16)
+          // Range from -PI*0.82 to +PI*0.82
+          const normIndex = (i - 1) / 15; // 0 to 1
+          const angle = -Math.PI * 0.82 + normIndex * (Math.PI * 1.64);
+
+          const x = -Math.sin(angle) * maxillaA;
+          const z = -Math.cos(angle) * maxillaB + 2.0;
+          const y = 2.4;
+
+          mesh.position.set(x, y, z);
+          mesh.rotation.y = -angle; // Face outwards
+
+          scene.add(mesh);
+          toothMeshes[i] = mesh;
+        }
+
+        // Build Lower Arch (17 to 32)
+        // Tooth 17 is Mandibular Left 3rd Molar, 32 is Mandibular Right 3rd Molar
+        for (let i = 17; i <= 32; i++) {
+          const meta = metadata.find(t => t.id === i);
+          const mesh = createToothMesh(meta);
+
+          // Tooth 17 starts at Left 3rd Molar (+PI*0.82) to Tooth 32 (-PI*0.82)
+          const normIndex = (i - 17) / 15; // 0 to 1
+          const angle = Math.PI * 0.82 - normIndex * (Math.PI * 1.64);
+
+          const x = -Math.sin(angle) * mandibleA;
+          const z = -Math.cos(angle) * mandibleB + 2.0;
+          const y = -2.4;
+
+          mesh.position.set(x, y, z);
+          mesh.rotation.y = -angle;
+          mesh.rotation.x = Math.PI; // Invert lower teeth so roots point up into jaw
+
+          scene.add(mesh);
+          toothMeshes[i] = mesh;
+        }
+
+        // Build Gingival Tissue Base (Gums)
+        createGingivalArches(maxillaA, maxillaB, mandibleA, mandibleB);
+      }
+
+      // Procedural Gingival Mesh
+      function createGingivalArches(maxA, maxB, manA, manB) {
+        const gumMat = new THREE.MeshStandardMaterial({
+          color: 0x993b48, // Natural gingival pink
+          roughness: 0.6,
+          metalness: 0.05
+        });
+
+        // Upper gum curve tube
+        const upperCurve = new THREE.EllipseCurve(0, 2, maxA * 0.95, maxB * 0.95, -Math.PI * 0.82, Math.PI * 0.82, false, 0);
+        const upperPoints = upperCurve.getPoints(32).map(p => new THREE.Vector3(-p.x, 2.2, -p.y + 2));
+        const upperPath = new THREE.CatmullRomCurve3(upperPoints);
+        const upperGumGeo = new THREE.TubeGeometry(upperPath, 32, 1.2, 8, false);
+        const upperGumMesh = new THREE.Mesh(upperGumGeo, gumMat);
+        scene.add(upperGumMesh);
+        gumMeshes.push(upperGumMesh);
+
+        // Lower gum curve tube
+        const lowerCurve = new THREE.EllipseCurve(0, 2, manA * 0.95, manB * 0.95, -Math.PI * 0.82, Math.PI * 0.82, false, 0);
+        const lowerPoints = lowerCurve.getPoints(32).map(p => new THREE.Vector3(-p.x, -2.2, -p.y + 2));
+        const lowerPath = new THREE.CatmullRomCurve3(lowerPoints);
+        const lowerGumGeo = new THREE.TubeGeometry(lowerPath, 32, 1.2, 8, false);
+        const lowerGumMesh = new THREE.Mesh(lowerGumGeo, gumMat);
+        scene.add(lowerGumMesh);
+        gumMeshes.push(lowerGumMesh);
+      }
+
+      // Animation Loop with FPS Counter
+      let frameCount = 0;
+      let lastTime = performance.now();
+      const fpsElem = document.getElementById('fps-counter');
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        const time = performance.now();
+        frameCount++;
+        if (time - lastTime >= 1000) {
+          fpsElem.textContent = Math.round((frameCount * 1000) / (time - lastTime));
+          frameCount = 0;
+          lastTime = time;
+        }
+
+        // Rotate/pulse active tooth ring
+        if (engine.activeToothId && toothMeshes[engine.activeToothId]) {
+          const activeMesh = toothMeshes[engine.activeToothId];
+          if (activeMesh.userData.ring) {
+            activeMesh.userData.ring.rotation.z += 0.03;
+          }
+        }
+
+        // Animate bleeding indicator pulses
+        for (let id = 1; id <= 32; id++) {
+          const m = toothMeshes[id];
+          if (m && m.userData.bleed && m.userData.bleed.visible) {
+            const scale = 1.0 + 0.25 * Math.sin(time * 0.008 + id);
+            m.userData.bleed.scale.set(scale, scale, scale);
+          }
+        }
+
+        controls.update();
+        renderer.render(scene, camera);
+      }
+
+      // Update 3D Tooth Coloration & Pocket Visualization based on Engine state
+      function update3DVisuals() {
+        for (let id = 1; id <= 32; id++) {
+          const toothData = engine.teeth[id];
+          const mesh = toothMeshes[id];
+          if (!toothData || !mesh) continue;
+
+          // Find max depth for this tooth
+          let maxD = 1;
+          let hasBleeding = false;
+          let hasSuppuration = false;
+
+          window.SITES.forEach(s => {
+            const d = toothData.probing[s];
+            if (d > maxD) maxD = d;
+            if (toothData.bleeding[s]) hasBleeding = true;
+            if (toothData.suppuration[s]) hasSuppuration = true;
+          });
+
+          // Ring color & scale based on pocket depth
+          let ringColor = 0x10b981; // Green (healthy)
+          if (maxD >= 5) {
+            ringColor = 0xef4444; // Red (severe)
+          } else if (maxD === 4) {
+            ringColor = 0xf59e0b; // Amber (warning)
+          }
+
+          mesh.userData.ring.material.color.setHex(ringColor);
+
+          // Crown material tint
+          if (!isXRayMode) {
+            if (id === engine.activeToothId) {
+              mesh.userData.crown.material.emissive.setHex(0x0284c7); // High-contrast blue highlight
+              mesh.userData.crown.material.emissiveIntensity = 0.4;
+            } else if (maxD >= 5) {
+              mesh.userData.crown.material.emissive.setHex(0x7f1d1d);
+              mesh.userData.crown.material.emissiveIntensity = 0.25;
+            } else if (maxD === 4) {
+              mesh.userData.crown.material.emissive.setHex(0x78350f);
+              mesh.userData.crown.material.emissiveIntensity = 0.15;
+            } else {
+              mesh.userData.crown.material.emissive.setHex(0x0f172a);
+              mesh.userData.crown.material.emissiveIntensity = 0.05;
+            }
+          }
+
+          // Bleeding marker visibility
+          mesh.userData.bleed.visible = hasBleeding;
+          if (hasSuppuration) {
+            mesh.userData.bleed.material.color.setHex(0xfacc15); // Yellow for suppuration
+          } else {
+            mesh.userData.bleed.material.color.setHex(0xef4444);
+          }
+        }
+      }
+
+      // Camera orbital view presets
+      function setupCameraPresets() {
+        document.getElementById('cam-preset-full').addEventListener('click', () => {
+          gsapOrTweenCamera(0, 18, 38, 0, 0, 0);
+        });
+        document.getElementById('cam-preset-maxilla').addEventListener('click', () => {
+          gsapOrTweenCamera(0, 30, 4, 0, 2.5, 0);
+        });
+        document.getElementById('cam-preset-mandible').addEventListener('click', () => {
+          gsapOrTweenCamera(0, -30, 4, 0, -2.5, 0);
+        });
+        document.getElementById('cam-preset-front').addEventListener('click', () => {
+          gsapOrTweenCamera(0, 0, 34, 0, 0, 0);
+        });
+
+        // X-Ray Relief View Mode Toggle
+        const shaderBtn = document.getElementById('view-mode-toggle');
+        shaderBtn.addEventListener('click', () => {
+          isXRayMode = !isXRayMode;
+          shaderBtn.textContent = isXRayMode ? "Shader: Radiographic X-Ray" : "Shader: Solid Enamel";
+          
+          for (let id = 1; id <= 32; id++) {
+            const m = toothMeshes[id];
+            if (!m) continue;
+            if (isXRayMode) {
+              m.userData.crown.material.transparent = true;
+              m.userData.crown.material.opacity = 0.45;
+              m.userData.crown.material.color.setHex(0x38bdf8);
+              m.userData.crown.material.wireframe = false;
+            } else {
+              m.userData.crown.material.transparent = false;
+              m.userData.crown.material.opacity = 1.0;
+              m.userData.crown.material.color.setHex(0xf8fafc);
+            }
+          }
+          update3DVisuals();
+        });
+      }
+
+      function gsapOrTweenCamera(tx, ty, tz, lx, ly, lz) {
+        camera.position.set(tx, ty, tz);
+        controls.target.set(lx, ly, lz);
+        controls.update();
+      }
+
+      // 3. UI Synchronization Functions
+      function selectTooth(toothId) {
+        engine.selectTooth(toothId);
+        updateActiveToothHUD();
+        update2DChart();
+        updateDiagnostics();
+        update3DVisuals();
+      }
+
+      function updateActiveToothHUD() {
+        const tooth = engine.teeth[engine.activeToothId];
+        if (!tooth) return;
+
+        document.getElementById('active-tooth-id').textContent = `Tooth #${tooth.id}`;
+        document.getElementById('active-fdi-tag').textContent = `FDI ${tooth.fdi}`;
+        document.getElementById('active-tooth-name').textContent = tooth.name;
+        document.getElementById('active-tooth-quad').textContent = `Quadrant ${tooth.quad} (${tooth.quad <= 2 ? 'Maxilla' : 'Mandible'})`;
+        document.getElementById('active-tooth-type').textContent = `${tooth.type.toUpperCase()} (${tooth.roots} ${tooth.roots === 1 ? 'Root' : 'Roots'})`;
+
+        // Update 6 probing site mini badges in HUD
+        window.SITES.forEach((s, idx) => {
+          const valElem = document.getElementById(`val-site-${s}`);
+          const badgeElem = document.getElementById(`badge-site-${idx}`);
+          const depth = tooth.probing[s];
+          const bleed = tooth.bleeding[s];
+
+          valElem.textContent = depth + (bleed ? ' *' : '');
+
+          badgeElem.className = "p-1 rounded text-[10px] transition-all ";
+          if (idx === engine.activeSiteIndex) {
+            badgeElem.className += "cell-active bg-cyan-950 border-cyan-400 text-cyan-200 ";
+          } else if (depth >= 5) {
+            badgeElem.className += "cell-danger ";
+          } else if (depth === 4) {
+            badgeElem.className += "cell-warning ";
+          } else {
+            badgeElem.className += "cell-normal ";
+          }
+        });
+      }
+
+      // Build 2D Periodontal Grid Chart Rows
+      function build2DChart() {
+        const tbodyMaxilla = document.getElementById('perio-table-maxilla');
+        const tbodyMandible = document.getElementById('perio-table-mandible');
+
+        tbodyMaxilla.innerHTML = '';
+        tbodyMandible.innerHTML = '';
+
+        // Maxilla (Teeth 1-16): Buccal sites (MB, B, DB) then Lingual sites (ML, L, DL)
+        window.SITES.forEach(site => {
+          const tr = document.createElement('tr');
+          tr.className = "border-b border-slate-800/60";
+          tr.innerHTML = `<td class="p-1 text-left font-bold text-slate-400 bg-slate-950/40">${site}</td>`;
+
+          for (let id = 1; id <= 16; id++) {
+            const td = document.createElement('td');
+            td.id = `cell-${id}-${site}`;
+            td.className = "p-1 cursor-pointer transition border border-slate-800/40 font-bold hover:brightness-125";
+            td.textContent = '2';
+            td.addEventListener('click', () => {
+              engine.selectTooth(id);
+              engine.activeSiteIndex = window.SITES.indexOf(site);
+              updateActiveToothHUD();
+              update2DChart();
+              update3DVisuals();
+            });
+            tr.appendChild(td);
+          }
+          tbodyMaxilla.appendChild(tr);
+        });
+
+        // Mandible (Teeth 17-32)
+        window.SITES.forEach(site => {
+          const tr = document.createElement('tr');
+          tr.className = "border-b border-slate-800/60";
+          tr.innerHTML = `<td class="p-1 text-left font-bold text-slate-400 bg-slate-950/40">${site}</td>`;
+
+          for (let id = 17; id <= 32; id++) {
+            const td = document.createElement('td');
+            td.id = `cell-${id}-${site}`;
+            td.className = "p-1 cursor-pointer transition border border-slate-800/40 font-bold hover:brightness-125";
+            td.textContent = '2';
+            td.addEventListener('click', () => {
+              engine.selectTooth(id);
+              engine.activeSiteIndex = window.SITES.indexOf(site);
+              updateActiveToothHUD();
+              update2DChart();
+              update3DVisuals();
+            });
+            tr.appendChild(td);
+          }
+          tbodyMandible.appendChild(tr);
+        });
+      }
+
+      function update2DChart() {
+        for (let id = 1; id <= 32; id++) {
+          const tooth = engine.teeth[id];
+          if (!tooth) continue;
+
+          window.SITES.forEach((site, sIdx) => {
+            const cell = document.getElementById(`cell-${id}-${site}`);
+            if (!cell) return;
+
+            const depth = tooth.probing[site];
+            const bleed = tooth.bleeding[site];
+
+            cell.textContent = depth;
+            let cls = "p-1 cursor-pointer transition border font-bold hover:brightness-125 ";
+
+            if (id === engine.activeToothId && sIdx === engine.activeSiteIndex) {
+              cls += "cell-active ";
+            }
+
+            if (depth >= 5) {
+              cls += "cell-danger ";
+            } else if (depth === 4) {
+              cls += "cell-warning ";
+            } else {
+              cls += "cell-normal ";
+            }
+
+            if (bleed) {
+              cls += "has-bleeding ";
+            }
+
+            cell.className = cls;
+          });
+        }
+      }
+
+      // Update AAP / EFP Diagnostics and CDT Claim Codes
+      function updateDiagnostics() {
+        const analytics = engine.getAnalytics();
+
+        // Update KPI counters
+        document.getElementById('kpi-bop').textContent = `${analytics.bopPercent}%`;
+        document.getElementById('kpi-bop').className = analytics.bopPercent > 10 ? "text-sm font-bold text-red-400" : "text-sm font-bold text-emerald-400";
+
+        document.getElementById('kpi-mean').textContent = `${analytics.meanDepth}mm`;
+        document.getElementById('kpi-deep').textContent = analytics.deepPocketsCount;
+        document.getElementById('kpi-deep').className = analytics.deepPocketsCount > 0 ? "text-sm font-bold text-red-400" : "text-sm font-bold text-emerald-400";
+
+        document.getElementById('kpi-affected').textContent = `${analytics.affectedTeethPercent}%`;
+
+        // Diagnostic box
+        document.getElementById('diag-staging').textContent = analytics.diagnosis;
+        document.getElementById('diag-grade').textContent = analytics.grade;
+        document.getElementById('diag-description').textContent = analytics.stageDescription;
+
+        // CDT Codes list
+        const cdtContainer = document.getElementById('cdt-code-list');
+        cdtContainer.innerHTML = '';
+        analytics.cdtCodes.forEach(item => {
+          const div = document.createElement('div');
+          div.className = "flex items-center justify-between p-2 rounded bg-slate-800/80 border border-slate-700/80 text-xs";
+          div.innerHTML = `
+            <div class="flex items-center space-x-2">
+              <span class="font-bold text-cyan-400 font-mono">${item.code}</span>
+              <span class="text-slate-300">${item.desc}</span>
+            </div>
+            <div class="font-mono font-bold text-emerald-400">${item.fee}</div>
+          `;
+          cdtContainer.appendChild(div);
+        });
+      }
+
+      // 4. Web Speech API & Audio Simulation
+      let recognition = null;
+      let isRecording = false;
+
+      function initVoiceRecognition() {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SpeechRecognition) {
+          console.warn("Web Speech API not supported in this browser. Simulation modes remain fully operational.");
+          return;
+        }
+
+        recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        recognition.onresult = (event) => {
+          let interimTranscript = '';
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              document.getElementById('transcription-tape').textContent = `HEARD: "${transcript.trim()}"`;
+              // Run parser through engine
+              const actions = engine.parseVoiceTranscript(transcript);
+              if (actions.length > 0) {
+                updateActiveToothHUD();
+                update2DChart();
+                updateDiagnostics();
+                update3DVisuals();
+              }
+            } else {
+              interimTranscript += transcript;
+            }
+          }
+          if (interimTranscript) {
+            document.getElementById('transcription-tape').textContent = `STREAM: "${interimTranscript.trim()}"`;
+          }
+        };
+
+        recognition.onerror = (err) => {
+          console.error("Speech Recognition Error:", err);
+        };
+
+        recognition.onend = () => {
+          if (isRecording) {
+            try { recognition.start(); } catch(e) {}
+          }
+        };
+      }
+
+      // Setup Voice Button
+      const btnVoice = document.getElementById('btn-voice-toggle');
+      const voiceIndicator = document.getElementById('voice-indicator');
+      const voiceText = document.getElementById('voice-btn-text');
+
+      btnVoice.addEventListener('click', () => {
+        if (!recognition) {
+          initVoiceRecognition();
+        }
+
+        if (!isRecording) {
+          try {
+            if (recognition) recognition.start();
+            isRecording = true;
+            voiceIndicator.className = "w-2.5 h-2.5 rounded-full bg-red-400 inline-block recording-pulse";
+            voiceText.textContent = "Listening Hands-Free...";
+            document.getElementById('transcription-tape').textContent = "Listening for dental commands: e.g. 'tooth 14, 5, 4, 6, bleeding'...";
+          } catch(e) {
+            console.error(e);
+          }
+        } else {
+          try {
+            if (recognition) recognition.stop();
+            isRecording = false;
+            voiceIndicator.className = "w-2.5 h-2.5 rounded-full bg-white inline-block";
+            voiceText.textContent = "Start Hands-Free Voice";
+          } catch(e) {
+            console.error(e);
+          }
+        }
+      });
+
+      // Operatory Acoustic Noise Gate Simulator
+      let noiseFilterActive = true;
+      document.getElementById('btn-toggle-noise-filter').addEventListener('click', () => {
+        noiseFilterActive = !noiseFilterActive;
+        const btn = document.getElementById('btn-toggle-noise-filter');
+        const tag = document.getElementById('noise-gate-tag');
+        if (noiseFilterActive) {
+          btn.textContent = "Suction Acoustic Filter: Active";
+          btn.className = "px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[11px] text-slate-300 transition";
+          tag.textContent = "NOISE-GATE ON";
+          tag.className = "text-[9px] text-cyan-400";
+        } else {
+          btn.textContent = "Suction Acoustic Filter: Bypassed";
+          btn.className = "px-2.5 py-1.5 rounded bg-amber-950/70 hover:bg-amber-900 border border-amber-800 text-[11px] text-amber-300 transition";
+          tag.textContent = "RAW AUDIO STREAM";
+          tag.className = "text-[9px] text-amber-400";
+        }
+      });
+
+      // Undo button ("Scratch that")
+      document.getElementById('btn-voice-rollback').addEventListener('click', () => {
+        const undone = engine.rollbackLast();
+        if (undone) {
+          document.getElementById('transcription-tape').textContent = `ROLLBACK: Restored Tooth #${undone.toothId} ${undone.site} to ${undone.prevProbing}mm`;
+          updateActiveToothHUD();
+          update2DChart();
+          updateDiagnostics();
+          update3DVisuals();
+        }
+      });
+
+      // 5. One-Click Demonstration Simulation Presets (Crucial for judging)
+      document.getElementById('demo-routine').addEventListener('click', () => {
+        engine.initChart();
+        document.getElementById('transcription-tape').textContent = "RUNNING: Routine Preventive Prophylaxis Charting (Teeth 1-32, 1-3mm probing)";
+        updateActiveToothHUD();
+        update2DChart();
+        updateDiagnostics();
+        update3DVisuals();
+      });
+
+      document.getElementById('demo-severe').addEventListener('click', () => {
+        engine.initChart();
+        document.getElementById('transcription-tape').textContent = "RUNNING: Generalized Stage III/IV Periodontitis Simulation with active bleeding";
+
+        // Inject deep pockets in Quadrant 1 (Teeth 1, 2, 3, 5)
+        [1, 2, 3, 5].forEach(tId => {
+          engine.setMeasurement(tId, "MB", 6, true);
+          engine.setMeasurement(tId, "B", 5, true);
+          engine.setMeasurement(tId, "DB", 7, false, true);
+          engine.setMeasurement(tId, "ML", 6, true);
+          engine.setMeasurement(tId, "L", 5, false);
+          engine.setMeasurement(tId, "DL", 7, true);
+        });
+
+        // Inject deep pockets in Quadrant 4 (Teeth 30, 31, 32)
+        [30, 31, 32].forEach(tId => {
+          engine.setMeasurement(tId, "MB", 5, true);
+          engine.setMeasurement(tId, "B", 4, false);
+          engine.setMeasurement(tId, "DB", 6, true);
+          engine.setMeasurement(tId, "ML", 7, true);
+          engine.setMeasurement(tId, "L", 5, false);
+          engine.setMeasurement(tId, "DL", 8, true, true);
+        });
+
+        engine.selectTooth(3);
+        updateActiveToothHUD();
+        update2DChart();
+        updateDiagnostics();
+        update3DVisuals();
+      });
+
+      document.getElementById('demo-rollback').addEventListener('click', () => {
+        document.getElementById('transcription-tape').textContent = "VOICE INPUT: 'Tooth 19 mesiobuccal 9 bleeding... scratch that, distal 4'";
+        engine.selectTooth(19);
+        engine.setMeasurement(19, "MB", 9, true);
+        updateActiveToothHUD();
+        update2DChart();
+        updateDiagnostics();
+        update3DVisuals();
+
+        setTimeout(() => {
+          engine.rollbackLast();
+          engine.setMeasurement(19, "DB", 4, false);
+          document.getElementById('transcription-tape').textContent = "CORRECTED: Voice rollback executed seamlessly in 24ms.";
+          updateActiveToothHUD();
+          update2DChart();
+          updateDiagnostics();
+          update3DVisuals();
+        }, 1200);
+      });
+
+      document.getElementById('demo-reset').addEventListener('click', () => {
+        engine.initChart();
+        document.getElementById('transcription-tape').textContent = "Chart reset to baseline 2mm probing depths.";
+        updateActiveToothHUD();
+        update2DChart();
+        updateDiagnostics();
+        update3DVisuals();
+      });
+
+      // 6. Insurance Dossier Modal Setup
+      const modal = document.getElementById('modal-dossier');
+      document.getElementById('btn-insurance-modal').addEventListener('click', openInsuranceModal);
+      document.getElementById('btn-close-modal').addEventListener('click', () => modal.classList.add('hidden'));
+
+      function openInsuranceModal() {
+        const analytics = engine.getAnalytics();
+        
+        document.getElementById('dossier-diagnosis-box').textContent = 
+          `${analytics.diagnosis} // Extent: ${analytics.affectedTeethPercent}% dentition involved. Max probing depth: ${analytics.maxDepth}mm. Bleeding on Probing: ${analytics.bopPercent}%.`;
+
+        const cdtTable = document.getElementById('dossier-cdt-table');
+        cdtTable.innerHTML = '';
+        analytics.cdtCodes.forEach(code => {
+          const row = document.createElement('tr');
+          row.className = "border-b border-slate-800";
+          row.innerHTML = `
+            <td class="p-2 font-bold text-cyan-400">${code.code}</td>
+            <td class="p-2 text-slate-300">${code.desc}</td>
+            <td class="p-2 text-slate-400">${code.teethCount ? code.teethCount + ' diseased teeth' : 'Full mouth'}</td>
+            <td class="p-2 text-right font-bold text-emerald-400">${code.fee}</td>
+          `;
+          cdtTable.appendChild(row);
+        });
+
+        // Claim narrative text
+        let narrative = `CLINICAL MEDICAL NECESSITY STATEMENT FOR PERIODONTAL THERAPY\n`;
+        narrative += `=========================================================================\n`;
+        narrative += `PATIENT: John Doe (ID: CS-2026-88941) | EXAM DATE: ${new Date().toLocaleDateString()}\n`;
+        narrative += `DIAGNOSIS: ${analytics.diagnosis}\n\n`;
+        narrative += `FINDINGS:\n`;
+        narrative += `A full-mouth 6-point comprehensive periodontal examination was conducted using SonoDent AI voice-synchronized charting.\n`;
+        narrative += `- Bleeding on Probing (BOP): ${analytics.bopPercent}% across examined sites.\n`;
+        narrative += `- Mean Probing Depth: ${analytics.meanDepth}mm (Max depth recorded: ${analytics.maxDepth}mm).\n`;
+        narrative += `- Pockets >= 5mm: ${analytics.deepPocketsCount} sites with clinical attachment loss.\n\n`;
+        narrative += `JUSTIFICATION FOR REQUESTED CDT CODES:\n`;
+
+        analytics.cdtCodes.forEach(c => {
+          narrative += `[${c.code}] ${c.desc}: Medically indicated due to active subgingival infection and pocketing exceeding 4mm with bleeding on probing. Scaling and root planing required to arrest active bone loss under AAP/EFP 2018 parameters.\n`;
+        });
+
+        document.getElementById('dossier-narrative-box').textContent = narrative;
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+
+      // Copy narrative to clipboard
+      document.getElementById('btn-copy-narrative').addEventListener('click', () => {
+        const text = document.getElementById('dossier-narrative-box').textContent;
+        navigator.clipboard.writeText(text).then(() => {
+          const btn = document.getElementById('btn-copy-narrative');
+          btn.textContent = "Copied to Clipboard!";
+          setTimeout(() => btn.textContent = "Copy Claim Narrative to CareStack", 2000);
+        });
+      });
+
+      // Numbering system switcher
+      document.getElementById('badge-system-select').addEventListener('click', () => {
+        if (engine.numberingSystem === "universal") {
+          engine.numberingSystem = "fdi";
+          document.getElementById('badge-system-select').textContent = "FDI / ISO 3950";
+        } else {
+          engine.numberingSystem = "universal";
+          document.getElementById('badge-system-select').textContent = "Universal (1-32)";
+        }
+        updateActiveToothHUD();
+      });
+
+      // Initialize Everything
+      initThree();
+      setupCameraPresets();
+      build2DChart();
+      updateActiveToothHUD();
+      update2DChart();
+      updateDiagnostics();
+      update3DVisuals();
+      animate();
+
+    })();
+  </script>
+</body>
+</html>
