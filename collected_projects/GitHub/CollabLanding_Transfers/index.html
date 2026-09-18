@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Transfers</title>
+  <script>
+    try{
+      const saved=localStorage.getItem("transfers-theme");
+      document.documentElement.dataset.theme=saved==="dark"?"dark":"light";
+    }catch(_err){}
+  </script>
+  <link rel="stylesheet" href="styles.css?v=20260918-sms1">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+</head>
+<body>
+<header>
+  <div><small>INTERNAL FREIGHT SCHEDULING</small><h1>Transfers</h1></div>
+  <div class="header-right"><div class="nav"><button id="prev">←</button><button id="today">Today</button><input id="boardDate" type="date"><button id="next">→</button></div><label class="theme-switch" for="themeToggle"><span class="theme-label light-label">Light</span><input id="themeToggle" type="checkbox" role="switch" aria-label="Toggle dark theme"><span class="switch-track"><span class="switch-thumb"></span></span><span class="theme-label dark-label">Dark</span></label><div class="user-session"><span id="me"></span><small id="email"></small><button id="signout" class="hidden">Sign Out</button></div></div>
+</header>
+<main>
+  <aside>
+    <section class="panel">
+      <h2 id="formTitle">Build Transfer Load</h2>
+      <form id="form">
+        <input id="editId" type="hidden">
+        <div class="row three">
+          <label>Scheduled Date<input id="date" type="date" required></label>
+          <label>Scheduled Time<input id="time" type="time" step="900" required></label>
+          <label>Load Duration
+            <select id="duration" required>
+              <option value="30">30 min</option><option value="60" selected>1 hour</option><option value="90">1 hr 30 min</option><option value="120">2 hours</option><option value="150">2 hr 30 min</option><option value="180">3 hours</option><option value="210">3 hr 30 min</option><option value="240">4 hours</option>
+            </select>
+          </label>
+        </div>
+        <label>Driver<select id="driver" required></select></label>
+        <div class="row">
+          <label>Load Origination<select id="origin" required></select></label>
+          <label>Load Destination<select id="destination" required></select></label>
+        </div>
+        <div class="row job-row">
+          <label>Pallet Count<input id="pallet" type="number" min="0" max="999" required></label>
+          <label>Job Number / Notes<input id="job" required></label>
+        </div>
+        <label>Order Status
+          <select id="status" required>
+            <option value="Planned">Planned</option>
+            <option value="Loading" selected>Loading</option>
+            <option value="Loaded">Loaded</option>
+            <option value="In Transit">In Transit</option>
+            <option value="Delivered">Delivered</option>
+          </select>
+        </label>
+        <button class="primary" type="submit" id="save">Add Transfer</button>
+        <button type="button" class="hidden" id="duplicate">Duplicate Transfer</button>
+        <button type="button" class="hidden" id="textDriver">Text Driver</button>
+        <button type="button" class="danger hidden" id="delete">Delete Transfer</button>
+        <button type="button" class="hidden" id="cancel">Cancel Edit</button>
+        <p id="msg"></p>
+      </form>
+    </section>
+    <section class="panel recent-activity-panel">
+      <div class="section-heading"><div><h2>Recent Activity</h2><p>Latest transfer changes</p></div><span id="mode" class="mode-badge">Demo</span></div>
+      <div id="recentActivity" class="activity-list"><div class="activity-empty">Loading activity…</div></div>
+    </section>
+  </aside>
+  <section class="panel board">
+    <div class="boardhead"><div><small>DAILY SCHEDULE</small><h2 id="title">Transfer Board</h2></div></div>
+    <div id="gridWrap"><div id="grid"></div></div>
+  </section>
+  <aside class="right-sidebar">
+    <section class="panel chat-panel" aria-label="Team chat">
+      <div class="chat-heading"><h2>Team Chat</h2><small>LIVE</small></div>
+      <div id="chatList" class="chat-list" aria-live="polite"><div class="chat-empty">Loading chat…</div></div>
+      <div id="chatNote" class="chat-note" aria-live="polite"></div>
+      <form id="chatForm" class="chat-form">
+        <textarea id="chatInput" maxlength="500" rows="2" placeholder="Type a message…" aria-label="Chat message"></textarea>
+        <button id="chatSend" class="primary" type="submit">Send</button>
+      </form>
+    </section>
+    <section class="panel active-users-panel" aria-label="Active users">
+      <div class="active-users-heading"><h2>Active Users</h2><span id="activeUsersCount" class="active-count">0</span></div>
+      <div id="active" class="active-users-list"><div class="active-empty">Connecting…</div></div>
+    </section>
+  </aside>
+</main>
+<div id="optionModal" class="modal hidden" role="dialog" aria-modal="true">
+  <form id="optionForm" class="modalbox">
+    <div class="modalhead"><div><small id="optionEyebrow">NEW OPTION</small><h2 id="optionTitle">Add a Driver</h2></div><button type="button" id="optionClose" class="iconbtn">×</button></div>
+    <label id="optionLabel">Driver Name<input id="optionName" autocomplete="off" required></label>
+    <div class="modalactions"><button type="button" id="optionCancel">Cancel</button><button class="primary" type="submit">Add</button></div>
+    <p id="optionMsg"></p>
+  </form>
+</div>
+<div id="smsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="smsTitle">
+  <form id="smsForm" class="modalbox sms-modalbox">
+    <div class="modalhead">
+      <div><small>DRIVER MESSAGE</small><h2 id="smsTitle">Text Driver</h2></div>
+      <button type="button" id="smsClose" class="iconbtn" aria-label="Close">×</button>
+    </div>
+    <div id="smsTransferSummary" class="sms-transfer-summary"></div>
+    <label>Driver Phone
+      <input id="smsPhone" type="tel" autocomplete="tel" placeholder="(214) 555-1234" required>
+    </label>
+    <div class="sms-template-label">Message Template</div>
+    <div class="sms-presets">
+      <button type="button" data-sms-template="assignment">Assignment</button>
+      <button type="button" data-sms-template="update">Update</button>
+      <button type="button" data-sms-template="delay">Delay</button>
+    </div>
+    <label>Message
+      <textarea id="smsMessage" maxlength="1600" rows="7" required></textarea>
+    </label>
+    <div class="sms-message-meta"><span id="smsChars">0 / 1600</span><span>Editable before sending</span></div>
+    <div class="modalactions">
+      <button type="button" id="smsCancel">Cancel</button>
+      <button class="primary" type="submit" id="smsSend">Send SMS</button>
+    </div>
+    <p id="smsMsg"></p>
+    <div class="sms-history-wrap">
+      <div class="sms-history-title">Recent texts for this transfer</div>
+      <div id="smsHistory" class="sms-history"><div class="sms-history-empty">No texts sent yet.</div></div>
+    </div>
+  </form>
+</div>
+<div id="login" class="login hidden">
+  <form id="loginForm" class="loginbox"><h1>Transfers</h1><p>Sign in to the transfer board.</p><input id="loginEmail" type="email" placeholder="Email" required><input id="loginPassword" type="password" placeholder="Password" required><button class="primary">Sign In</button><p id="loginMsg"></p></form>
+</div>
+<script src="app.js?v=20260918-sms1"></script>
+<script src="order-status.js"></script>
+<script src="recent-activity.js"></script>
+<script src="duplicate-transfer.js"></script>
+<script src="theme.js"></script>
+<script src="chat.js"></script>
+<script src="sms.js?v=20260918-sms1"></script>
+</body>
+</html>
