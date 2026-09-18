@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>E-CRM Studio — Sistem Penjualan Terintegrasi</title>
+  <meta name="description" content="E-CRM Studio: Mockup sistem penjualan sederhana yang terintegrasi dengan Electronic Customer Relationship Management." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Stylesheet utama -->
+  <link rel="stylesheet" href="css/style.css" />
+
+  <!-- Library eksternal untuk fitur Chart, Export Excel & Export PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+  <!-- Firebase (Cloud Firestore) — untuk sinkronisasi data online antar perangkat -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<!-- LOGIN PAGE DIBUANG UNTUK OPEN ACCESS -->
+
+<!-- ===================== WELCOME GATE PAGE (halaman sendiri, TANPA sidebar) ===================== -->
+<div id="welcomeGatePage" class="welcome-gate-page hidden">
+  <div class="welcome-gate-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <!-- LAYAR "JOINING" ALA ZOOM — tampil sekilas sebelum notifikasi Selamat Datang -->
+  <div id="joiningScreen" class="joining-screen hidden">
+    <div class="joining-logo-ring"><div class="joining-logo-inner" id="joiningLogoInner"></div></div>
+    <div class="joining-title">Menghubungkan ke Alviero Studio<span class="joining-dots"><span>.</span><span>.</span><span>.</span></span></div>
+    <div class="joining-sub">Mohon tunggu sebentar, sedang menyiapkan halaman untuk Anda</div>
+  </div>
+
+  <div class="welcome-gate-card hidden" id="welcomeGateCard">
+    <!-- STEP 1: Notifikasi Selamat Datang -->
+    <div id="welcomeGateStep1">
+      <div class="welcome-gate-logo" id="welcomeGateLogo"></div>
+      <h1 class="welcome-gate-title">Selamat Datang di Alviero Studio</h1>
+      <p class="welcome-gate-sub">Terima kasih sudah mampir! Yuk lanjutkan untuk memilih lokasi studio yang ingin Anda datangi, lalu lihat katalog paket foto terbaik kami.</p>
+      <div id="welcomeGateRatingBadge"></div>
+      <div id="welcomeGateReviewList"></div>
+      <button class="btn btn-primary btn-full" style="padding:14px;font-size:1rem" onclick="goToWelcomeGateStep2()">Lanjut ➜</button>
+    </div>
+
+    <!-- STEP 2: Lokasi -->
+    <div id="welcomeGateStep2" class="hidden">
+      <h1 class="welcome-gate-title" style="margin-bottom:4px">📍 Lokasi Studio</h1>
+      <p class="welcome-gate-sub">Silakan tentukan lokasi studio yang ingin Anda datangi untuk sesi pemotretan.</p>
+      <div id="welcomeGateLokasiWrap" class="welcome-gate-lokasi-wrap"></div>
+      <button class="btn btn-primary btn-full" id="welcomeGateBtn" style="margin-top:22px;padding:14px;font-size:1rem" onclick="proceedFromWelcomeGate()">Lihat Katalog 🛍️</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== APP SHELL ===================== -->
+<div id="appShell" class="app-shell hidden">
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <svg width="28" height="28" viewBox="0 0 36 36" fill="none">
+          <rect width="36" height="36" rx="6" fill="#2255C4"/>
+          <path d="M8 12h20M8 18h14M8 24h17" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+          <circle cx="27" cy="24" r="5" fill="#D7263D"/>
+          <path d="M25 24l1.5 1.5L29 22" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Alviero Studio</span>
+      </div>
+      <button class="sidebar-close" onclick="toggleSidebar()" id="sidebarCloseBtn">✕</button>
+    </div>
+
+    <!-- Admin Menu (Tersembunyi secara default) -->
+    <nav id="adminMenu" class="sidebar-nav hidden">
+      <div class="nav-item-wrap">
+        <a href="#" class="nav-item active" data-page="adminDashboard" onclick="navigateTo('adminDashboard',this)">
+          <span class="nav-icon">📊</span><span>Dashboard</span>
+        </a>
+      </div>
+      <div class="nav-section-label">Master Data</div>
+      <div class="nav-item-wrap">
+        <a href="#" class="nav-item" data-page="dataPelanggan" onclick="navigateTo('dataPelanggan',this)">
+          <span class="nav-icon">👥</span><span>Data Pelanggan</span>
+        </a>
+        <a href="#" class="nav-item" data-page="dataProduk" onclick="navigateTo('dataProduk',this)">
+          <span class="nav-icon">📦</span><span>Data Produk & Harga</span>
+        </a>
+      </div>
+      <div class="nav-section-label">Transaksi</div>
+      <div class="nav-item-wrap">
+        <a href="#" class="nav-item" data-page="pesananInvoice" onclick="navigateTo('pesananInvoice',this)">
+          <span class="nav-icon">🧾</span><span>Pesanan & Invoice</span>
+        </a>
+        <a href="#" class="nav-item" data-page="pembayaran" onclick="navigateTo('pembayaran',this)">
+          <span class="nav-icon">💳</span><span>Pembayaran</span>
+        </a>
+        <a href="#" class="nav-item" data-page="penerimaanKas" onclick="navigateTo('penerimaanKas',this)">
+          <span class="nav-icon">💰</span><span>Penerimaan Kas</span>
+        </a>
+      </div>
+      <div class="nav-section-label">E-CRM</div>
+      <div class="nav-item-wrap">
+        <a href="#" class="nav-item" data-page="profilPelanggan" onclick="navigateTo('profilPelanggan',this)">
+          <span class="nav-icon">🎯</span><span>Profil Pelanggan</span>
+        </a>
+        <a href="#" class="nav-item" data-page="riwayatPembelian" onclick="navigateTo('riwayatPembelian',this)">
+          <span class="nav-icon">📋</span><span>Riwayat Pembelian</span>
+        </a>
+        <a href="#" class="nav-item" data-page="poinLoyalitas" onclick="navigateTo('poinLoyalitas',this)">
+          <span class="nav-icon">⭐</span><span>Poin Loyalitas</span>
+        </a>
+      </div>
+      <div class="nav-section-label">Laporan</div>
+      <div class="nav-item-wrap">
+        <a href="#" class="nav-item" data-page="laporan" onclick="navigateTo('laporan',this)">
+          <span class="nav-icon">📈</span><span>Laporan</span>
+        </a>
+      </div>
+    </nav>
+
+    <!-- Customer Menu -->
+    <nav id="customerMenu" class="sidebar-nav hidden">
+      <div class="nav-item-wrap">
+        <!-- Halaman yang diminta user: modul produk harga, transaksi dan riwayat pembelian -->
+        <a href="#" class="nav-item" data-page="katalogProduk" onclick="navigateTo('katalogProduk',this)">
+          <span class="nav-icon">🛍️</span><span>Katalog Produk</span>
+        </a>
+        <a href="#" class="nav-item" data-page="keranjang" onclick="navigateTo('keranjang',this)">
+          <span class="nav-icon">🛒</span><span>Keranjang <span id="cartBadge" class="cart-badge hidden">0</span></span>
+        </a>
+        <a href="#" class="nav-item" data-page="pesananSaya" onclick="navigateTo('pesananSaya',this)">
+          <span class="nav-icon">📄</span><span>Transaksi & Riwayat</span>
+        </a>
+      </div>
+    </nav>
+
+
+  </aside>
+
+  <!-- OVERLAY -->
+  <div id="sidebarOverlay" class="sidebar-overlay hidden" onclick="toggleSidebar()"></div>
+
+  <!-- MAIN -->
+  <div class="main-wrap">
+    <!-- TOPBAR -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button class="hamburger" onclick="toggleSidebar()" id="hamburgerBtn">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="brand-square-logo" title="Alviero Studio">A</div>
+        <span class="brand-name-topbar">Alviero Studio</span>
+        <div class="topbar-breadcrumb" id="topbarTitle" ondblclick="instantToggleRole()" style="user-select:none;" title="Klik ganda untuk ganti mode">Dashboard</div>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-icon" onclick="refreshCurrentPage()" title="Perbarui Data Terbaru" style="margin-right:4px">🔄</button>
+        <div class="notif-bell-wrap hidden" id="custNotifBell" style="position:relative">
+          <button class="btn btn-icon" onclick="toggleNotifDropdown(event)" id="notifBellBtn" title="Notifikasi Jadwal & Pembayaran">
+            🔔<span id="notifBadge" class="notif-badge hidden">0</span>
+          </button>
+          <div id="notifDropdown" class="notif-dropdown hidden"></div>
+        </div>
+        <div class="topbar-date" id="topbarDate"></div>
+        <div class="topbar-user" id="topbarUser">
+          <div class="user-avatar" id="userAvatar">A</div>
+          <div class="user-info">
+            <div class="user-name" id="userName">Admin</div>
+            <div class="user-role" id="userRole">Administrator</div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- PAGE CONTENT -->
+    <main class="main-content" id="mainContent">
+      <!-- Pages injected here by JS -->
+    </main>
+  </div>
+</div>
+
+<!-- ===================== MODAL CONTAINER ===================== -->
+<div id="modalOverlay" class="modal-overlay hidden" onclick="closeModal(event)">
+  <div class="modal-box" id="modalBox">
+    <button class="modal-close" onclick="closeModalBtn()">✕</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<!-- ===================== TOAST ===================== -->
+<div id="toastContainer" class="toast-container"></div>
+
+<!-- ===================== FLOATING WHATSAPP ADMIN 2 ===================== -->
+<a href="https://wa.me/6285168879214?text=Halo%20Admin,%20saya%20ingin%20bertanya%20mengenai%20pemotretan%20studio"
+   target="_blank"
+   rel="noopener noreferrer"
+   id="waAdmin2FloatingBtn"
+   class="wa-floating-btn"
+   aria-label="Chat WhatsApp Admin 2"
+   title="Chat WhatsApp Admin 2">
+  <svg class="wa-icon" viewBox="0 0 24 24" width="30" height="30" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path fill-rule="evenodd" clip-rule="evenodd" d="M18.403 5.638A8.919 8.919 0 0 0 12.053 3c-4.948 0-8.976 4.027-8.978 8.977 0 1.582.413 3.126 1.2 4.488L3 21.116l4.759-1.249a8.981 8.981 0 0 0 4.29 1.09h.004c4.947 0 8.975-4.027 8.977-8.977a8.926 8.926 0 0 0-2.627-6.342m-6.35 13.812h-.003a7.446 7.446 0 0 1-3.798-1.041l-.272-.162-2.824.741.753-2.753-.177-.282a7.448 7.448 0 0 1-1.141-3.971c.002-4.114 3.351-7.462 7.468-7.462a7.434 7.434 0 0 1 5.279 2.188 7.435 7.435 0 0 1 2.183 5.279c-.002 4.114-3.351 7.463-7.465 7.463m4.093-5.595c-.225-.113-1.327-.655-1.533-.73-.205-.075-.354-.112-.504.112s-.58.729-.711.879-.262.168-.486.056-.948-.349-1.804-1.113c-.667-.595-1.117-1.33-1.248-1.555s-.014-.346.099-.458c.101-.1.224-.262.336-.393.112-.131.149-.224.224-.374.075-.15.037-.281-.019-.393s-.505-1.217-.692-1.666c-.182-.438-.367-.378-.504-.385l-.43-.008c-.149 0-.393.056-.599.28-.205.224-.786.767-.786 1.87 0 1.104.804 2.171.916 2.321s1.582 2.415 3.832 3.387c.536.231.954.369 1.279.473.537.171 1.026.147 1.413.089.431-.064 1.327-.542 1.514-1.066.187-.524.187-.973.131-1.066-.056-.093-.206-.15-.431-.262" fill="#ffffff"/>
+  </svg>
+  <span class="wa-tooltip">Chat Admin 2</span>
+</a>
+
+
+<!-- ===================== JAVASCRIPT (urutan wajib sesuai) ===================== -->
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+<script src="js/pages-admin.js"></script>
+<script src="js/pages-customer.js"></script>
+</body>
+</html>
