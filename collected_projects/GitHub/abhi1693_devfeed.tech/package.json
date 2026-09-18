@@ -1,0 +1,62 @@
+{
+  "name": "devfeed-web-workspace",
+  "version": "0.0.29",
+  "private": true,
+  "workspaces": [
+    "apps/admin",
+    "apps/web",
+    "packages/theme",
+    "packages/ui",
+    "packages/telemetry"
+  ],
+  "scripts": {
+    "extension:build": "node apps/extensions/build.mjs",
+    "extension:check": "tsc --project apps/extensions/tsconfig.json",
+    "extension:test": "node --test apps/extensions/tests/*.test.mjs",
+    "extension:test:browser": "npm run extension:build && node --test apps/extensions/tests/*.browser.mjs",
+    "extension:package": "npm run extension:check && npm run extension:test && npm run extension:build && python3 apps/extensions/package.py",
+    "admin:dev": "npm run dev --workspace @devfeed/admin",
+    "admin:build": "npm run build --workspace @devfeed/admin",
+    "admin:start": "npm run start --workspace @devfeed/admin",
+    "admin:lint": "npm run format:typescript:check && npm run lint --workspace @devfeed/admin",
+    "admin:test": "npm run test --workspace @devfeed/admin",
+    "admin:test:browser": "node apps/admin/tests/browser/overview.mjs",
+    "admin:generate": "uv run python scripts/export_admin_openapi.py && npm run generate --workspace @devfeed/admin",
+    "web:dev": "npm run dev --workspace @devfeed/web",
+    "web:build": "npm run build --workspace @devfeed/web",
+    "web:start": "npm run start --workspace @devfeed/web",
+    "web:lint": "npm run format:typescript:check && npm run lint --workspace @devfeed/web",
+    "web:test": "npm run test --workspace @devfeed/web",
+    "ci:admin-web-test": "bash .github/scripts/admin-web-test.sh",
+    "ci:user-web-test": "bash .github/scripts/user-web-test.sh",
+    "hooks:install": "uv run --locked pre-commit install --install-hooks",
+    "hooks:check": "uv run --locked pre-commit run --all-files",
+    "format": "npm run format:python && npm run format:typescript",
+    "format:check": "npm run format:python:check && npm run format:typescript:check",
+    "format:python": "uv run --locked ruff format .",
+    "format:python:check": "uv run --locked ruff format --check .",
+    "format:typescript": "prettier --write \"**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}\"",
+    "format:typescript:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mjs,cjs,mts,cts}\"",
+    "dev:seed": "python3 scripts/seed_dev.py",
+    "extension:edge:build": "node apps/extensions/build.mjs edge",
+    "extension:edge:package": "npm run extension:check && npm run extension:test && npm run extension:edge:build && python3 apps/extensions/package.py edge",
+    "extension:edge:test:browser": "npm run extension:edge:build && DEVFEED_EXTENSION_BROWSER=edge node --test apps/extensions/tests/*.browser.mjs",
+    "reader:test:parity": "npm run web:build && node apps/web/tests/browser/feed.mjs && npm run extension:test:browser && npm run extension:edge:test:browser",
+    "ci:reader-parity": "bash scripts/ci/reader-parity.sh",
+    "extension:build:all": "npm run extension:build && npm run extension:edge:build"
+  },
+  "engines": {
+    "node": ">=22.13"
+  },
+  "overrides": {
+    "orval": {
+      "js-yaml": "4.3.2"
+    }
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "eslint-config-prettier": "10.1.8",
+    "playwright": "1.62.1",
+    "prettier": "3.9.6"
+  }
+}
