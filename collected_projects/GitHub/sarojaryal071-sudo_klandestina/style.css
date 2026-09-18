@@ -1,0 +1,868 @@
+/* Klandestina — style.css
+   All visual styling lives here. Nothing in this file decides WHAT content
+   appears (that's data/menu.json + script.js) — only how it looks. */
+
+:root {
+  --accent: #ff5a36;
+  --bg: #120d0c;
+  --bg-alt: #171110;
+  --ink: #f5ede1;
+
+  /* Tones for raised/extruded chrome (ghost buttons, tabs, the floating
+     nav) that can't be derived from --ink/--accent by simple alpha blends —
+     each theme picks its own values below. */
+  --surface: #1e1613;
+  --surface-edge: #0b0706;
+  --accent-shadow: #b53c20;
+  --glass: rgba(18, 13, 12, 0.65);
+  --footer-bg: #0c0908;
+  --card-shadow: 0 24px 48px -16px rgba(0,0,0,0.7);
+}
+
+/* Light theme. Default/dark stays the values above; this overrides them
+   when the visitor is on light mode (see the toggle wiring in script.js). */
+:root[data-theme="light"] {
+  --accent: #d94a2b;
+  --bg: #f7f3ea;
+  --bg-alt: #efe7d8;
+  --ink: #221f1a;
+
+  --surface: #ece1cd;
+  --surface-edge: #cdbfa4;
+  --accent-shadow: #a83a20;
+  --glass: rgba(247, 243, 234, 0.72);
+  --footer-bg: #e6dac2;
+  --card-shadow: 0 24px 48px -16px rgba(34,31,26,0.28);
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-x: hidden;
+  transition: background 0.25s ease, color 0.25s ease;
+}
+a { color: inherit; text-decoration: none; }
+
+h1, h2, h3 {
+  font-family: "Bebas Neue", sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.container { max-width: 1180px; margin: 0 auto; }
+section { position: relative; padding: 130px 56px; }
+.section-head { max-width: 620px; margin: 0 auto 60px; text-align: center; }
+.section-head h2 { font-size: clamp(38px, 5vw, 60px); margin-top: 10px; }
+
+/* Ambient background for sections with no real photography of their own
+   yet (Menu, Visit) — the same radial-glow-over-var(--bg) technique
+   .hero already uses, reused rather than invented fresh so it reads as
+   one system. Isolated in its own class, applied directly on the
+   <section> in index.html, so it's a one-line removal once real photos
+   make it unnecessary there — nothing else about those sections depends
+   on it. */
+.section-ambient {
+  background:
+    radial-gradient(55% 45% at 12% 8%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%),
+    radial-gradient(45% 40% at 92% 88%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%),
+    var(--bg);
+}
+
+@media (max-width: 900px) {
+  /* Desktop's 130px top padding was carrying straight over to mobile, so
+     jumping to a section via the hamburger nav (below) landed with a
+     disproportionately large gap above the heading — most noticeable on
+     Menu since its tabs sit right there to make the empty space obvious,
+     but every section had it equally. */
+  section { padding: 64px 24px; }
+
+  /* scroll-margin-top so an anchor jump lands just below the fixed mobile
+     topbar (measured at 69px) instead of tucked underneath it — 16px of
+     breathing room on top of that. Only the nav-jump targets need this
+     (Home/hero, Story, Menu, Gallery, Find Us — the same five links in
+     mobileNav.js); desktop doesn't get this rule at all since it has no
+     fixed topbar to clear in the first place. */
+  #hero, #story, #menu, #gallery, #visit { scroll-margin-top: 85px; }
+}
+
+/* ---------- 3D buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 30px;
+  border-radius: 8px;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  border: none;
+  cursor: pointer;
+  transform: translateY(0);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #1a0f0a;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.35) inset, 0 6px 0 0 var(--accent-shadow), 0 14px 26px -8px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.btn-primary:hover { transform: translateY(-3px); box-shadow: 0 1px 0 rgba(255,255,255,0.35) inset, 0 9px 0 0 var(--accent-shadow), 0 22px 34px -10px color-mix(in srgb, var(--accent) 60%, transparent); }
+.btn-primary:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(255,255,255,0.25) inset, 0 2px 0 0 var(--accent-shadow); }
+.btn-ghost {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 6px 0 0 var(--surface-edge), 0 14px 26px -10px rgba(0,0,0,0.6);
+}
+.btn-ghost:hover { transform: translateY(-3px); }
+.btn-ghost:active { transform: translateY(3px); }
+
+/* ---------- Shortcut pill nav ---------- */
+.shortcut-nav {
+  position: fixed; top: 22px; left: 50%; transform: translateX(-50%); z-index: 50;
+  display: flex; gap: 4px; padding: 6px; border-radius: 999px;
+  background: var(--glass);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 16px 40px -16px rgba(0,0,0,0.7);
+}
+.shortcut-nav a {
+  position: relative; padding: 9px 18px; font-size: 12px; font-weight: 600;
+  letter-spacing: 0.06em; text-transform: uppercase; border-radius: 999px;
+  color: color-mix(in srgb, var(--ink) 60%, transparent); transition: color 0.2s ease;
+}
+.shortcut-nav a.active { color: #1a0f0a; }
+.shortcut-nav a .pill-fill {
+  position: absolute; inset: 0; border-radius: 999px; background: var(--accent);
+  opacity: 0; transform: scale(0.85); transition: opacity 0.25s ease, transform 0.25s ease; z-index: -1;
+}
+.shortcut-nav a.active .pill-fill { opacity: 1; transform: scale(1); }
+.shortcut-nav a:hover:not(.active) { color: var(--ink); }
+@media (max-width: 720px) { .shortcut-nav { display: none; } }
+
+#brand-mark {
+  position: fixed; top: 24px; left: 32px; z-index: 50;
+  font-family: "Bebas Neue", sans-serif; font-size: 22px; letter-spacing: 0.04em;
+}
+@media (max-width: 900px) { #brand-mark { display: none; } }
+
+/* Shared wordmark/logo image (components/logo.js), used inside #brand-mark,
+   .mobile-topbar-brand, .mobile-nav-brand, and .footer-logo — one base rule
+   plus a per-placement height so the same image reads as "topbar-sized" in
+   the nav and noticeably larger in the footer, without needing separate
+   image files per spot. If data/site.json has no `logo` set, or the file
+   404s/fails to decode, these containers instead hold the plain text mark
+   they always rendered (components/logo.js's onerror fallback) — sized off
+   each container's own font-size above/below, untouched by this block. */
+.brand-logo-img { display: block; width: auto; height: 26px; }
+#brand-mark .brand-logo-img { height: 26px; }
+.footer-logo .brand-logo-img { height: 42px; }
+.mobile-nav-brand .brand-logo-img { height: 36px; }
+
+/* The provided logo file is white letter-fill + black drop-shadow, drawn
+   for a dark background — on dark theme it's crisp, but on light theme's
+   cream background the white fill nearly vanishes, leaving only a faint
+   shadow-outline ghost (confirmed by rendering it against both theme
+   backgrounds directly). Rather than asking for a second logo file,
+   inverting it under light theme turns it into black fill + white
+   shadow, which reads cleanly there too — same asset, no new file. If a
+   real two-tone brand file arrives later, this is the rule to remove. */
+:root[data-theme="light"] .brand-logo-img { filter: invert(1); }
+
+/* ---------- Utility bar: language switch + theme toggle ---------- */
+.utility-bar {
+  position: fixed; top: 22px; right: 32px; z-index: 50;
+  display: flex; align-items: center; gap: 14px;
+}
+.lang-switch {
+  display: flex; align-items: center; gap: 6px;
+  padding: 8px 12px; border-radius: 999px;
+  background: var(--glass);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  backdrop-filter: blur(16px);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+}
+.lang-option {
+  background: none; border: none; padding: 2px; margin: 0; cursor: pointer;
+  font: inherit; letter-spacing: inherit; color: color-mix(in srgb, var(--ink) 55%, transparent);
+  transition: color 0.18s ease;
+}
+.lang-option:hover:not(.active) { color: var(--ink); }
+.lang-option.active { color: var(--accent); }
+.lang-sep { color: color-mix(in srgb, var(--ink) 25%, transparent); font-size: 11px; }
+
+.theme-toggle {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--glass);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  backdrop-filter: blur(16px);
+  color: var(--ink); cursor: pointer;
+  transition: transform 0.18s ease, color 0.18s ease;
+}
+.theme-toggle:hover { transform: translateY(-2px); color: var(--accent); }
+.theme-toggle .icon-moon { display: none; }
+:root[data-theme="light"] .theme-toggle .icon-sun { display: none; }
+:root[data-theme="light"] .theme-toggle .icon-moon { display: block; }
+
+/* ---------- Mobile topbar (<=900px only) ---------- */
+.mobile-topbar { display: none; }
+@media (max-width: 900px) {
+  .utility-bar { display: none; }
+
+  .mobile-topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 60;
+    padding: 16px 20px;
+    background: var(--glass);
+    border-bottom: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+    backdrop-filter: blur(16px);
+    box-shadow: 0 16px 40px -16px rgba(0,0,0,0.7);
+    transition: transform 0.3s ease;
+  }
+  .mobile-topbar.topbar--hidden { transform: translateY(-100%); }
+
+  .mobile-topbar-brand {
+    font-family: "Bebas Neue", sans-serif; font-size: 20px; letter-spacing: 0.04em; color: var(--ink);
+  }
+  .mobile-topbar-brand .brand-logo-img { height: 24px; }
+  .mobile-topbar-controls { display: flex; align-items: center; gap: 10px; }
+
+  /* These reuse .lang-switch/.theme-toggle's text/icon styling but drop the
+     glass pill chrome, since the topbar itself already provides that. */
+  .mobile-topbar .lang-switch {
+    background: none; border: none; backdrop-filter: none; padding: 0;
+  }
+  .mobile-topbar .theme-toggle {
+    background: none; border: none; backdrop-filter: none;
+  }
+
+  .mobile-nav-toggle {
+    display: flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border-radius: 50%;
+    background: none; border: none;
+    font-size: 20px; line-height: 1; color: var(--ink); cursor: pointer;
+    transition: color 0.18s ease;
+  }
+  .mobile-nav-toggle:hover { color: var(--accent); }
+}
+
+@media (max-width: 480px) {
+  /* .utility-bar itself is already hidden at <=900px (mobile topbar takes
+     over) — these two still matter there since they also size the topbar's
+     nested lang-switch/theme-toggle instances. */
+  .lang-switch { padding: 6px 9px; }
+  .theme-toggle { width: 32px; height: 32px; }
+}
+
+/* ---------- Mobile nav overlay (<=900px only) ---------- */
+/* Full-screen, opened by .mobile-nav-toggle in the mobile topbar. z-index
+   95 sits above the FAB (90) — no reason for the FAB to float above an
+   open nav — but below the event modal (100), which should always win.
+   Background is the same radial-glow-over-var(--bg) treatment as .hero,
+   so it reads as part of the site rather than a flat blank screen; being
+   built from --bg/--accent means it re-themes for free under
+   :root[data-theme="light"], no separate override needed. */
+.mobile-nav-overlay {
+  position: fixed; inset: 0; z-index: 95;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background:
+    radial-gradient(90% 55% at 50% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 60%),
+    radial-gradient(70% 45% at 85% 100%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%),
+    var(--bg);
+}
+.mobile-nav-overlay[hidden] { display: none; }
+
+/* Entrance/exit are separate keyframes (not a single transition) so the
+   overlay always renders its "from" state on the very first frame after
+   [hidden] is removed, with no flash of unstyled content. --closing plays
+   while [hidden] is still absent (JS removes it only once this finishes),
+   so the slide-up is actually visible instead of an instant cut. The
+   panel itself only ever slides (no opacity animation on the backdrop) —
+   animating its opacity too briefly let the page behind it show through
+   mid-fade, since the backdrop gradient itself would turn translucent. */
+.mobile-nav-overlay--open { animation: mobileNavIn 0.3s ease both; }
+.mobile-nav-overlay--closing { animation: mobileNavOut 0.2s ease both; }
+@keyframes mobileNavIn { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+@keyframes mobileNavOut { from { transform: translateY(0); } to { transform: translateY(-100%); } }
+
+.mobile-nav-close {
+  position: absolute; top: 20px; right: 20px;
+  width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid color-mix(in srgb, var(--ink) 8%, transparent);
+  font-size: 20px; line-height: 1; cursor: pointer;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 4px 0 0 var(--surface-edge), 0 10px 20px -8px rgba(0,0,0,0.5);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, color 0.18s ease;
+}
+.mobile-nav-close:hover { color: var(--accent); transform: translateY(-2px); }
+.mobile-nav-close:active { transform: translateY(2px); box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 1px 0 0 var(--surface-edge); }
+
+.mobile-nav-brand {
+  font-family: "Bebas Neue", sans-serif; font-size: 30px; letter-spacing: 0.04em;
+  margin-bottom: 44px; color: var(--ink);
+}
+.mobile-nav-brand span { color: var(--accent); }
+
+.mobile-nav-links { display: flex; flex-direction: column; align-items: center; }
+.mobile-nav-divider { width: 36px; height: 1px; margin: 6px 0; background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.mobile-nav-links a {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  padding: 10px 40px; border-radius: 14px;
+  font-family: "Bebas Neue", sans-serif; font-size: 38px; letter-spacing: 0.03em;
+  color: var(--ink); text-transform: uppercase; transition: color 0.18s ease;
+}
+/* The label sits in its own span (translated independently by
+   applyTranslations()) so it can be layered above .pill-fill — same split
+   nav.js uses for the desktop pills, reused here for the same hover/tap
+   treatment: a solid accent shape growing in behind the text. */
+.mobile-nav-links a > span:last-child { position: relative; z-index: 1; }
+.mobile-nav-links a .pill-fill {
+  position: absolute; inset: 4px; border-radius: 10px; background: var(--accent);
+  opacity: 0; transform: scale(0.85); transition: opacity 0.2s ease, transform 0.2s ease; z-index: 0;
+}
+.mobile-nav-links a:hover .pill-fill, .mobile-nav-links a:active .pill-fill, .mobile-nav-links a:focus-visible .pill-fill {
+  opacity: 1; transform: scale(1);
+}
+.mobile-nav-links a:hover, .mobile-nav-links a:active, .mobile-nav-links a:focus-visible { color: #1a0f0a; }
+
+/* Staggered entrance — each link's animation-delay is set inline by
+   mobileNav.js (60ms apart), so this only needs to define what plays;
+   .mobile-nav-overlay--closing intentionally doesn't re-trigger it — the
+   links just revert to their resting opacity/position instantly while the
+   overlay itself fades out around them, which reads fine over 200ms. */
+.mobile-nav-overlay--open .mobile-nav-brand,
+.mobile-nav-overlay--open .mobile-nav-links a {
+  animation: mobileNavItemIn 0.3s ease both;
+}
+@keyframes mobileNavItemIn { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+@media (min-width: 901px) {
+  /* The toggle that opens this is only reachable inside the mobile topbar
+     (itself hidden above 900px), but guard the overlay directly too in
+     case a resize leaves it open across the breakpoint. */
+  .mobile-nav-overlay { display: none !important; }
+}
+
+/* ---------- Floating action button ---------- */
+/* Fixed bottom-right on every section, independent of the top-anchored
+   .shortcut-nav/.utility-bar/.mobile-topbar (all top: ...; z-index 50-60) —
+   living in the opposite corner means it never has to fight them for
+   space. z-index 90 keeps it above ordinary page content but below the
+   modal overlay (100) so opening the modal doesn't leave the FAB floating
+   on top of it. */
+.fab {
+  position: fixed; bottom: 24px; right: 24px; z-index: 90;
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 20px 14px 16px; border-radius: 999px;
+  background: var(--accent); color: #1a0f0a;
+  font-family: "Space Grotesk", sans-serif; font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+  border: none; cursor: pointer;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.35) inset, 0 6px 0 0 var(--accent-shadow), 0 14px 26px -8px color-mix(in srgb, var(--accent) 55%, transparent);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.fab:hover { transform: translateY(-3px); box-shadow: 0 1px 0 rgba(255,255,255,0.35) inset, 0 9px 0 0 var(--accent-shadow), 0 22px 34px -10px color-mix(in srgb, var(--accent) 60%, transparent); }
+.fab:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(255,255,255,0.25) inset, 0 2px 0 0 var(--accent-shadow); }
+.fab-icon { display: flex; }
+.fab-label { white-space: nowrap; }
+
+/* Icon-only circular puck once the screen's too narrow for a pill with a
+   label — same corner, same shadow language, just no text to wrap. */
+@media (max-width: 720px) {
+  .fab {
+    width: 52px; height: 52px; padding: 0;
+    align-items: center; justify-content: center;
+    bottom: 20px; right: 20px;
+  }
+  .fab-label { display: none; }
+}
+
+/* ---------- Hero ---------- */
+.hero {
+  position: relative; min-height: 100vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center;
+  padding: 140px 24px 100px; overflow: hidden;
+  background:
+    radial-gradient(90% 60% at 50% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%),
+    radial-gradient(70% 50% at 90% 100%, rgba(201,255,79,0.06), transparent 60%),
+    var(--bg);
+}
+.hero-inner { position: relative; z-index: 2; max-width: 780px; }
+.hero .eyebrow { display: block; margin-bottom: 20px; }
+.hero h1 { font-size: clamp(64px, 13vw, 148px); line-height: 0.92; margin-bottom: 20px; }
+.hero p { color: color-mix(in srgb, var(--ink) 65%, transparent); font-size: 18px; max-width: 460px; margin: 0 auto 40px; }
+.hero-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+#hero-buttons { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+
+/* ---------- Scroll reveal ---------- */
+.reveal { opacity: 1; transform: none; }
+@supports (animation-timeline: view()) {
+  .reveal { opacity: 0; transform: translateY(40px); animation: revealUp linear both; animation-timeline: view(); animation-range: entry 0% cover 30%; }
+}
+@keyframes revealUp { to { opacity: 1; transform: translateY(0); } }
+
+/* ---------- 3D tilt ---------- */
+.tilt-frame { perspective: 1200px; }
+.tilt-card {
+  transform-style: preserve-3d;
+  transition: transform 0.4s cubic-bezier(0.2,0.8,0.2,1), box-shadow 0.4s ease;
+  box-shadow: var(--card-shadow);
+}
+.tilt-frame:hover .tilt-card {
+  transform: rotateX(6deg) rotateY(-8deg) translateY(-6px) translateZ(10px);
+  box-shadow: 0 40px 70px -20px rgba(0,0,0,0.8);
+}
+
+/* ---------- Full-bleed image + gradient overlay ---------- */
+.visual {
+  position: relative; border-radius: 22px; overflow: hidden;
+  display: flex; align-items: flex-end;
+  background-color: #221512;
+}
+/* A real <img> (dishCard.js/galleryTile.js), not a CSS background-image —
+   background-images have no equivalent to loading="lazy"/decoding="async"
+   and browsers are inconsistent about deferring them for off-screen
+   elements, which on a page with a dozen-plus tiles meant several were
+   still empty (showing this fallback background-color) well after the
+   photos above the fold had already loaded. */
+.visual-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* The scrim + caption text below are always tuned for a dark photo overlay,
+   regardless of the site's light/dark theme — they sit on top of a photo,
+   not the page background, so they intentionally don't use --ink/--bg. */
+.visual .scrim {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(10,7,6,0.92) 0%, rgba(10,7,6,0.55) 38%, rgba(10,7,6,0) 68%);
+}
+.visual .caption { position: relative; z-index: 2; padding: 26px 24px; width: 100%; color: #f5ede1; }
+.caption p { color: rgba(245,237,225,0.6); font-size: 14px; margin: 6px 0 0; }
+
+/* ---------- Full-bleed wrapper ---------- */
+/* Breaks an element out of its parent's padding to span the full viewport
+   width, regardless of that parent's own padding value at any breakpoint —
+   robust across breakpoints without tracking each one's padding number.
+   body's overflow-x:hidden (set above) absorbs the sub-pixel rounding this
+   can introduce. Used for imagery/content rows, not text — text keeps its
+   own natural max-width (.section-head, .story-body, etc.) per the site's
+   readability rule; only .dish-carousel and .gallery-grid use this. */
+.full-bleed { width: 100vw; margin-left: calc(50% - 50vw); margin-right: calc(50% - 50vw); }
+
+/* ---------- Dishes: auto-scrolling carousel ---------- */
+/* One component, one behavior, at every screen size — see
+   components/dishCarousel.js for the loop/pause/arrow logic. The card
+   list is rendered twice back-to-back (.dish-carousel-set, display:contents
+   so it groups for aria-hidden without breaking the track's flex layout)
+   and a rAF loop drives .dish-carousel-track's transform; overflow:hidden
+   here is what actually clips it down to one visible row. */
+.dish-carousel { position: relative; overflow: hidden; padding: 4px 56px; }
+.dish-carousel-track { display: flex; gap: 16px; width: max-content; will-change: transform; }
+.dish-carousel-set { display: contents; }
+.dish-carousel .tilt-frame { flex: 0 0 240px; }
+.dish-visual { aspect-ratio: 3 / 4; }
+.dish-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.dish-top h3 { font-size: 26px; }
+.dish-price { font-family: "Bebas Neue", sans-serif; color: var(--accent); font-size: 22px; }
+
+/* Optional manual controls layered on top of the row — supplementary to
+   the auto-scroll/loop, never required to see every dish. */
+.carousel-arrow {
+  position: absolute; top: 50%; transform: translateY(-50%); z-index: 3;
+  width: 44px; height: 44px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface); color: var(--ink);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  font-size: 22px; line-height: 1; cursor: pointer; opacity: 0.7;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 4px 0 0 var(--surface-edge), 0 10px 20px -8px rgba(0,0,0,0.5);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+}
+.carousel-arrow:hover, .carousel-arrow:focus-visible { opacity: 1; color: var(--accent); transform: translateY(-50%) translateY(-2px); }
+.carousel-arrow:active { transform: translateY(-50%) translateY(2px); box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 1px 0 0 var(--surface-edge); }
+.carousel-arrow--prev { left: 12px; }
+.carousel-arrow--next { right: 12px; }
+@media (max-width: 720px) {
+  .carousel-arrow { width: 38px; height: 38px; font-size: 18px; }
+  .dish-carousel { padding: 4px 16px; }
+}
+
+/* ---------- Story: asymmetric two-column on desktop ---------- */
+/* Stacked (text, then photo) below 901px — same DOM order as the desktop
+   row below, just a different flex-direction, so no order-reversal trick
+   is needed to get "text left, image right" on desktop from "text above
+   image" on mobile. */
+.story-layout { display: flex; flex-direction: column; gap: 48px; align-items: center; }
+.story-text { width: 100%; }
+.story-body { max-width: 680px; margin: 0 auto; text-align: center; }
+.story-body p { color: color-mix(in srgb, var(--ink) 70%, transparent); font-size: 17px; margin: 0 0 20px; }
+.story-quote {
+  margin: 44px auto 0; padding: 28px 32px; max-width: 560px;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-radius: 0 12px 12px 0; text-align: left;
+}
+.story-quote p {
+  font-family: "Bebas Neue", sans-serif; font-size: 24px; letter-spacing: 0.01em;
+  color: var(--ink); margin: 0; line-height: 1.25;
+}
+
+/* Soft-edged photo treatment, reused for both the Story photo and the
+   Menu section's rotating image column (Part 2) — the photo stays its
+   full rectangular shape at full size; only a band near each of the 4
+   edges fades to transparent, letting the section's own background show
+   through right at the edges. NOT a radial vignette: an earlier version
+   used a single radial-gradient mask, which fades outward from the
+   center in an oval, shrinking the visible photo into a blob rather than
+   keeping it rectangular — wrong effect entirely, not a bug in that
+   gradient's syntax.
+   Built from two linear-gradient mask layers, one fading the left/right
+   edges (to right) and one fading the top/bottom edges (to bottom), each
+   opaque through the middle 60% and transparent in the outer ~20% band.
+   The two layers must INTERSECT (multiply), not stack the default way:
+   with the default "add" compositing, a pixel near the left edge but
+   vertically in the untouched middle band would get (low alpha from the
+   horizontal layer) + (alpha 1 from the vertical layer) = still ~1, so
+   the left edge wouldn't visibly fade at all except right at the
+   corners. `mask-composite: intersect` (standard) / `-webkit-mask-
+   composite: source-in` (legacy WebKit/Safari, comma-separated per
+   layer-pair) make each layer actually cut into the one below it instead
+   of adding — confirmed empirically in a standalone test page: a
+   rectangular photo, sharp center, feathered on all 4 sides including
+   the corners, no circular blob.
+   No overflow:hidden/border-radius on this or its wrapper — that's the
+   old card-style clipping (.visual etc. use it deliberately), and it
+   would clip the image to a hard rectangle right at the box edge,
+   overriding the mask fade instead of complementing it. */
+.soft-fade-img {
+  --fade-edge: 20%;
+  object-fit: cover; display: block;
+  mask-image:
+    linear-gradient(to right, transparent 0%, black var(--fade-edge), black calc(100% - var(--fade-edge)), transparent 100%),
+    linear-gradient(to bottom, transparent 0%, black var(--fade-edge), black calc(100% - var(--fade-edge)), transparent 100%);
+  mask-composite: intersect;
+  mask-repeat: no-repeat;
+  mask-size: 100% 100%;
+  mask-position: center;
+  -webkit-mask-image:
+    linear-gradient(to right, transparent 0%, black var(--fade-edge), black calc(100% - var(--fade-edge)), transparent 100%),
+    linear-gradient(to bottom, transparent 0%, black var(--fade-edge), black calc(100% - var(--fade-edge)), transparent 100%);
+  -webkit-mask-composite: source-in;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: 100% 100%;
+  -webkit-mask-position: center;
+}
+
+.story-photo { position: relative; width: 100%; max-width: 420px; aspect-ratio: 4 / 5; }
+.story-photo-img { width: 100%; height: 100%; }
+
+@media (min-width: 901px) {
+  .story-layout { flex-direction: row; align-items: center; gap: 72px; }
+  .story-text { flex: 1 1 0; }
+  .story-text .section-head { text-align: left; margin: 0 0 32px; max-width: none; }
+  .story-body { text-align: left; margin: 0; max-width: 560px; }
+  .story-quote { margin-left: 0; }
+  .story-photo { flex: 1 1 0; max-width: 480px; }
+}
+
+/* ---------- Menu ---------- */
+/* Image-left/content-right — DOM order is photo, then content, so plain
+   flex-direction: row already puts them in that order on desktop with no
+   reversal trick, same technique Story uses for its (mirrored) text-left/
+   image-right split. Mobile uses column-reverse instead of column so the
+   list — the part visitors actually came for — shows first and the photo
+   stacks below it, per the "list stays easy to scan on small screens"
+   priority; column-reverse is exactly "reverse the same DOM order",
+   consistent with how the desktop row doesn't reverse anything either. */
+.menu-layout { display: flex; flex-direction: column-reverse; gap: 48px; align-items: center; }
+.menu-content { width: 100%; }
+.menu-photo { position: relative; width: 100%; max-width: 420px; aspect-ratio: 4 / 5; }
+/* position:absolute + inset:0 (not width/height:100%) — .menu-photo's
+   height comes from aspect-ratio on a flex item, and a normal-flow
+   child's height:100% doesn't reliably resolve against that (collapsed
+   to 0 in testing); absolute positioning anchors to the containing
+   block's box directly instead, sidestepping that percentage-resolution
+   edge case entirely. Same pattern .visual-img already uses. */
+.menu-photo-frame { position: absolute; inset: 0; }
+.menu-photo-img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; transition: opacity 0.9s ease;
+}
+.menu-photo-img--active { opacity: 1; }
+/* Same radial-glow technique as .section-ambient, scoped to just this box
+   — shown only when the active category has no on-theme photo at all
+   (see components/menuPhoto.js), so an empty/mismatched image is never
+   the fallback for "no photo yet." */
+.menu-photo-ambient {
+  position: absolute; inset: 0; opacity: 0; transition: opacity 0.9s ease;
+  background:
+    radial-gradient(60% 55% at 25% 20%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%),
+    radial-gradient(55% 50% at 80% 85%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 60%);
+}
+.menu-photo-frame--ambient-only .menu-photo-ambient { opacity: 1; }
+
+@media (min-width: 901px) {
+  /* 40/60 split (photo/content) rather than an even 50/50 — favors the
+     list's own readability over a strictly equal column, per the "don't
+     cramp item descriptions/prices" note. */
+  .menu-layout { flex-direction: row; align-items: flex-start; gap: 56px; }
+  .menu-photo { flex: 0 1 40%; max-width: 440px; position: sticky; top: 140px; }
+  .menu-content { flex: 1 1 60%; min-width: 0; }
+}
+
+.tabs { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 56px; }
+.tab {
+  padding: 12px 24px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: var(--surface); color: color-mix(in srgb, var(--ink) 60%, transparent); font-size: 13px; font-weight: 600;
+  letter-spacing: 0.04em; text-transform: uppercase; cursor: pointer;
+  box-shadow: 0 4px 0 0 var(--surface-edge); transform: translateY(0); transition: all 0.18s ease;
+}
+.tab:hover { color: var(--ink); transform: translateY(-2px); }
+.tab.active { background: var(--accent); border-color: var(--accent); color: #1a0f0a; box-shadow: 0 4px 0 0 var(--accent-shadow); transform: translateY(-2px); }
+.menu-list { max-width: 740px; margin: 0 auto; }
+/* Name, then description, then price — always stacked in that order inside
+   .menu-item-body rather than price sharing a row with the name, so a long
+   name (or wine's price grid) never ends up vertically misaligned against
+   wrapped text. The thumbnail (when present) is the only sibling; items
+   with no photo (.menu-item--no-photo) skip it and the body just takes the
+   full row width. */
+.menu-item { display: flex; align-items: flex-start; gap: 18px; padding: 20px 6px; border-bottom: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); }
+.menu-item:last-child { border-bottom: none; }
+.menu-item-thumb {
+  flex: 0 0 auto; width: 60px; height: 60px; border-radius: 12px; object-fit: cover;
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  box-shadow: 0 4px 10px -4px rgba(0,0,0,0.55);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.menu-item-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.menu-item-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.menu-item-name { font-family: "Bebas Neue", sans-serif; font-size: 24px; }
+.menu-item-tag { font-size: 10px; padding: 2px 7px; border-radius: 4px; border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent); color: color-mix(in srgb, var(--ink) 55%, transparent); text-transform: uppercase; letter-spacing: 0.06em; }
+.menu-item-desc { color: color-mix(in srgb, var(--ink) 50%, transparent); font-size: 14px; max-width: 460px; margin-top: 6px; }
+.menu-item-price { font-family: "Bebas Neue", sans-serif; color: var(--accent); font-size: 22px; white-space: nowrap; margin-top: 10px; }
+.menu-empty { text-align: center; color: color-mix(in srgb, var(--ink) 40%, transparent); padding: 26px 6px; }
+
+/* Wine's four-size price row: a fixed-width grid (not flex) so 12cl/16cl/
+   24cl/Btl line up in the same columns on every wine row, size labels
+   above the numbers, "–" for sizes not offered (e.g. House Sparkling
+   Wine's still/16cl/24cl glasses). */
+.menu-item-price--wine { display: grid; grid-template-columns: repeat(4, 58px); gap: 8px 10px; margin-top: 10px; }
+.price-col { display: flex; flex-direction: column; align-items: center; }
+.price-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: color-mix(in srgb, var(--ink) 45%, transparent); margin-bottom: 3px; }
+.price-value { font-family: "Bebas Neue", sans-serif; font-size: 16px; color: var(--accent); }
+
+/* On desktop there's ample horizontal room, so a wine row's name and its
+   price grid sit on one line instead of stacking (mobile keeps the
+   stacked layout/sizing above untouched — wine rows have no description,
+   so .menu-item-body's only two children are .menu-item-top and the
+   price grid, and switching that column to a row is all it takes). Sized
+   up slightly for legibility now that they're not competing for width
+   the way the stacked mobile layout does. */
+@media (min-width: 901px) {
+  .menu-item--wine .menu-item-body { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+  .menu-item--wine .menu-item-name { font-size: 28px; }
+  .menu-item--wine .menu-item-price--wine { margin-top: 0; grid-template-columns: repeat(4, 64px); }
+  .menu-item--wine .price-label { font-size: 10px; }
+  .menu-item--wine .price-value { font-size: 19px; }
+}
+
+/* A standing note above a group's items (Lunch's fixed price/schedule,
+   Cocktails' tequila & mezcal note). */
+.menu-note {
+  text-align: center; font-size: 13px; color: color-mix(in srgb, var(--ink) 65%, transparent);
+  margin: 0 0 32px; padding: 12px 20px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+/* Sub-section heading inside the grouped Drinks tab (Soft Drinks/Beer/
+   Cocktails/Wine sharing one panel). */
+.menu-group-heading {
+  font-family: "Bebas Neue", sans-serif; font-size: 20px; letter-spacing: 0.03em;
+  color: var(--accent); text-align: center; text-transform: uppercase;
+  margin: 40px 0 8px;
+}
+.menu-group-heading:first-of-type { margin-top: 0; }
+
+/* ---------- Gallery: scattered scrapbook ---------- */
+/* Flex-wrap (not grid) so tiles can overlap their neighbors and sit at a
+   slight rotation instead of aligning to strict rows/columns. */
+.gallery-grid { display: flex; flex-wrap: wrap; justify-content: center; padding: 24px 0; }
+.gallery-grid .tilt-frame { width: 160px; margin: 10px -18px; position: relative; }
+.gallery-grid .visual { aspect-ratio: 4 / 5; }
+.gallery-grid .tilt-card { transition: transform 0.35s cubic-bezier(0.2,0.8,0.2,1), box-shadow 0.35s ease; }
+
+/* Six rotation/offset variants, cycling by source order, for a hand-tossed
+   look rather than a uniform tilt. */
+.gallery-grid .tilt-frame:nth-child(6n+1) .tilt-card { transform: rotate(-6deg) translateY(8px); }
+.gallery-grid .tilt-frame:nth-child(6n+2) .tilt-card { transform: rotate(4deg) translateY(-10px); }
+.gallery-grid .tilt-frame:nth-child(6n+3) .tilt-card { transform: rotate(-3deg) translateY(4px); }
+.gallery-grid .tilt-frame:nth-child(6n+4) .tilt-card { transform: rotate(6deg) translateY(-6px); }
+.gallery-grid .tilt-frame:nth-child(6n+5) .tilt-card { transform: rotate(-5deg) translateY(10px); }
+.gallery-grid .tilt-frame:nth-child(6n+6) .tilt-card { transform: rotate(3deg) translateY(-4px); }
+
+/* Hover straightens the tile and lifts it above its neighbors — overrides
+   the site-wide 3D .tilt-frame:hover rule (higher specificity here) since
+   that rule's rotateX/rotateY tilt would fight this tile's own base
+   rotation instead of counteracting it back toward flat. */
+.gallery-grid .tilt-frame:hover { z-index: 5; }
+.gallery-grid .tilt-frame:hover .tilt-card {
+  transform: rotate(0deg) scale(1.08) translateY(-10px);
+  box-shadow: 0 30px 55px -16px rgba(0,0,0,0.5);
+}
+
+@media (max-width: 900px) {
+  .gallery-grid .tilt-frame { width: 130px; margin: 8px -14px; }
+}
+
+/* ---------- Visit ---------- */
+.visit-actions { display: flex; justify-content: center; }
+#visit-buttons { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+
+/* Same card treatment as .visual (dish/gallery tiles) — border-radius,
+   overflow:hidden, --card-shadow — so the map reads as part of the same
+   design system rather than a plain embedded widget. The larger top
+   margin (vs. the tight gap under the buttons/email line above it) is
+   deliberate: heading+buttons+email fallback read as one cluster, then a
+   clear break before the map starts. "Get Directions" sits close under
+   the map as its direct action, not overlapping it. */
+.visit-map { max-width: 900px; margin: 56px auto 0; text-align: center; }
+.map-card {
+  width: 100%; height: 340px;
+  border-radius: 22px; overflow: hidden;
+  box-shadow: var(--card-shadow);
+}
+#visit-directions { margin-top: 16px; }
+@media (max-width: 900px) {
+  .map-card { height: 260px; }
+}
+
+/* OpenStreetMap only ships one (light) tile style — CartoDB's free dark/
+   light tiles now require a registered API key on a live domain, so
+   plain OSM tiles replace them. Dark theme is simulated with a filter on
+   .leaflet-tile-pane specifically, not .map-card as a whole, so it hits
+   only the raster tiles — the marker (.map-marker, further down) and the
+   popup/attribution panes are separate Leaflet panes and stay untouched,
+   which is what keeps the pin matching var(--accent) exactly instead of
+   also getting inverted. See the README's "Known gaps" note. */
+.map-card .leaflet-tile-pane { filter: invert(90%) hue-rotate(180deg); }
+:root[data-theme="light"] .map-card .leaflet-tile-pane { filter: none; }
+
+/* Leaflet's own chrome (popups, attribution) re-themed to match the site
+   instead of Leaflet's default white-card look. */
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--surface); box-shadow: var(--card-shadow); }
+.leaflet-popup-content { font-family: "Space Grotesk", sans-serif; font-size: 13px; color: var(--ink); margin: 10px 14px; }
+.leaflet-popup-close-button { color: color-mix(in srgb, var(--ink) 60%, transparent) !important; }
+.leaflet-control-attribution { background: color-mix(in srgb, var(--surface) 85%, transparent) !important; color: color-mix(in srgb, var(--ink) 60%, transparent) !important; font-size: 10px; }
+.leaflet-control-attribution a { color: color-mix(in srgb, var(--ink) 75%, transparent) !important; }
+
+/* The marker itself: a plain div (not a raster pin image) so it's fully
+   palette-driven via var(--accent) — a classic pin silhouette built from
+   a circle plus a small triangular tip, both pure CSS. */
+.map-marker {
+  box-sizing: border-box;
+  width: 26px; height: 26px;
+  background: var(--accent);
+  border: 3px solid var(--surface);
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.45);
+  position: relative;
+}
+.map-marker::after {
+  content: "";
+  position: absolute; left: 50%; top: 100%; transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 8px solid var(--accent);
+}
+
+.visit-fallback {
+  text-align: center; margin: 18px 0 0; font-size: 14px;
+  color: color-mix(in srgb, var(--ink) 55%, transparent);
+}
+.visit-fallback a { color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* ---------- Special Event modal ---------- */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+}
+.modal-overlay[hidden] { display: none; }
+
+.modal-card {
+  position: relative; width: 100%; max-width: 460px; max-height: 90vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+  border-radius: 22px;
+  padding: 36px 32px;
+  box-shadow: var(--card-shadow);
+}
+.modal-card h3 { font-size: 28px; color: var(--ink); margin-bottom: 10px; }
+.modal-sub { font-size: 14px; color: color-mix(in srgb, var(--ink) 60%, transparent); margin: 0 0 24px; }
+
+.modal-close {
+  position: absolute; top: 20px; right: 20px;
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: 1px solid color-mix(in srgb, var(--ink) 15%, transparent);
+  color: var(--ink); font-size: 18px; line-height: 1; cursor: pointer;
+  transition: color 0.18s ease, transform 0.18s ease;
+}
+.modal-close:hover { color: var(--accent); transform: rotate(90deg); }
+
+.modal-form { display: flex; flex-direction: column; gap: 16px; }
+.modal-form label {
+  display: flex; flex-direction: column; gap: 6px;
+  font-size: 13px; font-weight: 600; letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--ink) 70%, transparent);
+}
+/* .modal-form label's own display:flex above has equal specificity to a
+   plain [hidden] selector and comes later in source order, so it would
+   otherwise win and keep a hidden field visible — same cascade gotcha as
+   .modal-overlay[hidden] above. */
+.modal-form label[hidden] { display: none; }
+.modal-form input, .modal-form textarea, .modal-form select {
+  font: inherit; font-size: 15px; padding: 12px 14px; border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  background: var(--bg); color: var(--ink);
+  resize: vertical;
+}
+.modal-form select { cursor: pointer; }
+.modal-form input:focus, .modal-form textarea:focus, .modal-form select:focus { outline: none; border-color: var(--accent); }
+.modal-form button[type="submit"] { margin-top: 8px; }
+
+/* ---------- Footer ---------- */
+footer { background: var(--footer-bg); padding: 56px 56px 28px; transition: background 0.25s ease; }
+.footer-grid { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 36px; padding-bottom: 36px; border-bottom: 1px solid color-mix(in srgb, var(--ink) 8%, transparent); }
+.footer-logo { font-family: "Bebas Neue", sans-serif; font-size: 26px; letter-spacing: 0.03em; margin-bottom: 10px; }
+.footer-logo span { color: var(--accent); }
+.footer-social { display: flex; gap: 10px; margin-top: 18px; }
+.footer-social-link {
+  display: flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--ink) 15%, transparent);
+  color: color-mix(in srgb, var(--ink) 55%, transparent);
+  transition: color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+.footer-social-link:hover { color: var(--accent); border-color: var(--accent); transform: translateY(-2px); }
+.footer-col h4 { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: color-mix(in srgb, var(--ink) 70%, transparent); margin-bottom: 14px; font-weight: 600; }
+.footer-col span { display: block; font-size: 14px; margin-bottom: 9px; color: color-mix(in srgb, var(--ink) 45%, transparent); }
+.footer-bottom { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding-top: 24px; font-size: 12.5px; color: color-mix(in srgb, var(--ink) 35%, transparent); }

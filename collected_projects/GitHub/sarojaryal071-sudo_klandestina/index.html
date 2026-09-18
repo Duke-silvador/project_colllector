@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Klandestina — Cantina</title>
+  <meta name="description" content="Klandestina Cantina, Helsinki — Mexican street food, mezcal, and a room with no sign out front.">
+  <link rel="icon" href="favicon.ico">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Leaflet (components/map.js) — free CartoDB tiles, no API key. -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    // Applied before first paint so there's no flash of the wrong theme:
+    // a saved choice wins, otherwise fall back to the OS-level preference.
+    (function () {
+      try {
+        var saved = localStorage.getItem("klandestina-theme");
+        var theme = saved || (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+        if (theme === "light") document.documentElement.setAttribute("data-theme", "light");
+      } catch (e) {}
+    })();
+
+    // Some mobile browsers (notably iOS Safari) restore the tab's LAST
+    // scroll offset on a fresh visit to the same URL, rather than starting
+    // at the top — landing a visitor mid-page with no indication why. This
+    // opts out of that restoration; it doesn't affect an intentional
+    // #section link, which is a separate browser mechanism this leaves
+    // untouched.
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+  </script>
+</head>
+<body>
+
+  <!-- Filled by components/nav.js -->
+  <div id="brand-mark"></div>
+  <nav id="shortcut-nav" class="shortcut-nav"></nav>
+
+  <!-- Filled by components/langSwitch.js + components/themeToggle.js -->
+  <div class="utility-bar">
+    <div id="lang-switch" class="lang-switch"></div>
+    <div id="theme-toggle"></div>
+  </div>
+
+  <!-- Mobile-only topbar (<=900px): wordmark + lang switch + theme toggle in
+       one bar, replacing the desktop's separate brand-mark/utility-bar.
+       Auto-hides on scroll down / reappears on scroll up (see script.js). -->
+  <div id="mobile-topbar" class="mobile-topbar">
+    <span id="mobile-topbar-brand" class="mobile-topbar-brand"></span>
+    <div class="mobile-topbar-controls">
+      <div id="mobile-lang-switch" class="lang-switch"></div>
+      <div id="mobile-theme-toggle"></div>
+      <!-- Filled by components/mobileNav.js: the hamburger button that opens
+           the full-screen section-nav overlay below (desktop's pill nav has
+           no mobile equivalent otherwise). -->
+      <div id="mobile-nav-toggle"></div>
+    </div>
+  </div>
+
+  <!-- Filled by components/mobileNav.js. Full-screen, mobile-only (<=900px)
+       nav overlay opened by the hamburger button above — the desktop pill
+       nav (#shortcut-nav) is hidden at this width with nothing replacing it
+       otherwise. -->
+  <div id="mobile-nav-overlay-mount"></div>
+
+  <!-- Filled by components/fab.js. Fixed bottom-right on every section,
+       independent of the top-anchored topbar/utility-bar. Opens the exact
+       same modal as the "Special Events or Inquiry" button in the Visit
+       section (see script.js). -->
+  <div id="fab-mount"></div>
+
+  <header class="hero" id="hero">
+    <div class="hero-inner">
+      <span class="eyebrow" data-i18n="hero.eyebrow">Klandestina Cantina · Helsinki</span>
+      <h1 data-i18n="hero.heading">Find the door.</h1>
+      <p data-i18n="hero.subtext">Tacos off live coals, mezcal poured heavy, and a room that doesn't announce itself.</p>
+      <div class="hero-actions">
+        <!-- Filled by components/button.js -->
+        <div id="hero-buttons"></div>
+      </div>
+    </div>
+  </header>
+
+  <section id="story">
+    <div class="story-layout container">
+      <div class="story-text">
+        <div class="section-head reveal">
+          <span class="eyebrow" data-i18n="story.eyebrow">The Story</span>
+          <h2 data-i18n="story.heading">No sign. No apologies.</h2>
+        </div>
+        <div class="story-body reveal">
+          <p data-i18n="story.body1">Welcome to Klandestina, your go-to casual Mexican restaurant!</p>
+          <p data-i18n="story.body2">Having been open in Harju Kallio for two and a half years, we faced the challenges of the pandemic roulette and all the issues it brought to everyone.</p>
+          <p data-i18n="story.body3">La Cantina Klandestina is our tribute to that distinctly Mexican feeling of not rigidly adhering to every rule and doing things our own way.</p>
+          <blockquote class="story-quote">
+            <p data-i18n="story.quoteText">“We're lawful rebels who love food and take pride in providing friendly customer service.”</p>
+          </blockquote>
+        </div>
+      </div>
+      <!-- Filler: reused from images/dishes/ like the gallery already does
+           — no dedicated interior/portrait photography for Story yet, see
+           README's "Known gaps". Soft-edged via a CSS mask (style.css). -->
+      <div class="story-photo reveal">
+        <img class="story-photo-img soft-fade-img" src="images/dishes/tommys-margarita.jpg" alt="" loading="lazy" decoding="async">
+      </div>
+    </div>
+  </section>
+
+  <section id="dishes">
+    <div class="section-head reveal">
+      <span class="eyebrow" data-i18n="dishes.eyebrow">Off the Grill</span>
+      <h2 data-i18n="dishes.heading">Regulars order these twice</h2>
+    </div>
+    <!-- Filled by components/dishCarousel.js — one continuously
+         auto-scrolling row at every screen size (see style.css's
+         "Dishes: auto-scrolling carousel" comment for how the loop
+         works). .full-bleed lets it run closer to the viewport edges on
+         wide screens instead of being boxed in by the section's own
+         padding, per the site's full-bleed-imagery/capped-text split. -->
+    <div class="full-bleed">
+      <div id="dish-grid"></div>
+    </div>
+  </section>
+
+  <section id="menu">
+    <!-- Mirrored from Story's split (which is text-left/image-right) —
+         image-left/content-right here, so the two asymmetric sections
+         alternate rather than reading as the same template twice. -->
+    <div class="menu-layout container">
+      <div class="menu-photo reveal">
+        <!-- Filled by components/menuPhoto.js: a small rotating,
+             crossfading ambient image set per active category tab (see
+             script.js's renderMenuCategory). Purely decorative, not tied
+             to specific menu items — categories with no on-theme photo
+             yet fall back to an ambient glow instead of showing
+             something misleading (e.g. a savory dish under Desserts). -->
+        <div id="menu-photo-mount"></div>
+      </div>
+      <div class="menu-content">
+        <div class="section-head reveal">
+          <span class="eyebrow" data-i18n="menu.eyebrow">Full Menu</span>
+          <h2 data-i18n="menu.heading">Kitchen &amp; Bar</h2>
+        </div>
+        <!-- Filled by components/menuItem.js -->
+        <div id="menu-tabs" class="tabs"></div>
+        <div id="menu-list" class="menu-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="gallery">
+    <div class="section-head reveal">
+      <span class="eyebrow" data-i18n="gallery.eyebrow">Inside</span>
+      <h2 data-i18n="gallery.heading">The room</h2>
+    </div>
+    <!-- Filled by components/galleryTile.js. .full-bleed for the same
+         reason as the dish carousel above — this is imagery, not text,
+         so it isn't held to the same readable max-width. -->
+    <div class="full-bleed">
+      <div id="gallery-grid" class="gallery-grid"></div>
+    </div>
+  </section>
+
+  <section id="visit" class="section-ambient">
+    <div class="section-head reveal">
+      <span class="eyebrow" data-i18n="visit.eyebrow">Find Us</span>
+      <h2 data-i18n="visit.heading">Come find the door</h2>
+    </div>
+    <!-- Address/hours/contact live in the footer only, to avoid repeating
+         them twice on the page. This section is just the CTA moment. -->
+    <div class="visit-actions reveal">
+      <!-- "Special Events or Inquiry" trigger (primary) + Reserve button
+           (secondary), filled by script.js -->
+      <div id="visit-buttons"></div>
+    </div>
+
+    <p class="visit-fallback reveal">
+      <span data-i18n="visit.emailFallbackPrefix">Or email us directly at</span>
+      <a id="visit-email-fallback" href="#"></a>
+    </p>
+
+    <!-- Filled by components/map.js. "Get Directions" sits directly under
+         the map card; filled/linked by script.js from site.json's address
+         so it stays in sync with the address printed everywhere else. -->
+    <div class="visit-map reveal">
+      <div id="visit-map-mount"></div>
+      <a id="visit-directions" class="btn btn-ghost" href="#" target="_blank" rel="noopener" data-i18n="visit.getDirections">Get Directions</a>
+    </div>
+  </section>
+
+  <!-- Filled by components/footer.js -->
+  <div id="footer-mount"></div>
+
+  <!-- Filled by components/eventModal.js; hidden until the "Special Events
+       or Inquiry" trigger (Visit section button or the floating FAB) opens it -->
+  <div id="event-modal-mount"></div>
+
+  <!-- Classic (non-module) script, so the global L it defines is ready by
+       the time the deferred module below runs. -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="script.js"></script>
+</body>
+</html>
