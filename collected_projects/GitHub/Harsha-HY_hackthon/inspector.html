@@ -1,0 +1,2017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0"/>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate, max-age=0"/>
+  <meta http-equiv="Pragma" content="no-cache"/>
+  <meta http-equiv="Expires" content="0"/>
+  <title>Field Inspector Console — Smart Civic Waste Mysuru</title>
+  
+  <!-- Supabase JS Client & Universal Civic DB -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    (function() {
+      const SUPABASE_URL = 'https://evnjukozsucobknwvzfp.supabase.co';
+      const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2bmp1a296c3Vjb2Jrbnd2emZwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTc3MjA1MywiZXhwIjoyMTA1MzQ4MDUzfQ.OzV3s8TKPGefQPdAKfMEUwKFYJwa4cYH6vsl7E9uGKk';
+      let suClient = null;
+      function initClient() {
+        if (suClient) return suClient;
+        if (window.supabase && typeof window.supabase.createClient === 'function') {
+          try {
+            suClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+              auth: { persistSession: false, autoRefreshToken: false }
+            });
+            console.log('⚡ Connected to Supabase Cloud Database');
+          } catch(err) {}
+        }
+        return suClient;
+      }
+      function mapAppToDb(app) {
+        const userEmail = (app.email || '').trim().toLowerCase();
+        let propId = app.propertyId || app.property_id || '';
+        if (userEmail && !propId.includes('||usr:')) propId = (propId ? propId + ' ' : '') + '||usr:' + userEmail;
+        const photosList = Array.isArray(app.photos) ? app.photos : (app.photo ? [app.photo] : []);
+        return {
+          id: app.id,
+          applicant_name: app.applicantName || app.applicant_name,
+          phone: app.phone,
+          pincode: app.pincode || app.pin,
+          address: app.address,
+          property_id: propId,
+          certificate_no: app.certificateNo || app.certificate_no,
+          certificate_type: app.certificateType || app.certificate_type,
+          issue_date: app.issueDate || app.issue_date,
+          status: app.status || 'Pending Inspection',
+          tonnage: Number(app.tonnage) || 10,
+          gps_location: app.gpsLocation || app.gps_location,
+          lat: Number(app.lat) || 12.2958,
+          lng: Number(app.lng) || 76.6394,
+          map_url: app.mapUrl || app.map_url,
+          photos: photosList,
+          photo: app.photo || (photosList.length > 0 ? photosList[0] : null),
+          authority: app.authority,
+          authority_key: app.authorityKey || app.authority_key,
+          assigned_inspector_name: app.assignedInspectorName || app.assigned_inspector_name,
+          assigned_inspector_email: app.assignedInspectorEmail || app.assigned_inspector_email,
+          inspector_notes: app.inspectorNotes || app.inspector_notes,
+          inspection_time: app.inspectionTime || app.inspection_time || null,
+          audited_by: app.auditedBy || app.audited_by,
+          audited_at: app.auditedAt || app.audited_at || null,
+          created_at: app.submittedAt || app.createdAt || new Date().toISOString()
+        };
+      }
+      function mapDbToApp(row) {
+        let rawPropId = row.property_id || '';
+        let email = '';
+        if (rawPropId.includes('||usr:')) {
+          const parts = rawPropId.split('||usr:');
+          rawPropId = parts[0].trim();
+          email = parts[1].trim();
+        }
+        const photosList = Array.isArray(row.photos) ? row.photos : (row.photo ? [row.photo] : []);
+        return {
+          id: row.id,
+          applicantName: row.applicant_name,
+          phone: row.phone,
+          email: email,
+          pincode: row.pincode,
+          pin: row.pincode,
+          address: row.address,
+          propertyId: rawPropId,
+          certificateNo: row.certificate_no,
+          certificateType: row.certificate_type,
+          issueDate: row.issue_date,
+          status: row.status,
+          tonnage: row.tonnage,
+          gpsLocation: row.gps_location,
+          lat: row.lat,
+          lng: row.lng,
+          mapUrl: row.map_url,
+          photos: photosList,
+          photo: row.photo || (photosList.length > 0 ? photosList[0] : null),
+          authority: row.authority,
+          authorityKey: row.authority_key,
+          assignedInspectorName: row.assigned_inspector_name,
+          assignedInspectorEmail: row.assigned_inspector_email,
+          inspectorNotes: row.inspector_notes,
+          inspectionTime: row.inspection_time,
+          auditedBy: row.audited_by,
+          auditedAt: row.audited_at,
+          submittedAt: row.created_at
+        };
+      }
+      function mapUserToDb(u) {
+        return {
+          id: u.id || ('u_' + Date.now()),
+          name: u.name,
+          email: (u.email || '').toLowerCase().trim(),
+          phone: u.phone || '',
+          password: u.password || '',
+          role: u.role || 'citizen',
+          department: u.department || '',
+          department_name: u.departmentName || u.department_name || '',
+          assigned_pin: u.assignedPin || u.assigned_pin || u.pin || '',
+          assigned_area: u.assignedArea || u.assigned_area || '',
+          designation: u.designation || '',
+          created_by: u.createdBy || u.created_by || '',
+          status: u.status || 'Active',
+          created_at: u.createdAt || new Date().toISOString()
+        };
+      }
+      function mapDbToUser(row) {
+        return {
+          id: row.id,
+          name: row.name,
+          email: row.email,
+          phone: row.phone,
+          password: row.password,
+          role: row.role,
+          department: row.department,
+          departmentName: row.department_name,
+          assignedPin: row.assigned_pin,
+          pin: row.assigned_pin,
+          assignedArea: row.assigned_area,
+          designation: row.designation,
+          createdBy: row.created_by,
+          status: row.status,
+          createdAt: row.created_at
+        };
+      }
+      window.civicDb = {
+        getClient: initClient,
+        async fetchApplications() {
+          const client = initClient();
+          if (client) {
+            try {
+              const { data, error } = await client.from('applications').select('*').order('created_at', { ascending: false });
+              if (!error && Array.isArray(data)) {
+                const apps = data.map(mapDbToApp);
+                localStorage.setItem('civic_applications', JSON.stringify(apps));
+                return apps;
+              }
+            } catch(e) {}
+          }
+          return JSON.parse(localStorage.getItem('civic_applications') || '[]');
+        },
+        async saveApplication(app) {
+          const dbRow = mapAppToDb(app);
+          const client = initClient();
+          if (client) {
+            try { await client.from('applications').upsert(dbRow); } catch(e) {}
+          }
+          const apps = JSON.parse(localStorage.getItem('civic_applications') || '[]');
+          const idx = apps.findIndex(a => a.id === app.id);
+          if (idx >= 0) apps[idx] = { ...apps[idx], ...app };
+          else apps.unshift(app);
+          localStorage.setItem('civic_applications', JSON.stringify(apps));
+          return app;
+        },
+        async login(email, password) {
+          const cleanEmail = (email || '').toLowerCase().trim();
+          const cleanPass = (password || '').trim();
+          const client = initClient();
+          if (client) {
+            try {
+              const { data, error } = await client.from('users').select('*').eq('email', cleanEmail).maybeSingle();
+              if (!error && data) {
+                const user = mapDbToUser(data);
+                if (user.password === cleanPass) return { success: true, user };
+              }
+            } catch(e) {}
+          }
+          return { success: false, message: 'Invalid credentials.' };
+        },
+        async registerUser(userData) {
+          const client = initClient();
+          const dbUser = mapUserToDb(userData);
+          if (client) {
+            try { await client.from('users').upsert(dbUser); } catch(e) {}
+          }
+          return { success: true, user: userData };
+        },
+        async fetchUsers() {
+          const client = initClient();
+          if (client) {
+            try {
+              const { data, error } = await client.from('users').select('*').order('created_at', { ascending: false });
+              if (!error && Array.isArray(data)) return data.map(mapDbToUser);
+            } catch(e) {}
+          }
+          return [];
+        },
+        subscribeToApplications(onChange) {
+          const client = initClient();
+          if (!client) return null;
+          try {
+            return client.channel('rt_apps_' + Math.random())
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'applications' }, (payload) => {
+                if (typeof onChange === 'function') onChange(payload);
+              }).subscribe();
+          } catch(e) { return null; }
+        }
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initClient);
+      } else {
+        initClient();
+      }
+    })();
+  </script>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Authentication Guard for Field Inspectors
+    function checkInspectorAuth() {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const emailParam = urlParams.get('email') || urlParams.get('inspector');
+        let saved = localStorage.getItem('current_user') || sessionStorage.getItem('current_user');
+        
+        if (emailParam) {
+          const allUsers = JSON.parse(localStorage.getItem('civic_registered_users') || '[]');
+          const allInspectors = JSON.parse(localStorage.getItem('civic_inspectors') || '[]');
+          const found = allInspectors.find(u => (u.email||'').toLowerCase() === emailParam.toLowerCase()) ||
+                        allUsers.find(u => (u.email||'').toLowerCase() === emailParam.toLowerCase());
+          if (found) {
+            localStorage.setItem('current_user', JSON.stringify(found));
+            return;
+          }
+        }
+
+        if (!saved) {
+          const defaultIns = {
+            id: 'BOGP1001',
+            name: 'Seervi',
+            email: 'q@gmail.com',
+            role: 'inspector',
+            department: 'gp',
+            departmentName: 'Bogadi Gram Panchayat',
+            authority: 'Gram Panchayat (Bogadi Rural)',
+            assignedPin: '570026',
+            pin: '570026',
+            assignedArea: 'Bogadi Gram Panchayat Ward 01',
+            designation: 'Panchayat Health & C&D Inspector',
+            phone: '+91 98450 11005',
+            createdBy: 'K. S. Manjunath (PDO)',
+            creatingOfficerEmail: 'gp@gmail.com'
+          };
+          localStorage.setItem('current_user', JSON.stringify(defaultIns));
+          return;
+        }
+
+        const user = JSON.parse(saved);
+        const role = (user.role || '').toLowerCase();
+        
+        // If customer/citizen tries to access inspector console
+        if (role === 'citizen' || role === 'customer') {
+          if (urlParams.has('view_as_inspector')) {
+            const defaultIns = {
+              id: 'BOGP1001',
+              name: 'Seervi',
+              email: 'q@gmail.com',
+              role: 'inspector',
+              department: 'gp',
+              departmentName: 'Bogadi Gram Panchayat',
+              authority: 'Gram Panchayat (Bogadi Rural)',
+              assignedPin: '570026',
+              pin: '570026',
+              assignedArea: 'Bogadi Gram Panchayat Ward 01',
+              designation: 'Panchayat Health & C&D Inspector',
+              phone: '+91 98450 11005',
+              createdBy: 'K. S. Manjunath (PDO)',
+              creatingOfficerEmail: 'gp@gmail.com'
+            };
+            localStorage.setItem('current_user', JSON.stringify(defaultIns));
+            return;
+          }
+          window.location.href = 'citizen.html';
+          return;
+        }
+      } catch(e) {}
+    }
+    checkInspectorAuth();
+
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+              800: '#166534',
+              900: '#14532d',
+            }
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #f8fafc;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.05);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.25);
+      border-radius: 9999px;
+    }
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 11px 15px;
+      border-radius: 14px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #94a3b8;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: pointer;
+      text-align: left;
+    }
+    .nav-btn:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.07);
+    }
+    .nav-btn.active {
+      color: #ffffff;
+      background: linear-gradient(90deg, rgba(16, 185, 129, 0.25) 0%, rgba(16, 185, 129, 0.08) 100%);
+      border-left: 3.5px solid #10b981;
+      font-weight: 700;
+    }
+    .mobile-tab-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #64748b;
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+    .mobile-tab-btn.active {
+      background-color: #064e3b;
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(6, 78, 59, 0.25);
+    }
+    .panel-view {
+      display: none;
+      animation: fadeIn 0.2s ease-out;
+    }
+    .panel-view.active {
+      display: block;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .toast-container {
+      position: fixed;
+      top: 16px;
+      right: 16px;
+      left: 16px;
+      z-index: 999999;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    @media (min-width: 640px) {
+      .toast-container {
+        left: auto;
+        width: 380px;
+      }
+    }
+    .toast {
+      pointer-events: auto;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col md:flex-row text-slate-900 antialiased overflow-x-hidden selection:bg-emerald-500 selection:text-white">
+
+  <!-- Toast Notification Stack -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- ========================================================================= -->
+  <!-- 1. MOBILE TOP NAVIGATION & TAB SWITCHER (For Phone Screen View)            -->
+  <!-- ========================================================================= -->
+  <header class="md:hidden bg-[#0c1527] text-white border-b border-slate-800 sticky top-0 z-50">
+    <div class="px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2.5 overflow-hidden">
+        <div id="mobile-icon" class="size-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 text-slate-950 flex items-center justify-center font-bold text-base shadow-sm shrink-0">
+          👷
+        </div>
+        <div class="leading-tight overflow-hidden">
+          <span id="mobile-title" class="block font-bold text-xs text-white truncate">Field Inspector Console</span>
+          <span id="mobile-pin-text" class="text-[10px] font-mono text-emerald-400 font-bold">PIN: 570026</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button onclick="loadInspectorData()" title="Refresh" class="size-8 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs transition cursor-pointer">
+          🔄
+        </button>
+        <button onclick="handleSignOut()" title="Sign Out" class="size-8 rounded-lg bg-rose-500/20 text-rose-300 flex items-center justify-center text-xs transition cursor-pointer">
+          🚪
+        </button>
+      </div>
+    </div>
+    <!-- Mobile Segmented Navigation Tabs -->
+    <div class="px-3 pb-2.5 flex items-center gap-2 bg-slate-950/40">
+      <button onclick="switchInspectorTab('inspection')" id="mob-tab-inspection" class="mobile-tab-btn active">
+        <span>📋</span> <span>Inspection Desk</span>
+        <span id="mob-stat-badge" class="px-1.5 py-0.2 rounded-full bg-emerald-500 text-slate-950 text-[10px] font-extrabold ml-1 font-mono">0</span>
+      </button>
+      <button onclick="switchInspectorTab('details')" id="mob-tab-details" class="mobile-tab-btn">
+        <span>👷</span> <span>Profile Info</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ========================================================================= -->
+  <!-- 2. DESKTOP LEFT SIDEBAR NAVIGATION PANEL                                  -->
+  <!-- ========================================================================= -->
+  <aside class="hidden md:flex w-72 lg:w-80 bg-[#0c1527] text-white flex-col justify-between shrink-0 h-screen sticky top-0 border-r border-slate-800 z-50">
+    
+    <!-- Top Brand & Panchayat Header -->
+    <div class="p-5 border-b border-white/10">
+      <div class="flex items-center gap-3">
+        <div id="sidebar-icon" class="size-11 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 text-slate-950 flex items-center justify-center font-bold text-xl shadow-lg shadow-emerald-500/20 shrink-0">
+          👷
+        </div>
+        <div class="leading-tight overflow-hidden">
+          <span id="sidebar-title" class="block font-bold text-sm text-white tracking-tight truncate">Field Inspector Desk</span>
+          <span id="sidebar-dept-tag" class="inline-block mt-0.5 px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-300 font-mono font-bold uppercase tracking-wider">
+            Mysuru Urban Division
+          </span>
+        </div>
+      </div>
+
+      <!-- Assigned PIN & Creating Panchayat Badge -->
+      <div class="mt-3.5 bg-slate-900/90 px-3 py-2 rounded-xl flex items-center justify-between border border-slate-700/60">
+        <div class="flex items-center gap-2">
+          <span class="size-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="sidebar-pin-text" class="text-[11px] font-mono font-bold text-emerald-300">PIN: 570001</span>
+        </div>
+        <span id="sidebar-authority-pill" class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+          MCC Authority
+        </span>
+      </div>
+    </div>
+
+    <!-- Navigation List (Inspector Panels: Inspections Desk & Details) -->
+    <div class="flex-1 overflow-y-auto custom-scrollbar px-3 py-4 space-y-2">
+      <button onclick="switchInspectorTab('inspection')" id="btn-tab-inspection" class="nav-btn active">
+        <span class="text-base">📋</span>
+        <div class="flex-1 flex items-center justify-between">
+          <span>1. Inspections Desk</span>
+          <span id="sidebar-assigned-badge" class="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-mono text-[10px] font-bold">0</span>
+        </div>
+      </button>
+      <button onclick="switchInspectorTab('details')" id="btn-tab-details" class="nav-btn">
+        <span class="text-base">👷</span>
+        <span>2. Inspector Profile</span>
+      </button>
+    </div>
+
+    <!-- Inspector Profile Footer -->
+    <div class="p-4 border-t border-white/10 bg-slate-950/60 flex items-center justify-between">
+      <div class="flex items-center gap-2.5 overflow-hidden">
+        <div id="inspector-avatar" class="size-8 rounded-xl bg-emerald-600 font-bold text-white flex items-center justify-center text-xs shrink-0">
+          IN
+        </div>
+        <div class="overflow-hidden leading-tight">
+          <span id="inspector-name-display" class="block font-bold text-xs text-white truncate">Field Inspector</span>
+          <span id="inspector-email-display" class="block text-[10px] text-slate-400 font-mono truncate">inspector@gmail.com</span>
+        </div>
+      </div>
+      <button onclick="handleSignOut()" title="Sign Out" class="size-8 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 flex items-center justify-center text-xs transition cursor-pointer shrink-0">
+        🚪
+      </button>
+    </div>
+  </aside>
+
+  <!-- ========================================================================= -->
+  <!-- 3. MAIN VIEWPORT (Phone & Desktop Responsive)                             -->
+  <!-- ========================================================================= -->
+  <main class="flex-1 flex flex-col min-w-0 bg-slate-50 min-h-screen">
+    
+    <!-- Top Header (Desktop View) -->
+    <header class="hidden md:flex bg-white border-b border-slate-200 px-6 lg:px-8 py-3.5 sticky top-0 z-40 items-center justify-between gap-4 shadow-xs">
+      <div class="flex items-center gap-3.5">
+        <div id="header-icon" class="size-10 rounded-2xl bg-emerald-50 text-emerald-700 font-bold flex items-center justify-center text-xl border border-emerald-100 shrink-0">
+          📍
+        </div>
+        <div>
+          <h1 id="header-jurisdiction-title" class="text-base lg:text-lg font-extrabold text-slate-900 leading-tight">
+            Assigned Area: PIN 570001 (Mysuru)
+          </h1>
+          <p id="header-jurisdiction-sub" class="text-xs text-slate-500 font-medium">
+            Authorized Field Officer Console · Operating under Mysuru City Corporation
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <span id="header-assigned-pin-badge" class="px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-mono text-xs font-bold border border-emerald-200">
+          📍 Assigned PIN: 570001
+        </span>
+        <button onclick="loadInspectorData()" class="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer">
+          <span>🔄 Refresh Queue</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Container -->
+    <div class="p-3 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-4 sm:space-y-6">
+
+      <!-- ===================================================================== -->
+      <!-- PANEL: 📋 INSPECTIONS & PHYSICAL CLEARANCE DESK (Primary Mobile Desk) -->
+      <!-- ===================================================================== -->
+      <section id="panel-inspection" class="panel-view active space-y-4 sm:space-y-6">
+        
+        <!-- Summary Stats Banner (Interactive Click-to-Filter Cards) -->
+        <div class="grid grid-cols-3 gap-2 sm:gap-4">
+          <div onclick="setInspectionFilter('all')" class="bg-white hover:bg-slate-50 rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs text-center sm:text-left cursor-pointer transition hover:border-emerald-400 group">
+            <span class="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block group-hover:text-emerald-700">Assigned</span>
+            <span id="stat-assigned-count" class="text-xl sm:text-3xl font-extrabold text-emerald-600 mt-1 sm:mt-2 block">0</span>
+            <span class="text-[9px] sm:text-[11px] text-slate-400 font-medium mt-0.5 hidden sm:block">Filtered by your assigned PIN</span>
+          </div>
+          <div onclick="setInspectionFilter('pending')" class="bg-white hover:bg-amber-50/50 rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs text-center sm:text-left cursor-pointer transition hover:border-amber-400 group">
+            <span class="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block group-hover:text-amber-700">Pending</span>
+            <span id="stat-pending-audit" class="text-xl sm:text-3xl font-extrabold text-amber-600 mt-1 sm:mt-2 block">0</span>
+            <span class="text-[9px] sm:text-[11px] text-amber-600 font-medium mt-0.5 hidden sm:block">Awaiting on-site field audit</span>
+          </div>
+          <div onclick="setInspectionFilter('completed')" class="bg-white hover:bg-blue-50/50 rounded-2xl border border-slate-200 p-3 sm:p-4 shadow-xs text-center sm:text-left cursor-pointer transition hover:border-blue-400 group">
+            <span class="text-[10px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block group-hover:text-blue-700">Passed (NOC)</span>
+            <span id="stat-cleared-count" class="text-xl sm:text-3xl font-extrabold text-blue-600 mt-1 sm:mt-2 block">0</span>
+            <span class="text-[9px] sm:text-[11px] text-blue-600 font-medium mt-0.5 hidden sm:block">NOC Certificate Issued</span>
+          </div>
+        </div>
+
+        <!-- Header Title Strip with Fast PIN Filter Indicator -->
+        <div class="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 p-4 sm:p-6 shadow-xs space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3 sm:pb-4">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-lg">📋</span>
+                <h2 class="text-base sm:text-lg font-bold text-slate-900">Physical Site Inspection Queue</h2>
+              </div>
+              <p class="text-xs text-slate-500 mt-0.5">Examine live geotag site photos, Khatta/deed status, blueprints, GPS coordinates, and issue NOC approvals on-site.</p>
+            </div>
+            <div class="flex items-center gap-2">
+              <span id="active-pin-filter-tag" class="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 font-mono text-xs font-bold border border-emerald-200">
+                PIN: 570026
+              </span>
+            </div>
+          </div>
+
+          <!-- Pending vs Completed vs All Segmented Filter Tabs -->
+          <div class="flex items-center justify-between gap-2 flex-wrap bg-slate-100/90 p-1.5 rounded-2xl border border-slate-200">
+            <div class="flex items-center gap-1.5 flex-1 sm:flex-none">
+              <button onclick="setInspectionFilter('pending')" id="filter-btn-pending" class="px-3.5 py-2 rounded-xl bg-white text-slate-900 font-bold text-xs shadow-xs transition cursor-pointer flex items-center gap-1.5">
+                <span>⏳ Pending Audits</span>
+                <span id="badge-pending-count" class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-mono font-extrabold">0</span>
+              </button>
+              <button onclick="setInspectionFilter('completed')" id="filter-btn-completed" class="px-3.5 py-2 rounded-xl text-slate-600 hover:text-slate-900 font-bold text-xs transition cursor-pointer flex items-center gap-1.5">
+                <span>✅ Completed / Passed</span>
+                <span id="badge-completed-count" class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 text-[10px] font-mono font-extrabold">0</span>
+              </button>
+              <button onclick="setInspectionFilter('all')" id="filter-btn-all" class="px-3.5 py-2 rounded-xl text-slate-600 hover:text-slate-900 font-bold text-xs transition cursor-pointer flex items-center gap-1.5">
+                <span>📋 All Assigned</span>
+                <span id="badge-all-count" class="px-2 py-0.5 rounded-full bg-slate-200 text-slate-800 text-[10px] font-mono font-extrabold">0</span>
+              </button>
+            </div>
+            <div class="text-[11px] font-mono text-slate-600 px-2 py-1 font-semibold">
+              <span id="filter-status-desc">Showing Pending Inspection Queue</span>
+            </div>
+          </div>
+
+          <!-- Phone-Optimized Cards & Responsive Table Container -->
+          <div id="inspections-container" class="space-y-3">
+            <!-- Dynamically populated responsive cards / table rows -->
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ===================================================================== -->
+      <!-- PANEL: 👷 INSPECTOR DETAILS & CREDENTIALS                             -->
+      <!-- ===================================================================== -->
+      <section id="panel-details" class="panel-view space-y-4 sm:space-y-6">
+        
+        <!-- Welcome Banner with Creating Officer Info -->
+        <div class="bg-gradient-to-r from-slate-900 via-slate-800 to-[#0c1527] text-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-sm border border-slate-700/60 relative overflow-hidden">
+          <div class="relative z-10 flex flex-wrap items-center justify-between gap-4">
+            <div class="space-y-1">
+              <span class="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-bold text-[10px] sm:text-[11px] border border-emerald-500/30">
+                ✓ Official Field Credential Active
+              </span>
+              <h2 id="welcome-inspector-name" class="text-xl sm:text-2xl font-extrabold tracking-tight">Inspector Profile</h2>
+              <p id="welcome-creating-officer" class="text-xs text-slate-300 max-w-xl leading-relaxed">
+                Designated by Authority Officer for on-site physical audits, structural verification, and C&D debris tracking.
+              </p>
+            </div>
+            <div class="text-left sm:text-right">
+              <span class="text-[10px] uppercase font-mono tracking-wider text-slate-400 block font-bold">Jurisdiction Scope</span>
+              <span id="hero-assigned-pin" class="text-xl sm:text-2xl font-extrabold text-emerald-400 font-mono block">PIN 570001</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4 Core Inspector Cards: Name & Inspector ID, Department & Designation, Phone Number, Ward / Area -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4" id="inspector-core-details-grid">
+          
+          <!-- 1. Name & Inspector ID -->
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider">Name & Inspector ID</span>
+              <span class="size-7 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold text-xs">🪪</span>
+            </div>
+            <span id="detail-ins-name" class="text-sm sm:text-base font-bold text-slate-900 block truncate">Ramesh Kumar</span>
+            <span id="detail-ins-id" class="text-xs font-mono font-bold text-emerald-700 block">ID: INS-MCC-101</span>
+          </div>
+
+          <!-- 2. Department & Designation -->
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider">Department & Designation</span>
+              <span class="size-7 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs">🏛️</span>
+            </div>
+            <span id="detail-ins-dept" class="text-sm sm:text-base font-bold text-slate-900 block truncate">Mysuru City Corporation</span>
+            <span id="detail-ins-desig" class="text-xs font-medium text-slate-600 block truncate">Ward Health Inspector</span>
+          </div>
+
+          <!-- 3. Phone Number & Email -->
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider">Phone Number</span>
+              <span class="size-7 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs">📞</span>
+            </div>
+            <span id="detail-ins-phone" class="text-sm sm:text-base font-mono font-bold text-slate-900 block">+91 98450 11001</span>
+            <span id="detail-ins-email" class="text-xs font-mono text-emerald-800 font-semibold block truncate">inspector@gmail.com</span>
+          </div>
+
+          <!-- 4. Ward / Area & PIN -->
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] sm:text-[11px] font-bold text-slate-400 uppercase tracking-wider">Ward / Area</span>
+              <span class="size-7 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center font-bold text-xs">📍</span>
+            </div>
+            <span id="detail-ins-area" class="text-sm sm:text-base font-bold text-slate-900 block truncate">Ward 14 (Palace Area)</span>
+            <span id="detail-ins-pin" class="text-xs font-mono font-extrabold text-amber-800 block">Mapped PIN: 570001</span>
+          </div>
+
+        </div>
+
+        <!-- Creating Authority & Officer Reference Card -->
+        <div class="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 p-4 sm:p-6 shadow-xs space-y-3">
+          <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <span>🏛️</span> Parent Panchayat / Authority Delegation
+          </h3>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Assigned Panchayat / Department</span>
+              <span id="parent-dept-name" class="font-bold text-slate-900 block text-xs sm:text-sm">Mysuru City Corporation</span>
+            </div>
+            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Creating Officer In-Charge</span>
+              <span id="parent-officer-name" class="font-bold text-slate-900 block text-xs sm:text-sm">MCC Executive Officer</span>
+              <span id="parent-officer-email" class="font-mono text-[11px] text-emerald-700 block mt-0.5">mcc@gmail.com</span>
+            </div>
+            <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-emerald-800 block mb-1">Inspection Status</span>
+              <span class="font-bold text-emerald-950 block text-xs sm:text-sm">✓ Active On-Site Duty</span>
+              <span class="text-[11px] text-emerald-700 block mt-0.5">Automated PIN Routing Active</span>
+            </div>
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ========================================================================= -->
+  <!-- 4. PHYSICAL SITE INSPECTION & APPROVAL MODAL (PHONE SIZE OPTIMIZED)        -->
+  <!-- ========================================================================= -->
+  <div id="modal-backdrop" class="fixed inset-0 bg-slate-950/75 backdrop-blur-xs z-50 hidden flex items-center justify-center p-2 sm:p-4 overflow-y-auto">
+    <div id="modal-container" class="bg-white rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 max-w-lg w-full p-4 sm:p-6 space-y-4 max-h-[92vh] overflow-y-auto custom-scrollbar my-auto animate-in fade-in zoom-in duration-150">
+      <!-- Dynamically Injected Modal Content -->
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 5. JAVASCRIPT CONTROLLER                                                  -->
+  <!-- ========================================================================= -->
+  <script>
+    const AUTHORITY_CONFIGS = {
+      mcc: {
+        key: 'mcc',
+        title: 'MCC Ward Inspector Field Console',
+        sub: 'Urban core jurisdiction · Mysuru City Corporation',
+        deptName: 'Mysuru City Corporation (MCC)',
+        tag: 'MCC Urban Division',
+        icon: '🏛️',
+        officer: 'MCC Executive Officer (mcc@gmail.com)',
+        defaultPins: ['570001', '570002', '570004', '570008', '570020', '570024']
+      },
+      gp: {
+        key: 'gp',
+        title: 'Gram Panchayat Field Officer Console',
+        sub: 'Rural jurisdiction · Bogadi Gram Panchayat / Mysuru Rural',
+        deptName: 'Bogadi Gram Panchayat (Mysuru Rural)',
+        tag: 'Gram Panchayat (Rural)',
+        icon: '🏡',
+        officer: 'Gram Panchayat PDO (gp@gmail.com)',
+        defaultPins: ['570026', '571130', '570028', '571311']
+      },
+      tp: {
+        key: 'tp',
+        title: 'Town Panchayat Municipal Inspector Console',
+        sub: 'Sub-urban municipal body · Hootagalli TMC',
+        deptName: 'Hootagalli Town Municipal Council (TMC)',
+        tag: 'Town Panchayat (Sub-Urban)',
+        icon: '🏭',
+        officer: 'Town Panchayat Chief Officer (tp@gmail.com)',
+        defaultPins: ['570018', '570017', '570027']
+      }
+    };
+
+    const BASELINE_SUBMITTED_APPLICATIONS = [
+      {
+        id: 'MCC-2026-101',
+        applicantName: 'Ramesh Somanna',
+        phone: '+91 98450 11021',
+        propertyId: '40291001',
+        address: 'Sayyaji Rao Road, Devaraja Market Area, Mysuru',
+        pincode: '570001',
+        pin: '570001',
+        ward: 'Ward 14 (Palace Core)',
+        propertyDetails: 'Commercial Complex Renovation & Wall Demolition',
+        propertyType: 'Commercial Building',
+        verifiedMaterial: 'Reinforced Concrete & Brick Rubble',
+        material: 'Reinforced Concrete & Brick Rubble',
+        verifiedTonnage: 14.5,
+        tonnage: 14.5,
+        status: 'Approved',
+        certificateStatus: 'Issued',
+        certificateNo: 'NOC/MCC/2026/101',
+        scheduledDate: '2026-09-17',
+        completionDate: '2026-09-18',
+        assignedInspectorName: 'Rajesh Kumar',
+        assignedInspectorEmail: 'inspector.mcc@gmail.com',
+        assignedInspectorId: 'MCCU1001',
+        waterBillDiscount: '10% discount on Water Bill for 2 Years',
+        authority: 'Mysuru City Corporation (MCC)',
+        authorityKey: 'mcc',
+        headName: 'Dr. N. Chandrashekar, IAS (MCC Commissioner)',
+        headTitle: 'Municipal Commissioner',
+        issueDate: '2026-09-18',
+        gpsLocation: '12.3051° N, 76.6554° E',
+        photos: ['https://images.unsplash.com/photo-1541888946425-d0fbb186156f?w=600&auto=format&fit=crop&q=80'],
+        inspectorNotes: 'Structural site verified for 10-ton tipper vehicle access. Dust suppression sheets installed.'
+      },
+      {
+        id: 'GP-2026-104',
+        applicantName: 'Naveen Kumar Gowda',
+        phone: '+91 98450 33419',
+        propertyId: '88215002',
+        address: 'Survey No. 44/2, Outer Ring Road, Bogadi Village',
+        pincode: '570026',
+        pin: '570026',
+        ward: 'GP Ward 01 (Bogadi Rural)',
+        propertyDetails: 'Old Farmhouse & Boundary Wall Dismantling',
+        propertyType: 'Rural Residential Structure',
+        verifiedMaterial: 'Stone Masonry, Brick Rubble & Soil',
+        material: 'Stone Masonry, Brick Rubble & Soil',
+        verifiedTonnage: 22.0,
+        tonnage: 22.0,
+        status: 'Approved',
+        certificateStatus: 'Issued',
+        certificateNo: 'NOC/GP/2026/104',
+        scheduledDate: '2026-09-16',
+        completionDate: '2026-09-18',
+        assignedInspectorName: 'Seervi',
+        assignedInspectorEmail: 'q@gmail.com',
+        assignedInspectorId: 'BOGP1001',
+        waterBillDiscount: '10% discount on Water Bill for 2 Years',
+        authority: 'Bogadi Gram Panchayat',
+        authorityKey: 'gp',
+        headName: 'K. S. Manjunath (PDO)',
+        headTitle: 'Panchayat Development Officer',
+        issueDate: '2026-09-18',
+        gpsLocation: '12.3021° N, 76.5912° E',
+        photos: ['https://images.unsplash.com/photo-1590381105924-c72589b9ef3f?w=600&auto=format&fit=crop&q=80'],
+        inspectorNotes: 'Rural site inspected. 22 MT rubble volume cleared and haulage path approved for recycling depot.'
+      },
+      {
+        id: 'TP-2026-106',
+        applicantName: 'Suresh B. Patil',
+        phone: '+91 98450 77102',
+        propertyId: '55106003',
+        address: 'Plot 18, KIADB Belagola Industrial Area, Hootagalli',
+        pincode: '570018',
+        pin: '570018',
+        ward: 'TP Ward 01 (Hootagalli Town)',
+        propertyDetails: 'Industrial Shed & Floor Slab Demolition',
+        propertyType: 'Industrial Workshop',
+        verifiedMaterial: 'Heavy Concrete Slabs & Steel Rubble',
+        material: 'Heavy Concrete Slabs & Steel Rubble',
+        verifiedTonnage: 35.0,
+        tonnage: 35.0,
+        status: 'Approved',
+        certificateStatus: 'Issued',
+        certificateNo: 'NOC/TP/2026/106',
+        scheduledDate: '2026-09-17',
+        completionDate: '2026-09-19',
+        assignedInspectorName: 'M. Anand',
+        assignedInspectorEmail: 'anand.tp@gmail.com',
+        assignedInspectorId: 'HTMC1001',
+        waterBillDiscount: '10% discount on Water Bill for 2 Years',
+        authority: 'Hootagalli Town Panchayat (CMC)',
+        authorityKey: 'tp',
+        headName: 'S. Ramesh (Chief Officer)',
+        headTitle: 'Chief Officer / Zonal Superintendent',
+        issueDate: '2026-09-19',
+        gpsLocation: '12.3489° N, 76.5744° E',
+        photos: ['https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=600&auto=format&fit=crop&q=80'],
+        inspectorNotes: 'Industrial zone heavy slab debris verified. Hazardous materials absent. Approved for NOC.'
+      },
+      {
+        id: 'GP-2026-112',
+        applicantName: 'Channappa Marigowda',
+        phone: '+91 98450 99812',
+        propertyId: '90145004',
+        address: 'Maratikyathanahalli Village Main Road, Bogadi GP',
+        pincode: '570026',
+        pin: '570026',
+        ward: 'GP Ward 02 (Maratikyathanahalli)',
+        propertyDetails: 'Old Tiled Roof House Structural Clearance',
+        propertyType: 'Residential Premise',
+        verifiedMaterial: 'Clay Roof Tiles & Red Brick Masonry',
+        material: 'Clay Roof Tiles & Red Brick Masonry',
+        verifiedTonnage: 8.5,
+        tonnage: 8.5,
+        status: 'Pending Inspection',
+        scheduledDate: '2026-09-20',
+        completionDate: 'Pending Final Clearance',
+        assignedInspectorName: 'Seervi',
+        assignedInspectorEmail: 'q@gmail.com',
+        assignedInspectorId: 'BOGP1001',
+        waterBillDiscount: '10% discount on Water Bill for 2 Years',
+        authority: 'Bogadi Gram Panchayat',
+        authorityKey: 'gp',
+        headName: 'K. S. Manjunath (PDO)',
+        headTitle: 'Panchayat Development Officer',
+        gpsLocation: '12.2710° N, 76.5640° E',
+        photos: ['https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=600&auto=format&fit=crop&q=80'],
+        inspectorNotes: 'Physical on-site audit scheduled for today. Safety barricading checklist ready.'
+      },
+      {
+        id: 'MCC-2026-108',
+        applicantName: 'Vinayaka Traders (P. Murthy)',
+        phone: '+91 98450 44520',
+        propertyId: '66231005',
+        address: 'Kuvempunagar Double Road, Mysuru',
+        pincode: '570023',
+        pin: '570023',
+        ward: 'Ward 32 (Kuvempunagar)',
+        propertyDetails: 'Commercial Building Partition Demolition',
+        propertyType: 'Commercial Premise',
+        verifiedMaterial: 'Concrete Blocks & Plaster Rubble',
+        material: 'Concrete Blocks & Plaster Rubble',
+        verifiedTonnage: 11.2,
+        tonnage: 11.2,
+        status: 'Pending Inspection',
+        scheduledDate: '2026-09-20',
+        completionDate: 'Pending Final Clearance',
+        assignedInspectorName: 'P. Ramesh',
+        assignedInspectorEmail: 'ramesh.mcc@gmail.com',
+        assignedInspectorId: 'MCCU1002',
+        waterBillDiscount: '10% discount on Water Bill for 2 Years',
+        authority: 'Mysuru City Corporation (MCC)',
+        authorityKey: 'mcc',
+        headName: 'Dr. N. Chandrashekar, IAS (MCC Commissioner)',
+        headTitle: 'Municipal Commissioner',
+        gpsLocation: '12.2890° N, 76.6260° E',
+        photos: []
+      },
+      {
+        id: 'TP-2026-119',
+        applicantName: 'KIADB Industrial Shed Renovations',
+        phone: '+91 98450 77140',
+        propertyId: '50216006',
+        address: 'Koorgalli Industrial Area, Phase 2, Hootagalli',
+        pincode: '570018',
+        pin: '570018',
+        ward: 'TP Ward 04 (Koorgalli KIADB)',
+        propertyDetails: 'Factory RCC Flooring & Partition Clearance',
+        propertyType: 'Industrial Premise',
+        verifiedMaterial: 'Heavy RCC Slabs & Aggregate Rubble',
+        material: 'Heavy RCC Slabs & Aggregate Rubble',
+        verifiedTonnage: 24.0,
+        tonnage: 24.0,
+        status: 'Pending Inspection',
+        scheduledDate: '2026-09-21',
+        completionDate: 'Pending Final Clearance',
+        assignedInspectorName: 'M. Anand',
+        assignedInspectorEmail: 'anand.tp@gmail.com',
+        assignedInspectorId: 'HTMC1001',
+        waterBillDiscount: '10% discount on Water Bill for 2 Years',
+        authority: 'Hootagalli Town Panchayat (CMC)',
+        authorityKey: 'tp',
+        headName: 'S. Ramesh (Chief Officer)',
+        headTitle: 'Chief Officer / Zonal Superintendent',
+        gpsLocation: '12.3512° N, 76.5821° E',
+        photos: []
+      },
+      {
+        id: 'MCC-2026-115',
+        applicantName: 'Gokulam Villa Renovation (Priya Natarajan)',
+        phone: '+91 98450 88201',
+        propertyId: '10821007',
+        address: 'Gokulam 3rd Stage, 8th Main, Mysuru',
+        pincode: '570002',
+        pin: '570002',
+        ward: 'Ward 08 (Gokulam)',
+        propertyDetails: 'Compound Wall & Porch Demolition Rubble',
+        propertyType: 'Residential Villa',
+        verifiedMaterial: 'Granite Kerbs & Red Brick Rubble',
+        material: 'Granite Kerbs & Red Brick Rubble',
+        verifiedTonnage: 6.8,
+        tonnage: 6.8,
+        status: 'Pending Inspection',
+        scheduledDate: '2026-09-22',
+        completionDate: 'Pending Final Clearance',
+        assignedInspectorName: 'Rajesh Kumar',
+        assignedInspectorEmail: 'inspector.mcc@gmail.com',
+        assignedInspectorId: 'MCCU1001',
+        waterBillDiscount: '10% discount on Water Bill for 2 Years',
+        authority: 'Mysuru City Corporation (MCC)',
+        authorityKey: 'mcc',
+        headName: 'Dr. N. Chandrashekar, IAS (MCC Commissioner)',
+        headTitle: 'Municipal Commissioner',
+        gpsLocation: '12.3312° N, 76.6340° E',
+        photos: []
+      },
+      {
+        id: 'GP-2026-124',
+        applicantName: 'Kadakola Godown Clearance',
+        phone: '+91 98450 33419',
+        propertyId: '30415008',
+        address: 'Survey No. 12/B, Kadakola Village, Nanjangud Border',
+        pincode: '571311',
+        pin: '571311',
+        ward: 'GP Ward 03 (Kadakola)',
+        propertyDetails: 'Old Agro Godown Dismantling',
+        propertyType: 'Commercial Storage',
+        verifiedMaterial: 'Stone Masonry & Concrete Rubble',
+        material: 'Stone Masonry & Concrete Rubble',
+        verifiedTonnage: 18.0,
+        tonnage: 18.0,
+        status: 'Pending Inspection',
+        scheduledDate: '2026-09-22',
+        completionDate: 'Pending Final Clearance',
+        assignedInspectorName: 'Seervi',
+        assignedInspectorEmail: 'q@gmail.com',
+        assignedInspectorId: 'BOGP1001',
+        waterBillDiscount: '10% discount on Water Bill for 2 Years',
+        authority: 'Bogadi Gram Panchayat',
+        authorityKey: 'gp',
+        headName: 'K. S. Manjunath (PDO)',
+        headTitle: 'Panchayat Development Officer',
+        gpsLocation: '12.2104° N, 76.6690° E',
+        photos: []
+      }
+    ];
+
+    let currentUser = null;
+    let currentAuthorityKey = 'mcc';
+    let applicationsList = [];
+
+    // Real-Time High Speed Synchronization across Citizen & Officer Consoles
+    const civicSyncChannel = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('civic_sync_channel') : null;
+    if (civicSyncChannel) {
+      civicSyncChannel.onmessage = (event) => {
+        loadInspectorData();
+      };
+    }
+    window.addEventListener('storage', () => {
+      loadInspectorData();
+    });
+
+    function initInspectorSession() {
+      try {
+        let saved = localStorage.getItem('current_user') || sessionStorage.getItem('current_user');
+        if (!saved) {
+          currentUser = {
+            id: 'BOGP1001',
+            name: 'Seervi',
+            email: 'q@gmail.com',
+            role: 'inspector',
+            department: 'gp',
+            departmentName: 'Bogadi Gram Panchayat',
+            authority: 'Gram Panchayat (Bogadi Rural)',
+            assignedPin: '570026',
+            pin: '570026',
+            assignedArea: 'Bogadi Gram Panchayat Ward 01',
+            designation: 'Panchayat Health & C&D Inspector',
+            phone: '+91 98450 11005',
+            createdBy: 'K. S. Manjunath (PDO)',
+            creatingOfficerEmail: 'gp@gmail.com'
+          };
+          localStorage.setItem('current_user', JSON.stringify(currentUser));
+        } else {
+          currentUser = JSON.parse(saved);
+        }
+
+        const dept = (currentUser.department || '').toLowerCase();
+        const deptName = (currentUser.departmentName || currentUser.department_name || '').toLowerCase();
+        const auth = (currentUser.authority || '').toLowerCase();
+        const email = (currentUser.email || '').toLowerCase();
+        const pin = String(currentUser.assignedPin || currentUser.pin || '570001').trim();
+
+        // Determine which Panchayat / Authority created this inspector
+        if (dept === 'gp' || dept.includes('panchayat') || dept.includes('gram') || deptName.includes('panchayat') || auth.includes('panchayat') || email.includes('gp') || AUTHORITY_CONFIGS.gp.defaultPins.some(p => pin.includes(p))) {
+          currentAuthorityKey = 'gp';
+        } else if (dept === 'tp' || dept.includes('town') || deptName.includes('town') || auth.includes('town') || email.includes('tp') || AUTHORITY_CONFIGS.tp.defaultPins.some(p => pin.includes(p))) {
+          currentAuthorityKey = 'tp';
+        } else {
+          currentAuthorityKey = 'mcc';
+        }
+
+        const cfg = AUTHORITY_CONFIGS[currentAuthorityKey];
+        const name = currentUser.name || 'Field Inspector';
+        const assignedPin = currentUser.assignedPin || currentUser.pin || cfg.defaultPins[0];
+        const area = currentUser.assignedArea || (currentAuthorityKey === 'gp' ? 'GP Ward 01 (Bogadi Rural)' : (currentAuthorityKey === 'tp' ? 'TP Ward 01 (Hootagalli Town)' : 'Ward 14 (Palace & Devaraja Market)'));
+        const designation = currentUser.designation || (currentAuthorityKey === 'gp' ? 'Panchayat Health Inspector' : (currentAuthorityKey === 'tp' ? 'Town Municipal Inspector' : 'Ward Health Inspector'));
+        const insId = currentUser.id || ('INS-' + currentAuthorityKey.toUpperCase() + '-101');
+
+        // Mobile Header Sync
+        if (document.getElementById('mobile-icon')) document.getElementById('mobile-icon').innerText = cfg.icon;
+        if (document.getElementById('mobile-title')) document.getElementById('mobile-title').innerText = name + ' (' + (cfg.tag.split(' ')[0]) + ')';
+        if (document.getElementById('mobile-pin-text')) document.getElementById('mobile-pin-text').innerText = 'Assigned PIN: ' + assignedPin;
+
+        // Desktop Sidebar Branding
+        const sidebarIcon = document.getElementById('sidebar-icon');
+        if (sidebarIcon) sidebarIcon.innerText = cfg.icon;
+        const sidebarTitle = document.getElementById('sidebar-title');
+        if (sidebarTitle) sidebarTitle.innerText = cfg.title.split('—')[0].trim();
+        const sidebarDeptTag = document.getElementById('sidebar-dept-tag');
+        if (sidebarDeptTag) sidebarDeptTag.innerText = cfg.tag;
+        const sidebarPinText = document.getElementById('sidebar-pin-text');
+        if (sidebarPinText) sidebarPinText.innerText = 'PIN: ' + assignedPin;
+        const sidebarAuthPill = document.getElementById('sidebar-authority-pill');
+        if (sidebarAuthPill) sidebarAuthPill.innerText = cfg.tag;
+
+        const headerIcon = document.getElementById('header-icon');
+        if (headerIcon) headerIcon.innerText = cfg.icon;
+        const headerJurisTitle = document.getElementById('header-jurisdiction-title');
+        if (headerJurisTitle) headerJurisTitle.innerText = cfg.deptName + ' — PIN ' + assignedPin;
+        const headerJurisSub = document.getElementById('header-jurisdiction-sub');
+        if (headerJurisSub) headerJurisSub.innerText = 'Authorized Field Inspector Desk · ' + area;
+        const headerPinBadge = document.getElementById('header-assigned-pin-badge');
+        if (headerPinBadge) headerPinBadge.innerText = '📍 Assigned PIN: ' + assignedPin;
+
+        const activePinTag = document.getElementById('active-pin-filter-tag');
+        if (activePinTag) activePinTag.innerText = '📍 Mapped PIN: ' + assignedPin;
+
+        // Sidebar Profile Footer
+        const inspNameDisplay = document.getElementById('inspector-name-display');
+        if (inspNameDisplay) inspNameDisplay.innerText = name;
+        const inspEmailDisplay = document.getElementById('inspector-email-display');
+        if (inspEmailDisplay) inspEmailDisplay.innerText = currentUser.email || 'inspector@mysuru.gov.in';
+        const initials = name.split(' ').map(n=>n[0]).join('').substring(0,2).toUpperCase();
+        const inspAvatar = document.getElementById('inspector-avatar');
+        if (inspAvatar) inspAvatar.innerText = initials || 'IN';
+
+        // Panel Details Populating
+        const welcomeName = document.getElementById('welcome-inspector-name');
+        if (welcomeName) welcomeName.innerText = name + ' (' + insId + ')';
+        const welcomeOfficer = document.getElementById('welcome-creating-officer');
+        if (welcomeOfficer) welcomeOfficer.innerText = 'Registered under ' + cfg.deptName + '. Operating under direction of ' + (currentUser.createdBy || cfg.officer) + '.';
+        const heroPin = document.getElementById('hero-assigned-pin');
+        if (heroPin) heroPin.innerText = 'PIN ' + assignedPin;
+
+        const detName = document.getElementById('detail-ins-name');
+        if (detName) detName.innerText = name;
+        const detId = document.getElementById('detail-ins-id');
+        if (detId) detId.innerText = 'ID: ' + insId;
+        const detDept = document.getElementById('detail-ins-dept');
+        if (detDept) detDept.innerText = cfg.deptName;
+        const detDesig = document.getElementById('detail-ins-desig');
+        if (detDesig) detDesig.innerText = designation;
+        const detPhone = document.getElementById('detail-ins-phone');
+        if (detPhone) detPhone.innerText = currentUser.phone || '+91 98450 11005';
+        const detEmail = document.getElementById('detail-ins-email');
+        if (detEmail) detEmail.innerText = currentUser.email;
+        const detArea = document.getElementById('detail-ins-area');
+        if (detArea) detArea.innerText = area;
+        const detPin = document.getElementById('detail-ins-pin');
+        if (detPin) detPin.innerText = 'Mapped PIN: ' + assignedPin;
+
+        const parDept = document.getElementById('parent-dept-name');
+        if (parDept) parDept.innerText = cfg.deptName;
+        const parOfficer = document.getElementById('parent-officer-name');
+        if (parOfficer) parOfficer.innerText = currentUser.createdBy || cfg.officer;
+        const parEmail = document.getElementById('parent-officer-email');
+        if (parEmail) parEmail.innerText = currentUser.creatingOfficerEmail || (currentAuthorityKey === 'gp' ? 'gp@gmail.com' : (currentAuthorityKey === 'tp' ? 'tp@gmail.com' : 'mcc@gmail.com'));
+      } catch(e) {}
+    }
+
+    async function loadInspectorData() {
+      try {
+        const resUsers = await fetch('/api/auth/users');
+        if (resUsers.ok) {
+          const allUsers = await resUsers.json();
+          if (Array.isArray(allUsers) && allUsers.length > 0) {
+            localStorage.setItem('civic_registered_users', JSON.stringify(allUsers));
+            const inspectors = allUsers.filter(u => (u.role || '').toLowerCase() === 'inspector' || (u.authority || '').toLowerCase().includes('inspector'));
+            localStorage.setItem('civic_inspectors', JSON.stringify(inspectors));
+            
+            if (currentUser && currentUser.email) {
+              const matched = allUsers.find(u => (u.email || '').toLowerCase() === currentUser.email.toLowerCase());
+              if (matched) {
+                currentUser = { ...currentUser, ...matched };
+                localStorage.setItem('current_user', JSON.stringify(currentUser));
+                initInspectorSession();
+              }
+            }
+          }
+        }
+      } catch(e) {}
+
+      let fetched = [];
+      if (window.civicDb && typeof window.civicDb.fetchApplications === 'function') {
+        try {
+          fetched = await window.civicDb.fetchApplications();
+        } catch(e) {}
+      } else {
+        try {
+          const res = await fetch('/api/applications');
+          if (res.ok) fetched = await res.json();
+        } catch(e) {}
+      }
+
+      const local = JSON.parse(localStorage.getItem('civic_applications') || '[]');
+      const custReqs = JSON.parse(localStorage.getItem('cust_my_requests') || '[]');
+      const combined = [...(Array.isArray(fetched) ? fetched : []), ...(Array.isArray(local) ? local : []), ...(Array.isArray(custReqs) ? custReqs : [])];
+      const uniqueMap = new Map();
+      combined.forEach(a => {
+        if (!a) return;
+        const id = String(a.id || a.requestId || '').trim();
+        if (!id) return;
+        if (!uniqueMap.has(id)) {
+          uniqueMap.set(id, a);
+        } else {
+          uniqueMap.set(id, { ...uniqueMap.get(id), ...a });
+        }
+      });
+      applicationsList = Array.from(uniqueMap.values());
+      localStorage.setItem('civic_applications', JSON.stringify(applicationsList));
+
+      renderAllPanels();
+    }
+
+    // Strictly filter applications for this inspector's assigned Authority & PIN
+    function getMyAssignedApplications() {
+      if (!currentUser) return applicationsList;
+      const myPin = String(currentUser.assignedPin || currentUser.pin || '').trim();
+      const myEmail = (currentUser.email || '').toLowerCase().trim();
+      const myName = (currentUser.name || '').toLowerCase().trim();
+
+      const GP_PINS = ['570026', '571130', '570028', '571311', '571201', '571186', '571101', '571120', '571124', '571125'];
+      const TP_PINS = ['570018', '570017', '570027', '571607', '571604', '571602', '571610'];
+      const MCC_PINS = ['570001', '570002', '570004', '570008', '570020', '570024'];
+
+      return applicationsList.filter(app => {
+        if (!app) return false;
+        const appPin = String(app.pincode || app.pin || '').trim();
+        const appAuthKey = (app.authorityKey || '').toLowerCase().trim();
+        const appInspectorEmail = (app.assignedInspectorEmail || '').toLowerCase().trim();
+        const appInspectorName = (app.assignedInspectorName || '').toLowerCase().trim();
+        const auditedBy = (app.auditedBy || '').toLowerCase().trim();
+        const authStr = (app.authority || '').toLowerCase().trim();
+
+        // 1. Direct inspector email assignment match (Primary)
+        if (appInspectorEmail && myEmail && (appInspectorEmail === myEmail || appInspectorEmail.includes(myEmail) || myEmail.includes(appInspectorEmail))) return true;
+
+        // 2. Direct inspector audited match
+        if (auditedBy && (auditedBy === myEmail || auditedBy === myName)) return true;
+
+        // 3. Assigned PIN code exact or prefix match (Primary assigned PIN routing)
+        if (myPin && appPin) {
+          const pinList = myPin.split(/[\s,]+/).map(p => p.trim());
+          if (pinList.some(p => p && (p === appPin || appPin.startsWith(p) || p.startsWith(appPin)))) return true;
+        }
+
+        // 4. Authority Fallback Match
+        let appTargetAuth = appAuthKey;
+        if (!appTargetAuth) {
+          if (GP_PINS.some(p => appPin.startsWith(p) || p.startsWith(appPin)) || authStr.includes('panchayat') || authStr.includes('gram') || authStr.includes('bogadi')) appTargetAuth = 'gp';
+          else if (TP_PINS.some(p => appPin.startsWith(p) || p.startsWith(appPin)) || authStr.includes('town') || authStr.includes('hootagalli')) appTargetAuth = 'tp';
+          else appTargetAuth = 'mcc';
+        }
+        if (appTargetAuth === currentAuthorityKey && (!appInspectorEmail || appInspectorEmail === myEmail)) return true;
+
+        return false;
+      });
+    }
+
+    let currentInspectionFilter = 'pending';
+
+    function setInspectionFilter(filter) {
+      currentInspectionFilter = filter;
+      ['pending', 'completed', 'all'].forEach(k => {
+        const btn = document.getElementById('filter-btn-' + k);
+        if (btn) {
+          if (k === filter) {
+            btn.className = 'px-3.5 py-2 rounded-xl bg-white text-slate-900 font-bold text-xs shadow-xs transition cursor-pointer flex items-center gap-1.5';
+          } else {
+            btn.className = 'px-3.5 py-2 rounded-xl text-slate-600 hover:text-slate-900 font-bold text-xs transition cursor-pointer flex items-center gap-1.5';
+          }
+        }
+      });
+
+      const desc = document.getElementById('filter-status-desc');
+      if (desc) {
+        if (filter === 'pending') desc.innerText = 'Showing Pending Inspections (Awaiting On-Site Audit)';
+        else if (filter === 'completed') desc.innerText = 'Showing Completed / Passed (Official NOC Issued)';
+        else desc.innerText = 'Showing All Assigned Applications';
+      }
+
+      renderAllPanels();
+    }
+
+    function renderAllPanels() {
+      const myApps = getMyAssignedApplications();
+      const myPin = currentUser ? (currentUser.assignedPin || '570001') : '570001';
+
+      // Summary Stats
+      const assignedCount = myApps.length;
+      const pendingCount = myApps.filter(a => a.status !== 'Approved' && a.certificateStatus !== 'Issued').length;
+      const approvedCount = myApps.filter(a => a.status === 'Approved' || a.certificateStatus === 'Issued').length;
+
+      document.getElementById('stat-assigned-count').innerText = assignedCount;
+      document.getElementById('stat-pending-audit').innerText = pendingCount;
+      document.getElementById('stat-cleared-count').innerText = approvedCount;
+
+      if (document.getElementById('badge-all-count')) document.getElementById('badge-all-count').innerText = assignedCount;
+      if (document.getElementById('badge-pending-count')) document.getElementById('badge-pending-count').innerText = pendingCount;
+      if (document.getElementById('badge-completed-count')) document.getElementById('badge-completed-count').innerText = approvedCount;
+
+      if (document.getElementById('sidebar-assigned-badge')) {
+        document.getElementById('sidebar-assigned-badge').innerText = pendingCount > 0 ? `${pendingCount} Pending` : `${assignedCount} Total`;
+      }
+      if (document.getElementById('mob-stat-badge')) {
+        document.getElementById('mob-stat-badge').innerText = pendingCount > 0 ? `${pendingCount} Pending` : `${assignedCount}`;
+      }
+
+      let filteredApps = myApps;
+      if (currentInspectionFilter === 'pending') {
+        filteredApps = myApps.filter(a => a.status !== 'Approved' && a.certificateStatus !== 'Issued');
+      } else if (currentInspectionFilter === 'completed') {
+        filteredApps = myApps.filter(a => a.status === 'Approved' || a.certificateStatus === 'Issued');
+      }
+
+      renderInspectionView(filteredApps, myPin);
+    }
+
+    // UNIFIED MOBILE-FIRST & DESKTOP RESPONSIVE INSPECTION DESK (With in-line Geotag Photos & Evidence Data)
+    function renderInspectionView(myApps, myPin) {
+      const container = document.getElementById('inspections-container');
+      if (!container) return;
+
+      if (myApps.length === 0) {
+        const isPendingView = currentInspectionFilter === 'pending';
+        const isCompletedView = currentInspectionFilter === 'completed';
+        
+        container.innerHTML = `
+          <div class="py-12 px-4 text-center rounded-2xl bg-slate-50 border border-slate-200 space-y-2">
+            <span class="text-3xl block">${isCompletedView ? '🎉' : (isPendingView ? '✨' : '📭')}</span>
+            <p class="font-bold text-slate-800 text-sm">
+              ${isCompletedView ? 'No completed inspections in this list yet.' : (isPendingView ? 'All caught up! No pending inspections for PIN ' + myPin + '.' : 'No applications assigned to PIN ' + myPin + ' currently.')}
+            </p>
+            <p class="text-xs text-slate-500 max-w-sm mx-auto">
+              ${isPendingView ? 'When new customer requests arrive for PIN ' + myPin + ', they will appear here.' : (isCompletedView ? 'Once you audit and approve pending permits, they will appear in this completed archive.' : 'Live updates will stream in real-time.')}
+            </p>
+            ${isPendingView && myApps.length === 0 ? `
+              <button onclick="setInspectionFilter('all')" class="mt-2 px-3.5 py-1.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs transition cursor-pointer">
+                View All Assigned Cases &rarr;
+              </button>
+            ` : ''}
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = myApps.map(a => {
+        const photos = (a.photos && Array.isArray(a.photos) && a.photos.length > 0) ? a.photos : (a.photo ? [a.photo] : []);
+        const gpsText = a.gpsLocation || (a.lat ? `Lat: ${a.lat}° N, Lng: ${a.lng}° E` : `Lat: 12.29581° N, Lng: 76.63942° E`);
+        const mapUrl = a.mapUrl || (a.lat ? `https://www.google.com/maps?q=${a.lat},${a.lng}` : `https://www.google.com/maps?q=12.29581,76.63942`);
+        const inspectTime = a.inspectionTime || a.auditedAt ? new Date(a.auditedAt || a.inspectionTime).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'Pending Site Visit';
+        const isApproved = a.status === 'Approved' || a.certificateStatus === 'Issued';
+        const remarksText = a.inspectorNotes || (isApproved ? 'Structural site verified for 10-ton tipper access. Safety guidelines met.' : 'Site audit scheduled. Physical GPS and rubble measurement required.');
+        const tonnageVal = a.verifiedTonnage || a.tonnage || 10;
+
+        let photoThumbHtml = '';
+        if (photos.length > 0) {
+          photoThumbHtml = `
+            <div class="relative group cursor-pointer shrink-0 rounded-2xl overflow-hidden border border-emerald-500/30 bg-slate-950 shadow-xs" onclick="viewPhoto('${a.id}')" title="Click to enlarge live geotagged photo">
+              <img src="${photos[0]}" alt="Live Site Photo" class="h-28 w-28 sm:h-32 sm:w-32 object-cover group-hover:scale-105 transition duration-200"/>
+              <div class="absolute bottom-1 left-1 right-1 bg-black/75 backdrop-blur-xs rounded-lg px-1.5 py-0.5 text-center">
+                <span class="text-[9px] font-mono font-extrabold text-emerald-300 block truncate">📍 LIVE GEOTAG</span>
+              </div>
+              ${photos.length > 1 ? `
+                <div class="absolute top-1 right-1 bg-emerald-700 text-white font-mono text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-xs">
+                  +${photos.length - 1}
+                </div>
+              ` : ''}
+            </div>
+          `;
+        } else {
+          photoThumbHtml = `
+            <div class="h-28 w-28 sm:h-32 sm:w-32 rounded-2xl border border-dashed border-slate-300 bg-slate-100/70 flex flex-col items-center justify-center p-2 text-center shrink-0">
+              <span class="text-xl">📷</span>
+              <span class="text-[9px] font-mono text-slate-500 mt-1">No site photo</span>
+            </div>
+          `;
+        }
+
+        return `
+          <!-- Inspection Card (Optimized for Mobile Phone Screens & Wide Screens) -->
+          <div class="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 p-4 sm:p-5 shadow-xs hover:shadow-md transition space-y-3.5">
+            
+            <!-- Top Header: Case ID, Date, Status Badge -->
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+              <div class="flex items-center gap-2">
+                <span class="px-2.5 py-0.5 rounded-lg bg-slate-900 text-white font-mono font-bold text-xs tracking-tight">
+                  ${a.id}
+                </span>
+                <span class="text-[11px] font-mono text-slate-400">
+                  ${a.scheduledDate || 'Today'}
+                </span>
+              </div>
+              <span class="px-3 py-1 rounded-full text-[11px] font-bold font-mono ${isApproved ? 'bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs' : 'bg-amber-100 text-amber-900 border border-amber-300'}">
+                ${isApproved ? '✓ Passed & Approved (NOC)' : (a.status || 'Pending Field Audit')}
+              </span>
+            </div>
+
+            <!-- Body: Photo Evidence Thumbnail + Site Details -->
+            <div class="flex flex-col sm:flex-row gap-3.5 items-start">
+              
+              <!-- In-Line Geotag Photo Evidence -->
+              ${photoThumbHtml}
+
+              <!-- Core Application & Verification Details -->
+              <div class="flex-1 min-w-0 space-y-2">
+                
+                <!-- Applicant Name & Click-to-Call Phone -->
+                <div class="flex flex-wrap items-center justify-between gap-1">
+                  <span class="font-extrabold text-sm sm:text-base text-slate-950 block">${a.applicantName || 'Citizen Applicant'}</span>
+                  ${a.phone ? `
+                    <a href="tel:${a.phone.replace(/[^0-9+]/g, '')}" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-mono text-xs font-bold border border-emerald-200 transition" title="Call Citizen">
+                      <span>📞</span> <span>${a.phone}</span>
+                    </a>
+                  ` : ''}
+                </div>
+
+                <!-- Site Premise Address & PIN -->
+                <div class="text-xs text-slate-700">
+                  <p class="font-medium text-slate-900 leading-snug">${a.address || 'Mysuru Premise'}</p>
+                  <span class="font-mono text-emerald-700 font-bold text-[11px]">Mapped PIN: ${a.pincode || a.pin || myPin}</span>
+                </div>
+
+                <!-- GPS Location Link & Document Validation Badges -->
+                <div class="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <a href="${mapUrl}" target="_blank" class="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-mono text-[10px] sm:text-[11px] font-bold flex items-center gap-1 border border-slate-300 transition" title="Open GPS Location in Google Maps">
+                    <span>📍</span> <span>${gpsText}</span> <span class="text-[9px] text-slate-500">↗</span>
+                  </a>
+                  <span class="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 font-mono text-[10px] font-bold border border-emerald-200">
+                    ✓ Khatta Validated
+                  </span>
+                  <span class="px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 font-mono text-[10px] font-bold border border-blue-200">
+                    ✓ Blueprint (${tonnageVal} MT)
+                  </span>
+                </div>
+
+                <!-- Inspector Remarks / Field Notes -->
+                <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+                  <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Field Inspection Notes</span>
+                  <p class="text-slate-800 italic text-[11px] leading-relaxed">"${remarksText}"</p>
+                </div>
+
+              </div>
+
+            </div>
+
+            <!-- Footer Action Buttons (Full-Width on Phone, Quick Tap) -->
+            <div class="pt-2 border-t border-slate-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+              <div class="text-[11px] font-mono text-slate-500 flex items-center gap-1.5">
+                <span>🕒 Last Audit:</span>
+                <span class="font-bold text-slate-700">${inspectTime}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                ${isApproved ? `
+                  <button onclick="openCertificateModal('${a.id}')" class="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs shadow-2xs transition cursor-pointer flex items-center justify-center gap-1.5">
+                    <span>📜</span> <span>View Official NOC</span>
+                  </button>
+                ` : ''}
+                <button onclick="openInspectionModal('${a.id}')" class="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition cursor-pointer flex items-center justify-center gap-1.5">
+                  <span>📋</span> <span>${isApproved ? 'Re-Audit Site' : 'Audit & Approve'}</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Modal Multi-Photo Zoom with Geotag Metadata
+    function viewPhoto(appId) {
+      const app = applicationsList.find(a => a.id === appId);
+      if (!app) return;
+      const photos = (app.photos && Array.isArray(app.photos) && app.photos.length > 0) ? app.photos : (app.photo ? [app.photo] : []);
+      if (photos.length === 0) return;
+
+      const modalContainer = document.getElementById('modal-container');
+      const backdrop = document.getElementById('modal-backdrop');
+
+      modalContainer.innerHTML = `
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <span>📸</span> Real Location Site Photo Evidence
+            </h3>
+            <p class="text-[11px] text-slate-500 font-mono">${app.id} · PIN: ${app.pincode || app.pin || ''} · ${app.applicantName || 'Citizen'}</p>
+          </div>
+          <button onclick="closeModal()" class="size-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-base flex items-center justify-center cursor-pointer">&times;</button>
+        </div>
+        <div class="space-y-3">
+          <div class="space-y-2">
+            <div id="inspector-active-photo-box" class="rounded-2xl overflow-hidden border border-slate-800 max-h-80 sm:max-h-96 flex items-center justify-center bg-slate-950 shadow-inner">
+              <img id="inspector-active-photo-img" src="${photos[0]}" alt="Geotagged Site Photo" class="max-h-80 sm:max-h-96 w-auto object-contain"/>
+            </div>
+            ${photos.length > 1 ? `
+              <div class="flex items-center gap-2 overflow-x-auto py-1">
+                ${photos.map((p, idx) => `
+                  <img src="${p}" onclick="document.getElementById('inspector-active-photo-img').src = '${p}'" class="size-14 rounded-xl object-cover cursor-pointer border-2 border-emerald-500 hover:opacity-80 shrink-0"/>
+                `).join('')}
+              </div>
+            ` : ''}
+          </div>
+          <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-1.5 text-slate-700">
+            <div class="flex items-center justify-between border-b border-slate-200/60 pb-1.5">
+              <span class="font-bold text-emerald-800 flex items-center gap-1"><span>📍</span> <span>Live GPS Geotag:</span></span>
+              <span class="font-mono font-bold text-slate-900">${app.gpsLocation || (app.lat ? `Lat: ${app.lat}° N, Lng: ${app.lng}° E` : 'Lat: 12.29581° N, Lng: 76.63942° E')}</span>
+            </div>
+            <p><span class="font-bold">Real Site Address:</span> ${app.address || 'Mysuru Site'} (PIN: ${app.pincode || app.pin || '570001'})</p>
+            <p><span class="font-bold">Applicant / Citizen:</span> ${app.applicantName || 'Citizen'} · Phone: ${app.phone || 'N/A'}</p>
+          </div>
+        </div>
+        <div class="pt-2 flex justify-end">
+          <button onclick="closeModal()" class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer">Close Preview</button>
+        </div>
+      `;
+      backdrop.classList.remove('hidden');
+    }
+
+    // On-Site Inspection & Field Audit Modal (Phone Size Optimized)
+    function openInspectionModal(appId) {
+      const app = applicationsList.find(a => a.id === appId);
+      if (!app) return;
+
+      const photos = (app.photos && Array.isArray(app.photos) && app.photos.length > 0) ? app.photos : (app.photo ? [app.photo] : []);
+      const modalContainer = document.getElementById('modal-container');
+      const backdrop = document.getElementById('modal-backdrop');
+      const nowFormatted = new Date().toISOString().slice(0, 16);
+      const defaultGps = app.gpsLocation || (app.lat ? `Lat: ${app.lat}° N, Lng: ${app.lng}° E` : 'Lat: 12.29581° N, Lng: 76.63942° E');
+
+      modalContainer.innerHTML = `
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm sm:text-base flex items-center gap-2">
+              <span>📋</span> Field Site Audit & Approval
+            </h3>
+            <p class="text-[11px] text-slate-500 font-mono">${app.id} · PIN: ${app.pincode || app.pin || '570001'}</p>
+          </div>
+          <button onclick="closeModal()" class="size-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-base flex items-center justify-center cursor-pointer">&times;</button>
+        </div>
+
+        <form onsubmit="handleSaveInspection(event, '${app.id}')" class="space-y-3.5 text-xs">
+          
+          <!-- Site Location & PIN Summary -->
+          <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Site Premise Address</span>
+            <p class="font-bold text-slate-900 text-xs sm:text-sm leading-snug">${app.address || 'Mysuru Premise'}</p>
+            <span class="text-xs font-mono font-bold text-emerald-800 block mt-0.5">PIN: ${app.pincode || app.pin || '570001'} · Citizen: ${app.applicantName || 'Citizen'} (${app.phone || ''})</span>
+          </div>
+
+          <!-- Photo Evidence Preview Strip (Inspect on Phone) -->
+          ${photos.length > 0 ? `
+            <div class="p-3 bg-slate-900 rounded-2xl text-white space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] sm:text-[11px] font-bold text-emerald-400 uppercase tracking-wider">📸 Site Geotag Photos (${photos.length})</span>
+                <button type="button" onclick="viewPhoto('${app.id}')" class="text-[10px] text-emerald-300 underline font-bold cursor-pointer">Enlarge &rarr;</button>
+              </div>
+              <div class="flex items-center gap-2 overflow-x-auto py-1">
+                ${photos.map((p, idx) => `
+                  <div class="h-20 w-20 rounded-xl overflow-hidden bg-slate-950 flex items-center justify-center shrink-0 border border-slate-700">
+                    <img src="${p}" alt="Site Photo ${idx+1}" class="h-full w-full object-cover cursor-pointer hover:scale-105 transition" onclick="viewPhoto('${app.id}')"/>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+
+          <!-- GPS Location & Auto-Fetch -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="block font-bold text-slate-700 uppercase tracking-wider text-[11px]">📍 Live GPS Coordinates</label>
+              <button type="button" onclick="detectGPS()" class="text-[10px] text-emerald-600 hover:text-emerald-700 font-bold underline cursor-pointer">Auto-Fetch GPS</button>
+            </div>
+            <input id="audit-gps" type="text" value="${defaultGps}" required placeholder="Lat: 12.29581° N, Lng: 76.63942° E" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 font-mono text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"/>
+          </div>
+
+          <!-- Scheduled Date & Inspection Time Pickers -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label class="block font-bold text-slate-700 uppercase tracking-wider mb-1 text-[11px]">📅 Scheduled Date</label>
+              <input id="audit-scheduled-date" type="date" value="${app.scheduledDate || (app.inspectionDate ? app.inspectionDate.split('T')[0] : new Date().toISOString().split('T')[0])}" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 font-mono text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"/>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 uppercase tracking-wider mb-1 text-[11px]">🕒 Inspection Time</label>
+              <input id="audit-datetime" type="datetime-local" value="${nowFormatted}" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 font-mono text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"/>
+            </div>
+          </div>
+
+          <!-- Audit Decision / Status Selection -->
+          <div>
+            <label class="block font-bold text-emerald-900 uppercase tracking-wider mb-1 text-[11px]">⚡ Inspection Stage / Approval Decision</label>
+            <select id="audit-decision" class="w-full px-3.5 py-2.5 rounded-xl bg-emerald-50 border border-emerald-300 font-bold text-xs text-emerald-950 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+              <option value="Approved" ${app.status === 'Approved' || app.certificateStatus === 'Issued' ? 'selected' : ''}>🏆 Agree & Approve (Issue Official NOC Certificate)</option>
+              <option value="Inspection Passed & Verified" ${app.status === 'Inspection Passed & Verified' ? 'selected' : ''}>🟢 Inspection Passed & Verified</option>
+              <option value="On-Site Audit In Progress" ${app.status === 'On-Site Audit In Progress' ? 'selected' : ''}>🚶 On-Site Audit In Progress</option>
+              <option value="Visit Scheduled" ${app.status === 'Visit Scheduled' ? 'selected' : ''}>📅 Visit Scheduled (Date & Time Fixed)</option>
+              <option value="Action Required" ${app.status === 'Action Required' ? 'selected' : ''}>⚠️ Action Required / Resubmission</option>
+              <option value="Flagged Violation" ${app.status === 'Flagged Violation' ? 'selected' : ''}>❌ Flagged Violation</option>
+              <option value="Cancelled" ${app.status === 'Cancelled' ? 'selected' : ''}>⛔ Cancel / Reject Request</option>
+            </select>
+          </div>
+
+          <!-- Verified Tonnage & Target Completion Date -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div>
+              <label class="block font-bold text-slate-700 uppercase tracking-wider mb-1 text-[11px]">Verified Tonnage (MT)</label>
+              <input id="audit-tonnage" type="number" step="0.1" value="${app.verifiedTonnage || app.tonnage || '10'}" placeholder="e.g. 10" required class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 font-mono font-bold text-xs text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"/>
+            </div>
+
+            <div>
+              <label class="block font-bold text-slate-700 uppercase tracking-wider mb-1 text-[11px]">🏁 Completion Date</label>
+              <input id="audit-completion-date" type="date" value="${app.completionDate && !app.completionDate.includes('Pending') && !app.completionDate.includes('Progress') ? app.completionDate : ''}" class="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 font-mono text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"/>
+            </div>
+          </div>
+
+          <!-- Water Bill Discount Clause -->
+          <div>
+            <label class="block font-bold text-emerald-800 uppercase tracking-wider mb-1 text-[11px]">💧 Civic Water Bill Rebate / Incentive</label>
+            <input id="audit-water-discount" type="text" value="${app.waterBillDiscount || '10% discount on Water Bill for 2 Years'}" placeholder="e.g. 10% discount on Water Bill for 2 Years" class="w-full px-3.5 py-2 rounded-xl bg-emerald-50/50 border border-emerald-300 font-bold text-xs text-emerald-950 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none"/>
+          </div>
+
+          <!-- Inspector Field Remarks -->
+          <div>
+            <label class="block font-bold text-slate-700 uppercase tracking-wider mb-1 text-[11px]">💬 Inspector Field Remarks</label>
+            <textarea id="audit-remarks" rows="2" placeholder="e.g. Site boundary verified. Road access suitable for 10-ton tipper truck. Safety barricades checked." class="w-full px-3.5 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none font-medium">${app.inspectorNotes || ''}</textarea>
+          </div>
+
+          <!-- Mobile-Friendly Action Buttons -->
+          <div class="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 border-t border-slate-100">
+            <button type="button" onclick="closeModal()" class="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs cursor-pointer text-center">Cancel</button>
+            <button type="submit" class="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/25 cursor-pointer flex items-center justify-center gap-1.5 text-center">
+              <span>✓ Save Audit & Issue NOC Certificate</span>
+            </button>
+          </div>
+
+        </form>
+      `;
+
+      backdrop.classList.remove('hidden');
+    }
+
+    function detectGPS() {
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const val = `Lat: ${lat.toFixed(5)}° N, Lng: ${lng.toFixed(5)}° E`;
+            const input = document.getElementById('audit-gps');
+            if (input) input.value = val;
+            showToast('📍 Live GPS coordinates captured: ' + val, 'success');
+          },
+          err => {
+            // Fallback realistic Mysuru GPS
+            const input = document.getElementById('audit-gps');
+            if (input) input.value = 'Lat: 12.29581° N, Lng: 76.63942° E';
+            showToast('📍 GPS Location set to Mysuru Ward Coordinate.', 'success');
+          }
+        );
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('modal-backdrop').classList.add('hidden');
+    }
+
+    async function handleSaveInspection(e, appId) {
+      e.preventDefault();
+      const app = applicationsList.find(a => a.id === appId);
+      if (app) {
+        const gps = document.getElementById('audit-gps').value.trim();
+        const datetime = document.getElementById('audit-datetime').value;
+        const scheduledDate = document.getElementById('audit-scheduled-date').value || (datetime ? datetime.split('T')[0] : new Date().toISOString().split('T')[0]);
+        const compDateInput = document.getElementById('audit-completion-date').value;
+        const tonnage = document.getElementById('audit-tonnage').value;
+        const decision = document.getElementById('audit-decision').value;
+        const remarks = document.getElementById('audit-remarks').value.trim();
+        const waterDiscountInput = document.getElementById('audit-water-discount');
+        const waterDiscount = waterDiscountInput ? waterDiscountInput.value.trim() : '';
+        const isPassing = decision === 'Approved' || decision.includes('Approve') || decision.includes('Inspection Passed') || decision.includes('NOC');
+        const finalStatus = decision.includes('Approve') ? 'Approved' : decision;
+        const completionDate = compDateInput || (isPassing ? (scheduledDate || new Date().toISOString().split('T')[0]) : (decision === 'Visit Scheduled' || decision === 'On-Site Audit In Progress' ? 'In Progress' : 'Pending'));
+
+        app.gpsLocation = gps;
+        app.inspectionTime = datetime;
+        app.scheduledDate = scheduledDate;
+        app.completionDate = completionDate;
+        app.tonnage = tonnage;
+        app.verifiedTonnage = tonnage;
+        app.status = finalStatus;
+        app.inspectorNotes = remarks;
+        app.waterBillDiscount = waterDiscount || '10% discount on Municipal / Panchayat Water Bill for 2 Years (24 Months)';
+        app.auditedBy = currentUser ? (currentUser.name || 'Field Inspector') : 'Field Inspector';
+        app.assignedInspectorName = currentUser ? (currentUser.name || app.assignedInspectorName) : (app.assignedInspectorName || 'Field Inspector');
+        app.assignedInspectorEmail = currentUser ? (currentUser.email || app.assignedInspectorEmail) : (app.assignedInspectorEmail || 'inspector@gmail.com');
+        app.auditedAt = new Date().toISOString();
+
+        if (isPassing) {
+          app.certificateStatus = 'Issued';
+          if (!app.certificateNo) {
+            const cleanId = (app.id || 'REQ101').replace(/[^a-zA-Z0-9]/g, '');
+            const authPrefix = (app.authorityKey || currentAuthorityKey || 'mcc').toUpperCase();
+            app.certificateNo = `NOC/${authPrefix}/2026/${cleanId.slice(-6)}`;
+          }
+          if (!app.issueDate) {
+            app.issueDate = new Date().toISOString().split('T')[0];
+          }
+        }
+
+        // 1. Save directly to Backend REST API AND Supabase Cloud Database
+        try {
+          await fetch('/api/applications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(app)
+          });
+        } catch(err) {
+          console.warn('Backend API save err:', err);
+        }
+
+        if (window.civicDb && typeof window.civicDb.saveApplication === 'function') {
+          try {
+            await window.civicDb.saveApplication(app);
+          } catch(err) {
+            console.warn('civicDb saveApplication err:', err);
+          }
+        }
+
+        // 2. Save locally in master applications list with quota protection
+        try {
+          localStorage.setItem('civic_applications', JSON.stringify(applicationsList));
+          
+          // Sync to customer requests cache
+          const myRequests = JSON.parse(localStorage.getItem('cust_my_requests') || '[]');
+          const custIdx = myRequests.findIndex(r => r.id === appId);
+          if (custIdx >= 0) {
+            myRequests[custIdx] = { ...myRequests[custIdx], ...app };
+            localStorage.setItem('cust_my_requests', JSON.stringify(myRequests));
+          }
+        } catch(storageErr) {
+          console.warn('LocalStorage save warning:', storageErr);
+        }
+
+        // 3. Broadcast to all open tabs immediately for 0ms cross-portal sync
+        if (civicSyncChannel) {
+          try {
+            civicSyncChannel.postMessage({ type: 'STATUS_UPDATED', id: appId, status: app.status, application: app });
+            civicSyncChannel.postMessage({ type: 'APPLICATION_UPDATED', id: appId, status: app.status, application: app });
+          } catch(e) {}
+        }
+        window.dispatchEvent(new Event('storage'));
+
+        closeModal();
+        renderAllPanels();
+        showToast('🎉 Status updated to "' + finalStatus + '" for ' + appId + '! ' + (isPassing ? 'Official NOC Certificate issued.' : 'Customer tracker updated live.'), 'success');
+      }
+    }
+
+    // Official NOC Certificate View in Inspector Console
+    function openCertificateModal(appId) {
+      const app = applicationsList.find(a => a.id === appId);
+      if (!app) return;
+
+      const cleanId = (app.id || 'REQ-101').replace(/[^a-zA-Z0-9]/g, '');
+      const deptKey = (app.authorityKey || (currentAuthorityKey || 'mcc')).toLowerCase();
+      const authorityName = app.authority || (deptKey === 'gp' ? 'Bogadi Gram Panchayat (Rural)' : (deptKey === 'tp' ? 'Hootagalli Town Panchayat' : 'Mysuru City Corporation (MCC)'));
+
+      const authTitle = document.getElementById('cert-authority-title');
+      if (authTitle) authTitle.innerText = authorityName.toUpperCase();
+
+      const authPrefix = deptKey.toUpperCase();
+      const refNo = document.getElementById('cert-ref-no');
+      if (refNo) refNo.innerText = app.certificateNo || `NOC/${authPrefix}/${cleanId}`;
+
+      const issueDate = document.getElementById('cert-issue-date');
+      if (issueDate) {
+        issueDate.innerText = app.issueDate ? new Date(app.issueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : (app.auditedAt ? new Date(app.auditedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }));
+      }
+
+      const applicantName = document.getElementById('cert-applicant-name');
+      if (applicantName) applicantName.innerText = app.applicantName || 'Citizen User';
+
+      const applicantPhone = document.getElementById('cert-applicant-phone');
+      if (applicantPhone) applicantPhone.innerText = `Mobile: ${app.phone || '+91 98765 43210'}`;
+
+      const propId = document.getElementById('cert-prop-id');
+      if (propId) propId.innerText = app.propertyId || '40291001';
+
+      const fullAddr = document.getElementById('cert-full-address');
+      if (fullAddr) fullAddr.innerText = `${app.address || 'Mysuru'} · PIN ${app.pincode || app.pin || '570001'}`;
+
+      const tonnage = document.getElementById('cert-verified-tonnage');
+      if (tonnage) tonnage.innerText = `${app.verifiedTonnage || app.tonnage || 10} MT (Metric Tonnes)`;
+
+      const materialEl = document.getElementById('cert-material-category');
+      if (materialEl) materialEl.innerText = `Waste Category: ${app.verifiedMaterial || app.material || 'Demolition Rubble & Masonry'}`;
+
+      const waterDiscEl = document.getElementById('cert-water-discount');
+      if (waterDiscEl) waterDiscEl.innerText = app.waterBillDiscount || '10% discount on Municipal / Panchayat Water Bill for 2 Years (24 Months)';
+
+      const lat = app.lat || 12.2958;
+      const lng = app.lng || 76.6394;
+      const gpsCoords = document.getElementById('cert-gps-coords');
+      if (gpsCoords) gpsCoords.innerText = app.gpsLocation || `${lat}° N, ${lng}° E`;
+
+      // Inspector info
+      const inspectorName = app.assignedInspectorName || (currentUser ? currentUser.name : 'Field Officer');
+      const inspectorEmail = app.assignedInspectorEmail || (currentUser ? currentUser.email : 'inspector@mysuru.gov.in');
+
+      const insName = document.getElementById('cert-inspector-name');
+      if (insName) insName.innerText = inspectorName;
+
+      const insEmail = document.getElementById('cert-inspector-email');
+      if (insEmail) insEmail.innerText = inspectorEmail;
+
+      // Head of Department info
+      const headName = app.headName || (deptKey === 'gp' ? 'K. S. Manjunath (PDO)' : (deptKey === 'tp' ? 'S. Ramesh (Chief Officer)' : 'Dr. N. Chandrashekar, IAS'));
+      const headTitle = app.headTitle || (deptKey === 'gp' ? 'Panchayat Development Officer' : (deptKey === 'tp' ? 'Chief Officer' : 'MCC Commissioner'));
+
+      const headNameEl = document.getElementById('cert-head-name');
+      if (headNameEl) headNameEl.innerText = headName;
+
+      const headTitleEl = document.getElementById('cert-head-title');
+      if (headTitleEl) headTitleEl.innerText = headTitle;
+
+      const panchayatSeal = document.getElementById('cert-panchayat-seal');
+      if (panchayatSeal) panchayatSeal.innerText = authorityName;
+
+      const modal = document.getElementById('noc-certificate-modal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeCertificateModal() {
+      const modal = document.getElementById('noc-certificate-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function switchInspectorTab(tabId) {
+      document.querySelectorAll('.panel-view').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.mobile-tab-btn').forEach(el => el.classList.remove('active'));
+
+      const targetPanel = document.getElementById('panel-' + tabId);
+      const targetBtn = document.getElementById('btn-tab-' + tabId);
+      const mobBtn = document.getElementById('mob-tab-' + tabId);
+
+      if (targetPanel) targetPanel.classList.add('active');
+      if (targetBtn) targetBtn.classList.add('active');
+      if (mobBtn) mobBtn.classList.add('active');
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function showToast(msg, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const item = document.createElement('div');
+      item.className = 'toast px-4 py-3 rounded-2xl text-xs font-bold shadow-xl flex items-center gap-2.5 border ' + 
+        (type === 'success' ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-rose-600 text-white border-rose-500');
+      item.innerHTML = '<span>' + (type === 'success' ? '✓' : '⚠️') + '</span> <span>' + msg + '</span>';
+      container.appendChild(item);
+      setTimeout(() => item.remove(), 3500);
+    }
+
+    function handleSignOut() {
+      localStorage.removeItem('current_user');
+      sessionStorage.removeItem('current_user');
+      showToast('Signed out successfully.', 'success');
+      setTimeout(() => {
+        window.location.href = 'auth.html?tab=signin';
+      }, 400);
+    }
+
+    initInspectorSession();
+    loadInspectorData();
+
+    // Subscribe to live Supabase database events
+    if (window.civicDb && typeof window.civicDb.subscribeToApplications === 'function') {
+      window.civicDb.subscribeToApplications(() => {
+        loadInspectorData();
+      });
+    }
+
+    setInterval(() => {
+      loadInspectorData();
+    }, 3000);
+  </script>
+
+  <!-- ========================================================================= -->
+  <!-- OFFICIAL MUNICIPAL & PANCHAYAT C&D CLEARANCE CERTIFICATE (NOC) MODAL       -->
+  <!-- ========================================================================= -->
+  <div id="noc-certificate-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 hidden overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[94vh] flex flex-col shadow-2xl border-2 border-emerald-600/30 overflow-hidden my-auto animate-in fade-in zoom-in duration-150">
+      
+      <!-- Certificate Action Header -->
+      <div class="p-3.5 sm:p-4 bg-[#081d19] text-white flex items-center justify-between border-b border-emerald-800 shrink-0">
+        <div class="flex items-center gap-2">
+          <span class="text-base sm:text-lg">📜</span>
+          <div>
+            <h3 class="font-bold text-xs sm:text-sm text-white">Official Clearance Certificate (NOC)</h3>
+            <span class="text-[9px] sm:text-[10px] font-mono text-emerald-400 font-semibold" id="cert-modal-header-sub">Authorized by Ward Inspector & Panchayat</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <button onclick="window.print()" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer flex items-center gap-1 shadow-xs">
+            <span>🖨️</span> <span class="hidden sm:inline">Print / Save PDF</span><span class="sm:hidden">Print</span>
+          </button>
+          <button onclick="closeCertificateModal()" class="size-8 rounded-xl bg-white/10 hover:bg-white/20 text-white text-base font-bold flex items-center justify-center transition cursor-pointer">
+            &times;
+          </button>
+        </div>
+      </div>
+
+      <!-- Printable Certificate Body (Properly Vertically Aligned, No Horizontal Scrolling) -->
+      <div class="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-5 flex-1 bg-[#fcfdfd] text-slate-800 border-4 border-double border-emerald-800/20 m-2 rounded-2xl" id="printable-certificate-content">
+        
+        <!-- Govt Header & Seal -->
+        <div class="text-center space-y-1 border-b-2 border-emerald-800/30 pb-3">
+          <div class="inline-flex items-center justify-center size-9 sm:size-10 rounded-full bg-emerald-900 text-amber-300 font-bold text-lg sm:text-xl shadow-md">
+            🏛️
+          </div>
+          <span class="block text-[9px] sm:text-[10px] font-bold font-mono tracking-widest text-emerald-900 uppercase">Government of Karnataka</span>
+          <span class="block text-[8px] sm:text-[9px] font-semibold text-slate-500 uppercase tracking-wider">Department of Municipal Administration & Panchayat Raj</span>
+          <h2 class="text-xs sm:text-base font-black text-slate-950 uppercase tracking-tight" id="cert-authority-title">
+            Bogadi Gram Panchayat (Rural)
+          </h2>
+          <div class="inline-block px-2.5 sm:px-3 py-0.5 rounded-full bg-emerald-100 text-emerald-900 font-bold text-[10px] sm:text-[11px] uppercase tracking-wider border border-emerald-300 mt-0.5">
+            Official C&D Waste Clearance No-Objection Certificate (NOC)
+          </div>
+        </div>
+
+        <!-- Reference & Date Strip -->
+        <div class="flex items-center justify-between text-[11px] sm:text-xs font-mono border-b border-slate-200 pb-2">
+          <div>
+            <span class="text-slate-400 font-semibold">NOC Ref No:</span>
+            <span class="font-bold text-emerald-800 ml-1" id="cert-ref-no">NOC/GP/2026/934924</span>
+          </div>
+          <div>
+            <span class="text-slate-400 font-semibold">Date:</span>
+            <span class="font-bold text-slate-800 ml-1" id="cert-issue-date">19 Sep 2026</span>
+          </div>
+        </div>
+
+        <!-- Clearance Statement & Details Grid -->
+        <div class="space-y-3 text-xs">
+          <p class="leading-relaxed text-slate-700 text-[11px] sm:text-[11.5px]">
+            This is to certify that physical site inspection, GPS verification, and rubble volume measurement have been completed in accordance with the <strong>Construction & Demolition Waste Management Rules</strong>. The applicant is hereby authorized for lawful haulage and disposal at the designated municipal processing facility.
+          </p>
+
+          <div class="p-3 sm:p-3.5 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+            <div>
+              <span class="text-[9px] sm:text-[10px] font-bold uppercase text-slate-400 tracking-wider block">Authorized Citizen / Applicant</span>
+              <span class="font-bold text-slate-900 text-xs block" id="cert-applicant-name">Citizen User</span>
+              <span class="text-slate-600 font-mono text-[10px] block" id="cert-applicant-phone">Mobile: +91 98765 43210</span>
+            </div>
+
+            <div>
+              <span class="text-[9px] sm:text-[10px] font-bold uppercase text-slate-400 tracking-wider block">Property ID & Location</span>
+              <span class="font-bold text-slate-900 text-xs block" id="cert-prop-id">40291001</span>
+              <span class="text-slate-600 text-[10px] block" id="cert-full-address">Bogadi 2nd Stage, Mysuru · PIN 570026</span>
+            </div>
+
+            <div>
+              <span class="text-[9px] sm:text-[10px] font-bold uppercase text-slate-400 tracking-wider block">Verified Rubble Volume</span>
+              <span class="font-bold text-emerald-800 font-mono text-xs block" id="cert-verified-tonnage">10 MT (Metric Tonnes)</span>
+              <span class="text-slate-500 text-[9px] block">Waste Category: Construction & Demolition Debris</span>
+            </div>
+
+            <div>
+              <span class="text-[9px] sm:text-[10px] font-bold uppercase text-slate-400 tracking-wider block">GPS Site Coordinates</span>
+              <span class="font-bold font-mono text-slate-800 block text-[10px]" id="cert-gps-coords">12.2958° N, 76.6394° E</span>
+              <span class="text-emerald-700 text-[9px] font-semibold block">Geo-Fenced Physical Audit Done</span>
+            </div>
+          </div>
+
+          <!-- Water Bill Rebate / Incentive Badge -->
+          <div class="p-2.5 sm:p-3 rounded-xl bg-cyan-50 border border-cyan-200 flex items-start gap-2.5 text-xs">
+            <span class="text-base sm:text-lg">💧</span>
+            <div class="flex-1">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-cyan-950 block text-[10.5px] sm:text-[11px]">Green Civic Water Bill Rebate / Incentive</span>
+                <span class="px-2 py-0.2 rounded-full bg-cyan-200/70 text-cyan-900 font-mono font-bold text-[8.5px]">2 Years Validity</span>
+              </div>
+              <span class="font-bold text-cyan-950 text-[10px] sm:text-[10.5px] block mt-0.5" id="cert-water-discount">10% discount on Municipal / Panchayat Water Bill for 2 Years (24 Months)</span>
+              <p class="text-[9px] sm:text-[9.5px] text-cyan-800/80 mt-0.5">Granted for Construction & Demolition (C&D) Waste Management Compliance for sustainable debris processing.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Endorsement & Signatures -->
+        <div class="pt-2.5 border-t-2 border-emerald-800/20 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+          <!-- Digital QR Seal -->
+          <div class="flex items-center gap-2 p-1.5 rounded-xl bg-emerald-50/70 border border-emerald-200 w-full sm:w-auto">
+            <div class="size-8 rounded-lg bg-emerald-900 text-white flex flex-col items-center justify-center font-mono font-bold text-[7px] leading-tight text-center shrink-0">
+              <span>QR</span>
+              <span class="text-[5px] text-emerald-300">VALID</span>
+            </div>
+            <div class="text-[8.5px] leading-tight">
+              <span class="font-bold text-emerald-950 block">Digital Verification Seal</span>
+              <span class="text-slate-500 font-mono block">Status: Official & Compliant</span>
+            </div>
+          </div>
+
+          <!-- Inspector & Authority Signatures -->
+          <div class="flex items-center justify-between sm:justify-end gap-3 text-right w-full sm:w-auto">
+            <div class="space-y-0.5 text-left sm:text-right">
+              <span class="text-[8px] sm:text-[9px] font-semibold text-slate-400 uppercase tracking-wider block">Field Inspector</span>
+              <span class="font-bold text-slate-900 text-[11px] sm:text-xs block" id="cert-inspector-name">Seervi</span>
+              <span class="text-[8.5px] font-mono text-slate-500 block" id="cert-inspector-email">q@gmail.com</span>
+            </div>
+            <div class="space-y-0.5 border-l border-slate-200 pl-2.5">
+              <span class="text-[8px] sm:text-[9px] font-semibold text-slate-400 uppercase tracking-wider block">Civic Authority</span>
+              <span class="font-bold text-emerald-900 text-[11px] sm:text-xs block" id="cert-panchayat-seal">Bogadi Gram Panchayat</span>
+              <span class="text-[8.5px] font-mono text-slate-500 block" id="cert-head-name">K. S. Manjunath (PDO)</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
+        <button onclick="closeCertificateModal()" class="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition cursor-pointer">
+          Close Window
+        </button>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>

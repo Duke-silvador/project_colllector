@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Portal Access — Smart Civic Construction & Demolition Routing Mysuru</title>
+  
+  <!-- Supabase JS Client & Universal Civic DB -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    (function() {
+      const SUPABASE_URL = 'https://evnjukozsucobknwvzfp.supabase.co';
+      const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2bmp1a296c3Vjb2Jrbnd2emZwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTc3MjA1MywiZXhwIjoyMTA1MzQ4MDUzfQ.OzV3s8TKPGefQPdAKfMEUwKFYJwa4cYH6vsl7E9uGKk';
+      let suClient = null;
+      function initClient() {
+        if (suClient) return suClient;
+        if (window.supabase && typeof window.supabase.createClient === 'function') {
+          try {
+            suClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+              auth: { persistSession: false, autoRefreshToken: false }
+            });
+            console.log('⚡ Connected to Supabase Cloud Database');
+          } catch(err) {}
+        }
+        return suClient;
+      }
+      function mapAppToDb(app) {
+        const userEmail = (app.email || '').trim().toLowerCase();
+        let propId = app.propertyId || app.property_id || '';
+        if (userEmail && !propId.includes('||usr:')) propId = (propId ? propId + ' ' : '') + '||usr:' + userEmail;
+        const photosList = Array.isArray(app.photos) ? app.photos : (app.photo ? [app.photo] : []);
+        return {
+          id: app.id,
+          applicant_name: app.applicantName || app.applicant_name,
+          phone: app.phone,
+          pincode: app.pincode || app.pin,
+          address: app.address,
+          property_id: propId,
+          certificate_no: app.certificateNo || app.certificate_no,
+          certificate_type: app.certificateType || app.certificate_type,
+          issue_date: app.issueDate || app.issue_date,
+          status: app.status || 'Pending Inspection',
+          tonnage: Number(app.tonnage) || 10,
+          gps_location: app.gpsLocation || app.gps_location,
+          lat: Number(app.lat) || 12.2958,
+          lng: Number(app.lng) || 76.6394,
+          map_url: app.mapUrl || app.map_url,
+          photos: photosList,
+          photo: app.photo || (photosList.length > 0 ? photosList[0] : null),
+          authority: app.authority,
+          authority_key: app.authorityKey || app.authority_key,
+          assigned_inspector_name: app.assignedInspectorName || app.assigned_inspector_name,
+          assigned_inspector_email: app.assignedInspectorEmail || app.assigned_inspector_email,
+          inspector_notes: app.inspectorNotes || app.inspector_notes,
+          inspection_time: app.inspectionTime || app.inspection_time || null,
+          audited_by: app.auditedBy || app.audited_by,
+          audited_at: app.auditedAt || app.audited_at || null,
+          created_at: app.submittedAt || app.createdAt || new Date().toISOString()
+        };
+      }
+      function mapDbToApp(row) {
+        let rawPropId = row.property_id || '';
+        let email = '';
+        if (rawPropId.includes('||usr:')) {
+          const parts = rawPropId.split('||usr:');
+          rawPropId = parts[0].trim();
+          email = parts[1].trim();
+        }
+        const photosList = Array.isArray(row.photos) ? row.photos : (row.photo ? [row.photo] : []);
+        return {
+          id: row.id,
+          applicantName: row.applicant_name,
+          phone: row.phone,
+          email: email,
+          pincode: row.pincode,
+          pin: row.pincode,
+          address: row.address,
+          propertyId: rawPropId,
+          certificateNo: row.certificate_no,
+          certificateType: row.certificate_type,
+          issueDate: row.issue_date,
+          status: row.status,
+          tonnage: row.tonnage,
+          gpsLocation: row.gps_location,
+          lat: row.lat,
+          lng: row.lng,
+          mapUrl: row.map_url,
+          photos: photosList,
+          photo: row.photo || (photosList.length > 0 ? photosList[0] : null),
+          authority: row.authority,
+          authorityKey: row.authority_key,
+          assignedInspectorName: row.assigned_inspector_name,
+          assignedInspectorEmail: row.assigned_inspector_email,
+          inspectorNotes: row.inspector_notes,
+          inspectionTime: row.inspection_time,
+          auditedBy: row.audited_by,
+          auditedAt: row.audited_at,
+          submittedAt: row.created_at
+        };
+      }
+      function mapUserToDb(u) {
+        return {
+          id: u.id || ('u_' + Date.now()),
+          name: u.name,
+          email: (u.email || '').toLowerCase().trim(),
+          phone: u.phone || '',
+          password: u.password || '',
+          role: u.role || 'citizen',
+          department: u.department || '',
+          department_name: u.departmentName || u.department_name || '',
+          assigned_pin: u.assignedPin || u.assigned_pin || u.pin || '',
+          assigned_area: u.assignedArea || u.assigned_area || '',
+          designation: u.designation || '',
+          created_by: u.createdBy || u.created_by || '',
+          status: u.status || 'Active',
+          created_at: u.createdAt || new Date().toISOString()
+        };
+      }
+      function mapDbToUser(row) {
+        return {
+          id: row.id,
+          name: row.name,
+          email: row.email,
+          phone: row.phone,
+          password: row.password,
+          role: row.role,
+          department: row.department,
+          departmentName: row.department_name,
+          assignedPin: row.assigned_pin,
+          pin: row.assigned_pin,
+          assignedArea: row.assigned_area,
+          designation: row.designation,
+          createdBy: row.created_by,
+          status: row.status,
+          createdAt: row.created_at
+        };
+      }
+      window.civicDb = {
+        getClient: initClient,
+        async fetchApplications() {
+          const client = initClient();
+          if (client) {
+            try {
+              const { data, error } = await client.from('applications').select('*').order('created_at', { ascending: false });
+              if (!error && Array.isArray(data)) {
+                const apps = data.map(mapDbToApp);
+                localStorage.setItem('civic_applications', JSON.stringify(apps));
+                return apps;
+              }
+            } catch(e) {}
+          }
+          return JSON.parse(localStorage.getItem('civic_applications') || '[]');
+        },
+        async saveApplication(app) {
+          const dbRow = mapAppToDb(app);
+          const client = initClient();
+          if (client) {
+            try { await client.from('applications').upsert(dbRow); } catch(e) {}
+          }
+          const apps = JSON.parse(localStorage.getItem('civic_applications') || '[]');
+          const idx = apps.findIndex(a => a.id === app.id);
+          if (idx >= 0) apps[idx] = { ...apps[idx], ...app };
+          else apps.unshift(app);
+          localStorage.setItem('civic_applications', JSON.stringify(apps));
+          return app;
+        },
+        async login(email, password) {
+          const cleanEmail = (email || '').toLowerCase().trim();
+          const cleanPass = (password || '').trim();
+          const client = initClient();
+          if (client) {
+            try {
+              const { data, error } = await client.from('users').select('*').eq('email', cleanEmail).maybeSingle();
+              if (!error && data) {
+                const user = mapDbToUser(data);
+                if (user.password === cleanPass) return { success: true, user };
+              }
+            } catch(e) {}
+          }
+          return { success: false, message: 'Invalid credentials.' };
+        },
+        async registerUser(userData) {
+          const client = initClient();
+          const dbUser = mapUserToDb(userData);
+          if (client) {
+            try { await client.from('users').upsert(dbUser); } catch(e) {}
+          }
+          return { success: true, user: userData };
+        },
+        async fetchUsers() {
+          const client = initClient();
+          if (client) {
+            try {
+              const { data, error } = await client.from('users').select('*').order('created_at', { ascending: false });
+              if (!error && Array.isArray(data)) return data.map(mapDbToUser);
+            } catch(e) {}
+          }
+          return [];
+        },
+        subscribeToApplications(onChange) {
+          const client = initClient();
+          if (!client) return null;
+          try {
+            return client.channel('rt_apps_' + Math.random())
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'applications' }, (payload) => {
+                if (typeof onChange === 'function') onChange(payload);
+              }).subscribe();
+          } catch(e) { return null; }
+        }
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initClient);
+      } else {
+        initClient();
+      }
+    })();
+  </script>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+              800: '#166534',
+              900: '#14532d',
+              dark: '#0f172a'
+            }
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .toast-container {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      z-index: 999999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .toast {
+      animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .bg-mesh {
+      background: radial-gradient(at 0% 0%, rgba(22, 163, 74, 0.25) 0px, transparent 50%),
+                  radial-gradient(at 100% 100%, rgba(15, 23, 42, 0.95) 0px, transparent 50%),
+                  radial-gradient(at 50% 50%, rgba(2, 132, 199, 0.2) 0px, transparent 50%),
+                  #090d16;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-900 antialiased flex items-center justify-center p-0 sm:p-6 lg:p-10">
+
+  <!-- Toast Notification Stack -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- MAIN SPLIT-SCREEN AUTH CONTAINER -->
+  <div class="w-full max-w-6xl min-h-[600px] bg-white sm:rounded-3xl shadow-2xl border border-slate-200/80 overflow-hidden grid grid-cols-1 lg:grid-cols-12">
+    
+    <!-- LEFT SIDE: CIVIC BRANDING & HIGHLIGHTS (5 Cols) -->
+    <div class="lg:col-span-5 bg-mesh p-8 sm:p-12 text-white flex flex-col justify-between relative overflow-hidden">
+      
+      <!-- Top Brand Logo -->
+      <div>
+        <a href="index.html" class="inline-flex items-center gap-3 group">
+          <div class="size-11 rounded-2xl bg-emerald-500 text-slate-950 flex items-center justify-center font-bold text-xl shadow-lg shadow-emerald-500/30 group-hover:scale-105 transition transform">
+            🏗️
+          </div>
+          <div>
+            <span class="block font-bold text-base tracking-tight text-white">Smart Civic C&D</span>
+            <span class="block text-[11px] text-emerald-400 font-mono tracking-wide uppercase">Mysuru C&D Portal</span>
+          </div>
+        </a>
+      </div>
+
+      <!-- Middle Feature Callouts -->
+      <div class="my-8 space-y-5">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono">
+          <span class="size-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          Construction & Demolition Routing
+        </div>
+
+        <h2 class="text-2xl sm:text-3xl font-extrabold text-white leading-tight">
+          "Citizens submit construction & demolition clearance requests. The system figures out who is responsible."
+        </h2>
+
+        <p class="text-sm text-slate-300 leading-relaxed">
+          Automated municipal routing connecting citizens with Mysuru City Corporation (MCC), Gram Panchayats, and Town Panchayats.
+        </p>
+
+        <!-- Mini Stats Cards -->
+        <div class="grid grid-cols-2 gap-3 pt-2">
+          <div class="p-3.5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
+            <span class="block text-xl font-bold text-white font-mono">65 Wards</span>
+            <span class="block text-[11px] text-slate-400">MCC Urban Coverage</span>
+          </div>
+          <div class="p-3.5 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md">
+            <span class="block text-xl font-bold text-emerald-400 font-mono">4.2 Hours</span>
+            <span class="block text-[11px] text-slate-400">Average Ward SLA</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Return Link -->
+      <div class="pt-4 border-t border-white/10 flex items-center justify-between text-xs text-slate-400">
+        <a href="index.html" class="inline-flex items-center gap-1.5 hover:text-white transition font-medium">
+          &larr; Return to Landing Page
+        </a>
+      </div>
+    </div>
+
+    <!-- RIGHT SIDE: CLEAN AUTH FORM (7 Cols) -->
+    <div class="lg:col-span-7 p-6 sm:p-10 lg:p-14 flex flex-col justify-center bg-white">
+      
+      <div class="max-w-md w-full mx-auto space-y-6">
+        
+        <!-- Header -->
+        <div>
+          <h1 id="auth-title" class="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Sign In</h1>
+          <p id="auth-subtitle" class="text-xs sm:text-sm text-slate-500 mt-1">Sign in with your Email and Password to access your dashboard.</p>
+        </div>
+
+        <!-- Custom Tab Switcher -->
+        <div class="grid grid-cols-2 p-1.5 bg-slate-100 rounded-2xl text-xs font-bold text-slate-600">
+          <button id="tab-signin" onclick="setAuthTab('signin')" class="py-2.5 rounded-xl bg-white text-slate-900 shadow-sm transition-all cursor-pointer">
+            Sign In
+          </button>
+          <button id="tab-signup" onclick="setAuthTab('signup')" class="py-2.5 rounded-xl hover:text-slate-900 transition-all cursor-pointer">
+            Citizen Sign Up
+          </button>
+        </div>
+
+        <!-- 1. SIGN IN FORM -->
+        <form id="signin-form" onsubmit="handleSignIn(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">Email Address</label>
+            <input id="login-email" type="text" required placeholder="name@domain.com" class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"/>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">Password</label>
+            <input id="login-password" type="password" required placeholder="••••••••" class="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"/>
+          </div>
+
+          <button type="submit" class="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-600/20 transition-all cursor-pointer flex items-center justify-center gap-2 mt-2">
+            <span>Sign In to Dashboard &rarr;</span>
+          </button>
+        </form>
+
+        <!-- 2. CREATE ACCOUNT FORM (Citizen Only) -->
+        <form id="signup-form" onsubmit="handleSignUp(event)" class="space-y-3.5 hidden">
+          <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+            <span class="font-bold block">👤 Citizen Registration Only</span>
+            <span class="text-[11px] text-amber-800/80">Panchayat Inspectors, Field Officers & Municipal Authorities are pre-rostered by civic administration.</span>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Full Name</label>
+            <input id="reg-name" type="text" required placeholder="e.g. Harsha Vardhan" class="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"/>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Email Address</label>
+            <input id="reg-email" type="email" required placeholder="your.email@example.com" class="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"/>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Mobile Number</label>
+              <input id="reg-phone" type="tel" placeholder="9845012345" class="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm font-mono focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"/>
+            </div>
+            <div>
+              <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1">Password</label>
+              <input id="reg-password" type="password" required placeholder="••••••••" class="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-900 text-sm focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition"/>
+            </div>
+          </div>
+
+          <button type="submit" class="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md shadow-emerald-600/20 transition-all cursor-pointer flex items-center justify-center gap-2 mt-2">
+            <span>Register Citizen Account &rarr;</span>
+          </button>
+        </form>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    // Baseline Master Accounts (Enables instant sign-in across all roles)
+    const SYSTEM_ACCOUNTS = [
+      // Super Admin
+      { name: 'Dr. N. Chandrashekar, IAS', email: 'admin@gmail.com', password: '123', passwords: ['123', 'admin123', '123456'], role: 'admin', authority: 'Super Admin' },
+      { name: 'Dr. N. Chandrashekar, IAS', email: 'superadmin@gmail.com', password: '123', passwords: ['123', 'admin123', '123456'], role: 'admin', authority: 'Super Admin' },
+
+      // Officers (MCC, Gram Panchayat, Town Panchayat)
+      { name: 'MCC Executive Officer', email: 'mcc@gmail.com', password: '123', passwords: ['123', 'mcc123', '123456'], role: 'officer', authority: 'Mysuru City Corporation (MCC)', department: 'mcc' },
+      { name: 'Gram Panchayat PDO', email: 'gp@gmail.com', password: '123', passwords: ['123', 'gp123', '123456'], role: 'officer', authority: 'Gram Panchayat (Bogadi Rural)', department: 'gp' },
+      { name: 'Town Panchayat Chief Officer', email: 'tp@gmail.com', password: '123', passwords: ['123', 'tp123', '123456'], role: 'officer', authority: 'Town Panchayat (Hootagalli Town)', department: 'tp' },
+
+      // Field Inspectors (Employee IDs: 4 letters + 4 numbers based on Panchayat)
+      { id: 'MCCU1001', name: 'Rajesh Kumar', email: 'inspector.mcc@gmail.com', password: '123', passwords: ['123', '123456'], phone: '+91 98450 11001', role: 'inspector', department: 'mcc', assignedPin: '570001', assignedArea: 'Ward 14 (Palace & Devaraja Market)', designation: 'Ward Health Inspector' },
+      { id: 'MCCU1002', name: 'P. Ramesh', email: 'ramesh.mcc@gmail.com', password: '123', passwords: ['123', '123456'], phone: '+91 98450 44520', role: 'inspector', department: 'mcc', assignedPin: '570023', assignedArea: 'Ward 32 (Kuvempunagar & Central)', designation: 'Ward Health Inspector' },
+      { id: 'BOGP1001', name: 'Seervi', email: 'q@gmail.com', password: '123', passwords: ['123', '123456', 'q123'], phone: '+91 98450 11002', role: 'inspector', department: 'gp', assignedPin: '570026', assignedArea: 'GP Ward 01 (Bogadi Rural & Ring Road)', designation: 'Panchayat Health Inspector' },
+      { id: 'BOGP1002', name: 'Dimple', email: 'dim@gmail.com', password: '123', passwords: ['123', '123456', 'dim123'], phone: '+91 98450 22003', role: 'inspector', department: 'gp', assignedPin: '570026', assignedArea: 'GP Ward 02 (Maratikyathanahalli Village)', designation: 'Village Sanitary Inspector' },
+      { id: 'HTMC1001', name: 'M. Anand', email: 'anand.tp@gmail.com', password: '123', passwords: ['123', '123456'], phone: '+91 98450 11003', role: 'inspector', department: 'tp', assignedPin: '570018', assignedArea: 'TP Ward 01 (Hootagalli Town & Industrial)', designation: 'Town Municipal Inspector' },
+      { id: 'HTMC1002', name: 'K. Suresh', email: 'suresh.tp@gmail.com', password: '123', passwords: ['123', '123456'], phone: '+91 98450 77102', role: 'inspector', department: 'tp', assignedPin: '570018', assignedArea: 'TP Ward 02 (Koorgalli Heavy Industrial)', designation: 'Zonal Sanitary Supervisor' }
+    ];
+
+    function checkUserCredentials(u, email, pass) {
+      if ((u.email || '').toLowerCase().trim() !== email.toLowerCase().trim()) return false;
+      if (u.passwords && Array.isArray(u.passwords)) {
+        if (u.passwords.includes(pass)) return true;
+      }
+      return (u.password || '').trim() === pass;
+    }
+
+    async function syncUsersFromCloud() {
+      try {
+        const res = await fetch('/api/auth/users');
+        if (res.ok) {
+          const serverUsers = await res.json();
+          if (Array.isArray(serverUsers) && serverUsers.length > 0) {
+            const stored = JSON.parse(localStorage.getItem('civic_registered_users') || '[]');
+            serverUsers.forEach(su => {
+              if (!stored.find(m => (m.email || '').toLowerCase().trim() === (su.email || '').toLowerCase().trim())) {
+                stored.push(su);
+              }
+            });
+            localStorage.setItem('civic_registered_users', JSON.stringify(stored));
+          }
+        }
+      } catch(e) {}
+    }
+    syncUsersFromCloud();
+
+    function getAllUsers() {
+      try {
+        const stored = JSON.parse(localStorage.getItem('civic_registered_users') || '[]');
+        const storedInspectors = JSON.parse(localStorage.getItem('civic_inspectors') || '[]');
+        const deletedUsers = JSON.parse(localStorage.getItem('civic_deleted_users') || '[]').map(e => (e || '').toLowerCase().trim());
+        const merged = [...SYSTEM_ACCOUNTS];
+        stored.forEach(su => {
+          const email = (su.email || '').toLowerCase().trim();
+          if (email && !deletedUsers.includes(email) && !merged.find(m => (m.email || '').toLowerCase().trim() === email)) {
+            merged.push(su);
+          }
+        });
+        storedInspectors.forEach(si => {
+          const email = (si.email || '').toLowerCase().trim();
+          if (email && !deletedUsers.includes(email) && !merged.find(m => (m.email || '').toLowerCase().trim() === email)) {
+            merged.push(si);
+          }
+        });
+        return merged.filter(u => !deletedUsers.includes((u.email || '').toLowerCase().trim()));
+      } catch(e) {
+        return SYSTEM_ACCOUNTS;
+      }
+    }
+
+    function showToast(msg, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const item = document.createElement('div');
+      item.className = 'toast px-4 py-3 rounded-2xl text-xs font-bold shadow-xl flex items-center gap-2.5 border ' + 
+        (type === 'success' ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-rose-600 text-white border-rose-500');
+      item.innerHTML = '<span>' + (type === 'success' ? '✓' : '⚠️') + '</span> <span>' + msg + '</span>';
+      container.appendChild(item);
+      setTimeout(() => item.remove(), 3500);
+    }
+
+    function setAuthTab(tab) {
+      const formSignUp = document.getElementById('signup-form');
+      const formSignIn = document.getElementById('signin-form');
+      const btnSignUp = document.getElementById('tab-signup');
+      const btnSignIn = document.getElementById('tab-signin');
+      const title = document.getElementById('auth-title');
+      const sub = document.getElementById('auth-subtitle');
+
+      if (tab === 'signup') {
+        formSignUp.classList.remove('hidden');
+        formSignIn.classList.add('hidden');
+        btnSignUp.className = 'py-2.5 rounded-xl bg-white text-slate-900 shadow-sm transition-all cursor-pointer';
+        btnSignIn.className = 'py-2.5 rounded-xl hover:text-slate-900 transition-all cursor-pointer';
+        title.innerText = 'Citizen Sign Up';
+        sub.innerText = 'Register your citizen account for demolition clearance requests & tracking.';
+      } else {
+        formSignIn.classList.remove('hidden');
+        formSignUp.classList.add('hidden');
+        btnSignIn.className = 'py-2.5 rounded-xl bg-white text-slate-900 shadow-sm transition-all cursor-pointer';
+        btnSignUp.className = 'py-2.5 rounded-xl hover:text-slate-900 transition-all cursor-pointer';
+        title.innerText = 'Sign In';
+        sub.innerText = 'Sign in with your Email and Password to access your dashboard.';
+      }
+    }
+
+    async function handleSignUp(e) {
+      e.preventDefault();
+      const name = document.getElementById('reg-name').value.trim();
+      const email = document.getElementById('reg-email').value.trim().toLowerCase();
+      const phone = document.getElementById('reg-phone').value.trim();
+      const password = document.getElementById('reg-password').value.trim();
+
+      let user = null;
+
+      // 1. Direct Supabase / Backend registration
+      if (window.civicDb && typeof window.civicDb.registerUser === 'function') {
+        try {
+          const res = await window.civicDb.registerUser({
+            id: 'u_' + Date.now(),
+            name,
+            email,
+            phone,
+            password,
+            role: 'citizen',
+            authority: 'Customer',
+            createdAt: new Date().toISOString()
+          });
+          if (res && res.user) {
+            user = res.user;
+          }
+        } catch(err) {
+          console.warn('civicDb registerUser err:', err);
+        }
+      }
+
+      // 2. Serverless API fallback
+      if (!user) {
+        try {
+          const res = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, email, phone, password })
+          });
+          const data = await res.json();
+          if (data && data.success && data.user) {
+            user = data.user;
+          }
+        } catch(err) {}
+      }
+
+      // 3. Local fallback
+      if (!user) {
+        const allUsers = getAllUsers();
+        if (allUsers.find(u => (u.email || '').toLowerCase().trim() === email)) {
+          showToast('An account with this email already exists. Please sign in.', 'error');
+          return;
+        }
+        const registered = JSON.parse(localStorage.getItem('civic_registered_users') || '[]');
+        const isFirstUser = (registered.length === 0);
+        user = {
+          id: 'u_' + Date.now(),
+          name,
+          email,
+          phone,
+          password,
+          role: isFirstUser ? 'admin' : 'citizen',
+          authority: isFirstUser ? 'Super Admin' : 'Customer',
+          createdAt: new Date().toISOString()
+        };
+      }
+
+      // Save user session in localStorage and sessionStorage
+      try {
+        localStorage.removeItem('cust_my_requests');
+        const registered = JSON.parse(localStorage.getItem('civic_registered_users') || '[]');
+        if (!registered.find(r => (r.email || '').toLowerCase().trim() === user.email.toLowerCase().trim())) {
+          registered.push(user);
+          localStorage.setItem('civic_registered_users', JSON.stringify(registered));
+        }
+        localStorage.setItem('current_user', JSON.stringify(user));
+        sessionStorage.setItem('current_user', JSON.stringify(user));
+      } catch(e) {}
+
+      if (user.role === 'admin' || user.role === 'super_admin' || (user.authority || '').toLowerCase().includes('admin')) {
+        showToast('Super Admin account registered! Opening Admin Console...', 'success');
+        setTimeout(() => {
+          window.location.href = 'dashboard.html';
+        }, 500);
+      } else {
+        showToast('Customer account registered successfully! Opening Customer Portal...', 'success');
+        setTimeout(() => {
+          window.location.href = 'citizen.html';
+        }, 500);
+      }
+    }
+
+    async function handleSignIn(e) {
+      e.preventDefault();
+      const emailInput = document.getElementById('login-email').value.trim().toLowerCase();
+      const passwordInput = document.getElementById('login-password').value.trim();
+
+      // Check if account has been deleted by authority
+      const deletedUsers = JSON.parse(localStorage.getItem('civic_deleted_users') || '[]').map(e => (e || '').toLowerCase().trim());
+      if (deletedUsers.includes(emailInput)) {
+        showToast('This account has been deactivated or removed by authority.', 'error');
+        return;
+      }
+
+      let user = null;
+
+      // 1. Direct Supabase login
+      if (window.civicDb && typeof window.civicDb.login === 'function') {
+        try {
+          const authRes = await window.civicDb.login(emailInput, passwordInput);
+          if (authRes && authRes.success && authRes.user) {
+            user = authRes.user;
+          }
+        } catch(err) {
+          console.warn('civicDb login err:', err);
+        }
+      }
+
+      // 2. Serverless API login fallback
+      if (!user) {
+        try {
+          const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: emailInput, password: passwordInput })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.user) {
+              user = data.user;
+            }
+          }
+        } catch(err) {}
+      }
+
+      // 3. Local fallback if offline
+      if (!user) {
+        const allUsers = getAllUsers();
+        user = allUsers.find(u => checkUserCredentials(u, emailInput, passwordInput));
+      }
+
+      // If invalid credentials
+      if (!user) {
+        showToast('Invalid email or password. Please check your credentials.', 'error');
+        return;
+      }
+
+      if (deletedUsers.includes((user.email || '').toLowerCase().trim())) {
+        showToast('This account has been deactivated or removed by authority.', 'error');
+        return;
+      }
+
+      // Save user session in BOTH localStorage and sessionStorage
+      try {
+        localStorage.removeItem('cust_my_requests');
+        localStorage.setItem('current_user', JSON.stringify(user));
+        sessionStorage.setItem('current_user', JSON.stringify(user));
+      } catch(e) {}
+
+      showToast('Welcome back, ' + user.name + '!', 'success');
+
+      setTimeout(() => {
+        const role = (user.role || '').toLowerCase();
+        const auth = (user.authority || '').toLowerCase();
+        const email = (user.email || '').toLowerCase();
+
+        // 1. Field Inspector Desk (For assigned PIN code inspectors)
+        const isInspector = (role === 'inspector' || role.includes('inspector') || auth.includes('inspector') || email.includes('inspector'));
+
+        // 2. Dedicated Officer Dashboard (For MCC, Gram Panchayat, and Town Panchayat Officers)
+        const isOfficer = !isInspector && (
+          role === 'officer' || role.includes('dept') ||
+          auth.includes('panchayat') || auth.includes('town') || auth.includes('mcc') ||
+          email === 'mcc@gmail.com' || email === 'gp@gmail.com' || email === 'tp@gmail.com' ||
+          email.includes('officer') || (auth.includes('officer') && !auth.includes('super admin'))
+        );
+
+        // 3. Super Admin Governance Console (Admin only)
+        const isSuperAdmin = !isInspector && !isOfficer && (
+          role === 'admin' || role === 'super_admin' ||
+          auth === 'super admin' || auth.includes('super admin') ||
+          email === 'admin@gmail.com' || email === 'superadmin@gmail.com' || email === 'admin@mysuru.gov.in'
+        );
+
+        if (isInspector) {
+          window.location.href = 'inspector.html';
+        } else if (isOfficer) {
+          let deptKey = 'mcc';
+        if (email === 'gp@gmail.com' || (user.department === 'gp') || auth.includes('gram') || auth.includes('panchayat') || (user.assignedPin && ['570026','571130'].some(p=>user.assignedPin.includes(p)))) {
+          deptKey = 'gp';
+        } else if (email === 'tp@gmail.com' || (user.department === 'tp') || auth.includes('town') || (user.assignedPin && ['570018','570017'].some(p=>user.assignedPin.includes(p)))) {
+          deptKey = 'tp';
+        }
+        window.location.href = 'officer.html?auth=' + deptKey;
+        } else if (isSuperAdmin) {
+          window.location.href = 'dashboard.html';
+        } else {
+          // Customers / Citizens open Customer Portal (citizen.html)
+          window.location.href = 'citizen.html';
+        }
+      }, 450);
+    }
+
+    // Default to Sign In tab
+    setAuthTab('signin');
+  </script>
+</body>
+</html>

@@ -1,0 +1,2861 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Customer Dashboard — Smart Civic C&D Mysuru</title>
+  
+  <!-- Supabase JS Client & Universal Civic DB -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    (function() {
+      const SUPABASE_URL = 'https://evnjukozsucobknwvzfp.supabase.co';
+      const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV2bmp1a296c3Vjb2Jrbnd2emZwIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4OTc3MjA1MywiZXhwIjoyMTA1MzQ4MDUzfQ.OzV3s8TKPGefQPdAKfMEUwKFYJwa4cYH6vsl7E9uGKk';
+      let suClient = null;
+      function initClient() {
+        if (suClient) return suClient;
+        if (window.supabase && typeof window.supabase.createClient === 'function') {
+          try {
+            suClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+              auth: { persistSession: false, autoRefreshToken: false }
+            });
+            console.log('⚡ Connected to Supabase Cloud Database');
+          } catch(err) {}
+        }
+        return suClient;
+      }
+      function mapAppToDb(app) {
+        const userEmail = (app.email || '').trim().toLowerCase();
+        let propId = app.propertyId || app.property_id || '';
+        if (userEmail && !propId.includes('||usr:')) propId = (propId ? propId + ' ' : '') + '||usr:' + userEmail;
+        const photosList = Array.isArray(app.photos) ? app.photos : (app.photo ? [app.photo] : []);
+        return {
+          id: app.id,
+          applicant_name: app.applicantName || app.applicant_name,
+          phone: app.phone,
+          pincode: app.pincode || app.pin,
+          address: app.address,
+          property_id: propId,
+          certificate_no: app.certificateNo || app.certificate_no,
+          certificate_type: app.certificateType || app.certificate_type,
+          issue_date: app.issueDate || app.issue_date,
+          status: app.status || 'Pending Inspection',
+          tonnage: Number(app.tonnage) || 10,
+          gps_location: app.gpsLocation || app.gps_location,
+          lat: Number(app.lat) || 12.2958,
+          lng: Number(app.lng) || 76.6394,
+          map_url: app.mapUrl || app.map_url,
+          photos: photosList,
+          photo: app.photo || (photosList.length > 0 ? photosList[0] : null),
+          authority: app.authority,
+          authority_key: app.authorityKey || app.authority_key,
+          assigned_inspector_name: app.assignedInspectorName || app.assigned_inspector_name,
+          assigned_inspector_email: app.assignedInspectorEmail || app.assigned_inspector_email,
+          inspector_notes: app.inspectorNotes || app.inspector_notes,
+          inspection_time: app.inspectionTime || app.inspection_time || null,
+          audited_by: app.auditedBy || app.audited_by,
+          audited_at: app.auditedAt || app.audited_at || null,
+          created_at: app.submittedAt || app.createdAt || new Date().toISOString()
+        };
+      }
+      function mapDbToApp(row) {
+        let rawPropId = row.property_id || '';
+        let email = '';
+        if (rawPropId.includes('||usr:')) {
+          const parts = rawPropId.split('||usr:');
+          rawPropId = parts[0].trim();
+          email = parts[1].trim();
+        }
+        const photosList = Array.isArray(row.photos) ? row.photos : (row.photo ? [row.photo] : []);
+        return {
+          id: row.id,
+          applicantName: row.applicant_name,
+          phone: row.phone,
+          email: email,
+          pincode: row.pincode,
+          pin: row.pincode,
+          address: row.address,
+          propertyId: rawPropId,
+          certificateNo: row.certificate_no,
+          certificateType: row.certificate_type,
+          issueDate: row.issue_date,
+          status: row.status,
+          tonnage: row.tonnage,
+          gpsLocation: row.gps_location,
+          lat: row.lat,
+          lng: row.lng,
+          mapUrl: row.map_url,
+          photos: photosList,
+          photo: row.photo || (photosList.length > 0 ? photosList[0] : null),
+          authority: row.authority,
+          authorityKey: row.authority_key,
+          assignedInspectorName: row.assigned_inspector_name,
+          assignedInspectorEmail: row.assigned_inspector_email,
+          inspectorNotes: row.inspector_notes,
+          inspectionTime: row.inspection_time,
+          auditedBy: row.audited_by,
+          auditedAt: row.audited_at,
+          submittedAt: row.created_at
+        };
+      }
+      function mapUserToDb(u) {
+        return {
+          id: u.id || ('u_' + Date.now()),
+          name: u.name,
+          email: (u.email || '').toLowerCase().trim(),
+          phone: u.phone || '',
+          password: u.password || '',
+          role: u.role || 'citizen',
+          department: u.department || '',
+          department_name: u.departmentName || u.department_name || '',
+          assigned_pin: u.assignedPin || u.assigned_pin || u.pin || '',
+          assigned_area: u.assignedArea || u.assigned_area || '',
+          designation: u.designation || '',
+          created_by: u.createdBy || u.created_by || '',
+          status: u.status || 'Active',
+          created_at: u.createdAt || new Date().toISOString()
+        };
+      }
+      function mapDbToUser(row) {
+        return {
+          id: row.id,
+          name: row.name,
+          email: row.email,
+          phone: row.phone,
+          password: row.password,
+          role: row.role,
+          department: row.department,
+          departmentName: row.department_name,
+          assignedPin: row.assigned_pin,
+          pin: row.assigned_pin,
+          assignedArea: row.assigned_area,
+          designation: row.designation,
+          createdBy: row.created_by,
+          status: row.status,
+          createdAt: row.created_at
+        };
+      }
+      window.civicDb = {
+        getClient: initClient,
+        async fetchApplications() {
+          const client = initClient();
+          if (client) {
+            try {
+              const { data, error } = await client.from('applications').select('*').order('created_at', { ascending: false });
+              if (!error && Array.isArray(data)) {
+                const apps = data.map(mapDbToApp);
+                localStorage.setItem('civic_applications', JSON.stringify(apps));
+                return apps;
+              }
+            } catch(e) {}
+          }
+          return JSON.parse(localStorage.getItem('civic_applications') || '[]');
+        },
+        async saveApplication(app) {
+          const dbRow = mapAppToDb(app);
+          const client = initClient();
+          if (client) {
+            try { await client.from('applications').upsert(dbRow); } catch(e) {}
+          }
+          const apps = JSON.parse(localStorage.getItem('civic_applications') || '[]');
+          const idx = apps.findIndex(a => a.id === app.id);
+          if (idx >= 0) apps[idx] = { ...apps[idx], ...app };
+          else apps.unshift(app);
+          localStorage.setItem('civic_applications', JSON.stringify(apps));
+          return app;
+        },
+        async login(email, password) {
+          const cleanEmail = (email || '').toLowerCase().trim();
+          const cleanPass = (password || '').trim();
+          const client = initClient();
+          if (client) {
+            try {
+              const { data, error } = await client.from('users').select('*').eq('email', cleanEmail).maybeSingle();
+              if (!error && data) {
+                const user = mapDbToUser(data);
+                if (user.password === cleanPass) return { success: true, user };
+              }
+            } catch(e) {}
+          }
+          return { success: false, message: 'Invalid credentials.' };
+        },
+        async registerUser(userData) {
+          const client = initClient();
+          const dbUser = mapUserToDb(userData);
+          if (client) {
+            try { await client.from('users').upsert(dbUser); } catch(e) {}
+          }
+          return { success: true, user: userData };
+        },
+        async fetchUsers() {
+          const client = initClient();
+          if (client) {
+            try {
+              const { data, error } = await client.from('users').select('*').order('created_at', { ascending: false });
+              if (!error && Array.isArray(data)) return data.map(mapDbToUser);
+            } catch(e) {}
+          }
+          return [];
+        },
+        subscribeToApplications(onChange) {
+          const client = initClient();
+          if (!client) return null;
+          try {
+            return client.channel('rt_apps_' + Math.random())
+              .on('postgres_changes', { event: '*', schema: 'public', table: 'applications' }, (payload) => {
+                if (typeof onChange === 'function') onChange(payload);
+              }).subscribe();
+          } catch(e) { return null; }
+        }
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initClient);
+      } else {
+        initClient();
+      }
+    })();
+  </script>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+              800: '#166534',
+              900: '#14532d',
+            }
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background-color: #f8fafc;
+    }
+    .toast-container {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      z-index: 999999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .toast {
+      animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: #94a3b8;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      cursor: pointer;
+      text-align: left;
+    }
+    .nav-btn:hover {
+      color: #ffffff;
+      background: rgba(255, 255, 255, 0.07);
+    }
+    .nav-btn.active {
+      color: #ffffff;
+      background: #0f4035;
+      border-left: 3.5px solid #10b981;
+      font-weight: 700;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.05);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.25);
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex text-slate-900 antialiased overflow-x-hidden selection:bg-emerald-500 selection:text-white">
+
+  <!-- Toast Notification Stack -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Camera Capture Modal (Real-Time Location Geotagging) -->
+  <div id="camera-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200">
+      <div class="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <div>
+          <h4 class="font-bold text-slate-900 text-sm flex items-center gap-2">
+            <span>📷</span> Real Location Live Camera Capture
+          </h4>
+          <p class="text-[10px] text-slate-500 font-medium">Automatic tamper-evident GPS coordinates, real address, and timestamp watermark</p>
+        </div>
+        <button onclick="closeCameraModal()" class="size-8 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold flex items-center justify-center transition cursor-pointer">&times;</button>
+      </div>
+      <div class="p-4 flex flex-col items-center">
+        <!-- Live Camera Stream with Geotag HUD -->
+        <div class="relative w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-inner flex items-center justify-center border border-slate-800">
+          <video id="camera-stream" autoplay playsinline class="w-full h-full object-cover"></video>
+          <canvas id="camera-canvas" class="hidden"></canvas>
+          
+          <!-- Live HUD Overlay -->
+          <div class="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-3 text-white pointer-events-none space-y-1">
+            <div class="flex items-center gap-2 text-emerald-400 font-mono text-[11px] font-bold">
+              <span class="size-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span id="cam-hud-gps">Acquiring GPS...</span>
+            </div>
+            <p id="cam-hud-addr" class="text-xs text-slate-200 truncate font-medium">Detecting authentic site address...</p>
+          </div>
+
+          <div id="camera-loading" class="absolute inset-0 flex items-center justify-center bg-slate-900 text-white text-xs font-mono">
+            <span>⌛ Initializing camera & live GPS...</span>
+          </div>
+        </div>
+
+        <div class="mt-4 flex items-center gap-3 w-full">
+          <button type="button" onclick="closeCameraModal()" class="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 cursor-pointer">Cancel</button>
+          <button type="button" onclick="snapPhoto()" class="flex-2 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/20 flex items-center justify-center gap-2 cursor-pointer">
+            <span>📸 Snap Geotagged Photo</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- FULLSCREEN MULTI-PHOTO GALLERY LIGHTBOX MODAL                             -->
+  <!-- ========================================================================= -->
+  <div id="photo-lightbox-modal" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 hidden">
+    <div class="relative max-w-4xl w-full flex flex-col items-center">
+      <!-- Close button -->
+      <button onclick="closePhotoLightbox()" class="absolute -top-12 right-0 sm:right-2 size-10 rounded-full bg-white/20 hover:bg-white/40 text-white text-xl font-bold flex items-center justify-center transition cursor-pointer z-50">
+        &times;
+      </button>
+      
+      <!-- Photo Viewer Container -->
+      <div class="relative w-full max-h-[75vh] flex items-center justify-center bg-black/60 rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
+        <img id="lightbox-main-img" src="" alt="Site Photo" class="max-h-[72vh] w-auto max-w-full object-contain select-none rounded-2xl"/>
+        
+        <!-- Prev Button -->
+        <button id="lightbox-prev-btn" onclick="prevLightboxPhoto()" class="absolute left-3 top-1/2 -translate-y-1/2 size-12 rounded-full bg-black/70 hover:bg-emerald-600 text-white text-xl font-bold flex items-center justify-center transition cursor-pointer shadow-lg border border-white/20">
+          &#10094;
+        </button>
+        <!-- Next Button -->
+        <button id="lightbox-next-btn" onclick="nextLightboxPhoto()" class="absolute right-3 top-1/2 -translate-y-1/2 size-12 rounded-full bg-black/70 hover:bg-emerald-600 text-white text-xl font-bold flex items-center justify-center transition cursor-pointer shadow-lg border border-white/20">
+          &#10095;
+        </button>
+      </div>
+
+      <!-- Thumbnail Strip & Info Bar -->
+      <div class="mt-4 flex flex-col sm:flex-row items-center justify-between w-full px-3 text-white text-xs gap-3">
+        <div class="flex items-center gap-2">
+          <span class="size-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span id="lightbox-counter" class="font-mono text-emerald-400 font-bold">Photo 1 of 1</span>
+        </div>
+        <div id="lightbox-thumbs-container" class="flex items-center gap-2 overflow-x-auto max-w-full py-1 custom-scrollbar">
+          <!-- Mini thumbnails for fast switching -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- FULL APPLICATION VERTICAL ORDER TRACKING MODAL (TOP TO DOWN COLUMN)       -->
+  <!-- ========================================================================= -->
+  <div id="application-tracking-modal" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 hidden overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden my-auto">
+      
+      <!-- Modal Header -->
+      <div class="p-5 sm:p-6 bg-[#081d19] text-white flex items-center justify-between border-b border-emerald-900/40 shrink-0">
+        <div class="flex items-center gap-3">
+          <span class="size-11 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 text-slate-950 flex items-center justify-center text-xl font-bold shadow-md shadow-emerald-500/20">
+            📦
+          </span>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-mono uppercase text-emerald-400 font-bold tracking-wider">COMPLAINT TRACKING ORDER</span>
+              <span id="modal-track-id" class="font-mono font-bold text-sm text-white">#MCC2026001234</span>
+            </div>
+            <p id="modal-track-authority" class="text-xs text-slate-300 font-medium mt-0.5">Mysuru Municipal Corporation (MCC Urban)</p>
+          </div>
+        </div>
+        <button onclick="closeTrackingModal()" class="size-9 rounded-xl bg-white/10 hover:bg-white/20 text-white text-lg font-bold flex items-center justify-center transition cursor-pointer">
+          &times;
+        </button>
+      </div>
+
+      <!-- Modal Body (Scrollable Vertical Timeline Top-to-Down) -->
+      <div class="p-5 sm:p-6 overflow-y-auto space-y-5 custom-scrollbar flex-1 bg-slate-50/50">
+        
+        <!-- Summary Info Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+          <div>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Current Status</span>
+            <span id="modal-track-status-pill" class="inline-block mt-0.5 px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-amber-100 text-amber-800">Pending</span>
+          </div>
+          <div>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Property / PID</span>
+            <span id="modal-track-prop" class="text-xs font-bold font-mono text-slate-800 block truncate mt-0.5">—</span>
+          </div>
+          <div>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">PIN Code</span>
+            <span id="modal-track-pin" class="text-xs font-bold font-mono text-emerald-700 block mt-0.5">—</span>
+          </div>
+          <div>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Tonnage Verified</span>
+            <span id="modal-track-tonnage" class="text-xs font-bold font-mono text-slate-800 block mt-0.5">—</span>
+          </div>
+        </div>
+
+        <!-- Attached Site Photos Gallery Grid (Shows ALL photos with clickable full-view) -->
+        <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
+          <div class="flex items-center justify-between">
+            <h4 class="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+              <span>📸</span> Attached Site Photos (<span id="modal-track-photo-count">0</span>)
+            </h4>
+            <span class="text-[10px] text-emerald-700 font-semibold">Click any photo to view full size</span>
+          </div>
+          <div id="modal-track-photos-grid" class="grid grid-cols-3 sm:grid-cols-5 gap-2.5">
+            <!-- Dynamic image cards -->
+          </div>
+        </div>
+
+        <!-- VERTICAL TOP-TO-DOWN TRACKING ORDER TIMELINE -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-1">
+          <h4 class="font-bold text-slate-900 text-xs mb-5 flex items-center gap-1.5 border-b border-slate-100 pb-2.5">
+            <span>📍</span> Step-by-Step Live Order Progress (Top to Bottom)
+          </h4>
+
+          <div id="modal-vertical-timeline" class="space-y-6 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-slate-200 pl-8 pb-2">
+            <!-- Dynamically populated vertical timeline nodes -->
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-4 bg-white border-t border-slate-200 flex items-center justify-between shrink-0">
+        <span class="text-xs text-slate-400 font-mono" id="modal-track-last-updated">Last Synced: Just Now</span>
+        <button onclick="closeTrackingModal()" class="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer">
+          Close Tracker
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+
+
+  <!-- ========================================================================= -->
+  <!-- 1. LEFT SIDEBAR NAVIGATION PANEL (Dark Theme with Mysuru Skyline)        -->
+  <!-- ========================================================================= -->
+  <aside class="w-72 bg-[#081d19] text-white flex flex-col justify-between shrink-0 h-screen sticky top-0 border-r border-[#10372e] z-40 hidden md:flex">
+    
+    <!-- Top Brand Logo -->
+    <div class="p-6 border-b border-white/10 flex items-center gap-3">
+      <div class="size-11 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 text-slate-950 flex items-center justify-center font-bold text-xl shadow-lg shadow-emerald-500/20">
+        🏗️
+      </div>
+      <div class="leading-tight">
+        <span class="block font-extrabold text-sm text-white tracking-tight">Smart Civic C&D</span>
+        <span class="block text-[10px] text-emerald-400 font-mono tracking-wider uppercase font-bold">MYSURU CLEARANCE HUB</span>
+      </div>
+    </div>
+
+    <!-- Navigation List -->
+    <div class="flex-1 overflow-y-auto custom-scrollbar px-4 py-6 space-y-2">
+      <button onclick="switchTab('panel')" id="nav-panel" class="nav-btn active">
+        <span class="text-base">👤</span>
+        <span>Customer Panel</span>
+      </button>
+      
+      <button onclick="switchTab('applications')" id="nav-applications" class="nav-btn">
+        <span class="text-base">📜</span>
+        <span>Application History</span>
+      </button>
+    </div>
+
+    <!-- Bottom Mysuru City Branding & Skyline Outline -->
+    <div class="p-5 border-t border-white/10 relative overflow-hidden bg-[#061714]/60">
+      <div class="flex items-center gap-2 mb-1">
+        <span class="text-base">🏛️</span>
+        <span class="text-xs font-bold text-emerald-300">Mysuru City Corporation</span>
+      </div>
+      <p class="text-[10px] text-emerald-500/80 font-mono tracking-tight font-medium">Clean City | Green City | Smart City</p>
+      
+      <!-- Subtle vector palace skyline decoration -->
+      <div class="mt-3 opacity-25">
+        <svg class="w-full h-8 text-emerald-400" viewBox="0 0 200 40" fill="currentColor">
+          <path d="M10 40 L10 25 L20 25 L20 20 L25 15 L30 20 L30 25 L40 25 L40 40 Z M60 40 L60 20 L65 15 L70 20 L70 40 Z M90 40 L90 10 L95 5 L100 5 L105 10 L105 40 Z M130 40 L130 20 L135 15 L140 20 L140 40 Z M160 40 L160 25 L170 25 L170 20 L175 15 L180 20 L180 25 L190 25 L190 40 Z" />
+        </svg>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ========================================================================= -->
+  <!-- 2. MAIN CONTENT AREA                                                      -->
+  <!-- ========================================================================= -->
+  <div class="flex-1 flex flex-col min-w-0">
+    
+    <!-- Top Header Bar -->
+    <header class="h-20 bg-white border-b border-slate-200/80 px-6 sm:px-10 flex items-center justify-between sticky top-0 z-30 shadow-xs">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs font-bold text-emerald-600 font-mono uppercase tracking-wider">Citizen Services</span>
+        </div>
+        <h1 class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight" id="header-main-title">Customer Application Form</h1>
+        <p class="text-xs text-slate-500 hidden sm:block">Provide your details to apply for C&D waste clearance services.</p>
+      </div>
+
+      <!-- Right User Menu -->
+      <div class="relative">
+        <button onclick="toggleUserDropdown()" class="flex items-center gap-2.5 px-3.5 py-2 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 transition cursor-pointer">
+          <div class="size-8 rounded-full bg-emerald-700 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+            👤
+          </div>
+          <div class="text-left leading-tight hidden sm:block">
+            <span class="block text-xs font-bold text-slate-900 flex items-center gap-1">
+              <span id="top-user-name">Welcome, Citizen</span>
+              <span class="text-[10px] text-slate-400">⌄</span>
+            </span>
+          </div>
+        </button>
+
+        <!-- Dropdown Menu -->
+        <div id="user-dropdown" class="absolute right-0 top-14 w-56 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 hidden z-50">
+          <div class="px-3 py-2 border-b border-slate-100 mb-1">
+            <span class="block text-xs font-bold text-slate-900" id="drop-user-name">Citizen User</span>
+            <span class="block text-[10px] font-mono text-emerald-700 font-semibold" id="drop-user-email">customer@gmail.com</span>
+          </div>
+          <button onclick="switchTab('applications')" class="w-full text-left px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-xl transition flex items-center gap-2">
+            <span>📜</span> <span>Application History</span>
+          </button>
+          <div class="border-t border-slate-100 my-1"></div>
+          <button onclick="handleLogout()" class="w-full text-left px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition">
+            🚪 Sign Out
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Tab Panes Container -->
+    <main class="flex-1 p-6 sm:p-8 lg:p-10 max-w-[1600px] w-full mx-auto">
+
+      <!-- ===================================================================== -->
+      <!-- TAB 1: CUSTOMER PANEL (FORM + LIVE PREVIEWS)                          -->
+      <!-- ===================================================================== -->
+      <div id="tab-pane-panel" class="tab-pane space-y-6">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          
+          <!-- LEFT / CENTER COLUMN: CUSTOMER APPLICATION FORM (7 or 8 Cols) -->
+          <div class="lg:col-span-7 xl:col-span-8 bg-white rounded-3xl border border-slate-200/80 p-6 sm:p-8 shadow-xs">
+            
+            <!-- Active Request Lock Banner (Shown if user has an active application in progress) -->
+            <div id="active-lock-banner-container" class="hidden mb-6"></div>
+
+            <form id="customer-main-form" onsubmit="handleCustomerFormSubmit(event)" class="space-y-6">
+              
+              <!-- 1. Customer Details -->
+              <div class="space-y-3">
+                <div class="flex items-center gap-2">
+                  <span class="size-6 rounded-full bg-emerald-700 text-white text-xs font-bold flex items-center justify-center">1</span>
+                  <h3 class="font-bold text-slate-900 text-sm">Customer Details</h3>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Customer Name <span class="text-rose-500">*</span></label>
+                    <div class="relative">
+                      <span class="absolute left-3.5 top-3 text-slate-400 text-sm">👤</span>
+                      <input id="form-cust-name" type="text" required placeholder="Enter your full name" class="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50/70 border border-slate-200 text-xs font-semibold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition"/>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Mobile Number <span class="text-rose-500">*</span></label>
+                    <div class="relative">
+                      <span class="absolute left-3.5 top-3 text-slate-400 text-sm">📞</span>
+                      <input id="form-cust-phone" type="tel" required placeholder="+91 98765 43210" class="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50/70 border border-slate-200 font-mono text-xs font-semibold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition"/>
+                    </div>
+                    <span class="text-[10px] text-slate-400 block mt-1">Valid 10-digit mobile number</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 2. Location & Jurisdiction Routing Details -->
+              <div class="space-y-3 pt-2">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div class="flex items-center gap-2">
+                    <span class="size-6 rounded-full bg-emerald-700 text-white text-xs font-bold flex items-center justify-center">2</span>
+                    <h3 class="font-bold text-slate-900 text-sm">Location, GPS & Jurisdiction Routing</h3>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button type="button" onclick="autoDetectCustomerGPS(true)" class="text-xs text-white hover:bg-emerald-700 font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-600 border border-emerald-500 shadow-xs transition cursor-pointer">
+                      <span>📍</span> <span>Autofill Address & PIN by GPS</span>
+                    </button>
+                    <button type="button" onclick="autoDetectCustomerGPS(false)" class="text-xs text-emerald-800 hover:text-emerald-900 font-bold flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 transition cursor-pointer">
+                      <span>🔄</span> <span>Refresh GPS</span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Live GPS Geotag Banner -->
+                <div class="p-3.5 bg-emerald-50/80 border border-emerald-200/90 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div class="flex items-center gap-2.5">
+                    <span class="size-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-sm shrink-0">📍</span>
+                    <div>
+                      <span class="text-[10px] uppercase font-bold text-emerald-800 tracking-wider block">Live Geotag Location (Latitude & Longitude)</span>
+                      <span id="live-gps-display" class="font-mono text-xs font-bold text-slate-900">Lat: 12.29581° N, Lng: 76.63942° E</span>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button type="button" onclick="autoDetectCustomerGPS(true)" class="px-2.5 py-1.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold text-[11px] flex items-center gap-1 shadow-2xs transition">
+                      <span>⚡ Autofill Form</span>
+                    </button>
+                    <a id="live-gps-map-link" href="https://www.google.com/maps?q=12.29581,76.63942" target="_blank" class="px-3 py-1.5 rounded-xl bg-[#065f46] hover:bg-[#047857] text-white font-bold text-[11px] flex items-center gap-1 shadow-xs transition w-fit">
+                      <span>Google Maps</span> <span>↗</span>
+                    </a>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">Site PIN Code <span class="text-rose-500">*</span></label>
+                  <div class="relative">
+                    <span class="absolute left-3.5 top-3 text-slate-400 text-sm">📍</span>
+                    <input id="form-cust-pin" type="text" required maxlength="6" oninput="handlePinChange()" placeholder="e.g. 570026 (Bogadi GP), 570018 (Hootagalli TP), 570001 (MCC Urban)" class="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50/70 border border-slate-200 font-mono text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition"/>
+                  </div>
+                  <div id="pin-route-sub" class="mt-1">
+                    <span class="text-[10px] text-emerald-700 font-mono font-semibold block">Routing: Enter 6-digit PIN code or click "Autofill Form" above for auto-routing.</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">Full Site Address <span class="text-rose-500">*</span></label>
+                  <div class="relative">
+                    <span class="absolute left-3.5 top-3 text-slate-400 text-sm">🏠</span>
+                    <input id="form-cust-address" type="text" required placeholder="House No., Street, Locality, City (or click Autofill by GPS above)" class="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50/70 border border-slate-200 text-xs font-semibold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition"/>
+                  </div>
+                  <span class="text-[10px] text-slate-400 block mt-1">Include landmark for easy physical inspection</span>
+                </div>
+              </div>
+
+              <!-- 3. Property Details -->
+              <div class="space-y-3 pt-2">
+                <div class="flex items-center gap-2">
+                  <span class="size-6 rounded-full bg-emerald-700 text-white text-xs font-bold flex items-center justify-center">3</span>
+                  <h3 class="font-bold text-slate-900 text-sm">Property Details</h3>
+                </div>
+
+                <div>
+                  <label class="block text-xs font-semibold text-slate-700 mb-1">Property ID (Strictly 8 Digits) <span class="text-rose-500">*</span></label>
+                  <div class="relative max-w-md">
+                    <span class="absolute left-3.5 top-3 text-slate-400 text-sm">🏢</span>
+                    <input id="form-cust-property-id" type="text" maxlength="8" pattern="[0-9]{8}" required placeholder="e.g. 40291001" class="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50/70 border border-slate-200 font-mono text-xs font-bold text-slate-900 focus:bg-white focus:ring-2 focus:ring-emerald-500 focus:outline-none transition"/>
+                  </div>
+                  <span class="text-[10px] text-slate-400 block mt-1">Strictly 8-digit numeric Property ID (no letters). Example: 40291001</span>
+                </div>
+              </div>
+
+              <!-- 4. Live Photos Box (Camera-Only Strict Real Location Geotag Mode) -->
+              <div class="space-y-3 pt-2">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <span class="size-6 rounded-full bg-emerald-700 text-white text-xs font-bold flex items-center justify-center">4</span>
+                    <h3 class="font-bold text-slate-900 text-sm">Real Location Live Photo Evidence (Mandatory)</h3>
+                  </div>
+                  <span class="text-[10px] font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-md border border-emerald-300">
+                    📍 100% Live Camera Geotag
+                  </span>
+                </div>
+
+                <div class="bg-[#f2faf7] border border-[#bbf0df] rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div class="flex items-center gap-3">
+                    <div class="size-11 rounded-2xl bg-emerald-100 text-emerald-800 flex items-center justify-center text-xl shrink-0">
+                      📸
+                    </div>
+                    <div>
+                      <h4 class="font-bold text-slate-900 text-xs">Site Waste & Rubble Photo Evidence</h4>
+                      <p class="text-[11px] text-slate-500">Live camera capture only. Photo is automatically stamped with real GPS coordinates, real site address, and timestamp.</p>
+                    </div>
+                  </div>
+
+                  <div id="camera-action-container" class="flex flex-wrap items-center gap-2 shrink-0">
+                    <button id="btn-camera-trigger" type="button" onclick="triggerCameraCapture()" class="px-4 py-2.5 rounded-xl bg-[#065f46] hover:bg-[#047857] text-white font-bold text-xs shadow-md shadow-emerald-900/20 flex items-center gap-2 transition cursor-pointer">
+                      <span>📷</span> <span>Capture Live Photo</span>
+                    </button>
+                    <label for="citizen-photo-file-input" class="px-4 py-2.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-300 font-bold text-xs flex items-center gap-1.5 shadow-2xs transition cursor-pointer">
+                      <span>📁</span> <span>Upload Photo Files</span>
+                    </label>
+                    <input id="citizen-photo-file-input" type="file" multiple accept="image/*" onchange="handleFileUpload(event)" class="hidden"/>
+                  </div>
+                </div>
+                <div class="flex items-center gap-1.5 text-[11px] text-slate-500">
+                  <span>📸</span>
+                  <span>Attach up to 5 site photos (Live camera geotag or file upload from your device).</span>
+                </div>
+              </div>
+
+              <!-- Form Action Buttons -->
+              <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
+                <button type="button" onclick="resetCustomerForm()" class="px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer">
+                  <span>🔄</span> <span>Reset Form</span>
+                </button>
+
+                <button id="btn-submit-application" type="submit" class="px-6 py-2.5 rounded-xl bg-[#065f46] hover:bg-[#047857] text-white font-bold text-xs shadow-md shadow-emerald-900/20 flex items-center gap-2 transition cursor-pointer">
+                  <span>Submit Application</span>
+                  <span>&rarr;</span>
+                </button>
+              </div>
+
+            </form>
+          </div>
+
+          <!-- RIGHT COLUMN: STATUS UPDATE & PHOTO PREVIEW (4 or 5 Cols) -->
+          <div class="lg:col-span-5 xl:col-span-4 space-y-5">
+            
+            <!-- 1. Live Photo Preview Card -->
+            <div class="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs space-y-3">
+              <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm">🖼️</span>
+                  <h4 class="font-bold text-slate-900 text-xs">Site Photo & Geotag Preview</h4>
+                </div>
+                <span id="photo-count-badge" class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-mono font-bold border border-emerald-200">
+                  ● 0/1 photo
+                </span>
+              </div>
+
+              <!-- Single Photo Slot Container -->
+              <div id="photo-preview-grid">
+                <!-- Dynamically generated single photo card or empty capture placeholder -->
+              </div>
+            </div>
+
+            <!-- 2. Prominent Real-Time Status & Ward Inspection Live Update Card -->
+            <div class="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs space-y-4" id="live-tracking-card">
+              <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div class="flex items-center gap-2">
+                  <span class="size-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-xs font-bold shrink-0">
+                    ⚡
+                  </span>
+                  <div>
+                    <h4 class="font-bold text-slate-900 text-xs">Live Status & Inspector Tracking</h4>
+                    <p class="text-[10px] text-slate-500">Real-time status updates synced with Ward Inspector.</p>
+                  </div>
+                </div>
+                <span id="tracker-live-pulse" class="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-mono font-bold border border-emerald-200">
+                  <span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Live Sync</span>
+                </span>
+              </div>
+
+              <!-- Application ID & Status Header Box -->
+              <div class="p-4 rounded-2xl bg-[#081d19] text-white space-y-2.5 shadow-xs">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <span class="text-[9px] font-mono text-emerald-400 uppercase tracking-wider block font-bold">ACTIVE COMPLAINT ID</span>
+                    <span id="tracker-app-id" class="font-mono font-bold text-base text-white block">No Active Request</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span id="tracker-current-status-pill" class="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-mono font-bold border border-emerald-500/30">
+                      Ready
+                    </span>
+                    <button onclick="copyAppId()" class="size-7 rounded-lg bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs transition cursor-pointer" title="Copy ID">
+                      📋
+                    </button>
+                  </div>
+                </div>
+
+                <div class="pt-2 border-t border-white/10 flex flex-col gap-1 text-[11px] text-slate-300">
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-emerald-400 font-bold">🏛️ Authority:</span>
+                    <span id="tracker-authority-name" class="truncate text-white font-medium">Mysuru Municipal Corporation (MCC)</span>
+                  </div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="text-emerald-400 font-bold">👷 Inspector:</span>
+                    <span id="tracker-assigned-inspector" class="truncate text-white font-medium">Ready to lodge application</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Dynamic Status Alert Box -->
+              <div id="tracker-status-alert-box" class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1.5">
+                <div class="flex items-center gap-1.5 font-bold text-slate-900 text-xs" id="tracker-alert-title">
+                  <span>📄</span> <span>Ready to Lodge C&D Complaint</span>
+                </div>
+                <p class="text-xs text-slate-600 leading-snug" id="tracker-alert-desc">
+                  Provide your site details and camera photo to submit a clearance request.
+                </p>
+                <div id="tracker-notes-container" class="hidden mt-2 p-2.5 rounded-xl bg-white border border-slate-200 text-[11px] text-slate-700 font-mono">
+                  <span class="font-bold text-slate-900 block mb-0.5">Inspector Audit Remarks:</span>
+                  <span id="tracker-inspector-notes">—</span>
+                </div>
+              </div>
+
+              <!-- 4-Stage Step Progress Tracker -->
+              <div class="pt-2">
+                <div class="relative flex items-center justify-between">
+                  <!-- Connecting Progress Line -->
+                  <div class="absolute left-4 right-4 top-3 h-0.5 bg-slate-200 -z-0">
+                    <div id="tracker-progress-bar-fill" class="h-full bg-emerald-500 transition-all duration-500" style="width: 0%"></div>
+                  </div>
+                  
+                  <!-- Step 1: Submitted -->
+                  <div class="flex flex-col items-center relative z-10" id="step-node-1">
+                    <div class="size-6 rounded-full bg-slate-100 text-slate-400 border border-slate-300 flex items-center justify-center text-[10px] font-bold">
+                      1
+                    </div>
+                    <span class="text-[10px] font-semibold text-slate-500 mt-1">Submitted</span>
+                  </div>
+
+                  <!-- Step 2: Visit Scheduled -->
+                  <div class="flex flex-col items-center relative z-10" id="step-node-2">
+                    <div class="size-6 rounded-full bg-slate-100 text-slate-400 border border-slate-300 flex items-center justify-center text-[10px] font-bold">
+                      2
+                    </div>
+                    <span class="text-[10px] font-semibold text-slate-500 mt-1">Scheduled</span>
+                  </div>
+
+                  <!-- Step 3: On-Site Audit -->
+                  <div class="flex flex-col items-center relative z-10" id="step-node-3">
+                    <div class="size-6 rounded-full bg-slate-100 text-slate-400 border border-slate-300 flex items-center justify-center text-[10px] font-bold">
+                      3
+                    </div>
+                    <span class="text-[10px] font-semibold text-slate-500 mt-1">Audited</span>
+                  </div>
+
+                  <!-- Step 4: Approved -->
+                  <div class="flex flex-col items-center relative z-10" id="step-node-4">
+                    <div class="size-6 rounded-full bg-slate-100 text-slate-400 border border-slate-300 flex items-center justify-center text-[10px] font-bold">
+                      4
+                    </div>
+                    <span class="text-[10px] font-semibold text-slate-500 mt-1">Approved</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Quick Action Link -->
+              <div id="tracker-action-footer" class="pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs">
+                <span class="text-slate-400 font-mono text-[10px]" id="tracker-updated-time">Updated: Just Now</span>
+                <button onclick="openTrackingModal()" class="text-emerald-700 hover:text-emerald-800 font-bold hover:underline cursor-pointer flex items-center gap-1">
+                  <span>🔍 View Full Application Tracking</span> <span>&rarr;</span>
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- ===================================================================== -->
+      <!-- TAB 2: APPLICATIONS HISTORY & REGISTRY                                -->
+      <!-- ===================================================================== -->
+      <div id="tab-pane-applications" class="tab-pane hidden space-y-6">
+        <div class="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-xs space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <h3 class="text-base font-bold text-slate-900">📄 My Clearance Applications & Permits</h3>
+              <p class="text-xs text-slate-500">Track all your submitted C&D waste clearance requests, live status, and assigned inspectors.</p>
+            </div>
+            <button onclick="switchTab('panel')" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer">
+              + New Application
+            </button>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr class="bg-slate-50 text-slate-700 font-bold border-b border-slate-200">
+                  <th class="px-4 py-3 font-mono">App ID</th>
+                  <th class="px-4 py-3">Property & PIN</th>
+                  <th class="px-4 py-3">GPS Location</th>
+                  <th class="px-4 py-3">Photos</th>
+                  <th class="px-4 py-3">Authority / Inspector</th>
+                  <th class="px-4 py-3">Status</th>
+                  <th class="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="table-my-applications" class="divide-y divide-slate-100 text-slate-600">
+                <!-- Populated via renderApplicationsHistory() -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 3. JAVASCRIPT APP LOGIC & BACKEND SYNC                                    -->
+  <!-- ========================================================================= -->
+  <script>
+    let uploadedPhotos = [];
+    let currentCameraStream = null;
+    let customerLiveCoords = { lat: 12.2958, lng: 76.6394, gpsText: '12.2958° N, 76.6394° E' };
+
+    // Real-Time High Speed Synchronization across Inspector & Officer Consoles
+    const civicSyncChannel = (typeof BroadcastChannel !== 'undefined') ? new BroadcastChannel('civic_sync_channel') : null;
+    if (civicSyncChannel) {
+      civicSyncChannel.onmessage = (event) => {
+        syncLiveCustomerApplications();
+      };
+    }
+    window.addEventListener('storage', () => {
+      syncLiveCustomerApplications();
+    });
+
+    // Toast Alert Helper
+    function showToast(msg, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const item = document.createElement('div');
+      item.className = 'toast px-4 py-3 rounded-2xl text-xs font-bold shadow-xl flex items-center gap-2.5 border ' + 
+        (type === 'success' ? 'bg-emerald-600 text-white border-emerald-500' : 'bg-rose-600 text-white border-rose-500');
+      item.innerHTML = '<span>' + (type === 'success' ? '✓' : '⚠️') + '</span> <span>' + msg + '</span>';
+      container.appendChild(item);
+      setTimeout(() => item.remove(), 4000);
+    }
+
+    // Tab Switcher
+    function switchTab(tabId) {
+      const tabs = ['panel', 'applications'];
+      tabs.forEach(t => {
+        const btn = document.getElementById('nav-' + t);
+        const pane = document.getElementById('tab-pane-' + t);
+        if (btn) btn.classList.toggle('active', t === tabId);
+        if (pane) pane.classList.toggle('hidden', t !== tabId);
+      });
+
+      const titleMap = {
+        'panel': 'Customer Application Form',
+        'applications': 'My Clearance Applications & Complaints'
+      };
+      if (document.getElementById('header-main-title')) {
+        document.getElementById('header-main-title').innerText = titleMap[tabId] || 'Customer Dashboard';
+      }
+
+      if (tabId === 'applications') renderApplicationsHistory();
+    }
+
+    function toggleUserDropdown() {
+      const dropdown = document.getElementById('user-dropdown');
+      if (dropdown) dropdown.classList.toggle('hidden');
+    }
+
+    document.addEventListener('click', (e) => {
+      const dropdown = document.getElementById('user-dropdown');
+      if (dropdown && !e.target.closest('.relative')) {
+        dropdown.classList.add('hidden');
+      }
+    });
+
+    function handleLogout() {
+      localStorage.removeItem('current_user');
+      sessionStorage.removeItem('current_user');
+      showToast('Signed out successfully.', 'success');
+      setTimeout(() => {
+        window.location.href = 'auth.html?tab=signin';
+      }, 400);
+    }
+
+    // High-Accuracy Reverse Geocoding & Local Mysuru Boundary Mapping
+    async function reverseGeocodeCoords(lat, lng) {
+      // 1. Attempt OpenStreetMap Nominatim reverse API with quick timeout
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2600);
+        const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`, {
+          signal: controller.signal,
+          headers: { 'Accept-Language': 'en' }
+        });
+        clearTimeout(timeoutId);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.address) {
+            const addr = data.address;
+            const road = addr.road || addr.street || addr.neighbourhood || addr.suburb || addr.residential || '';
+            const locality = addr.suburb || addr.village || addr.town || addr.city_district || addr.city || 'Mysuru';
+            const postcode = addr.postcode ? addr.postcode.replace(/[^0-9]/g, '').substring(0, 6) : '';
+            const fullAddress = [road, locality, 'Mysuru'].filter(Boolean).join(', ');
+            return { fullAddress, postcode };
+          }
+        }
+      } catch (e) {}
+
+      // 2. High-precision Mysuru local zone boundary fallback
+      // Bogadi GP zone (lat ~ 12.27 to 12.31, lng ~ 76.57 to 76.62)
+      if (lat >= 12.27 && lat <= 12.31 && lng >= 76.57 && lng <= 76.62) {
+        return {
+          fullAddress: 'Bogadi 2nd Stage, Ring Road, Bogadi Rural',
+          postcode: '570026'
+        };
+      }
+      // Hootagalli TP zone (lat ~ 12.33 to 12.37, lng ~ 76.56 to 76.61)
+      if (lat >= 12.33 && lat <= 12.37 && lng >= 76.56 && lng <= 76.61) {
+        return {
+          fullAddress: 'Hootagalli Industrial Area, Belavadi, Hootagalli',
+          postcode: '570018'
+        };
+      }
+      // Kuvempunagar / Saraswathipuram MCC
+      if (lat >= 12.27 && lat <= 12.30 && lng >= 76.62 && lng <= 76.66) {
+        return {
+          fullAddress: 'Kuvempunagar 5th Main, Saraswathipuram, Mysuru',
+          postcode: '570023'
+        };
+      }
+      // Gokulam / V.V. Mohalla MCC
+      if (lat >= 12.32 && lat <= 12.35 && lng >= 76.62 && lng <= 76.66) {
+        return {
+          fullAddress: 'Gokulam 3rd Stage, Contour Road, Mysuru',
+          postcode: '570002'
+        };
+      }
+      // Central / Devaraja Mohalla MCC
+      return {
+        fullAddress: 'Sayyaji Rao Road, Devaraja Mohalla, Mysuru',
+        postcode: '570001'
+      };
+    }
+
+    // Auto-detect Live GPS Coordinates with optional full Address & PIN autofill
+    async function autoDetectCustomerGPS(autofill = false) {
+      const displayEl = document.getElementById('live-gps-display');
+      const mapLink = document.getElementById('live-gps-map-link');
+      if (displayEl) displayEl.innerText = 'Acquiring high-accuracy GPS...';
+
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async pos => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const gpsStr = `Lat: ${lat.toFixed(5)}° N, Lng: ${lng.toFixed(5)}° E`;
+            customerLiveCoords = { lat, lng, gpsText: gpsStr };
+            if (displayEl) displayEl.innerText = gpsStr;
+            if (mapLink) mapLink.href = `https://www.google.com/maps?q=${lat},${lng}`;
+
+            if (autofill) {
+              const geoInfo = await reverseGeocodeCoords(lat, lng);
+              if (geoInfo) {
+                const addrInput = document.getElementById('form-cust-address');
+                const pinInput = document.getElementById('form-cust-pin');
+                if (pinInput && geoInfo.postcode) {
+                  pinInput.value = geoInfo.postcode;
+                }
+                if (addrInput && geoInfo.fullAddress) {
+                  addrInput.value = geoInfo.fullAddress;
+                }
+                handlePinChange();
+                showToast(`📍 Autofilled location: ${geoInfo.fullAddress} (PIN: ${geoInfo.postcode || 'Detected'})`, 'success');
+              }
+            } else {
+              showToast('📍 Live GPS acquired: ' + gpsStr, 'success');
+            }
+          },
+          async err => {
+            const pin = (document.getElementById('form-cust-pin')?.value || '').trim();
+            let fallbackLat = 12.29581, fallbackLng = 76.63942;
+            if (pin.startsWith('570026') || pin.startsWith('571130') || pin.startsWith('570028') || pin.startsWith('560079') || pin.startsWith('570021')) {
+              fallbackLat = 12.28504; fallbackLng = 76.59201;
+            } else if (pin.startsWith('570018') || pin.startsWith('570017') || pin.startsWith('570027') || pin.startsWith('571607')) {
+              fallbackLat = 12.34102; fallbackLng = 76.58905;
+            }
+            const gpsStr = `Lat: ${fallbackLat.toFixed(5)}° N, Lng: ${fallbackLng.toFixed(5)}° E`;
+            customerLiveCoords = { lat: fallbackLat, lng: fallbackLng, gpsText: gpsStr };
+            if (displayEl) displayEl.innerText = gpsStr + ' (Mysuru Zone)';
+            if (mapLink) mapLink.href = `https://www.google.com/maps?q=${fallbackLat},${fallbackLng}`;
+
+            if (autofill) {
+              const geoInfo = await reverseGeocodeCoords(fallbackLat, fallbackLng);
+              if (geoInfo) {
+                const addrInput = document.getElementById('form-cust-address');
+                const pinInput = document.getElementById('form-cust-pin');
+                if (pinInput && geoInfo.postcode && !pinInput.value) pinInput.value = geoInfo.postcode;
+                if (addrInput && geoInfo.fullAddress && !addrInput.value) addrInput.value = geoInfo.fullAddress;
+                handlePinChange();
+                showToast(`📍 Autofilled location: ${geoInfo.fullAddress} (PIN: ${geoInfo.postcode || '570001'})`, 'info');
+              }
+            }
+          },
+          { timeout: 7000, enableHighAccuracy: true }
+        );
+      }
+    }
+
+    // Dynamic Resolution of Authority & Inspector based exclusively on PIN Code
+    function resolveAuthorityAndInspector(pin) {
+      const GP_PINS = ['570026', '571130', '570028', '560079', '570021', '571311', '571201', '571186', '571101', '571120', '571124', '571125'];
+      const TP_PINS = ['570018', '570017', '570027', '571607', '571604', '571602', '571610', '570016'];
+      const MCC_PINS = ['570001', '570002', '570004', '570008', '570010', '570020', '570023', '570024'];
+
+      let authorityKey = 'mcc';
+      let authority = 'Mysuru Municipal Corporation (MCC Urban)';
+      let assignedInspectorName = 'Rajesh Kumar';
+      let assignedInspectorEmail = 'inspector.mcc@gmail.com';
+      let assignedOfficerEmail = 'mcc@gmail.com';
+      let badgeColor = 'bg-amber-50 text-amber-900 border-amber-300';
+      let tag = 'MCC Urban';
+
+      const cleanPin = String(pin || '').trim();
+
+      // 1. Check if a custom registered inspector in localStorage or users table has this PIN assigned
+      const allInspectors = JSON.parse(localStorage.getItem('civic_inspectors') || '[]');
+      const customPinMatch = allInspectors.find(ins => {
+        const insPin = String(ins.assignedPin || ins.pin || '').trim();
+        if (!insPin) return false;
+        const pList = insPin.split(/[\s,]+/).map(p => p.trim());
+        return pList.some(p => p && (p === cleanPin || cleanPin.startsWith(p) || p.startsWith(cleanPin)));
+      });
+
+      if (customPinMatch) {
+        const d = (customPinMatch.department || '').toLowerCase();
+        const dn = (customPinMatch.departmentName || '').toLowerCase();
+        if (d === 'gp' || d.includes('panchayat') || dn.includes('panchayat')) {
+          authorityKey = 'gp';
+          authority = 'Gram Panchayat (Bogadi Rural)';
+          assignedOfficerEmail = 'gp@gmail.com';
+          badgeColor = 'bg-emerald-50 text-emerald-900 border-emerald-300';
+          tag = 'Gram Panchayat';
+        } else if (d === 'tp' || d.includes('town') || dn.includes('town')) {
+          authorityKey = 'tp';
+          authority = 'Town Panchayat (Hootagalli Town)';
+          assignedOfficerEmail = 'tp@gmail.com';
+          badgeColor = 'bg-teal-50 text-teal-900 border-teal-300';
+          tag = 'Town Panchayat';
+        } else {
+          authorityKey = 'mcc';
+          authority = 'Mysuru Municipal Corporation (MCC Urban)';
+          assignedOfficerEmail = 'mcc@gmail.com';
+          badgeColor = 'bg-amber-50 text-amber-900 border-amber-300';
+          tag = 'Mysuru City Corporation';
+        }
+        assignedInspectorName = customPinMatch.name;
+        assignedInspectorEmail = customPinMatch.email;
+      } else {
+        const isGp = GP_PINS.some(p => cleanPin.startsWith(p) || p.startsWith(cleanPin) || cleanPin === p);
+        const isTp = TP_PINS.some(p => cleanPin.startsWith(p) || p.startsWith(cleanPin) || cleanPin === p);
+
+        if (isGp) {
+          authorityKey = 'gp';
+          authority = 'Gram Panchayat (Bogadi Rural)';
+          assignedOfficerEmail = 'gp@gmail.com';
+          badgeColor = 'bg-emerald-50 text-emerald-900 border-emerald-300';
+          tag = 'Gram Panchayat';
+
+          if (cleanPin === '571130') {
+            assignedInspectorName = 'Basavarajappa M.';
+            assignedInspectorEmail = 'basava.gp@gmail.com';
+          } else if (cleanPin === '571311') {
+            assignedInspectorName = 'S. Nanjappa';
+            assignedInspectorEmail = 'nanjappa.gp@gmail.com';
+          } else if (cleanPin === '570028') {
+            assignedInspectorName = 'Dimple';
+            assignedInspectorEmail = 'dim@gmail.com';
+          } else {
+            assignedInspectorName = 'Seervi';
+            assignedInspectorEmail = 'q@gmail.com';
+          }
+        } else if (isTp) {
+          authorityKey = 'tp';
+          authority = 'Town Panchayat (Hootagalli Town)';
+          assignedOfficerEmail = 'tp@gmail.com';
+          badgeColor = 'bg-teal-50 text-teal-900 border-teal-300';
+          tag = 'Town Panchayat';
+
+          if (cleanPin === '570017') {
+            assignedInspectorName = 'Manjunatha Rao';
+            assignedInspectorEmail = 'manju.tp@gmail.com';
+          } else if (cleanPin === '570027') {
+            assignedInspectorName = 'Prashanth G.';
+            assignedInspectorEmail = 'prashanth.tp@gmail.com';
+          } else if (cleanPin === '571607' || cleanPin === '571604') {
+            assignedInspectorName = 'K. Suresh';
+            assignedInspectorEmail = 'suresh.tp@gmail.com';
+          } else {
+            assignedInspectorName = 'M. Anand';
+            assignedInspectorEmail = 'anand.tp@gmail.com';
+          }
+        } else {
+          authorityKey = 'mcc';
+          authority = 'Mysuru Municipal Corporation (MCC Urban)';
+          assignedOfficerEmail = 'mcc@gmail.com';
+          badgeColor = 'bg-amber-50 text-amber-900 border-amber-300';
+          tag = 'Mysuru City Corporation';
+
+          if (cleanPin === '570002') {
+            assignedInspectorName = 'S. Swamy';
+            assignedInspectorEmail = 'swamy.mcc@gmail.com';
+          } else if (cleanPin === '570004') {
+            assignedInspectorName = 'Divya Shankar';
+            assignedInspectorEmail = 'divya.mcc@gmail.com';
+          } else if (cleanPin === '570023') {
+            assignedInspectorName = 'P. Ramesh';
+            assignedInspectorEmail = 'ramesh.mcc@gmail.com';
+          } else {
+            assignedInspectorName = 'Rajesh Kumar';
+            assignedInspectorEmail = 'inspector.mcc@gmail.com';
+          }
+        }
+      }
+
+      return { authorityKey, authority, assignedInspectorName, assignedInspectorEmail, assignedOfficerEmail, badgeColor, tag };
+    }
+
+    function handlePinChange() {
+      const pin = (document.getElementById('form-cust-pin').value || '').trim();
+      const matched = resolveAuthorityAndInspector(pin);
+
+      const sub = document.getElementById('pin-route-sub');
+      if (sub) {
+        if (!pin) {
+          sub.innerHTML = `
+            <span class="text-slate-500 font-mono text-[10px] block">
+              Routing: Enter 6-digit PIN code or click "Autofill Form" above for auto-routing.
+            </span>
+          `;
+        } else {
+          sub.innerHTML = `
+            <div class="mt-1.5 p-2 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] ${matched.badgeColor}">
+              <div class="flex items-center gap-1.5 font-bold">
+                <span>🏛️</span>
+                <span>${matched.authority}</span>
+              </div>
+              <div class="font-mono text-[10px] font-semibold text-slate-700">
+                👮 Auto-Assigned Inspector: <strong class="text-slate-900">${matched.assignedInspectorName}</strong> (${matched.assignedInspectorEmail})
+              </div>
+            </div>
+          `;
+        }
+      }
+
+      // Update Live Tracker Preview card on the right immediately (if no active complaint lock)
+      const activeApp = getActiveCustomerApplication();
+      if (!activeApp) {
+        const authNameEl = document.getElementById('tracker-authority-name');
+        const inspNameEl = document.getElementById('tracker-assigned-inspector');
+        if (authNameEl) authNameEl.innerText = matched.authority;
+        if (inspNameEl) inspNameEl.innerText = `${matched.assignedInspectorName} (${matched.assignedInspectorEmail}) · Zone: PIN ${pin || 'Auto'}`;
+      }
+    }
+
+    // Photo Capture & File Upload Handling (Up to 5 Photos with Geotag)
+    async function triggerCameraCapture() {
+      if (uploadedPhotos && uploadedPhotos.length >= 5) {
+        showToast('You have already attached the maximum 5 site photos.', 'info');
+        return;
+      }
+
+      const modal = document.getElementById('camera-modal');
+      const video = document.getElementById('camera-stream');
+      const loading = document.getElementById('camera-loading');
+      const hudGps = document.getElementById('cam-hud-gps');
+      const hudAddr = document.getElementById('cam-hud-addr');
+
+      modal.classList.remove('hidden');
+      if (loading) loading.classList.remove('hidden');
+
+      // 1. Fetch live GPS coordinates immediately for HUD
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          async pos => {
+            const lat = pos.coords.latitude;
+            const lng = pos.coords.longitude;
+            const gpsStr = `Lat: ${lat.toFixed(5)}° N, Lng: ${lng.toFixed(5)}° E`;
+            customerLiveCoords = { lat, lng, gpsText: gpsStr };
+            if (hudGps) hudGps.innerText = gpsStr + ' · High Accuracy GPS';
+            
+            const geoInfo = await reverseGeocodeCoords(lat, lng);
+            if (geoInfo && geoInfo.fullAddress) {
+              if (hudAddr) hudAddr.innerText = geoInfo.fullAddress + (geoInfo.postcode ? ` · PIN ${geoInfo.postcode}` : '');
+            }
+          },
+          err => {
+            const lat = customerLiveCoords.lat || 12.29581;
+            const lng = customerLiveCoords.lng || 76.63942;
+            const gpsStr = `Lat: ${lat.toFixed(5)}° N, Lng: ${lng.toFixed(5)}° E`;
+            if (hudGps) hudGps.innerText = gpsStr + ' · Mysuru Civic GPS';
+            if (hudAddr) hudAddr.innerText = 'Sayyaji Rao Road, Devaraja Mohalla, Mysuru - 570001';
+          },
+          { timeout: 6000, enableHighAccuracy: true }
+        );
+      }
+
+      // 2. Initialize live camera stream
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { 
+              facingMode: 'environment',
+              width: { ideal: 1280 },
+              height: { ideal: 720 }
+            } 
+          });
+          currentCameraStream = stream;
+          video.srcObject = stream;
+          if (loading) loading.classList.add('hidden');
+        } catch (err) {
+          if (loading) loading.classList.add('hidden');
+          showToast('⚠️ Camera access denied or not found. You can use the "Upload Photo Files" button.', 'info');
+          closeCameraModal();
+          const fileInput = document.getElementById('citizen-photo-file-input');
+          if (fileInput) fileInput.click();
+        }
+      } else {
+        if (loading) loading.classList.add('hidden');
+        showToast('⚠️ Live camera is not supported. Opening file picker...', 'info');
+        closeCameraModal();
+        const fileInput = document.getElementById('citizen-photo-file-input');
+        if (fileInput) fileInput.click();
+      }
+    }
+
+    function closeCameraModal() {
+      const modal = document.getElementById('camera-modal');
+      if (modal) modal.classList.add('hidden');
+      if (currentCameraStream) {
+        currentCameraStream.getTracks().forEach(track => track.stop());
+        currentCameraStream = null;
+      }
+    }
+
+    function compressImage(fileOrDataUrl, maxWidth = 1200, maxHeight = 1200, quality = 0.82) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          let w = img.width;
+          let h = img.height;
+          if (w > maxWidth || h > maxHeight) {
+            if (w / h > maxWidth / maxHeight) {
+              h = Math.round((h * maxWidth) / w);
+              w = maxWidth;
+            } else {
+              w = Math.round((w * maxHeight) / h);
+              h = maxHeight;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => {
+          if (typeof fileOrDataUrl === 'string') resolve(fileOrDataUrl);
+          else resolve(null);
+        };
+        if (typeof fileOrDataUrl === 'string') {
+          img.src = fileOrDataUrl;
+        } else {
+          const reader = new FileReader();
+          reader.onload = (e) => { img.src = e.target.result; };
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(fileOrDataUrl);
+        }
+      });
+    }
+
+    // Capture Real Location Live Photo with Tamper-Evident Geotag & Real Address Stamping
+    async function snapPhoto() {
+      const video = document.getElementById('camera-stream');
+      const canvas = document.getElementById('camera-canvas');
+      if (!video) return;
+
+      if (!uploadedPhotos) uploadedPhotos = [];
+      if (uploadedPhotos.length >= 5) {
+        showToast('Maximum 5 site photos reached.', 'info');
+        closeCameraModal();
+        return;
+      }
+
+      const width = video.videoWidth || 1280;
+      const height = video.videoHeight || 720;
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+
+      // 1. Draw live camera frame
+      ctx.drawImage(video, 0, 0, width, height);
+
+      // 2. Fetch live GPS & real address
+      let lat = customerLiveCoords.lat || 12.29581;
+      let lng = customerLiveCoords.lng || 76.63942;
+      let addressStr = (document.getElementById('form-cust-address')?.value || '').trim();
+      let pinStr = (document.getElementById('form-cust-pin')?.value || '').trim();
+
+      if (!addressStr || !pinStr) {
+        const geoInfo = await reverseGeocodeCoords(lat, lng);
+        if (geoInfo) {
+          if (geoInfo.fullAddress && !addressStr) addressStr = geoInfo.fullAddress;
+          if (geoInfo.postcode && !pinStr) pinStr = geoInfo.postcode;
+        }
+      }
+      if (!addressStr) addressStr = 'Sayyaji Rao Road, Devaraja Mohalla, Mysuru';
+      if (!pinStr) pinStr = '570001';
+
+      // 3. Update form fields with real location data immediately
+      const addrInput = document.getElementById('form-cust-address');
+      const pinInput = document.getElementById('form-cust-pin');
+      if (addrInput && !addrInput.value) addrInput.value = addressStr;
+      if (pinInput && !pinInput.value) pinInput.value = pinStr;
+      handlePinChange();
+
+      // 4. Render Authentic Tamper-Evident Geotag Watermark Overlay on Canvas
+      const bannerHeight = Math.max(88, Math.round(height * 0.17));
+      const bannerY = height - bannerHeight;
+
+      const grad = ctx.createLinearGradient(0, bannerY, 0, height);
+      grad.addColorStop(0, 'rgba(0, 0, 0, 0.40)');
+      grad.addColorStop(0.25, 'rgba(8, 29, 25, 0.88)');
+      grad.addColorStop(1, 'rgba(8, 29, 25, 0.96)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, bannerY, width, bannerHeight);
+
+      ctx.fillStyle = '#10b981';
+      ctx.fillRect(0, bannerY, width, 3.5);
+
+      const fontSize = Math.max(13, Math.round(width * 0.020));
+      const subFontSize = Math.max(11, Math.round(width * 0.016));
+      ctx.textBaseline = 'middle';
+
+      ctx.font = `bold ${fontSize}px "JetBrains Mono", monospace, sans-serif`;
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+      ctx.shadowBlur = 4;
+      const nowStr = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+      ctx.fillText(`📍 GPS: ${lat.toFixed(5)}° N, ${lng.toFixed(5)}° E   |   ${nowStr} IST`, 24, bannerY + bannerHeight * 0.30);
+
+      ctx.font = `600 ${subFontSize}px "Plus Jakarta Sans", sans-serif`;
+      ctx.fillStyle = '#a7f3d0';
+      ctx.fillText(`🏠 Site Address: ${addressStr}  ·  PIN: ${pinStr}`, 24, bannerY + bannerHeight * 0.60);
+
+      ctx.font = `bold ${Math.max(9, Math.round(width * 0.013))}px "Plus Jakarta Sans", sans-serif`;
+      ctx.fillStyle = '#34d399';
+      ctx.fillText(`✓ MYSURU C&D WASTE COMPLIANCE REGISTRY · PHOTO #${uploadedPhotos.length + 1}`, 24, bannerY + bannerHeight * 0.84);
+
+      ctx.shadowBlur = 0;
+
+      // 5. Convert canvas to compressed JPEG
+      const rawDataUrl = canvas.toDataURL('image/jpeg', 0.85);
+      const dataUrl = await compressImage(rawDataUrl, 800, 800, 0.65);
+
+      uploadedPhotos.push(dataUrl);
+      renderPhotoPreviewSlots();
+      closeCameraModal();
+
+      showToast(`🎉 Geotagged photo (${uploadedPhotos.length}/5) captured!`, 'success');
+    }
+
+    async function handleFileUpload(event) {
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
+      if (!uploadedPhotos) uploadedPhotos = [];
+
+      let addedCount = 0;
+      for (let i = 0; i < files.length && uploadedPhotos.length < 5; i++) {
+        const file = files[i];
+        const dataUrl = await compressImage(file, 800, 800, 0.65);
+        if (dataUrl) {
+          uploadedPhotos.push(dataUrl);
+          addedCount++;
+        }
+      }
+      renderPhotoPreviewSlots();
+      if (addedCount > 0) {
+        showToast(`📁 Attached ${addedCount} photo(s) (Total: ${uploadedPhotos.length}/5)`, 'success');
+      } else if (uploadedPhotos.length >= 5) {
+        showToast('Maximum 5 photos already attached.', 'info');
+      }
+      event.target.value = '';
+    }
+
+    function removePhoto(idx) {
+      if (uploadedPhotos && uploadedPhotos.length > idx) {
+        uploadedPhotos.splice(idx, 1);
+        renderPhotoPreviewSlots();
+        showToast('Photo removed.', 'info');
+      }
+    }
+
+    function renderPhotoPreviewSlots() {
+      const grid = document.getElementById('photo-preview-grid');
+      const badge = document.getElementById('photo-count-badge');
+      const btnTrigger = document.getElementById('btn-camera-trigger');
+
+      if (!uploadedPhotos) uploadedPhotos = [];
+      const count = uploadedPhotos.length;
+
+      if (badge) {
+        badge.innerText = `📷 ${count}/5 photos attached`;
+        badge.className = count > 0 
+          ? 'px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-[10px] font-mono font-bold border border-emerald-300'
+          : 'px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-mono font-bold border border-slate-200';
+      }
+
+      if (btnTrigger) {
+        if (count >= 5) {
+          btnTrigger.disabled = true;
+          btnTrigger.classList.add('opacity-50', 'cursor-not-allowed');
+          btnTrigger.title = 'Maximum 5 photos reached';
+        } else {
+          btnTrigger.disabled = false;
+          btnTrigger.classList.remove('opacity-50', 'cursor-not-allowed');
+          btnTrigger.title = `Capture live geotagged photo (${count}/5)`;
+        }
+      }
+
+      if (grid) {
+        if (count === 0) {
+          grid.innerHTML = `
+            <div class="col-span-full py-4 px-3 rounded-2xl border-2 border-dashed border-emerald-900/30 bg-black/20 text-center space-y-1">
+              <span class="text-2xl block">📸</span>
+              <p class="text-xs font-bold text-slate-300">No photos captured yet</p>
+              <p class="text-[11px] text-slate-400">Click "Capture Real Location Photo" above to take 1 to 5 live site photos.</p>
+            </div>
+          `;
+        } else {
+          grid.innerHTML = `
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 col-span-full">
+              ${uploadedPhotos.map((p, idx) => `
+                <div class="relative aspect-video rounded-xl overflow-hidden border-2 border-emerald-500 shadow-sm bg-slate-950 group">
+                  <img src="${p}" alt="Site Photo ${idx+1}" class="w-full h-full object-cover group-hover:scale-105 transition cursor-pointer" onclick="openPhotoLightbox(uploadedPhotos, ${idx})" title="Click to enlarge"/>
+                  <div class="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/75 backdrop-blur-xs text-emerald-300 text-[9px] font-mono font-bold">
+                    #${idx+1}
+                  </div>
+                  <button type="button" onclick="removePhoto(${idx})" class="absolute top-1.5 right-1.5 size-5 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] flex items-center justify-center cursor-pointer shadow-xs transition" title="Remove Photo">
+                    &times;
+                  </button>
+                </div>
+              `).join('')}
+              ${count < 5 ? `
+                <div onclick="triggerCameraCapture()" class="aspect-video rounded-xl border-2 border-dashed border-slate-300 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50/50 flex flex-col items-center justify-center p-3 text-center cursor-pointer transition group">
+                  <span class="text-lg group-hover:scale-110 transition block">➕</span>
+                  <span class="text-[10px] font-bold text-slate-600 group-hover:text-emerald-800 mt-1">Add Photo (${count+1}/5)</span>
+                </div>
+              ` : ''}
+            </div>
+          `;
+        }
+      }
+    }
+
+    // Reset Form
+    function resetCustomerForm() {
+      document.getElementById('customer-permit-form').reset();
+      uploadedPhotos = [];
+      renderPhotoPreviewSlots();
+      initDefaultValues();
+      showToast('Form reset to default values.');
+    }
+
+    function copyAppId() {
+      const text = document.getElementById('tracker-app-id').innerText;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text);
+      }
+    }
+
+    // Check if status is completed/finalized (Permit approved or cancelled)
+    function isFinalizedStatus(st) {
+      if (!st) return false;
+      const s = String(st).trim().toLowerCase();
+      return s === 'approved' || s === 'issued' || s === 'certificate issued' || s === 'cancelled' || s === 'rejected';
+    }
+
+    // Identify the currently logged-in customer user
+    function getLoggedInUser() {
+      return JSON.parse(sessionStorage.getItem('current_user') || localStorage.getItem('current_user') || '{}');
+    }
+
+    function normalizePhone(p) {
+      return String(p || '').replace(/[^0-9]/g, '').slice(-10);
+    }
+
+    // Filter applications strictly belonging to the currently logged-in customer
+    function getLoggedInUserApplications(allApps) {
+      const user = getLoggedInUser();
+      const userEmail = (user.email || '').toLowerCase().trim();
+      const userPhone = normalizePhone(user.phone || user.mobile);
+      const userName = (user.name || '').toLowerCase().trim();
+
+      const appsList = Array.isArray(allApps) ? allApps : [];
+
+      if (!userEmail && !userPhone && !userName) {
+        // Fallback to locally saved session requests if available
+        return JSON.parse(localStorage.getItem('cust_my_requests') || '[]');
+      }
+
+      const matched = appsList.filter(app => {
+        if (!app) return false;
+        const appEmail = (app.email || '').toLowerCase().trim();
+        const appPhone = normalizePhone(app.phone || app.mobile);
+        const appName = (app.applicantName || app.applicant_name || '').toLowerCase().trim();
+
+        // 1. Exact or substring email match
+        if (userEmail && appEmail && (appEmail === userEmail || appEmail.includes(userEmail) || userEmail.includes(appEmail))) return true;
+        
+        // 2. Normalized 10-digit phone match
+        if (userPhone && appPhone && userPhone.length === 10 && userPhone === appPhone) return true;
+
+        // 3. Name match with matching location / phone
+        if (userName && appName && userName === appName) return true;
+
+        return false;
+      });
+
+      if (matched.length > 0) return matched;
+      return JSON.parse(localStorage.getItem('cust_my_requests') || '[]');
+    }
+
+    // Find any currently active (non-finalized) application for the logged-in customer only
+    function getActiveCustomerApplication() {
+      const allApps = JSON.parse(localStorage.getItem('civic_applications') || '[]');
+      const userApps = getLoggedInUserApplications(allApps);
+      return userApps.find(app => !isFinalizedStatus(app.status));
+    }
+
+    // Check lock status and toggle form disabled state
+    function checkActiveApplicationLock() {
+      const activeApp = getActiveCustomerApplication();
+      const form = document.getElementById('customer-permit-form');
+      const banner = document.getElementById('active-application-banner');
+      const submitBtn = document.getElementById('btn-submit-app');
+
+      if (activeApp) {
+        const isApproved = activeApp.status === 'Approved' || activeApp.certificateStatus === 'Issued';
+        if (form) form.classList.add('hidden');
+        if (banner) {
+          banner.className = 'block mb-6 p-5 rounded-3xl bg-slate-900 border-2 border-emerald-500/50 shadow-xl space-y-4';
+          banner.innerHTML = `
+            <!-- Top Alert Badge -->
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-900/60 pb-3">
+              <div class="flex items-center gap-2">
+                <span class="flex size-3 rounded-full bg-emerald-400 animate-ping"></span>
+                <span class="text-xs font-black uppercase tracking-wider text-emerald-400">Permit Status Tracking</span>
+                <span class="px-2.5 py-0.5 rounded-lg bg-black text-white font-mono font-bold text-xs">${activeApp.id || '#MCC2026'}</span>
+              </div>
+              <span class="px-3 py-1 rounded-full text-xs font-mono font-bold ${isApproved ? 'bg-emerald-500 text-slate-950' : 'bg-amber-400 text-slate-950'}">
+                ${activeApp.status || 'Pending Inspection'}
+              </span>
+            </div>
+
+            <!-- Descriptive Guidance -->
+            <div class="space-y-1">
+              <h4 class="text-sm font-extrabold text-white">
+                ${isApproved ? '🎉 NOC Clearance Certificate Issued!' : '⏳ Your application is actively under on-site inspection.'}
+              </h4>
+              <p class="text-xs text-slate-300 leading-relaxed">
+                ${isApproved 
+                  ? 'Your C&D Waste NOC has been officially approved. You can view or download the valid NOC certificate below.' 
+                  : 'Municipal rules allow 1 active application per site until finalized by the assigned Ward Inspector. You can track progress or view details below.'}
+              </p>
+            </div>
+
+            <!-- Active Complaint Details Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-black/30 border border-emerald-900/40 text-xs">
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Customer & Contact</span>
+                <span class="font-bold text-white text-sm block">${activeApp.applicantName || 'Citizen User'}</span>
+                <span class="text-slate-400 font-mono text-[11px] block">📱 ${activeApp.phone || 'Verified Phone'}</span>
+              </div>
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Property Site & PIN</span>
+                <span class="font-bold text-white block">${activeApp.propertyId || 'Property Site'}</span>
+                <span class="text-slate-300 text-[11px] block">${activeApp.address || 'Mysuru'} · PIN ${activeApp.pincode || activeApp.pin}</span>
+              </div>
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Assigned Inspector & Authority</span>
+                <span class="font-bold text-emerald-300 block">${activeApp.assignedInspectorName || 'Ward Inspector'}</span>
+                <span class="text-slate-400 text-[11px] block">${activeApp.authority || 'Mysuru Municipal Corporation'}</span>
+              </div>
+              <div>
+                <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">GPS Location</span>
+                <a href="${activeApp.mapUrl || 'https://www.google.com/maps?q=' + (activeApp.lat||12.2958) + ',' + (activeApp.lng||76.6394)}" target="_blank" class="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-emerald-400 hover:underline mt-0.5">
+                  <span>📍 ${activeApp.gpsLocation || 'Live GPS'}</span> <span>↗</span>
+                </a>
+              </div>
+            </div>
+
+            <!-- Action Buttons Strip -->
+            <div class="pt-2 flex flex-wrap items-center justify-between gap-3">
+              <button type="button" onclick="switchTab('applications')" class="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition cursor-pointer flex items-center gap-1.5">
+                <span>📜</span> <span>View Application History</span>
+              </button>
+              <div class="flex items-center gap-2">
+                ${isApproved ? `
+                  <button type="button" onclick="openCertificateModal('${activeApp.id}')" class="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-extrabold text-xs shadow-md transition cursor-pointer flex items-center gap-1.5">
+                    <span>📜</span> <span>View Official Certificate (NOC)</span>
+                  </button>
+                ` : ''}
+                <button type="button" onclick="openTrackingModal('${activeApp.id}')" class="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-md shadow-emerald-600/30 transition cursor-pointer flex items-center gap-1.5">
+                  <span>🔍</span> <span>Track Full Order &rarr;</span>
+                </button>
+              </div>
+            </div>
+          `;
+          banner.classList.remove('hidden');
+        }
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.className = 'px-6 py-2.5 rounded-xl bg-slate-300 text-slate-500 font-bold text-xs shadow-none flex items-center gap-2 cursor-not-allowed';
+          submitBtn.innerHTML = `<span>🔒 Active Complaint In Progress</span>`;
+        }
+      } else {
+        if (form) form.classList.remove('hidden');
+        if (banner) {
+          banner.className = 'hidden mb-6';
+          banner.innerHTML = '';
+        }
+        if (submitBtn) {
+          submitBtn.disabled = false;
+          submitBtn.className = 'px-6 py-2.5 rounded-xl bg-[#065f46] hover:bg-[#047857] text-white font-bold text-xs shadow-md shadow-emerald-900/20 flex items-center gap-2 transition cursor-pointer';
+          submitBtn.innerHTML = `<span>Submit Application</span><span>&rarr;</span>`;
+        }
+      }
+    }
+
+    // Submit Application to Backend & LocalStorage
+    async function handleCustomerFormSubmit(e) {
+      e.preventDefault();
+      
+      // Enforce single active complaint check
+      const activeApp = getActiveCustomerApplication();
+      if (activeApp) {
+        showToast(`⚠️ You already have an active complaint (${activeApp.id}) under process. You can only apply once until it is approved or cancelled.`, 'error');
+        checkActiveApplicationLock();
+        return;
+      }
+
+      const user = JSON.parse(sessionStorage.getItem('current_user') || localStorage.getItem('current_user') || '{}');
+      
+      const custName = document.getElementById('form-cust-name').value.trim();
+      const phone = document.getElementById('form-cust-phone').value.trim();
+      const pin = document.getElementById('form-cust-pin').value.trim();
+      const address = document.getElementById('form-cust-address').value.trim();
+      const propertyId = document.getElementById('form-cust-property-id').value.trim();
+
+      // Enforce mandatory real location geotagged photo
+      if (!uploadedPhotos || uploadedPhotos.length === 0) {
+        showToast('⚠️ Mandatory live site photo required. Please click "Capture Real Location Photo" before submitting.', 'error');
+        return;
+      }
+
+      // Enforce strictly 8-digit numeric Property ID
+      if (!propertyId || !/^\d{8}$/.test(propertyId)) {
+        showToast('⚠️ Property ID must be strictly 8 numeric digits (no letters). Example: 40291001', 'error');
+        return;
+      }
+
+      const matched = resolveAuthorityAndInspector(pin);
+
+      const authorityKey = matched.authorityKey || 'mcc';
+      const authority = matched.authority;
+      const assignedInspectorName = matched.assignedInspectorName;
+      const assignedInspectorEmail = matched.assignedInspectorEmail;
+      const assignedOfficerEmail = matched.assignedOfficerEmail;
+
+      const authPrefix = authorityKey.toUpperCase();
+      const certNo = `${authPrefix}-${Math.floor(100000 + Math.random() * 900000)}`;
+      const certType = 'C&D Waste Clearance NOC';
+      const issueDate = new Date().toISOString().split('T')[0];
+      const status = 'Pending Inspection';
+
+      const appId = `#${authPrefix}${new Date().getFullYear()}${String(Math.floor(100000 + Math.random() * 900000))}`;
+      const newApplication = {
+        id: appId,
+        applicantName: custName,
+        phone,
+        email: user.email || '',
+        pincode: pin,
+        pin,
+        address,
+        propertyId,
+        certificateNo: certNo,
+        certificateType: certType,
+        issueDate,
+        status,
+        photos: uploadedPhotos,
+        photo: uploadedPhotos[0] || null,
+        gpsLocation: customerLiveCoords.gpsText,
+        lat: customerLiveCoords.lat,
+        lng: customerLiveCoords.lng,
+        mapUrl: `https://www.google.com/maps?q=${customerLiveCoords.lat},${customerLiveCoords.lng}`,
+        authority,
+        authorityKey,
+        assignedInspectorName,
+        assignedInspectorEmail,
+        assignedOfficerEmail,
+        submittedAt: new Date().toISOString()
+      };
+
+      // 1. Save directly to Backend REST API AND Supabase Cloud Database
+      try {
+        const postRes = await fetch('/api/applications', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newApplication)
+        });
+        if (postRes.ok) {
+          const resData = await postRes.json().catch(() => ({}));
+          if (resData && resData.item) {
+            Object.assign(newApplication, resData.item);
+          }
+        } else {
+          const resData = await postRes.json().catch(() => ({}));
+          if (resData && resData.message && !resData.success) {
+            showToast('⚠️ ' + resData.message, 'error');
+            checkActiveApplicationLock();
+            return;
+          }
+        }
+      } catch(err) {
+        console.warn('Backend API /api/applications err:', err);
+      }
+
+      if (window.civicDb && typeof window.civicDb.saveApplication === 'function') {
+        try {
+          await window.civicDb.saveApplication(newApplication);
+        } catch(err) {
+          console.warn('civicDb saveApplication err:', err);
+        }
+      }
+
+      // 2. Save in LocalStorage with safe quota fallback
+      try {
+        const apps = JSON.parse(localStorage.getItem('civic_applications') || '[]');
+        const existIdx = apps.findIndex(a => a.id === newApplication.id);
+        if (existIdx >= 0) {
+          apps[existIdx] = newApplication;
+        } else {
+          apps.unshift(newApplication);
+        }
+        localStorage.setItem('civic_applications', JSON.stringify(apps));
+
+        const myRequests = JSON.parse(localStorage.getItem('cust_my_requests') || '[]');
+        const myExistIdx = myRequests.findIndex(a => a.id === newApplication.id);
+        if (myExistIdx >= 0) {
+          myRequests[myExistIdx] = newApplication;
+        } else {
+          myRequests.unshift(newApplication);
+        }
+        localStorage.setItem('cust_my_requests', JSON.stringify(myRequests));
+      } catch(storageErr) {
+        console.warn('LocalStorage save warning:', storageErr);
+      }
+
+      // 3. Broadcast to all open tabs immediately
+      if (civicSyncChannel) {
+        try {
+          civicSyncChannel.postMessage({ type: 'APPLICATION_CREATED', id: appId, authorityKey, application: newApplication });
+        } catch(e) {}
+      }
+
+      // 4. Update UI Tracker Card and Lock State
+      updateLiveTrackerUI(newApplication);
+      checkActiveApplicationLock();
+
+      showToast('🎉 Application ' + appId + ' lodged successfully and dispatched to ' + authority + '!', 'success');
+      
+      // Sync tracking views
+      renderApplicationsHistory();
+    }
+
+    function updateLiveTrackerUI(app) {
+      if (!app) return;
+      if (document.getElementById('tracker-app-id')) document.getElementById('tracker-app-id').innerText = app.id || '#MCC2026001234';
+      if (document.getElementById('tracker-authority-name')) {
+        document.getElementById('tracker-authority-name').innerText = app.authority || 'Mysuru Municipal Corporation (MCC Urban)';
+      }
+      if (document.getElementById('tracker-assigned-inspector')) {
+        document.getElementById('tracker-assigned-inspector').innerText = `${app.assignedInspectorName || 'Ward Officer'} (${app.assignedInspectorEmail || 'Pending'})`;
+      }
+      
+      const status = app.status || 'Pending Inspection';
+      const statusPill = document.getElementById('tracker-current-status-pill');
+      const alertTitle = document.getElementById('tracker-alert-title');
+      const alertDesc = document.getElementById('tracker-alert-desc');
+      const alertBox = document.getElementById('tracker-status-alert-box');
+      const progressFill = document.getElementById('tracker-progress-bar-fill');
+      const updatedTime = document.getElementById('tracker-updated-time');
+      const notesContainer = document.getElementById('tracker-notes-container');
+      const inspectorNotes = document.getElementById('tracker-inspector-notes');
+
+      if (updatedTime) updatedTime.innerText = 'Updated: ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      // Reset step nodes (4 stages: 1. Submitted, 2. Scheduled, 3. Audited, 4. Approved)
+      const steps = [1, 2, 3, 4];
+      steps.forEach(s => {
+        const node = document.getElementById('step-node-' + s);
+        if (node) {
+          const icon = node.querySelector('div');
+          icon.className = 'size-6 rounded-full bg-slate-100 text-slate-400 border border-slate-300 flex items-center justify-center text-[10px] font-bold';
+          icon.innerText = String(s);
+        }
+      });
+
+      const setNodeActive = (stepNum, isCheck = true) => {
+        const node = document.getElementById('step-node-' + stepNum);
+        if (node) {
+          const icon = node.querySelector('div');
+          icon.className = 'size-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[10px] font-bold shadow-xs';
+          if (isCheck) icon.innerText = '✓';
+        }
+      };
+
+      const setNodePulse = (stepNum, iconText = '⏳') => {
+        const node = document.getElementById('step-node-' + stepNum);
+        if (node) {
+          const icon = node.querySelector('div');
+          icon.className = 'size-6 rounded-full bg-amber-500 text-white flex items-center justify-center text-[10px] font-bold shadow-xs animate-pulse';
+          icon.innerText = iconText;
+        }
+      };
+
+      // Handle inspector notes display
+      if (app.inspectorNotes && notesContainer && inspectorNotes) {
+        notesContainer.classList.remove('hidden');
+        inspectorNotes.innerText = app.inspectorNotes;
+      } else if (notesContainer) {
+        notesContainer.classList.add('hidden');
+      }
+
+      // Step 1 is always completed
+      setNodeActive(1, true);
+
+      if (status === 'Visit Scheduled') {
+        if (statusPill) {
+          statusPill.innerText = 'Visit Scheduled';
+          statusPill.className = 'px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-300 text-[11px] font-mono font-bold border border-blue-500/30';
+        }
+        if (alertBox) alertBox.className = 'p-3.5 rounded-2xl bg-blue-50 border border-blue-200 text-xs text-blue-900 space-y-1.5';
+        if (alertTitle) alertTitle.innerHTML = '<span>📅</span> <span>Site Visit Scheduled</span>';
+        if (alertDesc) alertDesc.innerText = `Field inspection scheduled for ${app.inspectionTime ? new Date(app.inspectionTime).toLocaleString() : 'Upcoming slot'}. Inspector ${app.assignedInspectorName || 'Ward Officer'} will inspect site address and GPS.`;
+        setNodeActive(1, true);
+        setNodePulse(2, '📅');
+        if (progressFill) progressFill.style.width = '35%';
+      } else if (status === 'On-Site Audit In Progress') {
+        if (statusPill) {
+          statusPill.innerText = 'Audit In Progress';
+          statusPill.className = 'px-2.5 py-1 rounded-full bg-purple-500/20 text-purple-300 text-[11px] font-mono font-bold border border-purple-500/30';
+        }
+        if (alertBox) alertBox.className = 'p-3.5 rounded-2xl bg-purple-50 border border-purple-200 text-xs text-purple-900 space-y-1.5';
+        if (alertTitle) alertTitle.innerHTML = '<span>🚶</span> <span>Inspector On-Site Auditing</span>';
+        if (alertDesc) alertDesc.innerText = `Field Officer ${app.assignedInspectorName || 'Inspector'} is currently at ${app.address || 'your site'} verifying GPS boundary, blueprints, and measuring rubble tonnage.`;
+        setNodeActive(1, true);
+        setNodeActive(2, true);
+        setNodePulse(3, '🚶');
+        if (progressFill) progressFill.style.width = '65%';
+      } else if (status === 'Inspection Passed & Verified' || status === 'Under Review') {
+        if (statusPill) {
+          statusPill.innerText = 'Inspection Passed';
+          statusPill.className = 'px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-mono font-bold border border-emerald-500/30';
+        }
+        if (alertBox) alertBox.className = 'p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 space-y-1.5';
+        if (alertTitle) alertTitle.innerHTML = '<span>🟢</span> <span>Inspection Verified & Passed</span>';
+        if (alertDesc) alertDesc.innerText = `Physical site audit passed! Verified Tonnage: ${app.tonnage || 10} MT. Remarks: "${app.inspectorNotes || 'Site waste verified for clearance.'}". Awaiting final Officer clearance approval.`;
+        setNodeActive(1, true);
+        setNodeActive(2, true);
+        setNodeActive(3, true);
+        if (progressFill) progressFill.style.width = '85%';
+      } else if (status === 'Approved' || status === 'Issued' || status === 'Certificate Issued') {
+        if (statusPill) {
+          statusPill.innerText = 'Clearance Approved';
+          statusPill.className = 'px-2.5 py-1 rounded-full bg-emerald-600 text-white text-[11px] font-mono font-bold shadow-xs';
+        }
+        if (alertBox) alertBox.className = 'p-3.5 rounded-2xl bg-emerald-700 text-white text-xs space-y-2';
+        if (alertTitle) alertTitle.innerHTML = '<span>🏆</span> <span>Clearance Approved & Verified!</span>';
+        if (alertDesc) alertDesc.innerHTML = `
+          <span>Your municipal C&D clearance permit is approved and finalized. Verified Tonnage: <strong>${app.verifiedTonnage || app.tonnage || 10} MT</strong>. You are cleared for lawful haulage.</span>
+          <div class="pt-1.5">
+            <button type="button" onclick="openCertificateModal('${app.id}')" class="w-full py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-extrabold text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-1.5">
+              <span>📜</span> <span>View Official Certificate (NOC)</span>
+            </button>
+          </div>
+        `;
+        setNodeActive(1, true);
+        setNodeActive(2, true);
+        setNodeActive(3, true);
+        setNodeActive(4, true);
+        if (progressFill) progressFill.style.width = '100%';
+      } else if (status === 'Cancelled' || status === 'Rejected') {
+        if (statusPill) {
+          statusPill.innerText = 'Cancelled';
+          statusPill.className = 'px-2.5 py-1 rounded-full bg-rose-500 text-white text-[11px] font-mono font-bold shadow-xs';
+        }
+        if (alertBox) alertBox.className = 'p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-1.5';
+        if (alertTitle) alertTitle.innerHTML = '<span>❌</span> <span>Complaint Cancelled / Rejected</span>';
+        if (alertDesc) alertDesc.innerText = `This complaint was closed/cancelled by officer: "${app.inspectorNotes || 'Site requirements not met or request withdrawn.'}". Lock has been released.`;
+        setNodeActive(1, true);
+        if (progressFill) progressFill.style.width = '0%';
+      } else if (status === 'Action Required') {
+        if (statusPill) {
+          statusPill.innerText = 'Action Required';
+          statusPill.className = 'px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 text-[11px] font-mono font-bold border border-amber-500/30';
+        }
+        if (alertBox) alertBox.className = 'p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1.5';
+        if (alertTitle) alertTitle.innerHTML = '<span>⚠️</span> <span>Action Required / Correction Needed</span>';
+        if (alertDesc) alertDesc.innerText = `Inspector Note: "${app.inspectorNotes || 'Please provide clear site access or blueprint clarification.'}".`;
+        setNodeActive(1, true);
+        setNodePulse(2, '⚠️');
+        if (progressFill) progressFill.style.width = '35%';
+      } else if (status === 'Flagged Violation') {
+        if (statusPill) {
+          statusPill.innerText = 'Flagged Violation';
+          statusPill.className = 'px-2.5 py-1 rounded-full bg-rose-500 text-white text-[11px] font-mono font-bold';
+        }
+        if (alertBox) alertBox.className = 'p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-1.5';
+        if (alertTitle) alertTitle.innerHTML = '<span>❌</span> <span>Flagged Municipal Violation</span>';
+        if (alertDesc) alertDesc.innerText = `Site flagged by inspector: "${app.inspectorNotes || 'Unauthorized hazardous disposal or zone violation.'}".`;
+        setNodeActive(1, true);
+        if (progressFill) progressFill.style.width = '20%';
+      } else {
+        if (statusPill) {
+          statusPill.innerText = 'Pending Inspection';
+          statusPill.className = 'px-2.5 py-1 rounded-full bg-amber-500/20 text-amber-300 text-[11px] font-mono font-bold border border-amber-500/30';
+        }
+        if (alertBox) alertBox.className = 'p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1.5';
+        if (alertTitle) alertTitle.innerHTML = '<span>📍</span> <span>Application Lodged · Inspector Alerted</span>';
+        if (alertDesc) alertDesc.innerText = `Your application has been received and dispatched to ${app.authority || 'Mysuru Municipal Authority'}. Inspector ${app.assignedInspectorName || 'Ward Inspector'} will review GPS & photo evidence.`;
+        setNodeActive(1, true);
+        if (progressFill) progressFill.style.width = '20%';
+      }
+    }
+
+    function resetLiveTrackerUI() {
+      if (document.getElementById('tracker-app-id')) document.getElementById('tracker-app-id').innerText = 'No Active Request';
+      if (document.getElementById('tracker-authority-name')) document.getElementById('tracker-authority-name').innerText = 'Mysuru Municipal Corporation (MCC)';
+      if (document.getElementById('tracker-assigned-inspector')) document.getElementById('tracker-assigned-inspector').innerText = 'Ready to lodge application';
+      const statusPill = document.getElementById('tracker-current-status-pill');
+      if (statusPill) {
+        statusPill.innerText = 'Ready';
+        statusPill.className = 'px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-[11px] font-mono font-bold border border-emerald-500/30';
+      }
+      const alertBox = document.getElementById('tracker-status-alert-box');
+      const alertTitle = document.getElementById('tracker-alert-title');
+      const alertDesc = document.getElementById('tracker-alert-desc');
+      const notesContainer = document.getElementById('tracker-notes-container');
+      if (notesContainer) notesContainer.classList.add('hidden');
+      if (alertBox) alertBox.className = 'p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1.5';
+      if (alertTitle) alertTitle.innerHTML = '<span>📄</span> <span>Ready to Lodge C&D Complaint</span>';
+      if (alertDesc) alertDesc.innerText = 'Complete the form on the left with site address, PIN code, and camera photo to lodge your request.';
+
+      const progressFill = document.getElementById('tracker-progress-bar-fill');
+      if (progressFill) progressFill.style.width = '0%';
+      const steps = [1, 2, 3, 4];
+      steps.forEach(s => {
+        const node = document.getElementById('step-node-' + s);
+        if (node) {
+          const icon = node.querySelector('div');
+          if (icon) {
+            icon.className = 'size-6 rounded-full bg-slate-100 text-slate-400 border border-slate-300 flex items-center justify-center text-[10px] font-bold';
+            icon.innerText = String(s);
+          }
+        }
+      });
+    }
+
+    async function syncLiveCustomerApplications() {
+      // 1. Immediately read from LocalStorage for instant 0ms cross-tab reactivity
+      try {
+        const localApps = JSON.parse(localStorage.getItem('civic_applications') || '[]');
+        if (Array.isArray(localApps)) {
+          const myRequests = getLoggedInUserApplications(localApps);
+          localStorage.setItem('cust_my_requests', JSON.stringify(myRequests));
+          if (myRequests.length > 0) {
+            const active = myRequests.find(a => !isFinalizedStatus(a.status)) || myRequests[0];
+            updateLiveTrackerUI(active);
+          } else {
+            resetLiveTrackerUI();
+          }
+          renderApplicationsHistory();
+          checkActiveApplicationLock();
+        }
+      } catch (err) {}
+
+      // 2. Fetch latest from Supabase Cloud DB
+      try {
+        if (window.civicDb && typeof window.civicDb.fetchApplications === 'function') {
+          const cloudApps = await window.civicDb.fetchApplications();
+          if (Array.isArray(cloudApps) && cloudApps.length > 0) {
+            const localApps = JSON.parse(localStorage.getItem('civic_applications') || '[]');
+            const map = new Map();
+            cloudApps.forEach(a => { if (a && a.id) map.set(a.id, a); });
+            localApps.forEach(a => {
+              if (a && a.id && !map.has(a.id)) map.set(a.id, a);
+            });
+            const merged = Array.from(map.values());
+            localStorage.setItem('civic_applications', JSON.stringify(merged));
+            const myRequests = getLoggedInUserApplications(merged);
+            localStorage.setItem('cust_my_requests', JSON.stringify(myRequests));
+            if (myRequests.length > 0) {
+              const active = myRequests.find(a => !isFinalizedStatus(a.status)) || myRequests[0];
+              updateLiveTrackerUI(active);
+            } else {
+              resetLiveTrackerUI();
+            }
+            renderApplicationsHistory();
+            checkActiveApplicationLock();
+          }
+        }
+      } catch(e) {}
+    }
+
+    // ==========================================
+    // MULTI-PHOTO FULL-SCREEN LIGHTBOX LOGIC
+    // ==========================================
+    let lightboxPhotosList = [];
+    let currentLightboxIndex = 0;
+
+    function openPhotoLightbox(photos, startIndex = 0) {
+      if (!photos || photos.length === 0) {
+        showToast('No photo available to preview', 'info');
+        return;
+      }
+      lightboxPhotosList = Array.isArray(photos) ? photos : [photos];
+      currentLightboxIndex = Math.max(0, Math.min(startIndex, lightboxPhotosList.length - 1));
+      updateLightboxView();
+      const modal = document.getElementById('photo-lightbox-modal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closePhotoLightbox() {
+      const modal = document.getElementById('photo-lightbox-modal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function updateLightboxView() {
+      if (lightboxPhotosList.length === 0) return;
+      const img = document.getElementById('lightbox-main-img');
+      const counter = document.getElementById('lightbox-counter');
+      const thumbsContainer = document.getElementById('lightbox-thumbs-container');
+
+      if (img) img.src = lightboxPhotosList[currentLightboxIndex];
+      if (counter) counter.innerText = `Photo ${currentLightboxIndex + 1} of ${lightboxPhotosList.length}`;
+
+      if (thumbsContainer) {
+        thumbsContainer.innerHTML = lightboxPhotosList.map((p, idx) => `
+          <button type="button" onclick="currentLightboxIndex = ${idx}; updateLightboxView()" class="size-11 rounded-xl overflow-hidden border-2 transition cursor-pointer shrink-0 ${idx === currentLightboxIndex ? 'border-emerald-400 scale-105 shadow-md shadow-emerald-500/30 ring-2 ring-emerald-400/60' : 'border-white/20 opacity-60 hover:opacity-100'}">
+            <img src="${p}" class="w-full h-full object-cover"/>
+          </button>
+        `).join('');
+      }
+    }
+
+    function prevLightboxPhoto() {
+      if (lightboxPhotosList.length <= 1) return;
+      currentLightboxIndex = (currentLightboxIndex - 1 + lightboxPhotosList.length) % lightboxPhotosList.length;
+      updateLightboxView();
+    }
+
+    function nextLightboxPhoto() {
+      if (lightboxPhotosList.length <= 1) return;
+      currentLightboxIndex = (currentLightboxIndex + 1) % lightboxPhotosList.length;
+      updateLightboxView();
+    }
+
+    // Keyboard navigation for lightbox
+    document.addEventListener('keydown', (e) => {
+      const modal = document.getElementById('photo-lightbox-modal');
+      if (modal && !modal.classList.contains('hidden')) {
+        if (e.key === 'Escape') closePhotoLightbox();
+        if (e.key === 'ArrowLeft') prevLightboxPhoto();
+        if (e.key === 'ArrowRight') nextLightboxPhoto();
+      }
+    });
+
+    // ==========================================
+    // VERTICAL ORDER TRACKING MODAL LOGIC
+    // ==========================================
+    let currentModalApp = null;
+
+    function openTrackingModal(appId) {
+      const allApps = JSON.parse(localStorage.getItem('civic_applications') || '[]');
+      const myRequests = getLoggedInUserApplications(allApps);
+      let app = null;
+
+      if (appId) {
+        app = allApps.find(a => String(a.id) === String(appId));
+      } else if (myRequests.length > 0) {
+        app = myRequests[0];
+      }
+
+      if (!app) {
+        showToast('No active complaint application found to track.', 'info');
+        return;
+      }
+
+      currentModalApp = app;
+
+      // 1. Header Information
+      const idEl = document.getElementById('modal-track-id');
+      if (idEl) idEl.innerText = app.id ? (app.id.startsWith('#') ? app.id : '#' + app.id) : '#MCC2026001234';
+
+      const authEl = document.getElementById('modal-track-authority');
+      if (authEl) authEl.innerText = app.authority || 'Mysuru Municipal Corporation (MCC Urban)';
+
+      // 2. Summary Grid
+      const statusPill = document.getElementById('modal-track-status-pill');
+      const status = app.status || 'Pending Inspection';
+      if (statusPill) {
+        if (status === 'Approved' || status === 'Clearance Approved' || status === 'Issued' || status === 'Certificate Issued') {
+          statusPill.className = 'inline-block mt-0.5 px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-emerald-100 text-emerald-800 border border-emerald-300';
+          statusPill.innerText = 'Clearance Approved';
+        } else if (status === 'Action Required') {
+          statusPill.className = 'inline-block mt-0.5 px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-amber-100 text-amber-800 border border-amber-300';
+          statusPill.innerText = 'Action Required';
+        } else if (status === 'Flagged Violation' || status === 'Cancelled' || status === 'Rejected') {
+          statusPill.className = 'inline-block mt-0.5 px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-rose-100 text-rose-800 border border-rose-300';
+          statusPill.innerText = status === 'Flagged Violation' ? 'Violation Flagged' : 'Cancelled';
+        } else if (status === 'Site Audit Done' || status === 'Audited' || status === 'Under Review') {
+          statusPill.className = 'inline-block mt-0.5 px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-teal-100 text-teal-800 border border-teal-300';
+          statusPill.innerText = 'Site Audited';
+        } else {
+          statusPill.className = 'inline-block mt-0.5 px-2.5 py-0.5 rounded-full text-xs font-bold font-mono bg-amber-100 text-amber-800 border border-amber-300';
+          statusPill.innerText = 'Pending Inspection';
+        }
+      }
+
+      const propEl = document.getElementById('modal-track-prop');
+      if (propEl) propEl.innerText = app.propertyId || app.address || 'Property Site';
+
+      const pinEl = document.getElementById('modal-track-pin');
+      if (pinEl) pinEl.innerText = app.pincode || app.pin || '570001';
+
+      const tonnageEl = document.getElementById('modal-track-tonnage');
+      if (tonnageEl) tonnageEl.innerText = app.verifiedTonnage ? `${app.verifiedTonnage} MT` : (app.wasteType || '10 MT');
+
+      // 3. Multi-Photo Strip
+      const photos = (app.photos && Array.isArray(app.photos) && app.photos.length > 0) 
+        ? app.photos 
+        : (app.photo ? [app.photo] : []);
+      
+      const photoCountEl = document.getElementById('modal-track-photo-count');
+      if (photoCountEl) photoCountEl.innerText = String(photos.length);
+
+      const photosGrid = document.getElementById('modal-track-photos-grid');
+      if (photosGrid) {
+        if (photos.length === 0) {
+          photosGrid.innerHTML = '<div class="col-span-full py-4 text-center text-xs text-slate-400 italic">No photos attached to this complaint.</div>';
+        } else {
+          window._trackingModalPhotos = photos;
+          photosGrid.innerHTML = photos.map((p, idx) => `
+            <div onclick="openPhotoLightbox(window._trackingModalPhotos, ${idx})" class="group relative aspect-square rounded-xl overflow-hidden bg-slate-900 border border-slate-200 shadow-2xs cursor-pointer hover:border-emerald-500 transition">
+              <img src="${p}" alt="Photo ${idx + 1}" class="w-full h-full object-cover group-hover:scale-105 transition"/>
+              <div class="absolute inset-0 bg-black/0 group-hover:bg-black/30 flex items-center justify-center transition">
+                <span class="opacity-0 group-hover:opacity-100 bg-black/75 text-white text-[9px] font-bold px-2 py-0.5 rounded-full transition shadow">🔍 Full View</span>
+              </div>
+              <span class="absolute bottom-1 right-1 bg-slate-900/80 text-white text-[9px] font-mono px-1 rounded">#${idx+1}</span>
+            </div>
+          `).join('');
+        }
+      }
+
+      // 4. Vertical Step-by-Step Live Order Progress (Top to Bottom)
+      const timelineContainer = document.getElementById('modal-vertical-timeline');
+      if (timelineContainer) {
+        const isApproved = status === 'Approved' || status === 'Clearance Approved' || status === 'Issued' || status === 'Certificate Issued';
+        const isAudited = isApproved || status === 'Site Audit Done' || status === 'Audited' || status === 'Under Review' || app.siteVisitDone || app.verifiedTonnage || app.inspectorNotes;
+        const isAssigned = !!(app.assignedInspectorName || app.assignedInspectorEmail || isAudited || isApproved);
+        const isViolation = status === 'Flagged Violation';
+        const isActionRequired = status === 'Action Required';
+
+        const formattedDate = app.createdAt 
+          ? new Date(app.createdAt).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) 
+          : 'Just Now';
+
+        const lat = app.lat || 12.2958;
+        const lng = app.lng || 76.6394;
+        const mapsLink = app.mapUrl || `https://www.google.com/maps?q=${lat},${lng}`;
+
+        // Build HTML for each of the 4 steps
+        timelineContainer.innerHTML = `
+          <!-- STEP 1: Application Lodged & Geotagged -->
+          <div class="relative flex items-start gap-3">
+            <div class="absolute -left-8 top-0.5 size-6 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[11px] font-bold shadow-xs">
+              ✓
+            </div>
+            <div class="flex-1 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1.5">
+              <div class="flex items-center justify-between">
+                <h5 class="font-bold text-xs text-slate-900">1. Application Lodged & Geotagged</h5>
+                <span class="text-[10px] font-mono text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                  ${formattedDate}
+                </span>
+              </div>
+              <p class="text-xs text-slate-600">
+                Complaint registered with site geotag, PIN code verification, and photo evidence.
+              </p>
+              <div class="pt-1 flex flex-wrap items-center gap-2 text-[11px]">
+                <span class="text-slate-700 font-semibold">Applicant: ${app.applicantName || 'Citizen'}</span>
+                ${app.phone ? `<span class="text-slate-400">·</span> <span class="text-slate-500 font-mono">📱 ${app.phone}</span>` : ''}
+              </div>
+              <div class="pt-0.5">
+                <a href="${mapsLink}" target="_blank" class="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-emerald-700 bg-emerald-50/80 px-2.5 py-1 rounded-lg border border-emerald-200 hover:bg-emerald-100 transition">
+                  <span>📍 GPS: ${app.gpsLocation || `${lat}° N, ${lng}° E`}</span> <span>↗</span>
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <!-- STEP 2: Ward Jurisdiction & Inspector Assigned -->
+          <div class="relative flex items-start gap-3">
+            <div class="absolute -left-8 top-0.5 size-6 rounded-full ${isAssigned ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-400 border border-slate-300'} flex items-center justify-center text-[11px] font-bold">
+              ${isAssigned ? '✓' : '2'}
+            </div>
+            <div class="flex-1 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1.5">
+              <div class="flex items-center justify-between">
+                <h5 class="font-bold text-xs text-slate-900">2. Ward Jurisdiction & Inspector Assigned</h5>
+                <span class="text-[10px] font-mono font-bold ${isAssigned ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-slate-400 bg-slate-50 border border-slate-200'} px-2 py-0.5 rounded">
+                  ${isAssigned ? 'Assigned' : 'Routing'}
+                </span>
+              </div>
+              <p class="text-xs text-slate-600">
+                Dispatched to local authority based on PIN code for physical inspection.
+              </p>
+              <div class="mt-2 p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+                <div class="flex items-center gap-1.5 text-slate-800 font-bold">
+                  <span>🏛️</span> <span>Authority: ${app.authority || 'Gram Panchayat (Bogadi Rural)'}</span>
+                </div>
+                <div class="flex items-center gap-1.5 text-emerald-800 font-semibold text-[11px]">
+                  <span>👮</span> <span>Inspector: <strong>${app.assignedInspectorName || 'seervi'}</strong> ${app.assignedInspectorEmail ? '<span class="font-mono text-slate-500">(' + app.assignedInspectorEmail + ')</span>' : ''}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- STEP 3: Physical Site Visit & Tonnage Verification -->
+          <div class="relative flex items-start gap-3">
+            <div class="absolute -left-8 top-0.5 size-6 rounded-full ${isAudited ? 'bg-emerald-600 text-white shadow-xs' : 'bg-slate-100 text-slate-400 border border-slate-300'} flex items-center justify-center text-[11px] font-bold">
+              ${isAudited ? '✓' : '3'}
+            </div>
+            <div class="flex-1 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-1.5">
+              <div class="flex items-center justify-between">
+                <h5 class="font-bold text-xs text-slate-900">3. Physical Site Visit & Tonnage Verification</h5>
+                <span class="text-[10px] font-mono font-bold ${isAudited ? 'text-emerald-700 bg-emerald-50 border border-emerald-200' : 'text-slate-400 bg-slate-50 border border-slate-200'} px-2 py-0.5 rounded">
+                  ${isAudited ? 'Audited' : 'Pending'}
+                </span>
+              </div>
+              <p class="text-xs text-slate-600">
+                Ward inspector physical site audit, geo-fenced rubble measurement, and validation.
+              </p>
+              ${app.verifiedTonnage ? `
+                <div class="font-mono text-xs text-slate-800 font-bold">
+                  Verified Rubble Volume: <span class="text-emerald-700 font-extrabold text-sm">${app.verifiedTonnage} MT</span>
+                </div>
+              ` : `
+                <div class="font-mono text-xs text-slate-800 font-bold">
+                  Verified Rubble Volume: <span class="text-emerald-700 font-extrabold text-sm">10 MT</span>
+                </div>
+              `}
+              ${app.inspectorNotes ? `
+                <div class="mt-2 p-2.5 rounded-xl bg-amber-50/70 border border-amber-200 text-xs text-amber-900">
+                  <span class="font-bold text-[10px] uppercase text-amber-800 tracking-wider block">Inspector Site Note:</span>
+                  <span class="italic font-medium">"${app.inspectorNotes}"</span>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+
+          <!-- STEP 4: Clearance NOC & Resolution -->
+          <div class="relative flex items-start gap-3">
+            <div class="absolute -left-8 top-0.5 size-6 rounded-full ${isApproved ? 'bg-emerald-600 text-white shadow-xs' : (isViolation ? 'bg-rose-600 text-white' : (isActionRequired ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-400 border border-slate-300'))} flex items-center justify-center text-[11px] font-bold">
+              ${isApproved ? '✓' : (isViolation ? '✕' : (isActionRequired ? '⚠️' : '4'))}
+            </div>
+            <div class="flex-1 space-y-1.5">
+              ${isApproved ? `
+                <div class="p-4 rounded-2xl bg-emerald-900 text-white border border-emerald-700 space-y-2 shadow-md shadow-emerald-950/20">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2 font-bold text-xs text-emerald-300">
+                      <span class="text-sm">🏆</span> <span>Clearance Approved & Verified!</span>
+                    </div>
+                    <span class="px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-200 font-mono text-[10px] font-bold border border-emerald-400/30">
+                      Approved
+                    </span>
+                  </div>
+                  <p class="text-xs text-emerald-100/90 leading-relaxed">
+                    Your municipal C&D clearance permit is approved and finalized. Verified Tonnage: <strong>${app.verifiedTonnage || 10} MT</strong>. You are cleared for lawful haulage.
+                  </p>
+                  <div class="pt-2">
+                    <button type="button" onclick="closeTrackingModal(); openCertificateModal('${app.id}')" class="px-5 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-extrabold text-xs shadow-md transition cursor-pointer flex items-center gap-1.5">
+                      <span>📜</span> <span>View Official Certificate (NOC)</span>
+                    </button>
+                  </div>
+                </div>
+              ` : isViolation ? `
+                <div class="p-4 rounded-2xl bg-rose-900 text-white border border-rose-700 space-y-2 shadow-md">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2 font-bold text-xs text-rose-300">
+                      <span class="text-sm">❌</span> <span>Flagged Municipal Violation</span>
+                    </div>
+                    <span class="px-2 py-0.5 rounded-full bg-rose-500/30 text-rose-200 font-mono text-[10px] font-bold">
+                      Flagged
+                    </span>
+                  </div>
+                  <p class="text-xs text-rose-100 leading-relaxed">
+                    Site flagged by inspector: "${app.inspectorNotes || 'Unauthorized hazardous disposal or zone violation.'}".
+                  </p>
+                </div>
+              ` : isActionRequired ? `
+                <div class="p-4 rounded-2xl bg-amber-900 text-white border border-amber-700 space-y-2 shadow-md">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2 font-bold text-xs text-amber-300">
+                      <span class="text-sm">⚠️</span> <span>Action Required / Correction Needed</span>
+                    </div>
+                    <span class="px-2 py-0.5 rounded-full bg-amber-500/30 text-amber-200 font-mono text-[10px] font-bold">
+                      Action Needed
+                    </span>
+                  </div>
+                  <p class="text-xs text-amber-100 leading-relaxed">
+                    Inspector Note: "${app.inspectorNotes || 'Please provide clear site access or blueprint clarification.'}".
+                  </p>
+                </div>
+              ` : `
+                <div class="p-4 rounded-2xl bg-white border border-slate-200 shadow-2xs space-y-1.5">
+                  <div class="flex items-center justify-between">
+                    <h5 class="font-bold text-xs text-slate-900">4. Clearance NOC & Final Resolution</h5>
+                    <span class="text-[10px] font-mono text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded font-bold">
+                      In Progress
+                    </span>
+                  </div>
+                  <p class="text-xs text-slate-600">
+                    Awaiting final site review and clearance issuance by ${app.assignedInspectorName || 'Ward Inspector'}.
+                  </p>
+                </div>
+              `}
+            </div>
+          </div>
+        `;
+      }
+
+      // 5. Update footer timestamp
+      const lastUpdatedEl = document.getElementById('modal-track-last-updated');
+      if (lastUpdatedEl) {
+        const d = new Date();
+        lastUpdatedEl.innerText = `Last Synced: ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+      }
+
+      // 6. Show the modal
+      const modalEl = document.getElementById('application-tracking-modal');
+      if (modalEl) modalEl.classList.remove('hidden');
+    }
+
+    function closeTrackingModal() {
+      const modalEl = document.getElementById('application-tracking-modal');
+      if (modalEl) modalEl.classList.add('hidden');
+    }
+
+    // ==========================================
+    // OFFICIAL CLEARANCE CERTIFICATE (NOC) MODAL
+    // ==========================================
+    function openCertificateModal(appId) {
+      const allApps = JSON.parse(localStorage.getItem('civic_applications') || '[]');
+      const myRequests = getLoggedInUserApplications(allApps);
+      let app = null;
+
+      if (appId) {
+        app = allApps.find(a => String(a.id) === String(appId));
+      } else if (myRequests.length > 0) {
+        app = myRequests.find(a => isFinalizedStatus(a.status) && (a.status === 'Approved' || a.status === 'Clearance Approved' || a.status === 'Issued' || a.status === 'Certificate Issued')) || myRequests[0];
+      }
+
+      if (!app) {
+        showToast('No approved clearance application found to generate NOC certificate.', 'info');
+        return;
+      }
+
+      const cleanId = String(app.id || '2026934924').replace(/[^0-9]/g, '') || '2026934924';
+      const deptKey = (app.authorityKey || (app.authority && app.authority.toLowerCase().includes('panchayat') ? 'gp' : (app.authority && app.authority.toLowerCase().includes('town') ? 'tp' : 'mcc'))).toLowerCase();
+      const authorityName = app.authority || (deptKey === 'gp' ? 'Gram Panchayat (Bogadi Rural)' : (deptKey === 'tp' ? 'Town Panchayat (Hootagalli Town)' : 'Mysuru City Corporation (MCC)'));
+
+      // Populate Authority & Header
+      const authTitle = document.getElementById('cert-authority-title');
+      if (authTitle) authTitle.innerText = authorityName.toUpperCase();
+
+      const inspectorName = app.assignedInspectorName || (deptKey === 'gp' ? 'Seervi' : (deptKey === 'tp' ? 'M. Anand' : 'Rajesh Kumar'));
+      const inspectorEmail = app.assignedInspectorEmail || (deptKey === 'gp' ? 'q@gmail.com' : (deptKey === 'tp' ? 'anand.tp@gmail.com' : 'inspector.mcc@gmail.com'));
+
+      const headerSub = document.getElementById('cert-modal-header-sub');
+      if (headerSub) headerSub.innerText = `Authorized by ${inspectorName} · ${authorityName}`;
+
+      const authPrefix = deptKey.toUpperCase();
+      const refNo = document.getElementById('cert-ref-no');
+      if (refNo) refNo.innerText = app.certificateNo || `NOC/${authPrefix}/${cleanId}`;
+
+      const issueDate = document.getElementById('cert-issue-date');
+      if (issueDate) {
+        issueDate.innerText = app.issueDate ? new Date(app.issueDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : (app.auditedAt ? new Date(app.auditedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : (app.createdAt ? new Date(app.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })));
+      }
+
+      const applicantName = document.getElementById('cert-applicant-name');
+      if (applicantName) applicantName.innerText = app.applicantName || 'Citizen User';
+
+      const applicantPhone = document.getElementById('cert-applicant-phone');
+      if (applicantPhone) applicantPhone.innerText = `Mobile: ${app.phone || '+91 98765 43210'}`;
+
+      const propId = document.getElementById('cert-prop-id');
+      if (propId) propId.innerText = app.propertyId || ('4029' + cleanId.slice(-4));
+
+      const fullAddr = document.getElementById('cert-full-address');
+      if (fullAddr) fullAddr.innerText = `${app.address || 'Mysuru'} · PIN ${app.pincode || app.pin || '570026'}`;
+
+      const tonnage = document.getElementById('cert-verified-tonnage');
+      if (tonnage) tonnage.innerText = `${app.verifiedTonnage || app.tonnage || 10} MT (Metric Tonnes)`;
+
+      const materialEl = document.getElementById('cert-material-category');
+      if (materialEl) materialEl.innerText = `Waste Category: ${app.verifiedMaterial || app.material || 'Demolition Rubble & Masonry'}`;
+
+      const lat = app.lat || 12.2958;
+      const lng = app.lng || 76.6394;
+      const gpsCoords = document.getElementById('cert-gps-coords');
+      if (gpsCoords) gpsCoords.innerText = app.gpsLocation || `${lat}° N, ${lng}° E`;
+
+      const waterDiscountEl = document.getElementById('cert-water-discount');
+      if (waterDiscountEl) waterDiscountEl.innerText = app.waterBillDiscount || '10% discount on Municipal / Panchayat Water Bill for 2 Years (24 Months)';
+
+      // Inspector Signatures
+      const insName = document.getElementById('cert-inspector-name');
+      if (insName) insName.innerText = inspectorName;
+
+      const insEmail = document.getElementById('cert-inspector-email');
+      if (insEmail) insEmail.innerText = inspectorEmail;
+
+      // Head of Department Signatures
+      const headName = app.headName || (deptKey === 'gp' ? 'K. S. Manjunath (PDO)' : (deptKey === 'tp' ? 'S. Ramesh (Chief Officer)' : 'Dr. N. Chandrashekar, IAS'));
+      const headTitle = app.headTitle || (deptKey === 'gp' ? 'Panchayat Development Officer' : (deptKey === 'tp' ? 'Chief Officer' : 'MCC Commissioner'));
+
+      const headNameEl = document.getElementById('cert-head-name');
+      if (headNameEl) headNameEl.innerText = headName;
+
+      const headTitleEl = document.getElementById('cert-head-title');
+      if (headTitleEl) headTitleEl.innerText = headTitle;
+
+      const panchayatSeal = document.getElementById('cert-panchayat-seal');
+      if (panchayatSeal) panchayatSeal.innerText = authorityName;
+
+      const modal = document.getElementById('noc-certificate-modal');
+      if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+      }
+    }
+
+    function closeCertificateModal() {
+      const modal = document.getElementById('noc-certificate-modal');
+      if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+      }
+    }
+
+    // Render Applications History Table with Multi-Photo Thumbnails and Track Order Modal
+    function renderApplicationsHistory() {
+      const tbody = document.getElementById('table-my-applications');
+      if (!tbody) return;
+
+      const allApps = JSON.parse(localStorage.getItem('civic_applications') || '[]');
+      const myRequests = getLoggedInUserApplications(allApps);
+      if (myRequests.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="px-4 py-8 text-center text-slate-400 font-medium">
+              No applications submitted yet. Click "+ New Application" to lodge a clearance permit.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = myRequests.map(a => {
+        const photos = (a.photos && Array.isArray(a.photos) && a.photos.length > 0) ? a.photos : (a.photo ? [a.photo] : []);
+        const isApproved = a.status === 'Approved' || a.status === 'Clearance Approved' || a.status === 'Issued' || a.status === 'Certificate Issued';
+        const isViolation = a.status === 'Flagged Violation' || a.status === 'Cancelled' || a.status === 'Rejected';
+
+        let photosHtml = '<span class="text-slate-400 italic">No Photo</span>';
+        if (photos.length > 0) {
+          photosHtml = `
+            <div class="flex items-center gap-1.5">
+              <div class="flex -space-x-2 overflow-hidden py-1">
+                ${photos.slice(0, 3).map((p, idx) => `
+                  <img src="${p}" class="inline-block size-7 rounded-lg ring-2 ring-white object-cover cursor-pointer hover:scale-110 transition shadow-2xs" onclick="openTrackingModal('${a.id}')" title="Photo ${idx+1}"/>
+                `).join('')}
+              </div>
+              <span class="font-mono text-[11px] font-bold text-slate-700 ml-1">
+                ${photos.length} Photo${photos.length > 1 ? 's' : ''}
+              </span>
+            </div>
+          `;
+        }
+
+        return `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="px-4 py-3 font-mono font-bold text-emerald-800">${a.id}</td>
+            <td class="px-4 py-3">
+              <span class="font-semibold text-slate-900 block">${a.propertyId || 'Property Site'}</span>
+              <span class="text-[11px] text-slate-500 block">${a.address || 'Mysuru'} · PIN ${a.pincode || a.pin}</span>
+            </td>
+            <td class="px-4 py-3">
+              <a href="${a.mapUrl || 'https://www.google.com/maps?q=' + (a.lat || 12.2958) + ',' + (a.lng || 76.6394)}" target="_blank" class="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200 font-bold hover:underline">
+                <span>📍 ${a.gpsLocation || 'Live GPS'}</span> <span>↗</span>
+              </a>
+            </td>
+            <td class="px-4 py-3">
+              ${photosHtml}
+            </td>
+            <td class="px-4 py-3">
+              <span class="font-bold text-slate-800 block">${a.authority || 'Mysuru Municipal'}</span>
+              <span class="text-[10px] text-slate-500 block">Inspector: ${a.assignedInspectorName || 'Assigned'}</span>
+            </td>
+            <td class="px-4 py-3">
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-mono ${isApproved ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : (isViolation ? 'bg-rose-100 text-rose-800 border border-rose-200' : 'bg-amber-100 text-amber-800 border border-amber-200')}">
+                ${a.status || 'Pending'}
+              </span>
+            </td>
+            <td class="px-4 py-3 text-right">
+              <div class="flex items-center justify-end gap-1.5">
+                ${isApproved ? `
+                  <button onclick="openCertificateModal('${a.id}')" class="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs transition cursor-pointer inline-flex items-center gap-1 shadow-2xs" title="View Official Clearance Certificate">
+                    <span>📜</span> <span>NOC</span>
+                  </button>
+                ` : ''}
+                <button onclick="openTrackingModal('${a.id}')" class="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-xs transition cursor-pointer inline-flex items-center gap-1">
+                  <span>🔍 Track</span> <span>&rarr;</span>
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function syncCivicUsers() {
+      try {
+        if (window.civicDb && typeof window.civicDb.fetchUsers === 'function') {
+          const users = await window.civicDb.fetchUsers();
+          if (Array.isArray(users) && users.length > 0) {
+            localStorage.setItem('civic_registered_users', JSON.stringify(users));
+            const inspectors = users.filter(u => (u.role || '').toLowerCase() === 'inspector' || (u.authority || '').toLowerCase().includes('inspector'));
+            if (inspectors.length > 0) {
+              localStorage.setItem('civic_inspectors', JSON.stringify(inspectors));
+            }
+          }
+        }
+      } catch(e) {}
+    }
+
+    // Initialize Default Form State & Auth
+    function initDefaultValues() {
+      const saved = localStorage.getItem('current_user') || sessionStorage.getItem('current_user');
+      if (saved) {
+        try {
+          const user = JSON.parse(saved);
+          if (user.name && document.getElementById('top-user-name')) document.getElementById('top-user-name').innerText = user.name;
+          if (user.name && document.getElementById('drop-user-name')) document.getElementById('drop-user-name').innerText = user.name;
+          if (user.email && document.getElementById('drop-user-email')) document.getElementById('drop-user-email').innerText = user.email;
+          const custNameInput = document.getElementById('form-cust-name');
+          if (custNameInput && !custNameInput.value && user.name) {
+            custNameInput.value = user.name;
+          }
+          const custPhoneInput = document.getElementById('form-cust-phone');
+          if (custPhoneInput && !custPhoneInput.value && (user.phone || user.mobile)) {
+            custPhoneInput.value = user.phone || user.mobile;
+          }
+        } catch(e) {}
+      }
+
+      renderPhotoPreviewSlots();
+      autoDetectCustomerGPS();
+      checkActiveApplicationLock();
+      syncLiveCustomerApplications();
+      renderApplicationsHistory();
+
+      // Subscribe to live database changes
+      if (window.civicDb && typeof window.civicDb.subscribeToApplications === 'function') {
+        window.civicDb.subscribeToApplications(() => {
+          syncLiveCustomerApplications();
+        });
+      }
+
+      setInterval(syncLiveCustomerApplications, 4000);
+    }
+
+    initDefaultValues();
+  </script>
+  <!-- ========================================================================= -->
+  <!-- OFFICIAL MUNICIPAL & PANCHAYAT C&D CLEARANCE CERTIFICATE (NOC) MODAL       -->
+  <!-- ========================================================================= -->
+  <div id="noc-certificate-modal" class="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-6 overflow-y-auto">
+    <div class="bg-white rounded-3xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl border-2 border-emerald-600/30 overflow-hidden my-auto animate-in fade-in zoom-in duration-150">
+      
+      <!-- Certificate Action Header -->
+      <div class="p-4 bg-[#081d19] text-white flex items-center justify-between border-b border-emerald-800 shrink-0">
+        <div class="flex items-center gap-2.5">
+          <span class="text-lg">📜</span>
+          <div>
+            <h3 class="font-bold text-xs sm:text-sm text-white">Official Clearance Certificate (NOC)</h3>
+            <span class="text-[10px] font-mono text-emerald-400 font-semibold" id="cert-modal-header-sub">Authorized by Ward Inspector & Panchayat</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="window.print()" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition cursor-pointer flex items-center gap-1 shadow-xs">
+            <span>🖨️</span> <span>Print / Save PDF</span>
+          </button>
+          <button onclick="closeCertificateModal()" class="size-8 rounded-xl bg-white/10 hover:bg-white/20 text-white text-base font-bold flex items-center justify-center transition cursor-pointer">
+            &times;
+          </button>
+        </div>
+      </div>
+
+      <!-- Printable Certificate Body -->
+      <div class="p-6 sm:p-8 overflow-y-auto space-y-6 flex-1 bg-[#fcfdfd] text-slate-800 border-8 border-double border-emerald-800/20 m-3 rounded-2xl" id="printable-certificate-content">
+        
+        <!-- Govt Header & Seal -->
+        <div class="text-center space-y-1.5 border-b-2 border-emerald-800/30 pb-4">
+          <div class="inline-flex items-center justify-center size-12 rounded-full bg-emerald-900 text-amber-300 font-bold text-2xl shadow-md">
+            🏛️
+          </div>
+          <span class="block text-[11px] font-bold font-mono tracking-widest text-emerald-900 uppercase">Government of Karnataka</span>
+          <span class="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider">Department of Municipal Administration & Panchayat Raj</span>
+          <h2 class="text-base sm:text-lg font-black text-slate-950 uppercase tracking-tight" id="cert-authority-title">
+            Gram Panchayat (Bogadi Rural)
+          </h2>
+          <div class="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 font-bold text-xs uppercase tracking-wider border border-emerald-300 mt-1">
+            Official C&D Waste Clearance No-Objection Certificate (NOC)
+          </div>
+        </div>
+
+        <!-- Reference & Date Strip -->
+        <div class="flex items-center justify-between text-xs font-mono border-b border-slate-200 pb-3">
+          <div>
+            <span class="text-slate-400 font-semibold">NOC Ref No:</span>
+            <span class="font-bold text-emerald-800 ml-1" id="cert-ref-no">NOC/GP/2026/934924</span>
+          </div>
+          <div>
+            <span class="text-slate-400 font-semibold">Date of Clearance:</span>
+            <span class="font-bold text-slate-800 ml-1" id="cert-issue-date">19 Sep 2026</span>
+          </div>
+        </div>
+
+        <!-- Clearance Statement & Details Grid -->
+        <div class="space-y-4 text-xs">
+          <p class="leading-relaxed text-slate-700">
+            This is to certify that physical site inspection, GPS verification, and rubble volume measurement have been completed in accordance with the <strong>Construction & Demolition Waste Management Rules</strong>. The applicant is hereby authorized for lawful haulage and disposal at the designated municipal processing facility.
+          </p>
+
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div>
+              <span class="text-[10px] font-bold uppercase text-slate-400 tracking-wider block">Authorized Citizen / Applicant</span>
+              <span class="font-bold text-slate-900 text-sm block" id="cert-applicant-name">Citizen User</span>
+              <span class="text-slate-600 font-mono text-[11px] block" id="cert-applicant-phone">Mobile: +91 98765 43210</span>
+            </div>
+
+            <div>
+              <span class="text-[10px] font-bold uppercase text-slate-400 tracking-wider block">Property ID & Location</span>
+              <span class="font-bold text-slate-900 block" id="cert-prop-id">40291001</span>
+              <span class="text-slate-600 text-[11px] block" id="cert-full-address">Bogadi 2nd Stage, Mysuru · PIN 570026</span>
+            </div>
+
+            <div>
+              <span class="text-[10px] font-bold uppercase text-slate-400 tracking-wider block">Verified Rubble Volume</span>
+              <span class="font-bold text-emerald-800 font-mono text-sm block" id="cert-verified-tonnage">10 MT (Metric Tonnes)</span>
+              <span class="text-slate-500 text-[10px] block" id="cert-material-category">Waste Category: Demolition Rubble & Masonry</span>
+            </div>
+
+            <div>
+              <span class="text-[10px] font-bold uppercase text-slate-400 tracking-wider block">GPS Site Coordinates</span>
+              <span class="font-bold font-mono text-slate-800 block text-[11px]" id="cert-gps-coords">12.2958° N, 76.6394° E</span>
+              <span class="text-emerald-700 text-[10px] font-semibold block">Geo-Fenced Physical Audit Done</span>
+            </div>
+          </div>
+
+          <!-- Water Bill Discount Section (2 Years) -->
+          <div class="p-3.5 rounded-xl bg-cyan-50 border border-cyan-200 flex items-start gap-3 text-xs">
+            <span class="text-xl">💧</span>
+            <div class="flex-1">
+              <div class="flex items-center justify-between">
+                <span class="text-[10px] font-bold uppercase text-cyan-900 tracking-wider">Mandatory Incentive / Citizen Benefit</span>
+                <span class="px-2 py-0.5 rounded-full bg-cyan-200/70 text-cyan-900 font-mono font-bold text-[10px]">2 Years Validity</span>
+              </div>
+              <p class="font-bold text-cyan-950 mt-0.5 text-xs" id="cert-water-discount">10% discount on Municipal / Panchayat Water Bill for 2 Years (24 Months)</p>
+              <p class="text-[10px] text-cyan-800/80 mt-0.5">Granted for Construction & Demolition (C&D) Waste Management Compliance for sustainable debris processing.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Endorsement & Signatures -->
+        <div class="pt-4 border-t-2 border-emerald-800/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <!-- Digital QR Seal -->
+          <div class="flex items-center gap-3 p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200">
+            <div class="size-12 rounded-lg bg-emerald-900 text-white flex flex-col items-center justify-center font-mono font-bold text-[9px] leading-tight text-center">
+              <span>QR</span>
+              <span class="text-[7px] text-emerald-300">VALID</span>
+            </div>
+            <div class="text-[10px] leading-tight">
+              <span class="font-bold text-emerald-950 block">Digital Verification Seal</span>
+              <span class="text-slate-500 font-mono block">Status: Official & Compliant</span>
+            </div>
+          </div>
+
+          <!-- Dual Signatures: Inspector + Head of Department -->
+          <div class="flex items-center gap-6 text-right">
+            <div class="space-y-0.5">
+              <span class="text-[9px] font-semibold text-slate-400 uppercase tracking-wider block">Verified By Inspector</span>
+              <span class="font-bold text-slate-900 text-xs block" id="cert-inspector-name">Rajesh Kumar</span>
+              <span class="text-[9px] font-mono text-slate-500 block" id="cert-inspector-email">inspector.mcc@gmail.com</span>
+            </div>
+            <div class="space-y-0.5 border-l border-slate-200 pl-4">
+              <span class="text-[9px] font-semibold text-slate-400 uppercase tracking-wider block">Approved By Head / Officer</span>
+              <span class="font-bold text-emerald-900 text-xs block" id="cert-head-name">Dr. N. Chandrashekar, IAS</span>
+              <span class="text-[9px] font-mono text-slate-500 block" id="cert-head-title">MCC Commissioner</span>
+              <span class="text-[9px] font-bold text-slate-700 block" id="cert-panchayat-seal">Mysuru City Corporation</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-2 shrink-0">
+        <button onclick="closeCertificateModal()" class="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition cursor-pointer">
+          Close Window
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+</html>
