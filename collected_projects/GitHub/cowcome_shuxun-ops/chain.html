@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>書荀 · 书荀连锁</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(160deg, #1a1730 0%, #241b3f 50%, #1b2440 100%);
+    color: #fff;
+    min-height: 100vh;
+    padding: 16px 14px 48px;
+    font-size: 14px;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  .hide { display: none !important; }
+
+  /* ---------- 登录 / 无权限 ---------- */
+  .login-box { max-width: 380px; margin: 12vh auto 0; }
+  .login-box h1 { font-size: 24px; text-align: center; margin: 0 0 6px; letter-spacing: 1px; }
+  .login-box .sub { text-align: center; font-size: 13px; color: rgba(255,255,255,0.5); margin-bottom: 24px; }
+  .noperm { max-width: 420px; margin: 14vh auto 0; text-align: center; }
+  .noperm .big { font-size: 44px; margin-bottom: 10px; }
+  .noperm h2 { font-size: 18px; margin: 0 0 8px; }
+  .noperm p { color: rgba(255,255,255,0.55); font-size: 13px; line-height: 1.7; margin: 0 0 20px; }
+
+  /* ---------- 卡片 ---------- */
+  .card {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 16px;
+    padding: 16px;
+    margin-bottom: 14px;
+    backdrop-filter: blur(8px);
+  }
+  .card-title { font-size: 15px; font-weight: 700; margin-bottom: 12px; color: #c4b5fd; }
+  .card-title .note { font-size: 12px; font-weight: 400; color: rgba(255,255,255,0.5); margin-left: 8px; }
+
+  /* ---------- 表单 ---------- */
+  .field { margin-bottom: 12px; }
+  .field-label { font-size: 13px; color: rgba(255,255,255,0.7); margin-bottom: 6px; display: block; }
+  input[type=text], input[type=password], input[type=date], select {
+    width: 100%; height: 42px; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.05); color: #fff;
+    font-size: 14px; padding: 0 12px; outline: none;
+    font-family: inherit;
+  }
+  select option { color: #222; }
+  input::placeholder { color: rgba(255,255,255,0.35); }
+  .row2 { display: flex; gap: 10px; }
+  .row2 > div { flex: 1; }
+
+  /* ---------- 门店搜索下拉 ---------- */
+  .store-pick {
+    position: absolute; left: 0; right: 0; top: 100%; z-index: 5;
+    background: #2b2148; border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 10px; max-height: 220px; overflow: auto; margin-top: 4px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  .store-pick div { padding: 9px 12px; font-size: 13px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .store-pick div:last-child { border-bottom: none; }
+  .store-pick div:hover { background: rgba(139,92,246,0.25); }
+  .store-pick .empty { color: rgba(255,255,255,0.4); cursor: default; }
+  .store-pick .empty:hover { background: transparent; }
+
+  /* ---------- 按钮 ---------- */
+  button {
+    height: 42px; border-radius: 10px; padding: 0 18px;
+    border: 1px solid rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.07); color: #fff;
+    font-size: 14px; cursor: pointer; transition: all .15s;
+    font-family: inherit;
+  }
+  button:hover { background: rgba(255,255,255,0.12); }
+  button.primary { background: #8b5cf6; border-color: #8b5cf6; font-weight: 600; }
+  button.primary:hover { background: #7c4ded; }
+  button.sm, a.sm { height: 30px; padding: 0 10px; font-size: 12px; border-radius: 8px; }
+  a.sm { display: inline-flex; align-items: center; box-sizing: border-box; text-decoration: none; color: #fff; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  /* ---------- 顶部 ---------- */
+  .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 12px; flex-wrap: wrap; }
+  .topbar h1 { font-size: 20px; margin: 0; letter-spacing: .5px; }
+  .topbar .who { font-size: 12px; color: rgba(255,255,255,0.6); }
+  .top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+  /* ---------- 提示条 ---------- */
+  #globalMsg { margin-bottom: 12px; }
+  .msg { padding: 10px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 8px; word-break: break-all; }
+  .msg.err { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.35); }
+  .msg.ok  { background: rgba(74,222,128,0.12); border: 1px solid rgba(74,222,128,0.3); }
+  .msg.info{ background: rgba(139,92,246,0.14); border: 1px solid rgba(139,92,246,0.35); }
+
+  /* ---------- 大盘健康度 ---------- */
+  .hero-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+  .stat {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 12px; padding: 14px;
+  }
+  .stat .k { font-size: 12px; color: rgba(255,255,255,0.55); margin-bottom: 6px; }
+  .stat .v { font-size: 26px; font-weight: 700; letter-spacing: .5px; }
+  .stat .d { font-size: 12px; color: rgba(255,255,255,0.4); margin-top: 6px; }
+  .stat .v.dim { color: rgba(255,255,255,0.28); }
+  .health-banner {
+    margin-top: 12px; padding: 10px 14px; border-radius: 10px; font-size: 13px;
+    background: rgba(139,92,246,0.14); border: 1px solid rgba(139,92,246,0.35);
+    color: rgba(255,255,255,0.85); line-height: 1.7;
+  }
+  .health-badge {
+    display: inline-block; padding: 2px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 700; margin-left: 8px; vertical-align: middle;
+  }
+  .hb-wait { background: rgba(250,204,21,0.15); border: 1px solid rgba(250,204,21,0.4); color: #fde047; }
+
+  /* ---------- 筛选 chips ---------- */
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
+  .chip {
+    padding: 6px 14px; border-radius: 999px; font-size: 13px; cursor: pointer;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    color: rgba(255,255,255,0.75); transition: all .15s; user-select: none;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .chip.on { background: #8b5cf6; border-color: #8b5cf6; color: #fff; font-weight: 600; }
+  .chip .cnt { font-size: 11px; opacity: .65; margin-left: 4px; }
+  .chip .dt { width: 8px; height: 8px; }
+
+  /* ---------- 门店网格 ---------- */
+  .store-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .store-card {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 12px; padding: 12px 14px;
+  }
+  .store-card.is-special { border-color: rgba(251,146,60,0.55); background: rgba(251,146,60,0.06); }
+  .store-card .hd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .store-card .nm { font-size: 15px; font-weight: 700; }
+  .op-pill {
+    font-size: 11px; padding: 1px 8px; border-radius: 999px; white-space: nowrap;
+    border: 1px solid rgba(255,255,255,0.25); color: rgba(255,255,255,0.75);
+  }
+  .op-pill.dim2 { border-color: rgba(255,255,255,0.12); color: rgba(255,255,255,0.4); }
+  .dots { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  .dt { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+  .dt-g { background: #3bff6f; box-shadow: 0 0 6px rgba(59,255,111,0.8); }   /* 营业=荧光绿 */
+  .dt-r { background: #ff3b3b; box-shadow: 0 0 6px rgba(255,59,59,0.8); }   /* 特殊=荧光红 */
+  .dt-y { background: #ffe600; box-shadow: 0 0 6px rgba(255,230,0,0.8); }   /* 新店=荧光黄 */
+  .dt-p { background: #ff5edb; box-shadow: 0 0 6px rgba(255,94,219,0.8); }  /* 老店=荧光粉 */
+  .plat-row { display: flex; align-items: baseline; font-size: 12.5px; line-height: 1.9; color: rgba(255,255,255,0.8); }
+  .plat-row .pv { width: 38px; color: rgba(255,255,255,0.45); }
+  .plat-row .pa { margin-right: 10px; white-space: nowrap; }
+  .plat-row .pc { white-space: nowrap; color: rgba(255,255,255,0.45); }
+  .plat-row .ng { color: rgba(255,255,255,0.5); margin-left: auto; }
+  .store-card .amt-row { font-size: 13px; color: rgba(255,255,255,0.4); margin-top: 6px; }
+  .store-card .amt-row > div { white-space: nowrap; line-height: 1.6; }
+  .store-card .sp-line { margin-bottom: 2px; font-size: 12px; }
+  .store-card .sp-date { color: rgba(251,146,60,0.85); }
+  .badge {
+    display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+  }
+  .bg-open { background: rgba(74,222,128,0.15); border: 1px solid rgba(74,222,128,0.35); color: #4ade80; }
+  .bg-closed { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.5); }
+  .bg-pending { background: rgba(250,204,21,0.12); border: 1px solid rgba(250,204,21,0.35); color: #fde047; }
+  .bg-special { background: rgba(251,146,60,0.16); border: 1px solid rgba(251,146,60,0.45); color: #fb923c; }
+
+  /* ---------- 特殊填报弹窗 ---------- */
+  .modal-mask {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(0,0,0,0.55);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .modal {
+    background: #241b3f; border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 16px; max-width: 580px; width: 100%;
+    max-height: 88vh; overflow: auto;
+  }
+  .modal-head {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 16px; font-weight: 700; font-size: 15px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    position: sticky; top: 0; background: #241b3f; z-index: 1;
+  }
+  .modal-body { padding: 16px; }
+  .sp-item {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 8px 10px; border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px; margin-top: 8px; font-size: 13px;
+  }
+  .sp-item .grow { flex: 1; min-width: 180px; }
+  .sp-item .sub { color: rgba(255,255,255,0.45); font-size: 12px; }
+  .sp-tag { padding: 1px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .sp-now { background: rgba(251,146,60,0.16); border: 1px solid rgba(251,146,60,0.45); color: #fb923c; }
+  .sp-future { background: rgba(250,204,21,0.12); border: 1px solid rgba(250,204,21,0.35); color: #fde047; }
+  .sp-past { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.5); }
+
+  .foot { text-align: center; font-size: 12px; color: rgba(255,255,255,0.35); margin-top: 20px; }
+</style>
+</head>
+<body>
+<!-- ===== 统一导航壳（2026-09-22 逻辑批）：驾驶舱=家；导航全员可见，非主账号仅开放佛山直营点击 ===== -->
+<nav class="sx-nav" id="sxNav">
+  <a class="sx-brand" href="cockpit.html">書荀 · 驾驶舱</a>
+  <div class="sx-links">
+    <a href="ops.html">佛山直营</a>
+    <a href="chain.html" data-sx="admin">书荀连锁</a>
+    <a href="douyin_pay.html" data-sx="admin">扫码上翻</a>
+    <a href="dy_monitor.html" data-sx="admin">抖音查询</a>
+    <a href="store_admin.html">门店管理</a>
+    <a href="index.html">每日填报</a>
+  </div>
+  <span class="sx-me" id="sxMe"></span>
+</nav>
+<style>
+  .sx-nav{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:12px;margin-bottom:12px;flex-wrap:wrap;background:rgba(255,255,255,.92);border:1px solid #e6e8ef}
+  .sx-nav a{font-size:13px;font-weight:600;color:#1f2330;text-decoration:none;padding:5px 11px;border-radius:8px;border:1px solid transparent;white-space:nowrap}
+  .sx-nav a:hover{border-color:#d6d9e2}
+  .sx-nav .sx-brand{font-weight:800;font-size:14px;padding-left:0}
+  .sx-nav .sx-links{display:flex;gap:4px;flex-wrap:wrap}
+  .sx-nav .sx-me{margin-left:auto;font-size:12px;color:#8a8f9e;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .sx-nav a.cur{background:#eff6ff;border-color:#bfdbfe;color:#1d4ed8}
+  .sx-nav a.sx-off{opacity:.4}
+  .sx-nav .sx-name{font-weight:700;color:inherit}
+  .sx-nav .sx-email{opacity:.65}
+  .sx-nav a.sx-out{color:#ef4444;font-weight:700;margin-left:2px}
+  .sx-nav.sx-dark{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14)}
+  .sx-nav.sx-dark a{color:rgba(255,255,255,.92)}
+  .sx-nav.sx-dark a:hover{border-color:rgba(255,255,255,.2)}
+  .sx-nav.sx-dark a.cur{background:rgba(139,92,246,.25);border-color:rgba(167,139,250,.5);color:#c4b5fd}
+  .sx-nav.sx-dark .sx-me{color:rgba(255,255,255,.55)}
+</style>
+<script>
+(function(){
+  var nav=document.getElementById('sxNav'); if(!nav) return;
+  var page=(location.pathname.split('/').pop()||'cockpit.html').toLowerCase();
+  if(page!=='cockpit.html') nav.classList.add('sx-dark');
+  nav.querySelectorAll('a').forEach(function(a){
+    var href=(a.getAttribute('href')||'').split('?')[0].toLowerCase();
+    if(href===page && (a.getAttribute('href')||'').indexOf('?')<0) a.classList.add('cur');
+  });
+  try{
+    var s=JSON.parse(localStorage.getItem('ops_session')||'null');
+    var tok=s&&s.access_token,email='';
+    if(tok){ try{ email=JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).email||''; }catch(e){} }
+    if(email==='411249585@qq.com'){
+      nav.querySelectorAll('[data-sx="admin"]').forEach(function(a){ a.hidden=false; });
+    }else if(email){
+      nav.querySelectorAll('.sx-links a, .sx-brand').forEach(function(a){
+        var href=(a.getAttribute('href')||'').split('?')[0].toLowerCase();
+        if(a.hasAttribute('data-sx') || (href!=='ops.html' && href!=='store_admin.html')){
+          a.classList.add('sx-off'); a.title='暂未开放';
+          a.addEventListener('click', function(ev){ ev.preventDefault(); });
+        }
+      });
+    }
+    var me=document.getElementById('sxMe');
+    if(me && email){
+      me.innerHTML='<span class="sx-name"></span> <span class="sx-email"></span>';
+      me.querySelector('.sx-email').textContent=email;
+      setTimeout(function(){
+        var K=(typeof SB_KEY!=='undefined')?SB_KEY:((typeof ANON_KEY!=='undefined')?ANON_KEY:'');
+        if(!K) return;
+        fetch('https://fgrjdaizgjpqdimgtxrp.supabase.co/rest/v1/operators?select=name&email=eq.'+encodeURIComponent(email),
+          {headers:{apikey:K,Authorization:'Bearer '+tok}})
+          .then(function(r){ return r.ok?r.json():[]; })
+          .then(function(rows){ var n=(rows&&rows[0]&&rows[0].name)||''; if(n) me.querySelector('.sx-name').textContent=n+' \u00b7 '; })
+          .catch(function(){});
+      }, 0);
+      var out=document.createElement('a'); out.href='#'; out.className='sx-out'; out.textContent='\u9000\u51fa';
+      out.onclick=function(ev){ ev.preventDefault(); localStorage.removeItem('ops_session'); location.reload(); };
+      me.appendChild(out);
+    }
+  }catch(e){}
+})();
+</script>
+<div class="wrap">
+
+  <!-- 登录框 -->
+  <div id="loginView" class="login-box hide">
+    <h1>书荀连锁</h1>
+    <div class="sub">書荀门店经营数据 · 内测版（仅限授权账号）</div>
+    <div class="card">
+      <div class="field"><label class="field-label">邮箱</label><input type="text" id="lgEmail" placeholder="工作邮箱" /></div>
+      <div class="field"><label class="field-label">密码</label><input type="password" id="lgPwd" placeholder="密码" /></div>
+      <button class="primary" id="lgBtn" style="width:100%">登 录</button>
+      <div id="loginErr" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- 无权限 -->
+  <div id="noPermView" class="noperm hide">
+    <div class="big">🔒</div>
+    <h2>暂无访问权限</h2>
+    <p>书荀连锁当前仅主账号可访问。<br/>如需查看，请联系主账号开通。</p>
+    <a class="sm" href="ops.html" style="background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.18)">← 佛山直营</a>
+  </div>
+
+  <!-- 主界面 -->
+  <div id="appView" class="hide">
+    <div id="globalMsg"></div>
+
+    <!-- 大盘健康度（第一眼） -->
+    <div class="card">
+      <div class="card-title">大盘健康度<span class="badge hb-wait" id="healthBadge">待接入</span><span class="note" id="asOf"></span></div>
+      <div class="hero-grid">
+        <div class="stat"><div class="k">今日核销金额</div><div class="v dim" id="stToday">—</div><div class="d" id="stTodayD">数据源接入后展示</div></div>
+        <div class="stat"><div class="k">对比昨日</div><div class="v dim" id="stDiff">—</div><div class="d">同口径按天对比</div></div>
+        <div class="stat" id="stZeroCard" style="cursor:pointer" title="点击展开/收起 0 核销门店明细"><div class="k">今日 0 核销门店</div><div class="v" id="stZero">—</div><div class="d" id="stZeroD">加载中…</div></div>
+      </div>
+      <div id="zeroList" style="display:none; margin-top:10px; border-top:1px dashed rgba(255,255,255,0.15); padding-top:10px;"></div>
+      <div class="health-banner" id="yzBanner">
+        数据源：有赞开放平台 · Supabase 实时同步。口径：顾客实付（真实核销订单，不含二维码收款 / 充值）；
+        内购订单不走有赞，故本数据即真实客户业绩（未对账，供经营参考）。
+      </div>
+    </div>
+
+    <!-- 门店列表 -->
+    <div class="card">
+      <div class="card-title">门店列表<span class="note" id="storeCount"></span></div>
+      <div class="note" style="margin:-4px 0 10px 2px;opacity:.55">卡片平台金额 = 本月累计（9/1 起）；卡片底部为今日 / 昨日</div>
+      <div class="chips" id="storeChips">
+      <div class="chip" data-f="all">全部<span class="cnt" id="cAll"></span></div>
+      <div class="chip on" data-f="open"><span class="dt dt-g"></span>营业<span class="cnt" id="cOpen"></span></div>
+        <div class="chip" data-f="special"><span class="dt dt-r"></span>特殊<span class="cnt" id="cSp"></span></div>
+        <div class="chip" data-f="new"><span class="dt dt-y"></span>新店<span class="cnt" id="cNew"></span></div>
+        <div class="chip" data-f="old"><span class="dt dt-p"></span>老店<span class="cnt" id="cOld"></span></div>
+        <div class="chip" data-f="pending">⏳ 待上线<span class="cnt" id="cPending"></span></div>
+        <button class="sm" id="spOpenBtn" style="margin-left:auto">＋ 特殊填报</button>
+      </div>
+      <div class="store-grid" id="storeGrid"><div class="op">加载中…</div></div>
+    </div>
+
+    <!-- 周期内特殊门店 -->
+    <div class="card">
+      <div class="card-title">周期内特殊门店<span class="note" id="spActiveCount"></span>
+        <button class="sm" id="spExportBtn" style="float:right">⬇ 导出为表格</button>
+      </div>
+      <div id="spActiveList"><div class="op">加载中…</div></div>
+    </div>
+
+    <div class="foot">書荀连锁 · 数据源：有赞开放平台（实时）</div>
+  </div>
+</div>
+
+<!-- 特殊填报弹窗 -->
+<div id="spModal" class="modal-mask hide">
+  <div class="modal">
+    <div class="modal-head">
+      <span>特殊门店填报</span>
+      <button class="sm" onclick="closeSpModal()">关闭</button>
+    </div>
+    <div class="modal-body">
+      <div class="msg info" style="margin-bottom:14px">
+        适用于周期性特殊情况：培训闭店、团建闭店、台风闭店、假日闭店、装修调整、特殊营业时间等。<br/>
+        填报后，门店在起止日期内自动归入「特殊」分类，到期自动回到「营业」。
+      </div>
+      <div class="field" id="spStoreWrap" style="position:relative">
+        <label class="field-label">门店 *（输入省份 / 城市 / 行政区 / 店名 / 缩写 / 别名关键字，从候选中点击选择）</label>
+        <input type="text" id="spStoreSearch" placeholder="如：百联 / 奉贤 / 上海…" autocomplete="off" />
+        <div id="spStoreList" class="store-pick hide"></div>
+      </div>
+      <div class="field"><label class="field-label">类型 *</label>
+        <select id="spType">
+          <option>培训闭店</option>
+          <option>团建闭店</option>
+          <option>台风闭店</option>
+          <option>假日闭店</option>
+          <option>装修调整</option>
+          <option>特殊营业时间</option>
+          <option>其他</option>
+        </select>
+      </div>
+      <div class="field row2">
+        <div><label class="field-label">开始日期 *</label><input type="date" id="spStart" /></div>
+        <div><label class="field-label">结束日期 *</label><input type="date" id="spEnd" /></div>
+      </div>
+      <div class="field"><label class="field-label">备注</label><input type="text" id="spNote" placeholder="选填，如：全体员工去总部培训 3 天" /></div>
+      <button class="primary" id="spSaveBtn" style="width:100%">保 存</button>
+      <div id="spErr" style="margin-top:10px"></div>
+      <div style="margin-top:18px">
+        <div style="font-size:13px;color:rgba(255,255,255,0.6)">已登记的特殊周期（按开始日期倒序）</div>
+        <div id="spList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/xlsx.full.min.js"></script>
+<script>
+/* ================= 常量 ================= */
+const SB_URL = 'https://fgrjdaizgjpqdimgtxrp.supabase.co';
+const SB_KEY = 'sb_publishable_PddH-hdBtn_G2vwtdB9xuA_UuBSLVgG';
+const ADMIN_EMAIL = '411249585@qq.com';   // 书荀连锁：仅主账号可见
+const NEW_STORE_DAYS = 30;                // 上线 N 天内算「新店」，其余为「老店」（可调）
+
+/* ================= 工具 ================= */
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function msg(html, cls){ $('globalMsg').innerHTML = '<div class="msg '+cls+'">'+html+'</div>'; }
+function clearMsg(){ $('globalMsg').innerHTML = ''; }
+// 统一北京时间（GMT+8）取「今天」，YYYY-MM-DD
+function todayStr(){
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' });
+}
+
+/* ================= 会话（与 ops.html 共用同一份 localStorage 登录态） ================= */
+let session = null;
+try{ session = JSON.parse(localStorage.getItem('ops_session') || 'null'); }catch(e){ session = null; }
+
+async function authPost(path, body){
+  const r = await fetch(SB_URL+path, {
+    method:'POST',
+    headers:{ 'apikey':SB_KEY, 'Content-Type':'application/json' },
+    body: JSON.stringify(body||{})
+  });
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error_description || d.msg || d.message || ('HTTP '+r.status));
+  return d;
+}
+function saveSession(d){
+  session = d;
+  localStorage.setItem('ops_session', JSON.stringify(d));
+}
+async function fetchRole(token){
+  try{
+    const uid = JSON.parse(atob(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'))).sub;
+    const r = await fetch(SB_URL+'/rest/v1/user_roles?user_id=eq.'+uid+'&select=role', {
+      headers:{ 'apikey':SB_KEY, 'Authorization':'Bearer '+token }
+    });
+    const d = await r.json();
+    return (d && d[0] && d[0].role) || null;
+  }catch(e){ return null; }
+}
+async function ensureSession(){
+  if(!session) throw new Error('未登录');
+  const exp = session.expires_at || 0;
+  if(exp*1000 - Date.now() < 120000){
+    try{
+      const d = await authPost('/auth/v1/token?grant_type=refresh_token', { refresh_token: session.refresh_token });
+      saveSession(d);
+    }catch(e){ throw new Error('登录已过期，请重新登录'); }
+  }
+}
+async function sb(path, opts){
+  opts = opts || {};
+  await ensureSession();
+  const h = Object.assign({
+    'apikey': SB_KEY,
+    'Authorization': 'Bearer '+session.access_token,
+    'Content-Type': 'application/json'
+  }, opts.headers||{});
+  let r = await fetch(SB_URL+path, Object.assign({}, opts, { headers:h }));
+  if(r.status === 401){
+    try{
+      const d = await authPost('/auth/v1/token?grant_type=refresh_token', { refresh_token: session.refresh_token });
+      saveSession(d);
+    }catch(e){ doLogout(true); throw new Error('登录已过期，请重新登录'); }
+    h['Authorization'] = 'Bearer '+session.access_token;
+    r = await fetch(SB_URL+path, Object.assign({}, opts, { headers:h }));
+  }
+  if(!r.ok){
+    const t = await r.text().catch(()=> '');
+    throw new Error('接口错误 '+r.status+': '+t.slice(0,180));
+  }
+  return r.json();
+}
+function myEmail(){
+  try{ return String((session && session.user && session.user.email) || '').toLowerCase(); }catch(e){ return ''; }
+}
+function doLogout(silent){
+  localStorage.removeItem('ops_session'); session = null;
+  if(!silent) location.reload();
+}
+
+/* ================= 登录 ================= */
+async function doLogin(){
+  const email = $('lgEmail').value.trim();
+  const pwd = $('lgPwd').value;
+  $('loginErr').innerHTML = '';
+  if(!email || !pwd){ $('loginErr').innerHTML = '<div class="msg err">请填写邮箱和密码</div>'; return; }
+  $('lgBtn').disabled = true; $('lgBtn').textContent = '登录中…';
+  try{
+    const d = await authPost('/auth/v1/token?grant_type=password', { email, password: pwd });
+    const role = await fetchRole(d.access_token);
+    if(role !== 'ops'){
+      $('loginErr').innerHTML = '<div class="msg err">该账号没有运营权限（role='+(role||'无')+'）</div>';
+      $('lgBtn').disabled = false; $('lgBtn').textContent = '登 录';
+      return;
+    }
+    saveSession(d);
+    await enterApp();
+  }catch(e){
+    $('loginErr').innerHTML = '<div class="msg err">登录失败：'+esc(e.message)+'</div>';
+  }
+  $('lgBtn').disabled = false; $('lgBtn').textContent = '登 录';
+}
+
+/* ================= 入口 ================= */
+async function enterApp(){
+  const email = myEmail();
+  const isAdmin = email === ADMIN_EMAIL;
+  if(!isAdmin){
+    $('loginView').classList.add('hide');
+    $('noPermView').classList.remove('hide');
+    return;
+  }
+  $('loginView').classList.add('hide');
+  $('noPermView').classList.add('hide');
+  $('appView').classList.remove('hide');
+   await loadChainStores();
+   await loadSpecials();
+   renderStores();
+   loadYz();                                        // 有赞实时数据（异步灌入，不阻塞首屏）
+   setInterval(() => loadYz(false), 5 * 60 * 1000); // 每 5 分钟自动刷新（缓存 TTL 3 分钟）
+ }
+
+/* ================= 连锁门店（数量与清单动态拉取，永不写死） ================= */
+let allStores = [];     // stores 主表 · 连锁类型
+let specials = [];      // store_special_periods 全量记录
+let storeFilter = 'open';// all | open | special | new | old（默认营业中，崔姐 9-17 拍板）
+
+async function loadChainStores(){
+  try{
+    // 只拉连锁类型；数量以数据库实际返回为准
+    allStores = await sb('/rest/v1/stores?store_type=eq.连锁&select=id,std_name,short_name,aliases,province,city,district,operator,status,launch_date&order=std_name.asc');
+  }catch(e){
+    allStores = [];
+    msg('门店列表加载失败：'+esc(e.message), 'err');
+  }
+}
+
+async function loadSpecials(){
+  try{
+    specials = await sb('/rest/v1/store_special_periods?select=*&order=start_date.desc');
+  }catch(e){
+    specials = [];
+    if(/relation .* does not exist|404/i.test(e.message)){
+      msg('特殊门店表尚未创建：请先在 Supabase 执行 store_special_periods_setup.sql', 'err');
+    }else{
+      msg('特殊周期加载失败：'+esc(e.message), 'err');
+    }
+  }
+}
+
+/* 今天（北京时间）是否落在该门店的特殊周期内 */
+function activeSpecialOf(x){
+  const T = todayStr();
+  return specials.find(s => s.store_id === x.id && s.start_date <= T && T <= s.end_date) || null;
+}
+
+/* 门店分类：待上线 > 特殊 > 新店 > 老店；营业 = 非特殊且非待上线 */
+function classOf(x){
+  if(x.status === '待上线') return 'pending';
+  if(activeSpecialOf(x)) return 'special';
+  const ld = x.launch_date;
+  if(ld){
+    const days = Math.floor((new Date(todayStr()+'T00:00:00') - new Date(ld+'T00:00:00')) / 86400000);
+    if(days >= 0 && days <= NEW_STORE_DAYS) return 'new';
+  }
+  return 'old';
+}
+
+function statusBadge(s){
+  if(s === '在营') return '<span class="badge bg-open">在营</span>';
+  if(s === '待上线') return '<span class="badge bg-pending">待上线</span>';
+  return '<span class="badge bg-closed">'+esc(s||'—')+'</span>';
+}
+
+function renderStores(){
+  const grid = $('storeGrid');
+  const cnt = { all: allStores.length, open: 0, special: 0, new: 0, old: 0, pending: 0 };
+  allStores.forEach(x => { cnt[classOf(x)]++; });
+  cnt.open = cnt.all - cnt.special - cnt.pending;   // 营业 = 全部 − 特殊 − 待上线
+  $('cAll').textContent = '('+cnt.all+')';
+  $('cOpen').textContent = '('+cnt.open+')';
+  $('cSp').textContent = '('+cnt.special+')';
+  $('cNew').textContent = '('+cnt.new+')';
+  $('cOld').textContent = '('+cnt.old+')';
+  $('cPending').textContent = '('+cnt.pending+')';
+
+  // 「营业」= 非待上线且非特殊（classOf 不产生 'open'，须单独判断——9-22 修复点灯筛选空结果）
+  const list = allStores.filter(x => {
+    if(storeFilter==='all') return true;
+    if(storeFilter==='open') return x.status !== '待上线' && !activeSpecialOf(x);
+    return classOf(x)===storeFilter;
+  });
+  $('storeCount').textContent = '共 ' + allStores.length + ' 家' + (storeFilter==='all' ? '' : ' · 当前筛选 '+list.length+' 家');
+  if(!list.length){
+    grid.innerHTML = '<div class="op">'+(storeFilter==='special' ? '当前没有特殊门店' : '没有符合条件的门店')+'</div>';
+    return;
+  }
+  grid.innerHTML = list.map(x => {
+    const sp = activeSpecialOf(x);
+    const cls = classOf(x);
+    // 右上角荧光点：绿=营业 / 红=特殊（二选一） + 黄=新店 / 粉=老店（二选一）
+    const dots = (sp ? '<i class="dt dt-r"></i>' : '<i class="dt dt-g"></i>') +
+                 (cls === 'new' ? '<i class="dt dt-y"></i>' : '<i class="dt dt-p"></i>');
+    const met = storeMetrics[x.id];
+    return '<div class="store-card'+(sp?' is-special':'')+'" data-id="'+x.id+'" style="cursor:pointer" title="点击查看逐月核销履历">' +
+      '<div class="hd">' +
+        '<span class="nm">'+esc(x.short_name || x.std_name)+'</span>' +
+        (x.operator ? '<span class="op-pill">'+esc(x.operator)+'</span>' : '') +
+        (x.status && x.status !== '在营' ? '<span class="op-pill dim2">'+esc(x.status)+'</span>' : '') +
+        '<span class="dots">'+dots+'</span>' +
+      '</div>' +
+      (sp ? '<div class="sp-line">特殊 · '+esc(sp.special_type)+' <span class="sp-date">'+esc(String(sp.start_date).slice(5))+' ~ '+esc(String(sp.end_date).slice(5))+'</span></div>' : '') +
+      platRows(x) +
+      '<div class="amt-row">' + (x.status==='待上线'
+        ? '<span style="opacity:.55">🛡 未上线 · 测试数据已拦截</span>'
+        : (met
+          ? '<div>今日 <b>'+fmtY(met.today)+'</b> · '+met.todayC+' 单</div><div>昨日 '+fmtY(met.yday)+' · '+met.ydayC+' 单</div>'
+          : '本月暂无订单')) + '</div>' +
+    '</div>';
+  }).join('');
+  // 卡片点击 → 门店经营详情（批次1）
+  grid.querySelectorAll('.store-card').forEach(el => {
+    el.addEventListener('click', () => { location.href = 'store.html?id=' + el.dataset.id; });
+  });
+  renderSpActive();
+}
+
+/* 平台数据行：美团 / 抖音 各一行（¥金额 + 单数）。数据源：Supabase yz_orders（有赞实时） */
+let storeMetrics = {};
+let zeroStores = [];    // 今日 0 核销门店（营业中且有有赞映射）
+const fmtY = (x) => '¥' + (Math.round((x||0)*100)/100);
+function platRows(x){
+  const m = storeMetrics[x.id] || null;
+  const fa = (k) => (m && m[k] != null) ? fmtY(m[k]) : '——';
+  const fc = (k) => (m && m[k] != null) ? m[k] : '——';
+  return '<div class="plat-row"><span class="pv">美团</span><span class="pa">'+fa('mtA')+'</span><span class="pc">'+fc('mtC')+' 单</span></div>' +
+         '<div class="plat-row"><span class="pv">抖音</span><span class="pa">'+fa('dyA')+'</span><span class="pc">'+fc('dyC')+' 单</span></div>';
+}
+
+/* ================= 有赞实时数据（yz_orders 直读） =================
+   口径：order_type=0（真实核销），排除 item_type 6/7/9（二维码收款/直接收款/充值）。
+   内购订单不走有赞（2026-09-15 崔姐确认），故有赞金额=真实客户业绩。
+   按天归属暂用 create_time（下单时间），finish_time 口径验证后切换。 */
+const YZ_ITEM_EXCLUDE = [6,7,9];
+const yzCacheKey = 'chain_yz_cache_v3';
+let yz = { ready:false, asOf:null, unmatched:[], blocked:[] };
+let kdtToStore = {};   // yz_shop_map：kdt_id → store_id（2026-09-16 崔姐飞书确认，99 条）
+let storeToKdt = {};   // 反向映射：store_id → kdt_id（判断门店是否接入有赞）
+// 🛡 防线（2026-09-16 崔姐拍板）：未上线门店（status=待上线）的数据是门店学有赞系统的测试脏数据，
+// 一律不显示、不计入看板任何统计；非连锁门店（陪跑/直营）也不计入连锁大盘。
+
+function yzNorm(s){
+  return String(s||'').replace(/书荀|書荀|头疗|养生|美容|SPA|spa/g,'')
+    .replace(/[（(【\[]/g,'').replace(/[）)】\]]/g,'').replace(/[\s\-—_·・]/g,'').trim();
+}
+/* yz shop_name → 门店主表（四层匹配：全名 / 去省市区前缀 / 剥头2字 / 区县兜底）
+   ctx=被剥掉的地名字，必须出现在有赞店名中才允许用该变体（防错配）。
+   已验证（2026-09-15，9月20302单）：79/93 匹配，其余 14 家主表无对应店（向崔姐确认后补 aliases） */
+function yzKeysOf(x){
+  const pt = String(x.province||'').replace(/省$/,'');
+  const ct = String(x.city||'').replace(/市$/,'');
+  const out = [];
+  const add = (t, ctx) => {
+    if(t && t.length >= 2 && !out.some(o => o[0] === t)) out.push([t, ctx]);
+  };
+  [x.short_name, x.std_name].concat(String(x.aliases||'').split(/[\/、,，;；]+/)).forEach(k => {
+    const kn = yzNorm(k);
+    if(kn.length < 2) return;
+    add(kn, '');
+    [pt, ct].forEach(loc => {
+      if(loc && kn.indexOf(loc) >= 0){
+        const v = kn.split(loc).join('');
+        add(v, loc);
+        add(v.replace(/(店|路)$/,''), loc);
+      }
+    });
+    if(kn.length >= 4){
+      add(kn.slice(2), kn.slice(0,2));
+      add(kn.slice(2).replace(/(店|路)$/,''), kn.slice(0,2));
+    }
+    add(kn.replace(/(店|路)$/,''), '');
+  });
+  return out;
+}
+function matchYzStore(name){
+  const n = yzNorm(name);
+  let best = null, bestLen = 0;
+  allStores.forEach(x => {
+    const ct = String(x.city||'').replace(/市$/,'');
+    const dt = String(x.district||'').replace(/区$|县$|市$/,'');
+    yzKeysOf(x).forEach(p => {
+      if(n.indexOf(p[0]) >= 0 && (!p[1] || n.indexOf(p[1]) >= 0) && p[0].length > bestLen){
+        best = x; bestLen = p[0].length;
+      }
+    });
+    // 区县兜底：同城市内该区县唯一的门店才启用
+    if(dt.length >= 2 && ct && n.indexOf(dt) >= 0 && n.indexOf(ct) >= 0){
+      const same = allStores.filter(y => String(y.city||'').replace(/市$/,'') === ct
+        && String(y.district||'').replace(/区$|县$|市$/,'') === dt);
+      if(same.length === 1 && dt.length - 1 > bestLen){ best = x; bestLen = dt.length - 1; }
+    }
+  });
+  return best;
+}
+/* 毫秒 → 北京时间日期串 */
+function yzDateStr(ms){ return new Date(ms + 8*3600000).toISOString().slice(0,10); }
+function bjStr(iso){ return iso ? new Date(new Date(iso).getTime() + 8*3600000).toISOString().slice(5,16).replace('T',' ') : ''; }
+
+async function loadYz(force){
+  try{
+    const T  = todayStr();
+    const ms = T.slice(0,8) + '01';                      // 本月 1 日
+    const d7 = yzDateStr(Date.now() - 6*86400000);       // 近 7 天起点
+    const yd = yzDateStr(Date.now() - 1*86400000);       // 昨天
+    const start = [ms, d7, yd].sort()[0];
+    const ck = yzCacheKey + '_' + start;
+
+    // 读缓存（3 分钟 TTL，避免每次打开都全量拉）
+    let agg = null, asOf = null;
+    if(!force){
+      try{
+        const c = JSON.parse(localStorage.getItem(ck) || 'null');
+        if(c && Date.now() - c.t < 3*60*1000){ agg = c.agg; asOf = c.asOf; }
+      }catch(e){}
+    }
+    if(!agg){
+      // 先拉 kdt_id→store_id 映射（99 行小表，随刷新一起拉）
+      const ymap = await sb('/rest/v1/yz_shop_map?select=kdt_id,store_id');
+      kdtToStore = {}; storeToKdt = {};
+      ymap.forEach(r => { kdtToStore[r.kdt_id] = r.store_id; storeToKdt[r.store_id] = r.kdt_id; });
+      // 分页拉取（Supabase 单次上限 1000 行）
+      const gte = new Date(Date.parse(start + 'T00:00:00+08:00')).toISOString();
+      const sel = 'kdt_id,shop_name,real_pay,order_type,item_type,pay_channel_name,create_time';
+      const raw = [];
+      let from = 0;
+      while(true){
+        const part = await sb('/rest/v1/yz_orders?source=eq.chain&order=create_time.asc&select=' + sel
+          + '&create_time=gte.' + encodeURIComponent(gte),
+          { headers: { Range: from + '-' + (from+999) } });
+        raw.push(...part);
+        if(part.length < 1000 || from > 150000) break;
+        from += 1000;
+      }
+      asOf = raw.length ? raw[raw.length-1].create_time : null;
+      // 聚合：按 kdt_id（有赞门店唯一身份，改名不影响）× 日期
+      agg = {};
+      raw.forEach(r => {
+        if(r.order_type !== 0 || YZ_ITEM_EXCLUDE.indexOf(r.item_type) >= 0) return;
+        const ch = String(r.pay_channel_name || '');
+        // 2026-09-15 崔姐拍板：只认「核销 / 验券」渠道为真实核销业绩，
+        // 扫码买单（二维码收款）/ 会员余额 / 欠款 / 现金 / 抖音线上买单 等一律不算
+        if(!/核销|验券/.test(ch)) return;
+        const amt = (r.real_pay || 0) / 100;
+        const D = yzDateStr(new Date(r.create_time).getTime());
+        let g = agg[r.kdt_id];
+        if(!g) g = agg[r.kdt_id] = { name:r.shop_name, mtA:0, mtC:0, dyA:0, dyC:0, otA:0, otC:0, days:{} };
+        if(ch.indexOf('美团') >= 0){ g.mtA += amt; g.mtC++; }
+        else if(ch.indexOf('抖音') >= 0){ g.dyA += amt; g.dyC++; }
+        else { g.otA += amt; g.otC++; }
+        const d = g.days[D] || (g.days[D] = [0,0]);
+        d[0] += amt; d[1]++;
+      });
+      try{ localStorage.setItem(ck, JSON.stringify({ t: Date.now(), asOf, agg })); }catch(e){}
+    }
+
+    // 映射到门店主表（按 kdt_id 精确映射，弃店名模糊匹配）
+    // 🛡 防线：待上线门店 = 测试脏数据，拦截不计入；非连锁门店（陪跑/直营映射）也不计入连锁大盘
+    const metrics = {};
+    yz.unmatched = []; yz.blocked = [];
+    const storeById = {}; allStores.forEach(s => storeById[s.id] = s);
+    Object.keys(agg).forEach(kdt => {
+      const sid = kdtToStore[kdt];
+      const g = agg[kdt];
+      const st = sid ? storeById[sid] : null;
+      const amtAll = g.mtA + g.dyA + g.otA;
+      if(st && st.status === '待上线'){
+        yz.blocked.push({ name: g.name || ('kdt '+kdt), amt: amtAll, why:'未上线' });
+        return;
+      }
+      if(st){
+        const t = g.days[T]  || [0,0];
+        const y = g.days[yd] || [0,0];
+        let mtd = 0; Object.keys(g.days).forEach(d => { if(d >= ms) mtd += g.days[d][0]; });
+        metrics[sid] = { mtA:g.mtA, mtC:g.mtC, dyA:g.dyA, dyC:g.dyC,
+          today:t[0], todayC:t[1], yday:y[0], ydayC:y[1], mtd:mtd };
+      }else if(sid){
+        yz.blocked.push({ name: g.name || ('kdt '+kdt), amt: amtAll, why:'非连锁' });
+      }else{
+        yz.unmatched.push({ name: g.name || ('kdt '+kdt), amt: amtAll });
+      }
+    });
+    storeMetrics = metrics;
+    yz.ready = true; yz.asOf = asOf;
+
+    // 大盘健康度
+    let tA = 0, tC = 0, yA = 0, mA = 0;
+    Object.values(metrics).forEach(m => { tA += m.today; tC += m.todayC; yA += m.yday; mA += m.mtd; });
+    $('stToday').textContent = fmtY(tA);
+    $('stToday').classList.remove('dim');
+    $('stTodayD').textContent = '今日 ' + tC + ' 单 · 本月累计 ' + fmtY(mA);
+    const diff = tA - yA;
+    const diffPct = yA ? Math.round(diff / yA * 100) : null;
+    $('stDiff').innerHTML = (diff >= 0 ? '<span style="color:#4ade80">+' : '<span style="color:#f87171">') + fmtY(diff) + '</span>'
+      + '<span style="font-size:11px;opacity:.6"> vs 昨日 ' + fmtY(yA) + (diffPct === null ? '' : ' · ' + (diffPct >= 0 ? '+' : '') + diffPct + '%') + '</span>';
+    // 今日 0 核销门店（口径：营业中 + 已接入有赞映射；无有赞系统门店不计入，避免永远挂零）
+    zeroStores = allStores
+      .filter(x => classOf(x) === 'open' && storeToKdt[x.id])
+      .filter(x => !metrics[x.id] || !(metrics[x.id].today > 0))
+      .sort((a,b) => (metrics[b.id] ? metrics[b.id].mtd : 0) - (metrics[a.id] ? metrics[a.id].mtd : 0));
+    const yzOpenN = allStores.filter(x => classOf(x) === 'open' && storeToKdt[x.id]).length;
+    $('stZero').textContent = zeroStores.length + ' 家';
+    $('stZero').style.color = zeroStores.length ? '#f87171' : '#4ade80';
+    $('stZeroD').textContent = '有赞营业店 ' + yzOpenN + ' 家中 · 点击看明细';
+    renderZeroList();
+    const badge = $('healthBadge');
+    badge.textContent = '有赞 · 实时';
+    badge.className = 'badge bg-open';
+    $('asOf').textContent = asOf ? ('数据截至 ' + bjStr(asOf)) : '';
+
+    // 未匹配 / 拦截提示
+    const un = yz.unmatched, bl = yz.blocked;
+    const blPend = bl.filter(x => x.why === '未上线'), blOther = bl.filter(x => x.why !== '未上线');
+    $('yzBanner').innerHTML = '数据源：有赞开放平台 · Supabase 实时同步。口径：真实核销业绩 = 美团验券 + 抖音核销 + 记账核销 + 商城核销；不含扫码买单（二维码收款）/ 会员余额 / 欠款 / 现金 / 抖音线上买单 等非核销支付。内购不走有赞，本数据即真实客户业绩（未对账）。门店归属按 kdt_id 精确映射（yz_shop_map，2026-09-16 确认），有赞店改名不影响对账。'
+      + (blPend.length ? '<br/>🛡 已拦截 ' + blPend.length + ' 家未上线门店的测试数据（合计 ' + fmtY(blPend.reduce((s,x)=>s+x.amt,0)) + '），不计入看板：'
+        + esc(blPend.slice(0,8).map(x => x.name).join('、')) : '')
+      + (blOther.length ? '<br/>ℹ️ ' + blOther.length + ' 家非连锁门店（陪跑/直营）数据不并入连锁大盘（合计 ' + fmtY(blOther.reduce((s,x)=>s+x.amt,0)) + '）' : '')
+      + (un.length ? '<br/>⚠️ 有 ' + un.length + ' 家有赞门店未在映射表中（合计 ' + fmtY(un.reduce((s,x)=>s+x.amt,0)) + '）：'
+        + esc(un.slice(0,8).map(x => x.name).join('、')) : (blPend.length || blOther.length ? '' : '✅ 有赞门店已全部按 kdt_id 映射到门店主表'));
+
+    renderStores();
+  }catch(e){
+    $('healthBadge').textContent = '数据加载失败';
+    $('stTodayD').textContent = esc(e.message.slice(0,80));
+  }
+}
+
+/* ================= 周期内特殊门店 + 导出 ================= */
+function spActiveRows(){
+  const T = todayStr();
+  return specials.filter(s => s.start_date <= T && T <= s.end_date);
+}
+
+function renderSpActive(){
+  const rows = spActiveRows();
+  $('spActiveCount').textContent = '当前进行中 ' + rows.length + ' 家';
+  const box = $('spActiveList');
+  if(!rows.length){
+    box.innerHTML = '<div class="op" style="color:rgba(255,255,255,0.4);font-size:13px">当前没有进行中的特殊门店</div>';
+    return;
+  }
+  box.innerHTML = rows.map(s => {
+    const st = allStores.find(x => x.id === s.store_id);
+    return '<div class="sp-item">' +
+      '<span class="sp-tag sp-now">进行中</span>' +
+      '<div class="grow"><b>'+esc(st ? (st.short_name || st.std_name) : (s.std_name || ('门店#'+s.store_id)))+'</b>' +
+      ' · '+esc(s.special_type||'')+'<br/>' +
+      '<span class="sub">'+esc(s.start_date)+' ~ '+esc(s.end_date)+(s.note ? ' · '+esc(s.note) : '')+'</span></div>' +
+      '<button class="sm" onclick="delSpecial('+s.id+')">删除</button>' +
+    '</div>';
+  }).join('');
+}
+
+function exportSp(){
+  const rows = spActiveRows();
+  if(!rows.length){ msg('当前没有进行中的特殊门店，无需导出', 'info'); return; }
+  if(typeof XLSX === 'undefined'){ msg('导出组件未加载，请刷新页面重试', 'err'); return; }
+  const data = rows.map(s => {
+    const st = allStores.find(x => x.id === s.store_id);
+    return {
+      '门店': st ? st.std_name : (s.std_name || ''),
+      '类型': s.special_type || '',
+      '开始日期': s.start_date,
+      '结束日期': s.end_date,
+      '备注': s.note || '',
+      '填报人': s.created_by || ''
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:22},{wch:12},{wch:12},{wch:12},{wch:30},{wch:20}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '特殊门店');
+  XLSX.writeFile(wb, '周期内特殊门店_' + todayStr() + '.xlsx');
+}
+
+/* ================= 0 核销门店明细（点击卡片切换） ================= */
+function renderZeroList(){
+  const box = $('zeroList');
+  if(box.style.display === 'none') return;
+  if(!zeroStores.length){
+    box.innerHTML = '<div style="font-size:13px;color:#4ade80">✅ 有赞营业门店今日全部有核销</div>';
+    return;
+  }
+  let h = '<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-bottom:6px">共 ' + zeroStores.length + ' 家 · 按本月累计降序（核销金额均为 0）</div>';
+  h += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:6px">';
+  zeroStores.forEach(s => {
+    const m = storeMetrics[s.id];
+    const city = s.city || '';
+    h += '<div style="background:rgba(248,113,113,0.10);border:1px solid rgba(248,113,113,0.25);border-radius:10px;padding:8px 10px">'
+      + '<div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(s.short_name || s.std_name) + '</div>'
+      + '<div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:2px">'
+      + esc(city) + (city ? ' · ' : '') + '本月 ' + fmtY(m ? m.mtd : 0) + ' · 昨日 ' + fmtY(m ? m.yday : 0) + '</div></div>';
+  });
+  h += '</div>';
+  box.innerHTML = h;
+}
+$('stZeroCard').addEventListener('click', () => {
+  const box = $('zeroList');
+  box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  renderZeroList();
+});
+
+/* ================= 筛选 ================= */
+$('storeChips').addEventListener('click', (ev) => {
+  const c = ev.target.closest('.chip'); if(!c) return;
+  document.querySelectorAll('#storeChips .chip').forEach(x=>x.classList.remove('on'));
+  c.classList.add('on');
+  storeFilter = c.dataset.f;
+  renderStores();
+});
+
+/* ================= 特殊填报 ================= */
+let spStoreId = null;   // 已选中的门店 id（由搜索候选点选产生）
+
+function openSpModal(){
+  spStoreId = null;
+  $('spStoreSearch').value = '';
+  $('spStoreList').classList.add('hide');
+  $('spStart').value = todayStr();
+  $('spEnd').value = todayStr();
+  $('spErr').innerHTML = '';
+  renderSpList();
+  $('spModal').classList.remove('hide');
+}
+function closeSpModal(){ $('spModal').classList.add('hide'); }
+
+/* 门店关键字搜索：省份 / 城市 / 行政区 / 店名 / 缩写 / 别名，命中即出候选 */
+function spStoreMatches(kw){
+  kw = kw.trim().toLowerCase();
+  if(!kw) return [];
+  return allStores.filter(x => {
+    const parts = [x.province, x.city, x.district, x.std_name, x.short_name, x.aliases].filter(Boolean);
+    if(!parts.length) return false;
+    // 两种拼法都参与匹配：带分隔（各字段独立命中）+ 无分隔（地区+店名连打，如「上海奉贤」）
+    const hay = (parts.join(',') + ',' + parts.join('')).toLowerCase();
+    return hay.indexOf(kw) >= 0;
+  }).slice(0, 30);
+}
+function renderSpPick(){
+  const kw = $('spStoreSearch').value;
+  const box = $('spStoreList');
+  if(!kw.trim()){ box.classList.add('hide'); box.innerHTML = ''; return; }
+  const ms = spStoreMatches(kw);
+  box.innerHTML = ms.length
+    ? ms.map(x => {
+        const reg = [x.province, x.city, x.district].filter(Boolean).join('');
+        return '<div onclick="pickSpStore('+x.id+')">'+esc(x.std_name)+
+          (x.short_name && x.short_name !== x.std_name ? '（'+esc(x.short_name)+'）' : '')+
+          (reg ? ' <span style="color:rgba(255,255,255,0.4);font-size:12px">'+esc(reg)+'</span>' : '')+'</div>';
+      }).join('')
+    : '<div class="empty">没有匹配的门店</div>';
+  box.classList.remove('hide');
+}
+function pickSpStore(id){
+  const x = allStores.find(v => v.id === id); if(!x) return;
+  spStoreId = id;
+  $('spStoreSearch').value = x.std_name;
+  $('spStoreList').classList.add('hide');
+}
+
+function spTagOf(s){
+  const T = todayStr();
+  if(T < s.start_date) return '<span class="sp-tag sp-future">未开始</span>';
+  if(T > s.end_date)   return '<span class="sp-tag sp-past">已结束</span>';
+  return '<span class="sp-tag sp-now">进行中</span>';
+}
+
+function renderSpList(){
+  const box = $('spList');
+  if(!specials.length){
+    box.innerHTML = '<div class="op" style="color:rgba(255,255,255,0.4);font-size:13px;padding:8px 0">暂无记录</div>';
+    return;
+  }
+  box.innerHTML = specials.map(s => {
+    const st = allStores.find(x => x.id === s.store_id);
+    return '<div class="sp-item">' +
+      spTagOf(s) +
+      '<div class="grow"><b>'+esc(st ? (st.short_name || st.std_name) : (s.std_name || ('门店#'+s.store_id)))+'</b>' +
+      ' · '+esc(s.special_type||'')+'<br/>' +
+      '<span class="sub">'+esc(s.start_date)+' ~ '+esc(s.end_date)+(s.note ? ' · '+esc(s.note) : '')+'</span></div>' +
+      '<button class="sm" onclick="delSpecial('+s.id+')">删除</button>' +
+    '</div>';
+  }).join('');
+}
+
+async function saveSpecial(){
+  const storeId = spStoreId;
+  const type = $('spType').value;
+  const sd = $('spStart').value;
+  const ed = $('spEnd').value;
+  const note = $('spNote').value.trim();
+  const st = allStores.find(x => x.id === storeId);
+  if(!st){ $('spErr').innerHTML = '<div class="msg err">请输入关键字并从候选列表中点击选择门店</div>'; return; }
+  if(!sd || !ed){ $('spErr').innerHTML = '<div class="msg err">请填写开始和结束日期</div>'; return; }
+  if(ed < sd){ $('spErr').innerHTML = '<div class="msg err">结束日期不能早于开始日期</div>'; return; }
+  $('spSaveBtn').disabled = true; $('spSaveBtn').textContent = '保存中…';
+  try{
+    await sb('/rest/v1/store_special_periods', {
+      method:'POST',
+      headers:{ 'Prefer':'return=minimal' },
+      body: JSON.stringify({
+        store_id: storeId,
+        std_name: st.std_name,
+        special_type: type,
+        start_date: sd,
+        end_date: ed,
+        note: note,
+        created_by: myEmail()
+      })
+    });
+    $('spErr').innerHTML = '<div class="msg ok">已保存：'+esc(st.std_name)+' '+esc(sd)+' ~ '+esc(ed)+'</div>';
+    $('spNote').value = '';
+    await loadSpecials();
+    renderSpList();
+    renderStores();
+  }catch(e){
+    $('spErr').innerHTML = '<div class="msg err">保存失败：'+esc(e.message)+'</div>';
+  }
+  $('spSaveBtn').disabled = false; $('spSaveBtn').textContent = '保 存';
+}
+
+async function delSpecial(id){
+  if(!confirm('确定删除这条特殊周期记录吗？')) return;
+  try{
+    await sb('/rest/v1/store_special_periods?id=eq.'+id, { method:'DELETE' });
+    await loadSpecials();
+    renderSpList();
+    renderStores();
+  }catch(e){
+    msg('删除失败：'+esc(e.message), 'err');
+  }
+}
+
+/* ================= 启动 ================= */
+$('lgBtn').addEventListener('click', doLogin);
+$('lgPwd').addEventListener('keydown', (e)=>{ if(e.key==='Enter') doLogin(); });
+$('spOpenBtn').addEventListener('click', openSpModal);
+$('spSaveBtn').addEventListener('click', saveSpecial);
+$('spExportBtn').addEventListener('click', exportSp);
+$('spStoreSearch').addEventListener('input', () => { spStoreId = null; renderSpPick(); });
+$('spStoreSearch').addEventListener('focus', renderSpPick);
+// 点击弹窗其他区域时收起候选列表
+document.addEventListener('click', (e) => {
+  if(!e.target.closest('#spStoreWrap')) $('spStoreList').classList.add('hide');
+});
+
+(async function init(){
+  if(session){
+    try{
+      await enterApp();
+      return;
+    }catch(e){
+      // session 失效则回登录
+      session = null; localStorage.removeItem('ops_session');
+    }
+  }
+  $('loginView').classList.remove('hide');
+})();
+</script>
+</body>
+</html>
