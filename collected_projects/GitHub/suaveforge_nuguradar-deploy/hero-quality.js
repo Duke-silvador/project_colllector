@@ -1,0 +1,13 @@
+(()=>{
+  const cfg=window.NUGU_CONFIG||{};const api=String(cfg.apiBase||'').replace(/\/$/,'');
+  const media=document.getElementById('heroMedia');if(!media)return;
+  const ytId=url=>{const m=String(url||'').match(/(?:i\.ytimg\.com|img\.youtube\.com)\/vi\/([^/]+)\//i);return m?m[1]:''};
+  const youtubeSet=url=>{const id=ytId(url);return id?[`https://i.ytimg.com/vi/${encodeURIComponent(id)}/maxresdefault.jpg`,`https://i.ytimg.com/vi/${encodeURIComponent(id)}/sddefault.jpg`,`https://i.ytimg.com/vi/${encodeURIComponent(id)}/hqdefault.jpg`]:[url]};
+  const inspect=url=>new Promise(resolve=>{if(!url)return resolve(null);const img=new Image();const timer=setTimeout(()=>{img.src='';resolve(null)},7000);img.onload=()=>{clearTimeout(timer);resolve({url,w:img.naturalWidth,h:img.naturalHeight,area:img.naturalWidth*img.naturalHeight})};img.onerror=()=>{clearTimeout(timer);resolve(null)};img.referrerPolicy='no-referrer';img.src=url});
+  async function choose(leader){const seen=new Set(),groups=[];const add=(url,priority)=>{for(const u of youtubeSet(url)){if(u&&!seen.has(u)){seen.add(u);groups.push({url:u,priority})}}};add(leader.image_url,0);for(const c of leader.content||[])add(c.thumbnail_url,1);const loaded=(await Promise.all(groups.map(async x=>({...x,info:await inspect(x.url)})))).filter(x=>x.info);if(!loaded.length)return null;const strong=loaded.filter(x=>x.info.w>=1200&&x.info.h>=650).sort((a,b)=>a.priority-b.priority||b.info.area-a.info.area);if(strong.length)return{...strong[0].info,quality:'high'};const decent=loaded.filter(x=>x.info.w>=900&&x.info.h>=500).sort((a,b)=>a.priority-b.priority||b.info.area-a.info.area);if(decent.length)return{...decent[0].info,quality:'medium'};loaded.sort((a,b)=>b.info.area-a.info.area||a.priority-b.priority);return{...loaded[0].info,quality:'soft'}}
+  let chosen=null,applying=false;
+  function apply(){if(!chosen)return;applying=true;media.style.backgroundImage=`url("${String(chosen.url).replace(/"/g,'')}")`;media.dataset.heroQuality=chosen.quality;media.dataset.heroImage='verified';requestAnimationFrame(()=>applying=false)}
+  async function run(){let data=window.NUGU_FALLBACK||{artists:[]};if(api){try{const r=await fetch(`${api}/api/v1/home`,{headers:{Accept:'application/json'},cache:'no-store'});if(r.ok)data=await r.json()}catch{}}const leader=(data.artists||[]).find(a=>Number(a.rank)===1)||(data.artists||[])[0];if(!leader)return;chosen=await choose(leader);apply()}
+  new MutationObserver(()=>{if(!applying&&chosen&&media.style.backgroundImage&&!media.style.backgroundImage.includes(chosen.url))apply()}).observe(media,{attributes:true,attributeFilter:['style']});
+  if(document.readyState==='complete')run();else addEventListener('load',run,{once:true});
+})();

@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设置 · 打卡提醒</title>
+<meta name="theme-color" content="#0b0f16">
+<link rel="icon" href="assets/icons/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="assets/icons/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<script>document.documentElement.classList.add("fx-ready");window.__fxT=setTimeout(function(){document.documentElement.classList.remove("fx-ready")},1800);</script>
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/app.js" defer></script>
+<style>
+  .wrap{padding-bottom:132px}
+
+  .page-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+
+  label.lbl{display:block;font-size:12px;color:var(--dim);margin-bottom:5px;letter-spacing:.02em}
+
+  input[type=text],input[type=password],input[type=number],textarea,select{
+    width:100%;background:var(--bg);color:var(--txt);
+    border:1px solid var(--line);border-radius:var(--r-sm);
+    padding:8px 11px;font-size:13.5px;font-family:inherit;
+    transition:border-color .18s,box-shadow .18s,background .18s;
+  }
+  textarea{resize:vertical;min-height:66px;line-height:1.7}
+  input:focus,textarea:focus,select:focus{
+    outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(88,166,255,.14);
+  }
+  input:disabled,textarea:disabled,select:disabled{opacity:.45;cursor:not-allowed}
+  select{cursor:pointer;appearance:none;
+    background-image:linear-gradient(45deg,transparent 50%,var(--dim2) 50%),linear-gradient(135deg,var(--dim2) 50%,transparent 50%);
+    background-position:calc(100% - 17px) calc(50% + 1px),calc(100% - 12px) calc(50% + 1px);
+    background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:32px;}
+
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+  @media(max-width:640px){.row{grid-template-columns:1fr}}
+
+  /* 提醒卡片 */
+  .rem{
+    position:relative;overflow:hidden;
+    background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);
+    padding:16px;margin-bottom:12px;
+    transition:border-color .18s,box-shadow .3s,transform .3s;
+  }
+  .rem:hover{border-color:var(--line2);box-shadow:0 12px 32px rgba(0,0,0,.28)}
+  .rem.removed{animation:remOut .3s ease both}
+  @keyframes remOut{to{opacity:0;transform:translateX(-14px) scale(.98)}}
+  .rem-top{display:flex;align-items:flex-start;gap:11px;flex-wrap:wrap;margin-bottom:13px}
+  .rem-idx{
+    font-family:var(--mono);font-size:11.5px;color:var(--dim2);
+    flex:none;min-width:22px;height:22px;margin-top:12px;
+    display:grid;place-items:center;border-radius:7px;
+    background:rgba(255,255,255,.04);border:1px solid var(--line);
+  }
+  .rem-actions{margin-left:auto;display:flex;align-items:center;gap:7px;margin-top:6px}
+
+  .t-col{display:flex;flex-direction:column;gap:5px}
+  .snap{font-size:11.5px;line-height:1.4;min-height:16px;transition:color .2s}
+  .snap.ok{color:var(--ok)}
+  .snap.early{color:var(--warn)}
+  .snap.late{color:var(--dim2)}
+
+  .chips{display:flex;gap:6px;margin-top:9px}
+  .chip{
+    border:1px solid var(--line);background:var(--bg);color:var(--dim2);
+    padding:5px 12px;border-radius:8px;font-size:12.5px;font-family:inherit;
+    cursor:pointer;transition:all .16s;
+  }
+  .chip:hover:not(:disabled){border-color:var(--line2);color:var(--txt)}
+  .chip.on[data-ch=dingtalk]{background:rgba(59,130,246,.16);border-color:var(--dt);color:#79b8ff}
+  .chip.on[data-ch=feishu]{background:rgba(240,136,62,.16);border-color:var(--fs);color:#f0b27a}
+  .chip:disabled{opacity:.4;cursor:not-allowed}
+
+  .icon-btn{
+    border:1px solid var(--line);background:var(--bg);color:var(--dim);
+    width:31px;height:31px;border-radius:8px;cursor:pointer;
+    font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;
+    transition:all .16s;font-family:inherit;
+  }
+  .icon-btn:hover:not(:disabled){border-color:var(--err);color:var(--err);background:rgba(248,81,73,.08)}
+  .icon-btn:disabled{opacity:.35;cursor:not-allowed}
+
+  .switch{position:relative;display:inline-block;width:40px;height:23px;flex:none}
+  .switch input{opacity:0;width:0;height:0;position:absolute}
+  .slider{position:absolute;inset:0;background:var(--line);border-radius:999px;transition:.2s;cursor:pointer}
+  .slider::before{content:'';position:absolute;width:17px;height:17px;left:3px;top:3px;background:#94a3b8;border-radius:50%;transition:.2s}
+  .switch input:checked + .slider{background:rgba(240,136,62,.4)}
+  .switch input:checked + .slider::before{transform:translateX(17px);background:var(--accent)}
+  .switch input:disabled + .slider{opacity:.4;cursor:not-allowed}
+
+  .actionbar{
+    position:fixed;left:0;right:0;bottom:0;z-index:20;
+    background:rgba(11,15,22,.94);-webkit-backdrop-filter:blur(13px);backdrop-filter:blur(13px);
+    border-top:1px solid var(--line);padding:13px 22px;
+  }
+  .actionbar-inner{max-width:800px;margin:0 auto;display:flex;gap:11px;align-items:center;flex-wrap:wrap}
+  .spacer{flex:1}
+  .unsaved{
+    display:none;align-items:center;gap:6px;font-size:12px;color:var(--warn);
+    border:1px solid rgba(210,153,34,.35);background:rgba(210,153,34,.09);
+    padding:4px 10px;border-radius:999px;
+  }
+  .unsaved.on{display:inline-flex;animation:fadeUp .3s ease both}
+  .unsaved i{width:6px;height:6px;border-radius:50%;background:var(--warn);animation:pulse2 1.6s infinite}
+  @keyframes pulse2{0%,100%{opacity:1}50%{opacity:.3}}
+
+  .warn-box{
+    background:rgba(210,153,34,.07);border:1px solid rgba(210,153,34,.28);
+    border-radius:var(--r-sm);padding:13px 15px;font-size:12.5px;
+    color:#e3b341;line-height:1.8;margin-bottom:18px;
+  }
+  .warn-box b{color:#f0c674}
+  .warn-box code{background:rgba(0,0,0,.32);padding:1.5px 6px;border-radius:4px;font-family:var(--mono);font-size:12px;color:var(--txt)}
+
+  .opt{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:11px 0;border-bottom:1px solid rgba(36,45,59,.5)}
+  .opt:last-child{border-bottom:none;padding-bottom:0}
+  .opt:first-child{padding-top:0}
+  .opt-text{font-size:13.5px}
+  .opt-desc{font-size:12px;color:var(--dim2);margin-top:3px}
+
+  @media(max-width:640px){
+    .rem-actions{margin-left:0;width:100%;justify-content:flex-end}
+    .rem-idx{margin-top:0}
+  }
+</style>
+</head>
+<body class="has-actionbar">
+<div class="wrap narrow">
+
+  <nav class="nav">
+    <a class="brand" href="index.html">
+      <img src="assets/icons/avatar-128.png" alt="鱼丸">
+      <span class="brand-txt">
+        <b>打卡提醒</b>
+        <span>tonia-checkin-reminder</span>
+      </span>
+    </a>
+    <div class="nav-links">
+      <a href="index.html">看板</a>
+      <a href="settings.html" class="active">设置</a>
+      <a href="changelog.html">更新日志</a>
+    </div>
+  </nav>
+
+  <div class="page-head fx-in">
+    <div>
+      <h1>提醒设置</h1>
+      <p class="sub">每条提醒可单独设定时间、通道和文案 · 保存后提交到 GitHub，下一轮轮询即生效</p>
+    </div>
+    <span class="badge" id="conn-badge"><span class="dot"></span><span id="conn-badge-text">未连接</span></span>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="warn-box fx-in">
+    <b>关于访问令牌</b><br>
+    保存配置需要向 GitHub 写入文件，必须使用你自己的 Personal Access Token。令牌<b>只保存在本浏览器本地</b>，不上传任何第三方。<br>
+    建议去 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" style="color:#e3b341">GitHub → Fine-grained tokens</a> 新建，只授予<b>本仓库</b>的 <code>Contents: Read and write</code> 与 <code>Actions: Read and write</code>，并设置较短有效期。
+  </div>
+
+  <div class="card glow fx-in">
+    <div class="card-head">
+      <div class="card-title"><span class="ct-ico">🔌</span>仓库连接</div>
+      <button class="btn sm" id="btn-connect">连接并加载</button>
+    </div>
+    <div class="row">
+      <div><label class="lbl">GitHub 用户名</label><input type="text" id="conn-owner" placeholder="ToniaXuu" autocomplete="off"></div>
+      <div><label class="lbl">仓库名</label><input type="text" id="conn-repo" placeholder="tonia-checkin-reminder" autocomplete="off"></div>
+    </div>
+    <div class="row" style="margin-top:13px">
+      <div><label class="lbl">分支</label><input type="text" id="conn-branch" value="main" autocomplete="off"></div>
+      <div><label class="lbl">访问令牌（PAT）</label><input type="password" id="conn-token" placeholder="github_pat_..." autocomplete="off"></div>
+    </div>
+    <div class="hint" style="margin-top:11px">只填一次，浏览器会记住。换设备或清缓存后需重填。</div>
+  </div>
+
+  <div class="card-head fx-in" style="margin:26px 0 13px">
+    <div class="card-title"><span class="ct-ico">⏰</span>提醒列表 <span class="hint" id="rem-count"></span></div>
+  </div>
+
+  <div id="reminder-list"><div class="empty">未连接，暂无数据</div></div>
+
+  <button class="btn block fx-in" id="btn-add" disabled>＋ 添加提醒</button>
+
+  <div class="card glow fx-in" style="margin-top:20px">
+    <div class="card-head"><div class="card-title"><span class="ct-ico">📍</span>位置与天气</div></div>
+    <div class="row">
+      <div><label class="lbl">城市</label><select id="city-select" disabled></select></div>
+      <div>
+        <label class="lbl">经纬度（自定义时手填）</label>
+        <div class="row" style="gap:8px">
+          <input type="text" id="city-lat" placeholder="纬度" disabled>
+          <input type="text" id="city-lon" placeholder="经度" disabled>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card glow fx-in">
+    <div class="card-head"><div class="card-title"><span class="ct-ico">⚙️</span>全局规则</div></div>
+    <div class="opt">
+      <div>
+        <div class="opt-text">自动跳过周末与法定节假日</div>
+        <div class="opt-desc">含调休补班识别，节假日当天静默不打扰</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="opt-holidays" disabled><span class="slider"></span></label>
+    </div>
+    <div class="opt">
+      <div>
+        <div class="opt-text">消息附带天气</div>
+        <div class="opt-desc">来自 open-meteo，免费无需密钥</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="opt-weather" disabled><span class="slider"></span></label>
+    </div>
+    <div class="opt">
+      <div>
+        <div class="opt-text">消息附带本月工作日进度</div>
+        <div class="opt-desc">如「本月工作日进度 17/22 天」</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="opt-month" disabled><span class="slider"></span></label>
+    </div>
+    <div class="opt">
+      <div>
+        <div class="opt-text">文案留空时用随机句子填充</div>
+        <div class="opt-desc">关闭后，未填文案的提醒只显示标题和时间</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="opt-quote" disabled><span class="slider"></span></label>
+    </div>
+    <div class="opt">
+      <div>
+        <div class="opt-text">时间容差</div>
+        <div class="opt-desc">轮询间隔内允许多少分钟延迟仍算命中（默认 10）</div>
+      </div>
+      <input type="number" id="opt-tolerance" min="1" max="60" value="10" style="width:80px;text-align:center" disabled>
+    </div>
+  </div>
+
+</div>
+
+<div class="actionbar">
+  <div class="actionbar-inner">
+    <button class="btn primary" id="btn-save" disabled>保存到 GitHub</button>
+    <span class="unsaved" id="unsaved"><i></i>有未保存的改动</span>
+    <span class="spacer"></span>
+    <span class="hint" id="saved-hint"></span>
+  </div>
+</div>
+
+<!-- 自定义时间选择器（挂到 body，避免被卡片 overflow 裁掉） -->
+<div class="tp-mask" id="tp-mask"></div>
+<div class="tp-pop" id="tp-pop" role="dialog" aria-label="选择提醒时间">
+  <div class="tp-head">
+    <div class="tp-big" id="tp-big">17:00</div>
+    <div class="tp-snap" id="tp-snap"></div>
+  </div>
+  <div class="tp-lbls"><span>小时</span><span>分钟</span></div>
+  <div class="tp-cols">
+    <div class="tp-col" id="tp-hours"></div>
+    <div class="tp-col" id="tp-mins"></div>
+  </div>
+  <div class="tp-quick" id="tp-quick"></div>
+  <div class="tp-foot">
+    <div class="tp-steps">
+      <button type="button" data-step="-5" title="减 5 分钟">−5</button>
+      <button type="button" data-step="-1" title="减 1 分钟">−1</button>
+      <button type="button" data-step="1" title="加 1 分钟">+1</button>
+      <button type="button" data-step="5" title="加 5 分钟">+5</button>
+    </div>
+    <button type="button" class="btn sm primary" data-act="tp-close">完成</button>
+  </div>
+</div>
+
+<script>
+const CITY_PRESETS = [
+  ["济南", 36.6512, 117.1201], ["北京", 39.9042, 116.4074], ["上海", 31.2304, 121.4737],
+  ["深圳", 22.5431, 114.0579], ["广州", 23.1291, 113.2644], ["杭州", 30.2741, 120.1551],
+  ["南京", 32.0603, 118.7969], ["苏州", 31.2989, 120.5853], ["青岛", 36.0671, 120.3826],
+  ["烟台", 37.4638, 121.4479], ["天津", 39.3434, 117.3616], ["郑州", 34.7466, 113.6254],
+  ["武汉", 30.5928, 114.3055], ["长沙", 28.2282, 112.9388], ["西安", 34.3416, 108.9398],
+  ["成都", 30.5728, 104.0668], ["重庆", 29.5630, 106.5516], ["沈阳", 41.8057, 123.4315]
+];
+
+const STORE_KEY = "tonia-checkin-conn";
+const API = "https://api.github.com";
+const CH_LABEL = {dingtalk: "钉钉", feishu: "飞书"};
+const TP_PRESETS = ["08:45", "09:00", "12:00", "17:00", "17:30", "18:00"];
+
+let remoteSha = null;
+let remoteRaw = null;
+let model = [];
+let connected = false;
+
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2, "0");
+const esc = s => String(s == null ? "" : s)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+const GLOBAL_FIELDS = ["city-select","city-lat","city-lon","opt-holidays","opt-weather","opt-month","opt-quote","opt-tolerance"];
+
+/* 轮询粒度 5 分钟 —— 提示用户这个时间点实际会在什么时候发出 */
+function snapInfo(t){
+  const m = parseInt(String(t || "").split(":")[1], 10);
+  if(isNaN(m)) return null;
+  const r = m % 5;
+  if(r === 0) return {kind: "ok",    text: "对准轮询点 · 误差约 +15 秒"};
+  if(r === 1) return {kind: "early", text: "会提前到前一个轮询点发出（早约 45 秒）"};
+  return {kind: "late", text: "会延迟到下一个轮询点发出（晚约 " + (5 - r) + " 分钟）"};
+}
+
+/* ══════════ 自定义时间选择器 ══════════ */
+
+const TP = { el: null, h: 17, m: 0, nudge: 0 };
+const pop  = $("tp-pop");
+const mask = $("tp-mask");
+
+function buildPicker(){
+  let h = "", m = "";
+  for(let i = 0; i < 24; i++){
+    h += `<button type="button" class="tp-item" data-col="h" data-v="${i}">${pad(i)}</button>`;
+  }
+  for(let i = 0; i < 60; i++){
+    const tick = (i % 5 === 0) ? " tick" : "";
+    m += `<button type="button" class="tp-item${tick}" data-col="m" data-v="${i}">${pad(i)}</button>`;
+  }
+  $("tp-hours").innerHTML = h;
+  $("tp-mins").innerHTML  = m;
+
+  const smart = '<button type="button" class="tp-q smart" data-quick="snap">对齐最近 5 分</button>';
+  $("tp-quick").innerHTML = TP_PRESETS
+    .map(t => `<button type="button" class="tp-q" data-quick="${t}">${t}</button>`).join("") + smart;
+}
+
+function colScroll(col, val){
+  const items = col.children;
+  for(let i = 0; i < items.length; i++){
+    if(+items[i].dataset.v === val){
+      col.scrollTop = items[i].offsetTop - col.clientHeight / 2 + items[i].offsetHeight / 2;
+      return;
+    }
+  }
+}
+
+function placePop(){
+  if(!TP.el) return;
+  if(window.innerWidth <= 560){
+    pop.style.left = ""; pop.style.top = ""; pop.style.bottom = "";
+    return;
+  }
+  const r  = TP.el.getBoundingClientRect();
+  const pw = 274;
+  const ph = pop.offsetHeight || 440;
+  let left = r.left + r.width / 2 - pw / 2;
+  left = Math.max(12, Math.min(left, window.innerWidth - pw - 12));
+  let top = r.bottom + 9;
+  if(top + ph > window.innerHeight - 12){
+    const up = r.top - ph - 9;
+    top = up >= 12 ? up : Math.max(12, window.innerHeight - ph - 12);
+  }
+  pop.style.left = left + "px";
+  pop.style.top  = top + "px";
+  pop.style.bottom = "auto";
+}
+
+function syncPicker(){
+  const val = pad(TP.h) + ":" + pad(TP.m);
+  $("tp-big").innerHTML = pad(TP.h) + "<i>:</i>" + pad(TP.m);
+
+  const s = snapInfo(val), sn = $("tp-snap");
+  sn.textContent = s ? s.text : "";
+  sn.className = "tp-snap " + (s ? s.kind : "");
+
+  Array.prototype.forEach.call($("tp-hours").children, b => b.classList.toggle("on", +b.dataset.v === TP.h));
+  Array.prototype.forEach.call($("tp-mins").children,  b => b.classList.toggle("on", +b.dataset.v === TP.m));
+
+  if(TP.el){
+    const before = TP.el.dataset.time;
+    TP.el.dataset.time = val;
+    const tv = TP.el.querySelector(".tp-val");
+    if(tv) tv.textContent = val;
+    const card = TP.el.closest(".rem");
+    if(card){
+      const i = +card.dataset.idx;
+      if(model[i]) model[i].time = val;
+      refreshSnap(card);
+    }
+    if(before !== val) markDirty();
+  }
+}
+
+function openPicker(tpEl){
+  if(TP.el && TP.el !== tpEl) TP.el.classList.remove("open");
+  TP.el = tpEl;
+  const t = String(tpEl.dataset.time || "17:00").split(":");
+  TP.h = Math.min(23, Math.max(0, parseInt(t[0], 10) || 0));
+  TP.m = Math.min(59, Math.max(0, parseInt(t[1], 10) || 0));
+
+  tpEl.classList.add("open");
+  syncPicker();
+  if(window.innerWidth <= 560) mask.classList.add("on");
+  pop.classList.add("on");
+  placePop();
+
+  const mid = $("tp-hours").clientHeight / 2 + 1;
+  pop.style.setProperty("--tp-mid", mid + "px");
+  // scrollTop 需要在弹层可见后设置才可靠
+  requestAnimationFrame(() => {
+    colScroll($("tp-hours"), TP.h);
+    colScroll($("tp-mins"), TP.m);
+  });
+}
+
+function closePicker(){
+  if(TP.el) TP.el.classList.remove("open");
+  TP.el = null;
+  pop.classList.remove("on");
+  mask.classList.remove("on");
+}
+
+function nudge(delta){
+  const total = (TP.h * 60 + TP.m + delta + 1440) % 1440;
+  TP.h = Math.floor(total / 60);
+  TP.m = total % 60;
+  syncPicker();
+  colScroll($("tp-hours"), TP.h);
+  colScroll($("tp-mins"), TP.m);
+}
+
+buildPicker();
+
+pop.addEventListener("click", e => {
+  const it = e.target.closest(".tp-item");
+  if(it){
+    if(it.dataset.col === "h") TP.h = +it.dataset.v; else TP.m = +it.dataset.v;
+    syncPicker();
+    return;
+  }
+  const q = e.target.closest(".tp-q");
+  if(q){
+    if(q.dataset.quick === "snap"){
+      TP.m = (Math.round(TP.m / 5) * 5) % 60;
+      if(TP.m === 0 && Math.round(TP.m / 5) * 5 === 60) TP.h = (TP.h + 1) % 24;
+    }else{
+      const p = String(q.dataset.quick).split(":");
+      TP.h = +p[0]; TP.m = +p[1];
+    }
+    syncPicker();
+    colScroll($("tp-hours"), TP.h);
+    colScroll($("tp-mins"), TP.m);
+    return;
+  }
+  const st = e.target.closest("[data-step]");
+  if(st){ nudge(parseInt(st.dataset.step, 10)); return; }
+  if(e.target.closest('[data-act="tp-close"]')) closePicker();
+});
+
+/* 点空白处关闭；点触发器则切换 */
+mask.addEventListener("click", closePicker);
+document.addEventListener("click", e => {
+  const open = e.target.closest('[data-act="tp-open"]');
+  if(open){
+    const tpEl = open.closest(".tp");
+    if(TP.el === tpEl) closePicker(); else openPicker(tpEl);
+    return;
+  }
+  if(e.target.closest("#tp-pop")) return;
+  if(!e.target.closest(".tp")) closePicker();
+});
+
+document.addEventListener("keydown", e => {
+  if(!TP.el) return;
+  if(e.key === "Escape") closePicker();
+  if(e.key === "ArrowUp"){ e.preventDefault(); nudge(e.shiftKey ? 30 : 5); }
+  if(e.key === "ArrowDown"){ e.preventDefault(); nudge(e.shiftKey ? -30 : -5); }
+});
+
+let rafPend = false;
+const onMove = () => {
+  if(!TP.el || rafPend) return;
+  rafPend = true;
+  requestAnimationFrame(() => { rafPend = false; placePop(); });
+};
+window.addEventListener("resize", onMove);
+window.addEventListener("scroll", onMove, { passive: true });
+
+/* ══════════ 状态与开关 ══════════ */
+
+function markDirty(){
+  if(!connected) return;
+  $("unsaved").classList.add("on");
+  $("saved-hint").textContent = "";
+}
+
+function clearDirty(){
+  $("unsaved").classList.remove("on");
+}
+
+function setEnabled(on){
+  connected = on;
+  GLOBAL_FIELDS.forEach(id => { $(id).disabled = !on; });
+  $("btn-save").disabled = !on;
+  $("btn-add").disabled = !on;
+  renderReminders();
+  $("conn-badge").className = "badge " + (on ? "live" : "");
+  $("conn-badge-text").textContent = on ? "已连接" : "未连接";
+}
+
+function status(msg, kind){
+  const el = $("status");
+  el.textContent = msg;
+  el.className = "status show" + (kind ? " " + kind : "");
+}
+
+function b64encode(str){
+  const bytes = new TextEncoder().encode(str);
+  let bin = "";
+  bytes.forEach(b => bin += String.fromCharCode(b));
+  return btoa(bin);
+}
+
+function b64decode(b64){
+  const bin = atob(b64.replace(/\s/g, ""));
+  return new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
+}
+
+function conn(){
+  return {
+    owner: $("conn-owner").value.trim(),
+    repo: $("conn-repo").value.trim(),
+    branch: $("conn-branch").value.trim() || "main",
+    token: $("conn-token").value.trim()
+  };
+}
+
+function headers(withAuth){
+  const h = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"};
+  const c = conn();
+  if(withAuth && c.token) h["Authorization"] = "Bearer " + c.token;
+  return h;
+}
+
+function initCities(){
+  const sel = $("city-select");
+  sel.innerHTML = CITY_PRESETS
+    .map(([n, la, lo]) => `<option value="${n}" data-lat="${la}" data-lon="${lo}">${n}</option>`)
+    .join("") + `<option value="__custom">自定义…</option>`;
+  sel.addEventListener("change", () => {
+    if(sel.value !== "__custom"){
+      $("city-lat").value = sel.selectedOptions[0].dataset.lat;
+      $("city-lon").value = sel.selectedOptions[0].dataset.lon;
+    }else{
+      $("city-lat").focus();
+    }
+    markDirty();
+  });
+}
+
+/* ══════════ 提醒卡片 ══════════ */
+
+const CLOCK_SVG = '<svg class="tp-ico" viewBox="0 0 16 16" fill="none" aria-hidden="true">'
+  + '<circle cx="8" cy="8" r="6.2" stroke="currentColor" stroke-width="1.5"/>'
+  + '<path d="M8 4.5V8l2.4 1.7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>';
+
+function remCard(r, i){
+  const chs = r.channels || ["dingtalk"];
+  const cls = chs.length > 1 ? "both" : (chs[0] === "feishu" ? "fs" : "dt");
+  const off = r.enabled === false ? " off" : "";
+  const dis = connected ? "" : "disabled";
+  const chip = k => `<button type="button" class="chip${chs.includes(k) ? " on" : ""}" data-ch="${k}" data-act="ch" ${dis}>${CH_LABEL[k]}</button>`;
+  const time = r.time || "17:00";
+  const s = snapInfo(time);
+
+  return `<div class="rem stripe fx-in ${cls}${off}" data-idx="${i}">
+    <div class="rem-top">
+      <span class="rem-idx">${i + 1}</span>
+      <div class="t-col">
+        <div class="tp" data-field="time" data-time="${esc(time)}">
+          <button type="button" class="tp-btn" data-act="tp-open" ${dis} aria-label="选择提醒时间">
+            <span class="tp-val">${esc(time)}</span>${CLOCK_SVG}
+          </button>
+        </div>
+        <span class="snap ${s ? s.kind : ""}" data-snap>${s ? s.text : ""}</span>
+      </div>
+      <div>
+        <label class="lbl" style="margin-bottom:0">推送通道</label>
+        <div class="chips">${chip("dingtalk")}${chip("feishu")}</div>
+      </div>
+      <div class="rem-actions">
+        <button type="button" class="btn sm" data-act="test" ${dis}>测试</button>
+        <label class="switch" title="启用 / 停用"><input type="checkbox" data-field="enabled" ${r.enabled === false ? "" : "checked"} ${dis}><span class="slider"></span></label>
+        <button type="button" class="icon-btn" data-act="del" title="删除" ${dis}>×</button>
+      </div>
+    </div>
+    <div class="row">
+      <div><label class="lbl">标题</label><input type="text" data-field="label" value="${esc(r.label || "打卡提醒")}" placeholder="下班打卡" ${dis}></div>
+      <div><label class="lbl">图标</label><input type="text" data-field="emoji" value="${esc(r.emoji || "🔔")}" placeholder="🔔" ${dis}></div>
+    </div>
+    <div style="margin-top:13px">
+      <label class="lbl">提示文案（留空则只用标题+时间）</label>
+      <textarea data-field="message" placeholder="该打卡了，别忘了。" ${dis}>${esc(r.message || "")}</textarea>
+    </div>
+  </div>`;
+}
+
+function renderSkeleton(n){
+  let s = "";
+  for(let i = 0; i < (n || 2); i++){
+    s += '<div class="sk-card"><div class="sk" style="width:34%;height:22px"></div>'
+       + '<div class="sk" style="width:100%;height:34px"></div>'
+       + '<div class="sk" style="width:72%;height:34px"></div></div>';
+  }
+  $("reminder-list").innerHTML = s;
+}
+
+function renderReminders(){
+  closePicker();
+  const box = $("reminder-list");
+  if(!connected){
+    box.innerHTML = '<div class="empty">未连接，暂无数据</div>';
+    $("rem-count").textContent = "";
+    return;
+  }
+  if(!model.length){
+    box.innerHTML = '<div class="empty">还没有提醒<br>点下面的「添加提醒」开始</div>';
+    $("rem-count").textContent = "";
+    return;
+  }
+  box.innerHTML = model.map(remCard).join("");
+  $("rem-count").textContent = `共 ${model.length} 条`;
+  if(window.PFX){ PFX.reveal(); PFX.stagger(); }
+}
+
+function refreshSnap(card){
+  const el = card.querySelector('[data-field="time"]');
+  const sEl = card.querySelector('[data-snap]');
+  if(!el || !sEl) return;
+  const s = snapInfo(el.dataset.time);
+  sEl.textContent = s ? s.text : "";
+  sEl.className = "snap " + (s ? s.kind : "");
+}
+
+function removeCard(i, card){
+  if(!confirm(`确定删除第 ${i + 1} 条提醒（${model[i].time || "未设时间"}）？`)) return;
+  card.classList.add("removed");
+  setTimeout(() => {
+    model.splice(i, 1);
+    renderReminders();
+    status("已从列表移除，记得点保存", "warn");
+    markDirty();
+  }, 260);
+}
+
+function bindList(){
+  const box = $("reminder-list");
+
+  box.addEventListener("input", e => {
+    const card = e.target.closest(".rem");
+    const f = e.target.dataset.field;
+    if(!card || !f) return;
+    const i = +card.dataset.idx;
+    if(!model[i]) return;
+    model[i][f] = e.target.type === "checkbox" ? e.target.checked : e.target.value;
+    if(f === "enabled") card.classList.toggle("off", !e.target.checked);
+    markDirty();
+  });
+
+  box.addEventListener("click", e => {
+    const card = e.target.closest(".rem");
+    if(!card) return;
+    const i = +card.dataset.idx;
+    const btn = e.target.closest("[data-act]");
+    if(!btn) return;
+    const act = btn.dataset.act;
+
+    if(act === "ch"){
+      const k = btn.dataset.ch;
+      const cur = model[i].channels || ["dingtalk"];
+      const next = cur.includes(k) ? cur.filter(x => x !== k) : cur.concat(k);
+      if(!next.length){ status("每条提醒至少要保留一个通道", "warn"); return; }
+      model[i].channels = next.sort();
+      renderReminders();
+      markDirty();
+    }
+
+    if(act === "del") removeCard(i, card);
+
+    if(act === "test"){
+      const r = model[i];
+      if(!r.id){ status("这条提醒还没有 ID，请先保存一次", "warn"); return; }
+      testRemind(r);
+    }
+  });
+}
+
+/* ══════════ 读取 / 保存 ══════════ */
+
+async function loadConfig(){
+  const c = conn();
+  if(!c.owner || !c.repo){ status("请先填写用户名和仓库名", "err"); return; }
+  if(!c.token){ status("请填写访问令牌", "err"); return; }
+
+  renderSkeleton(2);
+  status("正在验证令牌…", "loading");
+  try{
+    const u = await fetch(API + "/user", {headers: headers(true)});
+    if(!u.ok) throw new Error(u.status === 401 ? "令牌无效或已过期" : "验证失败 " + u.status);
+    const user = await u.json();
+    status("令牌有效（" + user.login + "），正在读取 config.json…", "loading");
+  }catch(e){
+    status("令牌验证失败：" + e.message, "err");
+    renderReminders();
+    return;
+  }
+
+  try{
+    const r = await fetch(`${API}/repos/${c.owner}/${c.repo}/contents/config.json?ref=${c.branch}`, {headers: headers(true)});
+    if(!r.ok) throw new Error(r.status === 404 ? "仓库或 config.json 不存在" : "读取失败 " + r.status);
+    const data = await r.json();
+    remoteSha = data.sha;
+    remoteRaw = JSON.parse(b64decode(data.content));
+  }catch(e){
+    status("读取配置失败：" + e.message, "err");
+    renderReminders();
+    return;
+  }
+
+  model = (remoteRaw.reminders || []).map(r => Object.assign({}, r));
+  fillGlobals(remoteRaw);
+  setEnabled(true);
+  clearDirty();
+  localStorage.setItem(STORE_KEY, JSON.stringify(conn()));
+  status(`已连接 · 读取到 ${model.length} 条提醒，可以编辑了`, "ok");
+}
+
+function fillGlobals(cfg){
+  const o = cfg.options || {}, city = cfg.city || {};
+  $("opt-holidays").checked = o.skip_holidays !== false;
+  $("opt-weather").checked  = o.include_weather === true;
+  $("opt-month").checked    = o.include_month_stats === true;
+  $("opt-quote").checked    = o.include_quote === true;
+  $("opt-tolerance").value  = o.tolerance_minutes || 10;
+
+  const sel = $("city-select");
+  if(CITY_PRESETS.some(([n]) => n === city.name)){
+    sel.value = city.name;
+    $("city-lat").value = city.lat;
+    $("city-lon").value = city.lon;
+  }else{
+    sel.value = "__custom";
+    $("city-lat").value = city.lat || "";
+    $("city-lon").value = city.lon || "";
+  }
+}
+
+function buildConfig(){
+  const base = remoteRaw ? JSON.parse(JSON.stringify(remoteRaw)) : {};
+  const sel = $("city-select");
+  const manual = sel.value === "__custom";
+  const prevName = (base.city && base.city.name) || "";
+
+  const lat = parseFloat($("city-lat").value), lon = parseFloat($("city-lon").value);
+  if(isNaN(lat) || isNaN(lon)) throw new Error("经纬度必须是数字");
+
+  base.city = { name: manual ? (prevName || "自定义") : sel.value, lat, lon, timezone: "Asia/Shanghai" };
+  if(manual){
+    const nm = prompt("给这个地点起个名字（会显示在提醒消息里）：", prevName === "自定义" ? "" : prevName);
+    if(nm && nm.trim()) base.city.name = nm.trim();
+  }
+
+  const clean = model.map(r => ({
+    id: r.id || ("rm-" + Math.random().toString(36).slice(2, 9)),
+    enabled: r.enabled !== false,
+    channels: (r.channels && r.channels.length) ? r.channels : ["dingtalk"],
+    time: r.time || "17:00",
+    label: (r.label || "打卡提醒").trim(),
+    emoji: (r.emoji || "🔔").trim(),
+    message: (r.message || "").trim()
+  }));
+  clean.sort((a, b) => a.time.localeCompare(b.time));
+  base.reminders = clean;
+
+  base.options = Object.assign({}, base.options, {
+    skip_holidays: $("opt-holidays").checked,
+    include_weather: $("opt-weather").checked,
+    include_month_stats: $("opt-month").checked,
+    include_quote: $("opt-quote").checked,
+    tolerance_minutes: parseInt($("opt-tolerance").value, 10) || 10
+  });
+
+  delete base.schedule;
+  delete base.options.max_late_minutes;
+  delete base.options.include_countdown;
+  delete base.options.checklist_in;
+  delete base.options.checklist_out;
+  return base;
+}
+
+async function save(){
+  if(TP.el) closePicker();
+  let cfg;
+  try{ cfg = buildConfig(); }
+  catch(e){ status(e.message, "err"); if(window.PFX) PFX.toast(e.message, "err"); return; }
+
+  const c = conn();
+  const btn = $("btn-save");
+  btn.disabled = true;
+  status("正在提交到 GitHub…", "loading");
+
+  try{
+    const r = await fetch(`${API}/repos/${c.owner}/${c.repo}/contents/config.json`, {
+      method: "PUT",
+      headers: Object.assign({"Content-Type": "application/json"}, headers(true)),
+      body: JSON.stringify({
+        message: "config: 更新打卡提醒设置（网页端）",
+        content: b64encode(JSON.stringify(cfg, null, 2) + "\n"),
+        sha: remoteSha,
+        branch: c.branch
+      })
+    });
+    if(!r.ok){
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.message || ("提交失败 " + r.status));
+    }
+    const res = await r.json();
+    remoteSha = res.content.sha;
+    remoteRaw = cfg;
+    model = cfg.reminders.map(x => Object.assign({}, x));
+    renderReminders();
+    clearDirty();
+    $("saved-hint").textContent = "已保存 " + new Date().toLocaleTimeString("zh-CN", {hour12: false});
+    status(`已提交到 GitHub（${cfg.reminders.length} 条提醒）。定时任务下一轮（≤5 分钟）就会用新配置。`, "ok");
+    if(window.PFX) PFX.toast(`已保存 ${cfg.reminders.length} 条提醒`, "ok");
+  }catch(e){
+    status("保存失败：" + e.message, "err");
+    if(window.PFX) PFX.toast("保存失败：" + e.message, "err", 4600);
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+async function testRemind(r){
+  const c = conn();
+  status(`正在触发测试：${r.label} ${r.time} …`, "loading");
+  try{
+    const url = `${API}/repos/${c.owner}/${c.repo}/actions/workflows/checkin-reminder.yml/dispatches`;
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: Object.assign({"Content-Type": "application/json"}, headers(true)),
+      body: JSON.stringify({ref: c.branch, inputs: {id: r.id, force: true}})
+    });
+    if(resp.status === 204){
+      status("已触发，约 20~60 秒后消息送达。测试会忽略去重与工作日判断，也不会写入去重日志。", "ok");
+      if(window.PFX) PFX.toast("测试已触发，稍后查收", "ok");
+    }else{
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.message || ("触发失败 " + resp.status));
+    }
+  }catch(e){
+    status("触发失败：" + e.message, "err");
+    if(window.PFX) PFX.toast("触发失败：" + e.message, "err", 4600);
+  }
+}
+
+/* ══════════ 启动 ══════════ */
+
+initCities();
+bindList();
+setEnabled(false);
+
+GLOBAL_FIELDS.forEach(id => {
+  $(id).addEventListener("change", () => { if(connected) markDirty(); });
+});
+
+$("btn-add").addEventListener("click", () => {
+  model.push({
+    id: "rm-" + Math.random().toString(36).slice(2, 9),
+    enabled: true,
+    channels: ["dingtalk"],
+    time: "17:00",
+    label: "打卡提醒",
+    emoji: "🔔",
+    message: ""
+  });
+  renderReminders();
+  status("已添加，改完记得点保存", "warn");
+  markDirty();
+});
+
+$("btn-connect").addEventListener("click", loadConfig);
+$("btn-save").addEventListener("click", save);
+
+const saved = localStorage.getItem(STORE_KEY);
+if(saved){
+  try{
+    const s = JSON.parse(saved);
+    $("conn-owner").value  = s.owner || "";
+    $("conn-repo").value   = s.repo || "tonia-checkin-reminder";
+    $("conn-branch").value = s.branch || "main";
+    $("conn-token").value  = s.token || "";
+    loadConfig();
+  }catch(e){}
+}else{
+  status("填写仓库信息后点「连接并加载」。", "warn");
+}
+</script>
+</body>
+</html>
