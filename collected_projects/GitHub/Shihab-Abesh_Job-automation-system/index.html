@@ -1,0 +1,1147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="CareerPilot BD - personal job search and ATS resume tailoring dashboard">
+<title>CareerPilot BD | Smart Career & ATS Job Engine</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+@media print{
+ body{background:#fff!important;color:#111!important}
+ .no-print{display:none!important}
+ .print-area{display:block!important}
+}
+@page{size:A4;margin:10mm}
+@media print{body{background:#fff!important}.no-print{display:none!important}.print-resume{position:absolute;left:0;top:0;width:100%;margin:0;box-shadow:none!important;border-radius:0!important}}
+</style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+<div id="root"></div>
+<script src="feed-sync.js"></script>
+<script src="scoring.js"></script>
+<script src="keywords.js"></script>
+<script src="applypack.js"></script>
+<script src="resumedoc.js"></script>
+<script src="resumefiles.js"></script>
+<script src="versions.js"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+<script type="text/babel">
+const {useState,useEffect,useMemo,useRef}=React;
+
+/*
+ CAREERPILOT BD - GitHub Pages Static Edition
+ IMPORTANT:
+ - Data stays in this browser using localStorage.
+ - GitHub Pages cannot securely store API keys or run server-side automation.
+ - Resume tailoring here is rule-based and truthful: it never invents skills.
+*/
+
+const STORAGE_KEY="careerpilot_bd_v2_profile";
+const VAULT_KEY="careerpilot_bd_v2_vault";
+const JOB_KEY="careerpilot_bd_v2_jobs";
+// Recorded resume versions hold your phone, email and the exact wording you sent, so unlike the job
+// list they are encrypted with the vault password, under their own key ({iv,data}).
+const VERSIONS_KEY="careerpilot_bd_v2_versions";
+
+/* Password-derived encryption for the profile only (name, contact links,
+   resume content). Job listings stay unencrypted so review.html keeps
+   working without a password prompt — they're public postings, not personal
+   data. There is no recovery: losing the password means the vault cannot be
+   decrypted by anyone, which is the point. */
+function bufToB64(buf){return btoa(String.fromCharCode(...new Uint8Array(buf)))}
+function b64ToBuf(b64){return Uint8Array.from(atob(b64),c=>c.charCodeAt(0))}
+async function deriveKey(password,saltB64){
+ const salt=saltB64?b64ToBuf(saltB64):crypto.getRandomValues(new Uint8Array(16));
+ const keyMaterial=await crypto.subtle.importKey("raw",new TextEncoder().encode(password),"PBKDF2",false,["deriveKey"]);
+ const key=await crypto.subtle.deriveKey({name:"PBKDF2",salt,iterations:200000,hash:"SHA-256"},keyMaterial,{name:"AES-GCM",length:256},false,["encrypt","decrypt"]);
+ return {key,saltB64:bufToB64(salt)};
+}
+async function encryptJSON(key,obj){
+ const iv=crypto.getRandomValues(new Uint8Array(12));
+ const data=await crypto.subtle.encrypt({name:"AES-GCM",iv},key,new TextEncoder().encode(JSON.stringify(obj)));
+ return {iv:bufToB64(iv),data:bufToB64(data)};
+}
+async function decryptJSON(key,ivB64,dataB64){
+ const plain=await crypto.subtle.decrypt({name:"AES-GCM",iv:b64ToBuf(ivB64)},key,b64ToBuf(dataB64));
+ return JSON.parse(new TextDecoder().decode(plain));
+}
+
+const DEFAULT_PROFILE={
+ personal:{fullName:"",headline:"",location:"Dhaka, Bangladesh",phone:"",email:"",linkedin:"",github:"",portfolio:""},
+ education:[
+  {degree:"Bachelor of Science in Computer Science and Engineering",institution:"American International University-Bangladesh (AIUB), Dhaka",score:"CGPA 3.46 / 4.00",date:"Expected October 2026"}
+ ],
+ experience:[{
+   role:"Software Quality Assurance Intern",company:"Innolytic IT Ltd.",location:"Dhaka, Bangladesh",duration:"June 2026 – September 2026",
+   bullets:[
+    "Surfaced dozens of defects on a live university website rebuild by designing and executing functional test cases covering UI verification, form validation, responsive layouts and cross-browser behaviour, all reported before client delivery.",
+    "Prevented incorrect content reaching the client launch by verifying backend behaviour through frontend actions and escalating critical content-display defects to the development team.",
+    "Cut back-and-forth on fixes by documenting every defect with reproduction steps and screen recordings, then retesting and closing each fix after the developer round.",
+    "Protected released features from breakage by running regression testing on core pages and forms after each fix cycle.",
+    "Turned client needs into testable checks by taking part in requirement meetings, Scrum meetings and project meetings with developers, designers and the project manager."
+   ],
+   tags:["Software Quality Assurance","Information Technology","Information Systems","Application Support"]
+ }],
+ projects:[
+  {name:"Shipping Port Management System",subtitle:"Web Application (HTML, CSS, PHP, JavaScript, MySQL)",bullets:["Delivered a dynamic web application with full create, read, update and delete functionality for ship, terminal and shipment records.","Integrated a MySQL database through phpMyAdmin and implemented form validation and database connectivity in PHP."],skills:["HTML","CSS","PHP","JavaScript","MySQL","phpMyAdmin","Form Validation"],categories:["Information Technology","Software Development","Information Systems","Application Support"]},
+  {name:"Shipping Port Management System",subtitle:"Software Engineering Project",bullets:["Specified a port management system covering ship registration, terminal operations and shipment tracking, producing system requirements, UML diagrams, work breakdown structure, COCOMO cost estimation and risk analysis.","Validated the build against requirements by designing and running functional test cases at system level."],skills:["System Analysis","Requirements Analysis","UML","WBS","Risk Analysis","Functional Testing"],categories:["Information Systems","MIS","Business Analysis","Management & Business","Software Quality Assurance"]},
+  {name:"University Payroll Management System",subtitle:"Oracle Database Project",bullets:["Built a normalized relational database in Oracle from an ER diagram, enforcing data integrity through constraints and triggers.","Improved query performance by writing and tuning complex SQL with joins, subqueries, stored procedures and PL/SQL blocks."],skills:["Oracle","SQL","PL/SQL","Database Design","ER Diagram","Normalization"],categories:["Information Systems","MIS","Data & Reporting","Information Technology"]}
+ ],
+ skills:[
+  {category:"Software Testing",items:["Manual Testing","Test Case Design","Test Execution","Functional Testing","UI and Design Verification","Form Validation","Responsive Testing","Cross-Browser Testing","Regression Testing","Smoke Testing","Defect Reporting","Bug Life Cycle","SDLC","STLC","Agile","Scrum"]},
+  {category:"Programming and Web",items:["PHP","JavaScript","C++","HTML","CSS"]},
+  {category:"Databases",items:["Oracle SQL","PL/SQL","MySQL","phpMyAdmin","ER Modelling","Normalization","Joins","Subqueries","Triggers","Stored Procedures","Constraints","Query Optimization"]},
+  {category:"Web and Hosting",items:["E-Commerce Website Setup","Domain Purchase and Registration","DNS Configuration","Hosting Panel Management","SSL Installation","Server Migration Verification"]},
+  {category:"Tools",items:["Visual Studio Code","Microsoft Office (Excel, Word)","Cisco Packet Tracer","Dia Diagram Editor","Git and GitHub"]},
+  {category:"Documentation",items:["Test Cases","Defect Reports","Requirement Documents","UML Diagrams","Work Breakdown Structure","COCOMO Cost Estimation","Risk Analysis"]}
+ ],
+ references:[],
+ preferences:{
+  categories:["Software Development","Information Technology","Information Systems","MIS","Management & Business","Business Analysis","Data & Reporting","Application Support","Software Quality Assurance"],
+  titles:["Software Engineer","Junior Software Engineer","Web Developer","PHP Developer","System Analyst","Systems Analyst","IT Executive","IT Officer","MIS Executive","MIS Officer","MIS Analyst","Information Systems Executive","Management Trainee Officer","Management Trainee","Trainee Officer","Graduate Trainee","Business Analyst","Business Systems Analyst","Business Development Executive","Marketing Executive","Operations Executive","Project Coordinator","Data Analyst","Reporting Analyst","Application Support Engineer","QA Engineer","Software Tester"],
+  locations:["Dhaka, Bangladesh","Hybrid - Dhaka","Remote"],
+  excluded:["Senior","Sr","Staff","Lead","Head of","Principal","Director","Manager","Architect"],
+  minimumMatch:60,
+  strongMatch:75,
+  experienceYears:0,
+  expectedSalaryMin:null,
+  version:2
+ }
+};
+
+function migrateProfile(raw){
+ if(!raw||typeof raw!=="object")return null;
+ const p={...raw};
+ p.personal={...DEFAULT_PROFILE.personal,...(raw.personal||{})};
+ p.education=(raw.education||[]).map(e=>({
+  degree:e.degree||"",
+  institution:e.institution||"",
+  score:e.score||e.cgpa||"",
+  date:e.date||e.graduation||""
+ }));
+ p.experience=(raw.experience||[]).map(e=>({role:e.role||"",company:e.company||"",location:e.location||"",duration:e.duration||"",bullets:e.bullets||[],tags:e.tags||[]}));
+ p.projects=(raw.projects||[]).map(x=>({
+  name:x.name||"",
+  subtitle:x.subtitle||"",
+  bullets:x.subtitle!==undefined&&x.subtitle!==""?(x.bullets||[]):[x.description,...(x.bullets||[])].filter(Boolean),
+  skills:x.skills||[],
+  categories:x.categories||[]
+ }));
+ if(Array.isArray(raw.skills)){
+  p.skills=raw.skills.map(g=>({category:g.category||"",items:g.items||[]}));
+ }else if(raw.skills&&typeof raw.skills==="object"){
+  const labels={technical:"Technical",testing:"Software Testing",tools:"Tools",systems:"Systems",soft:"Soft Skills"};
+  p.skills=Object.entries(raw.skills).map(([k,v])=>({category:labels[k]||k,items:v||[]}));
+ }else{
+  p.skills=[];
+ }
+ p.references=raw.references||[];
+ const saved=raw.preferences||{};
+ p.preferences={...DEFAULT_PROFILE.preferences,...saved};
+ if((saved.version||1)<2){
+  // Version 1 only targeted QA/MIS roles. Widen it once to CSE, management-trainee and business
+  // roles, keeping everything the user already chose.
+  const union=(a,b)=>[...a,...b.filter(x=>!a.some(y=>String(y).toLowerCase()===x.toLowerCase()))];
+  const oldDefaultExcluded=["Senior Software Developer","Backend Developer","Full Stack Developer"];
+  const excludedUntouched=Array.isArray(saved.excluded)&&saved.excluded.length===oldDefaultExcluded.length&&oldDefaultExcluded.every(x=>saved.excluded.includes(x));
+  p.preferences={
+   ...p.preferences,
+   categories:union(p.preferences.categories,DEFAULT_PROFILE.preferences.categories),
+   titles:union(p.preferences.titles,DEFAULT_PROFILE.preferences.titles),
+   excluded:excludedUntouched||!saved.excluded?DEFAULT_PROFILE.preferences.excluded:p.preferences.excluded,
+   version:2
+  };
+ }
+ return p;
+}
+
+/* Scoring (normalize, terms, analyzeJob) lives in scoring.js so the pipeline and this page share one formula. */
+const ROLE_STRATEGIES={
+"Software Development":{label:"Software Development Resume",headline:"Software Development | PHP | JavaScript | MySQL",keywords:["software engineer","software developer","software development","web developer","php developer","php","laravel","full stack","frontend","front end","backend","back end","programmer","application developer","java developer","python developer","node.js","react developer","android developer","flutter","asp.net"]},
+"Information Technology":{label:"IT Resume",headline:"Information Technology | Application Support | Web & Database",keywords:["it support","help desk","helpdesk","hosting","dns","ssl","network","hardware","troubleshoot","technical support","it officer","system admin","desktop support","it executive"]},
+"Information Systems":{label:"Information Systems Resume",headline:"Information Systems | Systems Analysis | Database Management",keywords:["information systems","systems analysis","system analyst","systems analyst","database design","requirements analysis","uml","er diagram","normalization"]},
+"MIS":{label:"MIS Resume",headline:"Management Information Systems | SQL | Reporting | Data",keywords:["mis","management information system","mis executive","mis officer","daily report","monthly report","data entry","excel report"]},
+"Management & Business":{label:"Management Trainee / Business Resume",headline:"Management Trainee | Business & Operations | Analytical Problem Solving",keywords:["management trainee","trainee officer","mto","mba","business development","marketing executive","operations executive","project coordinator","sales executive","relationship officer","supply chain","human resource","graduate trainee"]},
+"Business Analysis":{label:"Business Analyst Resume",headline:"Business Analysis | Requirements | System Analysis | SQL",keywords:["business analyst","business analysis","requirements gathering","stakeholder","process improvement","bpmn","work breakdown","wbs"]},
+"Data & Reporting":{label:"Data / Reporting Resume",headline:"Data & Reporting | SQL | Oracle | Database | Analytics",keywords:["data analyst","data analytics","reporting analyst","dashboard","business intelligence","data management","analytics"]},
+"Application Support":{label:"Application Support Resume",headline:"Application Support | Web Applications | Database | Validation",keywords:["application support","production support","incident","ticket","l1 support","l2 support","support engineer"]},
+"Software Quality Assurance":{label:"SQA / QA Resume",headline:"Software Quality Assurance | Manual Testing | Web Validation",keywords:["manual testing","test case","test execution","regression","functional testing","defect","quality assurance","bug","test plan","uat","sqa","tester","qa engineer","smoke testing","cross-browser","cross browser"]},
+"General":{label:"General Resume (any field)",headline:"",keywords:[]}
+};
+// For a job that fits none of the fixed strategies, in any field: a summary made only from your profile,
+// the job title, and the keywords you pressed Add for. It states nothing you have not already written.
+function generalSummary(p,job,skills){
+ const edu=(p.education||[])[0]||{},exp=(p.experience||[])[0]||{};
+ const field=(edu.degree||"").replace(/^.*?\bin\s+/i,"").trim();
+ const who=field?`${field} graduate`:"Graduate";
+ const where=exp.role&&exp.company?` with ${exp.role} experience at ${exp.company}`:exp.role?` with ${exp.role} experience`:"";
+ const strengths=skills.length?` Strengths include ${skills.slice(0,6).join(", ")}.`:"";
+ const goal=job.title?` Seeking the ${job.title} position${job.company?` at ${job.company}`:""}.`:"";
+ return `${who}${where}.${strengths}${goal}`;
+}
+function summaryFor(strategy){const m={
+"Software Quality Assurance":"Computer Science and Engineering graduate with hands-on Software Quality Assurance internship experience in manual, functional and regression testing of web applications. Experienced in UI verification, form validation, responsive and cross-browser testing, defect documentation, fix verification, and collaboration with development and project teams.",
+"Information Technology":"Computer Science and Engineering graduate with practical exposure to web applications, databases, software quality validation, website infrastructure, hosting, DNS configuration, SSL setup, and technical problem solving through internship and academic projects.",
+"Information Systems":"Computer Science and Engineering graduate with experience in information systems, relational databases, SQL, system analysis, requirements documentation, UML, risk analysis, and software validation through academic projects and practical QA experience.",
+"MIS":"Computer Science and Engineering graduate with a foundation in management information systems, SQL, relational databases, data management, system analysis, and analytical problem solving.",
+"Business Analysis":"Computer Science and Engineering graduate with academic experience in requirements analysis, UML, work breakdown structures, risk analysis, system validation, and database-backed application projects.",
+"Application Support":"Computer Science and Engineering graduate with practical experience validating web applications, documenting defects, verifying fixes, working with databases, and exposure to hosting, DNS, SSL, and website migration.",
+"Software Development":"Computer Science and Engineering graduate with hands-on web development experience in PHP, JavaScript, HTML, CSS and MySQL, including a database-backed CRUD application, plus relational database design in Oracle SQL and PL/SQL. Brings practical exposure to the software delivery cycle from an internship on a live website rebuild, working in Agile and Scrum teams alongside developers, designers and project managers.",
+"Management & Business":"Computer Science and Engineering graduate whose software-company internship included client requirement meetings, Scrum and project meetings with developers, designers and project managers, and structured defect and requirement documentation. Academic projects covered work breakdown structures, COCOMO cost estimation and risk analysis. Combines analytical and technical skills with clear written communication, and is seeking a management trainee or business role.",
+"Data & Reporting":"Computer Science and Engineering graduate with practical database experience in Oracle and MySQL, SQL queries, database design, data integrity, data management, and analytical problem solving."};return m[strategy]||m["Information Systems"]}
+// kws are the job's recruiter keywords (keywords.js): a bullet or project that uses them moves up.
+function scoreBullet(b,job,kws){return terms([job.title,job.description].join(" ")).filter(t=>normalize(b).includes(t)).length+3*keywordHits(b,kws||[])}
+function projectScore(x,strategy,job,kws){const text=[x.name,x.subtitle||"",...(x.skills||[]),...x.bullets].join(" ");return (x.categories.includes(strategy)?20:0)+terms([job.title,job.description].join(" ")).filter(t=>normalize(text).includes(t)).length+3*keywordHits(text,kws||[])}
+function hasPhrase(text,phrase){
+ const p=normalize(phrase).trim();
+ if(!p)return false;
+ const esc=p.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+ // Short keys ("mis", "mba") must be whole words; longer ones only need to start a word so plurals match.
+ return new RegExp("(^|[^a-z0-9])"+esc+(p.length<=4?"($|[^a-z0-9])":"")).test(text);
+}
+function bestFitStrategy(job){
+ const text=normalize([job.title,job.description].join(" "));
+ // A job outside every fixed field gets the General resume, not a guess at some other field's.
+ const fallback=job.category&&ROLE_STRATEGIES[job.category]?job.category:"General";
+ let best=fallback,bestScore=0;
+ for(const [key,cfg] of Object.entries(ROLE_STRATEGIES)){
+  const s=(cfg.keywords||[]).filter(k=>hasPhrase(text,k)).length;
+  if(s>bestScore){bestScore=s;best=key;}
+ }
+ return best;
+}
+
+function download(filename,content,type="text/plain"){
+ const blob=new Blob([content],{type}); downloadBlob(filename,blob);
+}
+function downloadBlob(filename,blob){
+ const u=URL.createObjectURL(blob); const a=document.createElement("a");a.href=u;a.download=filename;a.click();URL.revokeObjectURL(u);
+}
+function csvEscape(v){return `"${String(v??"").replaceAll('"','""')}"`}
+
+function App(){
+ const [vaultStatus,setVaultStatus]=useState(()=>localStorage.getItem(VAULT_KEY)?"locked":"setup");
+ const [cryptoKey,setCryptoKey]=useState(null);
+ const [lockError,setLockError]=useState("");
+ const [profile,setProfile]=useState(null);
+ const [jobs,setJobs]=useState(()=>JSON.parse(localStorage.getItem(JOB_KEY)||"[]"));
+ const [tab,setTab]=useState("dashboard");
+ const [selected,setSelected]=useState(null);
+ const [editing,setEditing]=useState(false);
+ const [toast,setToast]=useState("");
+ const [jobForm,setJobForm]=useState({title:"",company:"",category:"Information Technology",location:"Dhaka, Bangladesh",source:"",url:"",description:""});
+ const [search,setSearch]=useState("");
+ const [profileText,setProfileText]=useState("");
+ const [fCat,setFCat]=useState("all");
+ const [fSrc,setFSrc]=useState("all");
+ const [fPri,setFPri]=useState("all");
+ const [sortBy,setSortBy]=useState("best");
+ // Recorded resume versions (versions.js). They live only in memory while the vault is unlocked and are
+ // written back encrypted. versionsReady stays false if the stored copy could not be read, so a failed
+ // read can never be overwritten by an empty list.
+ const [versions,setVersions]=useState([]);
+ const [versionsReady,setVersionsReady]=useState(false);
+ const [versionsError,setVersionsError]=useState("");
+ const [openVersion,setOpenVersion]=useState(null);
+ const versionsSeq=useRef(0);
+
+ useEffect(()=>{
+  if(!cryptoKey||!profile)return;
+  (async()=>{
+   const enc=await encryptJSON(cryptoKey,profile);
+   const vault=JSON.parse(localStorage.getItem(VAULT_KEY)||"{}");
+   localStorage.setItem(VAULT_KEY,JSON.stringify({...vault,iv:enc.iv,data:enc.data}));
+  })();
+ },[profile,cryptoKey]);
+ useEffect(()=>{
+  if(!cryptoKey||!versionsReady)return;
+  const n=++versionsSeq.current;
+  (async()=>{
+   try{
+    const enc=await encryptJSON(cryptoKey,versions);
+    if(n!==versionsSeq.current)return;          // a newer save is already on its way
+    localStorage.setItem(VERSIONS_KEY,JSON.stringify(enc));
+    setVersionsError("");
+   }catch(e){
+    const m="Could not save your recorded versions ("+(e&&e.name==="QuotaExceededError"?"browser storage is full; export them and delete old ones":"storage error")+"). Export them now so nothing is lost.";
+    setVersionsError(m);notify(m);
+   }
+  })();
+ },[versions,cryptoKey,versionsReady]);
+ useEffect(()=>localStorage.setItem(JOB_KEY,JSON.stringify(jobs)),[jobs]);
+ const notify=m=>{setToast(m);setTimeout(()=>setToast(""),3500)};
+ const createVault=async password=>{
+  const {key,saltB64}=await deriveKey(password);
+  const existing=migrateProfile(JSON.parse(localStorage.getItem(STORAGE_KEY)||"null"));
+  const initial=existing||DEFAULT_PROFILE;
+  const enc=await encryptJSON(key,initial);
+  localStorage.setItem(VAULT_KEY,JSON.stringify({salt:saltB64,iv:enc.iv,data:enc.data}));
+  localStorage.removeItem(STORAGE_KEY);
+  setVersions([]);setVersionsError("");setVersionsReady(true);
+  setCryptoKey(key);setProfile(initial);setVaultStatus("unlocked");
+  if(existing)notify("Existing profile data in this browser was encrypted with your new password.");
+ };
+ const unlockVault=async password=>{
+  setLockError("");
+  try{
+   const vault=JSON.parse(localStorage.getItem(VAULT_KEY));
+   const {key}=await deriveKey(password,vault.salt);
+   const decrypted=await decryptJSON(key,vault.iv,vault.data);
+   // The password is right (the profile decrypted). Read the recorded versions with the same key.
+   let loaded=[],ready=true,vError="";
+   try{
+    const raw=localStorage.getItem(VERSIONS_KEY);
+    if(raw){const s=JSON.parse(raw);loaded=normalizeVersions(await decryptJSON(key,s.iv,s.data));}
+   }catch(e){ready=false;vError="Your recorded versions could not be read, so nothing is shown and nothing will be overwritten. They are still stored in this browser; restoring an export will bring them back.";}
+   setVersions(loaded);setVersionsReady(ready);setVersionsError(vError);
+   setCryptoKey(key);setProfile(migrateProfile(decrypted)||DEFAULT_PROFILE);setVaultStatus("unlocked");
+  }catch(e){setLockError("Incorrect password.");}
+ };
+ const lockVault=()=>{setCryptoKey(null);setProfile(null);setVersions([]);setVersionsReady(false);setVersionsError("");setOpenVersion(null);setVaultStatus("locked");setTab("dashboard");};
+ // Hooks must run unconditionally on every render, so this stays above the
+ // early return below (which only happens while locked/setting up) — moving
+ // it after that return caused React to see a different hook count between
+ // the locked and unlocked renders and silently fail to render anything.
+ const stats=useMemo(()=>{
+  if(!profile)return{total:0,strong:0,review:0,applied:0};
+  const scores=jobs.map(j=>analyzeJob(j,profile).score);
+  const bar=(profile.preferences&&profile.preferences.strongMatch)||75;
+  return{total:jobs.length,strong:scores.filter(x=>x>=bar).length,review:jobs.filter(j=>j.status==="Awaiting Review").length,applied:jobs.filter(j=>j.status==="Applied").length};
+ },[jobs,profile]);
+ if(vaultStatus!=="unlocked"){
+  return <LockScreen mode={vaultStatus} onCreate={createVault} onUnlock={unlockVault} error={lockError}/>;
+ }
+ const updateJob=(id,patch)=>{
+  setJobs(prev=>prev.map(x=>x.id===id?{...x,...patch}:x));
+  setSelected(prev=>prev&&prev.id===id?{...prev,...patch}:prev);
+ };
+ // Records what the resume and the Application Pack hold right now. The same content is never recorded
+ // twice in a row for one job; the caller shows the message either way.
+ const recordVersion=c=>{
+  if(!versionsReady)return {ok:false,message:"Your recorded versions could not be opened, so this one was not recorded. See the warning in the Applications tab."};
+  const v=makeVersion(c);
+  const r=addVersion(versions,v);
+  if(!r.added)return {ok:true,added:false,version:versions.find(x=>x.id===r.duplicateOf)};
+  setVersions(r.list);
+  return {ok:true,added:true,version:v};
+ };
+ const updateVersion=(id,patch)=>setVersions(prev=>prev.map(v=>v.id===id?{...v,...patch,updatedAt:new Date().toISOString()}:v));
+ const deleteVersion=id=>setVersions(prev=>prev.filter(v=>v.id!==id));
+ const importVersions=list=>{
+  if(!versionsReady){
+   // Restoring an export is the way out of an unreadable store: keep the unreadable copy aside first,
+   // then let saving resume.
+   try{const raw=localStorage.getItem(VERSIONS_KEY);if(raw)localStorage.setItem(VERSIONS_KEY+"_unreadable",raw)}catch(e){}
+   setVersionsReady(true);setVersionsError("");
+  }
+  const before=versions.length;const merged=mergeVersions(versions,list);setVersions(merged);return {added:merged.length-before,total:merged.length};
+ };
+ const openApplications=id=>{setOpenVersion(id||null);setTab("applications")};
+ const saveProfileJSON=()=>{
+  try{const obj=migrateProfile(JSON.parse(profileText));setProfile(obj);setEditing(false);notify("Profile saved successfully.");}
+  catch(e){alert("Invalid JSON. Please correct the profile data.");}
+ };
+ const addJob=e=>{
+  e.preventDefault();
+  if(!jobForm.title||!jobForm.company||!jobForm.description)return alert("Please provide title, company, and full job description.");
+  const j={...jobForm,id:crypto.randomUUID(),status:"Awaiting Review",createdAt:new Date().toISOString()};
+  setJobs([j,...jobs]);setJobForm({title:"",company:"",category:"Information Technology",location:"Dhaka, Bangladesh",source:"",url:"",description:""});setTab("jobs");notify("Job added and analyzed.");
+ };
+ const exportProfile=()=>download("careerpilot-profile.json",JSON.stringify(profile,null,2),"application/json");
+ const exportJobs=()=>{const rows=[["Title","Company","Category","Location","Match","Status","Source","URL"],...jobs.map(j=>{const a=analyzeJob(j,profile);return[j.title,j.company,j.category,j.location,a.score,j.status,j.source,j.url]})];download("careerpilot-jobs.csv",rows.map(r=>r.map(csvEscape).join(",")).join("\n"),"text/csv")};
+ const importProfile=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{setProfile(migrateProfile(JSON.parse(r.result)));notify("Profile imported.");}catch{alert("Invalid profile file.");}};r.readAsText(f)};
+ const PRI_RANK={A:0,B:1,C:2};
+ const salaryTop=j=>j.salaryMax??j.salaryMin??-1;      // pay not stated sorts last
+ const scoreOf=j=>analyzeJob(j,profile).score;
+ const sourceOf=j=>j.source||"Added by hand";
+ const categoryOptions=[...new Set(jobs.map(j=>j.category).filter(Boolean))].sort();
+ const sourceOptions=[...new Set(jobs.map(sourceOf))].sort();
+ const visibleJobs=jobs
+  .filter(j=>[j.title,j.company,j.category,j.location].join(" ").toLowerCase().includes(search.toLowerCase()))
+  .filter(j=>fCat==="all"||j.category===fCat)
+  .filter(j=>fSrc==="all"||sourceOf(j)===fSrc)
+  .filter(j=>fPri==="all"||(j.priority||"-")===fPri)
+  .sort((x,y)=>sortBy==="newest"?(y.createdAt||"").localeCompare(x.createdAt||"")
+   :sortBy==="deadline"?(x.deadline||"9999").localeCompare(y.deadline||"9999")
+   :sortBy==="priority"?((PRI_RANK[x.priority]??3)-(PRI_RANK[y.priority]??3))||(scoreOf(y)-scoreOf(x))
+   :sortBy==="salary"?(salaryTop(y)-salaryTop(x))||(scoreOf(y)-scoreOf(x))
+   :(scoreOf(y)-scoreOf(x)));
+ const strongBar=(profile.preferences&&profile.preferences.strongMatch)||75;
+ const nav=[["dashboard","Dashboard"],["profile","Master Profile"],["preferences","Career Preferences"],["add","Add Job"],["jobs","Job Analysis"],["manual","Manual Sites"],["tracker","Tracker"],["applications","Applications"]];
+ return <div>
+  <header className="no-print sticky top-0 z-30 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
+   <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap gap-3 justify-between items-center">
+    <div><h1 className="font-bold text-lg">CareerPilot BD</h1><p className="text-xs text-cyan-400">Multi-Career Job Search & Truthful ATS Resume Engine</p></div>
+    <a href="review.html" className="px-3 py-2 rounded-lg text-xs bg-slate-900 text-cyan-400 hover:bg-slate-800 border border-slate-800">Approval queue</a>
+    <div className="flex flex-wrap gap-1">{nav.map(([id,label])=><button key={id} onClick={()=>setTab(id)} className={"px-3 py-2 rounded-lg text-xs "+(tab===id?"bg-cyan-600 text-white":"bg-slate-900 text-slate-300 hover:bg-slate-800")}>{label}</button>)}<button onClick={lockVault} className="px-3 py-2 rounded-lg text-xs bg-slate-900 text-amber-300 hover:bg-slate-800 border border-slate-800">Lock</button></div>
+   </div>
+  </header>
+  {toast&&<div className="no-print fixed right-4 top-20 z-50 bg-emerald-600 text-white px-4 py-3 rounded-lg shadow">{toast}</div>}
+  <main className="max-w-7xl mx-auto p-4 md:p-6">
+   {tab==="dashboard"&&<section className="space-y-6">
+    <div className="bg-gradient-to-r from-cyan-900/40 to-slate-900 border border-slate-800 rounded-2xl p-6"><h2 className="text-2xl font-bold">Welcome, {profile.personal.fullName||"Candidate"}</h2><p className="text-slate-400 mt-2">One master profile. Multiple career paths. Job-specific, truthful resume tailoring.</p><p className="text-xs text-amber-300 mt-3">Static GitHub Pages edition: this app stores data in your browser. It does not automatically apply to jobs.</p></div>
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">{[["Jobs",stats.total],[`Strong Match (${strongBar}+)`,stats.strong],["Awaiting Review",stats.review],["Applied",stats.applied]].map(x=><div key={x[0]} className="bg-slate-900 border border-slate-800 rounded-xl p-4"><p className="text-xs text-slate-400">{x[0]}</p><p className="text-2xl font-bold mt-1">{x[1]}</p></div>)}</div>
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5"><h3 className="font-semibold">Active Career Areas</h3><div className="flex flex-wrap gap-2 mt-3">{profile.preferences.categories.map(c=><span className="bg-cyan-950 text-cyan-300 border border-cyan-800 px-3 py-1 rounded-full text-xs" key={c}>{c}</span>)}</div></div>
+   </section>}
+
+   {tab==="profile"&&<section className="space-y-4">
+    <div className="flex flex-wrap justify-between gap-2"><div><h2 className="text-xl font-bold">Master Profile</h2><p className="text-sm text-slate-400">This is your source of truth. Keep all information factual.</p></div><div className="flex gap-2"><button onClick={exportProfile} className="px-3 py-2 text-xs rounded bg-slate-800">Export Backup</button><label className="px-3 py-2 text-xs rounded bg-slate-800 cursor-pointer">Import Backup<input type="file" accept=".json" className="hidden" onChange={importProfile}/></label><button onClick={()=>{if(!editing)setProfileText(JSON.stringify(profile,null,2));setEditing(!editing)}} className="px-3 py-2 text-xs rounded bg-cyan-600">{editing?"Structured Editor":"Advanced JSON Editor"}</button></div></div>
+    {!editing?<div className="space-y-4">
+      <PersonalInfoForm p={profile} setProfile={setProfile}/>
+      <EducationEditor p={profile} setProfile={setProfile}/>
+      <ExperienceEditor p={profile} setProfile={setProfile}/>
+      <ProjectsEditor p={profile} setProfile={setProfile}/>
+      <SkillsEditor p={profile} setProfile={setProfile}/>
+      <ReferencesEditor p={profile} setProfile={setProfile}/>
+    </div>:<div className="space-y-3"><div className="bg-amber-950/40 border border-amber-800 p-3 rounded text-xs text-amber-200">Advanced editor: edit carefully. This version uses structured JSON so every part of the master profile can be changed at once (useful for bulk edits or restoring a backup).</div><textarea value={profileText} onChange={e=>setProfileText(e.target.value)} className="w-full h-[600px] bg-slate-900 border border-slate-700 rounded-xl p-4 font-mono text-xs"/><div className="flex gap-2"><button onClick={saveProfileJSON} className="px-4 py-2 bg-emerald-600 rounded">Save</button><button onClick={()=>setEditing(false)} className="px-4 py-2 bg-slate-800 rounded">Cancel</button></div></div>}
+   </section>}
+
+   {tab==="preferences"&&<Preferences p={profile} setProfile={setProfile} notify={notify}/>}
+   {tab==="add"&&<section className="max-w-3xl"><h2 className="text-xl font-bold mb-2">Add Job for Analysis</h2><p className="text-sm text-slate-400 mb-4">Paste the complete job description. The system calculates a transparent compatibility analysis using your master profile.</p><form onSubmit={addJob} className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
+    <div className="grid md:grid-cols-2 gap-3"><Input placeholder="Job Title *" value={jobForm.title} set={v=>setJobForm({...jobForm,title:v})}/><Input placeholder="Company *" value={jobForm.company} set={v=>setJobForm({...jobForm,company:v})}/></div>
+    <div className="grid md:grid-cols-2 gap-3"><select value={jobForm.category} onChange={e=>setJobForm({...jobForm,category:e.target.value})} className="bg-slate-950 border border-slate-700 rounded p-3" aria-label="Job category">{[...profile.preferences.categories,"Other"].map(c=><option key={c}>{c}</option>)}</select><Input placeholder="Location" value={jobForm.location} set={v=>setJobForm({...jobForm,location:v})}/></div>
+    <div className="grid md:grid-cols-2 gap-3"><Input placeholder="Source (Bdjobs, company site, LinkedIn...)" value={jobForm.source} set={v=>setJobForm({...jobForm,source:v})}/><Input placeholder="Application URL" value={jobForm.url} set={v=>setJobForm({...jobForm,url:v})}/></div>
+    <textarea required placeholder="Paste the FULL job description here *" value={jobForm.description} onChange={e=>setJobForm({...jobForm,description:e.target.value})} className="w-full h-56 bg-slate-950 border border-slate-700 rounded p-3"/>
+    <KeywordPreview title={jobForm.title} company={jobForm.company} text={jobForm.description} p={profile}/>
+    <button className="bg-cyan-600 px-5 py-2 rounded font-semibold">Analyze & Add to Queue</button>
+   </form></section>}
+
+   {tab==="jobs"&&<section><div className="flex flex-wrap justify-between gap-3 mb-4"><div><h2 className="text-xl font-bold">Job Analysis & Resume Queue</h2><p className="text-sm text-slate-400">Scores are explainable estimates, not a claim about any employer's ATS.</p></div><div className="flex gap-2"><input placeholder="Search jobs..." value={search} onChange={e=>setSearch(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-3 text-sm"/><button onClick={exportJobs} className="bg-slate-800 px-3 py-2 rounded text-xs">Export CSV</button></div></div>
+    <div className="no-print flex flex-wrap items-center gap-2 mb-4 text-xs" data-testid="job-filters">
+     <select aria-label="Filter by category" value={fCat} onChange={e=>setFCat(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-2"><option value="all">All categories</option>{categoryOptions.map(c=><option key={c} value={c}>{c}</option>)}</select>
+     <select aria-label="Filter by source" value={fSrc} onChange={e=>setFSrc(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-2"><option value="all">All sources</option>{sourceOptions.map(s=><option key={s} value={s}>{s}</option>)}</select>
+     <select aria-label="Filter by priority" value={fPri} onChange={e=>setFPri(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-2"><option value="all">Any priority</option><option value="A">A: strong</option><option value="B">B: worth a look</option><option value="C">C: read the note first</option></select>
+     <select aria-label="Sort jobs" value={sortBy} onChange={e=>setSortBy(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-2 py-2"><option value="best">Sort: best match</option><option value="priority">Sort: priority</option><option value="newest">Sort: newest</option><option value="deadline">Sort: deadline soonest</option><option value="salary">Sort: highest salary</option></select>
+     <span className="text-slate-500" data-testid="job-count">{visibleJobs.length} of {jobs.length} jobs</span>
+     {(fCat!=="all"||fSrc!=="all"||fPri!=="all"||search)&&<button onClick={()=>{setFCat("all");setFSrc("all");setFPri("all");setSearch("")}} className="text-cyan-400 underline">Clear filters</button>}
+    </div>
+    <div className="grid lg:grid-cols-2 gap-4">{visibleJobs.map(j=>{const a=analyzeJob(j,profile);const meta=[sourceOf(j),j.salaryText,j.deadline?`Apply by ${j.deadline}`:null].filter(Boolean).join(" · ");return <div key={j.id} className="bg-slate-900 border border-slate-800 rounded-xl p-5"><div className="flex justify-between gap-4"><div><h3 className="font-bold">{j.priority&&<span title="Priority from the discovery pipeline" className={"mr-2 text-[10px] px-2 py-0.5 rounded-full align-middle "+(j.priority==="A"?"bg-emerald-900 text-emerald-300":j.priority==="B"?"bg-cyan-900 text-cyan-300":"bg-slate-800 text-slate-400")}>{j.priority}</span>}{j.title}</h3><p className="text-sm text-cyan-400">{j.company} · {j.category}</p><p className="text-xs text-slate-400">{j.location}</p><p className="text-xs text-slate-500 mt-1">{meta}</p>{j.gateNotes&&j.gateNotes.length>0&&<p className="text-xs text-amber-300 mt-1">{j.gateNotes[0]}</p>}</div><div className="text-right"><p className="text-3xl font-bold text-cyan-400">{a.score}%</p><p className="text-[10px] text-slate-400">COMPATIBILITY</p></div></div><div className="grid grid-cols-3 gap-2 text-xs mt-4"><Metric label="Title fit" value={a.titleFit}/><Metric label="Level fit" value={a.levelFit}/><Metric label="Skills" value={a.skillFit}/></div><div className="flex gap-2 mt-4"><button onClick={()=>{setSelected(j);setTab("resume")}} className="bg-cyan-600 px-3 py-2 rounded text-xs">View Analysis & Resume</button>{j.url&&<a href={j.url} target="_blank" rel="noopener noreferrer" className="bg-slate-800 px-3 py-2 rounded text-xs text-cyan-300">Open posting</a>}<button onClick={()=>setJobs(jobs.filter(x=>x.id!==j.id))} className="bg-slate-800 px-3 py-2 rounded text-xs">Delete</button></div></div>})}</div>
+    {jobs.length>0&&!visibleJobs.length&&<div className="text-slate-400 bg-slate-900 border border-slate-800 rounded-xl p-8 text-center">No jobs match these filters.</div>}
+    {!jobs.length&&<div className="text-slate-400 bg-slate-900 border border-slate-800 rounded-xl p-8 text-center">No jobs yet. Add a real job description to begin.</div>}
+   </section>}
+
+   {tab==="resume"&&selected&&<ResumePanel key={selected.id} job={selected} p={profile} updateJob={updateJob} notify={notify} versions={versions} recordVersion={recordVersion} openApplications={openApplications}/>}
+   {tab==="resume"&&!selected&&<div className="text-slate-400">Select a job from Job Analysis first.</div>}
+   {tab==="manual"&&<ManualSites p={profile}/>}
+   {tab==="tracker"&&<Tracker jobs={jobs} setJobs={setJobs} versions={versions} versionsReady={versionsReady} openApplications={openApplications}/>}
+   {tab==="applications"&&<ApplicationsPanel versions={versions} ready={versionsReady} error={versionsError} jobs={jobs} openId={openVersion} setOpenId={setOpenVersion} onUpdate={updateVersion} onDelete={deleteVersion} onImport={importVersions} openJob={j=>{setSelected(j);setTab("resume")}} notify={notify}/>}
+  </main>
+  <footer className="no-print text-center text-xs text-slate-500 p-5 border-t border-slate-900">CareerPilot BD · Static GitHub Pages Edition · Your data remains in this browser unless you export it.</footer>
+ </div>
+}
+
+function LockScreen({mode,onCreate,onUnlock,error}){
+ const [pw,setPw]=useState("");
+ const [pw2,setPw2]=useState("");
+ const [busy,setBusy]=useState(false);
+ const [localError,setLocalError]=useState("");
+ const submit=async e=>{
+  e.preventDefault();
+  setLocalError("");
+  if(mode==="setup"){
+   if(pw.length<8){setLocalError("Use at least 8 characters.");return;}
+   if(pw!==pw2){setLocalError("Passwords do not match.");return;}
+   setBusy(true);await onCreate(pw);setBusy(false);
+  }else{
+   if(!pw){setLocalError("Enter your password.");return;}
+   setBusy(true);await onUnlock(pw);setBusy(false);
+  }
+ };
+ return <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100 p-4">
+  <form onSubmit={submit} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 w-full max-w-sm space-y-4">
+   <div><h1 className="font-bold text-lg">CareerPilot BD</h1><p className="text-xs text-cyan-400">Multi-Career Job Search & Truthful ATS Resume Engine</p></div>
+   {mode==="setup"?<>
+    <p className="text-sm text-slate-400">Set a password to encrypt your profile and resume data in this browser (AES-256, derived with PBKDF2). There is no recovery — if you forget it, this data cannot be unlocked by anyone, including you. Export a backup once you're set up.</p>
+    <input type="password" autoFocus placeholder="Create a password (8+ characters)" value={pw} onChange={e=>setPw(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-sm"/>
+    <input type="password" placeholder="Confirm password" value={pw2} onChange={e=>setPw2(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-sm"/>
+   </>:<>
+    <p className="text-sm text-slate-400">Enter your password to unlock your profile and resume data.</p>
+    <input type="password" autoFocus placeholder="Password" value={pw} onChange={e=>setPw(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-sm"/>
+   </>}
+   {(localError||error)&&<p className="text-xs text-red-400">{localError||error}</p>}
+   <button disabled={busy} className="w-full bg-cyan-600 py-2 rounded font-semibold disabled:opacity-50">{busy?"Working...":mode==="setup"?"Create & Unlock":"Unlock"}</button>
+   <p className="text-[11px] text-slate-600">This protects data stored in this browser only. It is not an online account and cannot be reset or recovered without the password.</p>
+  </form>
+ </div>;
+}
+function Input({placeholder,value,set}){return <input placeholder={placeholder} value={value} onChange={e=>set(e.target.value)} className="bg-slate-950 border border-slate-700 rounded p-3 w-full text-sm"/>}
+function Metric({label,value}){return <div className="bg-slate-950 rounded p-2"><p className="text-slate-500">{label}</p><p className="font-bold">{value}%</p></div>}
+function Block({title,children}){return <div className="bg-slate-900 border border-slate-800 rounded-xl p-5"><h3 className="font-semibold mb-3">{title}</h3>{children}</div>}
+function EntryCard({children,onRemove,removeLabel}){return <div className="border border-slate-800 rounded-lg p-3 space-y-2 bg-slate-950/40">{children}<button onClick={onRemove} className="text-xs text-red-300 hover:text-red-200">{removeLabel||"Remove"}</button></div>}
+function AddButton({onClick,children}){return <button onClick={onClick} className="mt-3 bg-cyan-600 px-3 py-2 rounded text-xs">{children}</button>}
+
+function PersonalInfoForm({p,setProfile}){
+ const set=(k,v)=>setProfile({...p,personal:{...p.personal,[k]:v}});
+ return <Block title="Personal Information">
+  <p className="text-xs text-slate-500 mb-3">This is what appears in your resume header — your real name, headline and links go here, not in the JSON editor.</p>
+  <div className="grid md:grid-cols-2 gap-3">
+   <Input placeholder="Full Name" value={p.personal.fullName} set={v=>set("fullName",v)}/>
+   <Input placeholder="Professional Headline (e.g. Software QA Engineer (Manual) | PHP Web Developer)" value={p.personal.headline} set={v=>set("headline",v)}/>
+   <Input placeholder="Location" value={p.personal.location} set={v=>set("location",v)}/>
+   <Input placeholder="Phone" value={p.personal.phone} set={v=>set("phone",v)}/>
+   <Input placeholder="Email" value={p.personal.email} set={v=>set("email",v)}/>
+   <Input placeholder="LinkedIn URL" value={p.personal.linkedin} set={v=>set("linkedin",v)}/>
+   <Input placeholder="GitHub URL" value={p.personal.github} set={v=>set("github",v)}/>
+   <Input placeholder="Portfolio / Website URL" value={p.personal.portfolio} set={v=>set("portfolio",v)}/>
+  </div>
+ </Block>
+}
+
+function EducationEditor({p,setProfile}){
+ const items=p.education;
+ const update=(i,patch)=>setProfile({...p,education:items.map((x,idx)=>idx===i?{...x,...patch}:x)});
+ const add=()=>setProfile({...p,education:[...items,{degree:"",institution:"",score:"",date:""}]});
+ const remove=i=>setProfile({...p,education:items.filter((_,idx)=>idx!==i)});
+ return <Block title="Education">
+  <div className="space-y-3">
+   {items.map((x,i)=><EntryCard key={i} onRemove={()=>remove(i)} removeLabel="Remove this entry">
+    <div className="grid md:grid-cols-2 gap-2">
+     <Input placeholder="Degree (e.g. Bachelor of Science in ...)" value={x.degree} set={v=>update(i,{degree:v})}/>
+     <Input placeholder="Date (e.g. Expected October 2026, or 2021)" value={x.date} set={v=>update(i,{date:v})}/>
+    </div>
+    <div className="grid md:grid-cols-2 gap-2">
+     <Input placeholder="Institution" value={x.institution} set={v=>update(i,{institution:v})}/>
+     <Input placeholder="Score (e.g. CGPA 3.46 / 4.00)" value={x.score} set={v=>update(i,{score:v})}/>
+    </div>
+   </EntryCard>)}
+  </div>
+  <AddButton onClick={add}>Add Education Entry</AddButton>
+ </Block>
+}
+
+function ExperienceEditor({p,setProfile}){
+ const items=p.experience;
+ const update=(i,patch)=>setProfile({...p,experience:items.map((x,idx)=>idx===i?{...x,...patch}:x)});
+ const add=()=>setProfile({...p,experience:[...items,{role:"",company:"",location:"",duration:"",bullets:[],tags:[]}]});
+ const remove=i=>setProfile({...p,experience:items.filter((_,idx)=>idx!==i)});
+ return <Block title="Experience">
+  <div className="space-y-3">
+   {items.map((x,i)=><EntryCard key={i} onRemove={()=>remove(i)} removeLabel="Remove this entry">
+    <div className="grid md:grid-cols-2 gap-2">
+     <Input placeholder="Role" value={x.role} set={v=>update(i,{role:v})}/>
+     <Input placeholder="Company" value={x.company} set={v=>update(i,{company:v})}/>
+    </div>
+    <div className="grid md:grid-cols-2 gap-2">
+     <Input placeholder="Location" value={x.location} set={v=>update(i,{location:v})}/>
+     <Input placeholder="Duration (e.g. June 2026 - September 2026)" value={x.duration} set={v=>update(i,{duration:v})}/>
+    </div>
+    <div>
+     <label className="text-xs text-slate-400">Bullets (one per line)</label>
+     <textarea value={x.bullets.join("\n")} onChange={e=>update(i,{bullets:e.target.value.split("\n")})} className="w-full h-32 bg-slate-950 border border-slate-700 rounded p-3 text-sm mt-1"/>
+    </div>
+    <Input placeholder="Career area tags, comma separated (e.g. Software Quality Assurance, IT) — used for the compatibility score, not printed" value={(x.tags||[]).join(", ")} set={v=>update(i,{tags:v.split(",").map(s=>s.trim())})}/>
+   </EntryCard>)}
+  </div>
+  <AddButton onClick={add}>Add Experience Entry</AddButton>
+ </Block>
+}
+
+function ProjectsEditor({p,setProfile}){
+ const items=p.projects;
+ const update=(i,patch)=>setProfile({...p,projects:items.map((x,idx)=>idx===i?{...x,...patch}:x)});
+ const add=()=>setProfile({...p,projects:[...items,{name:"",subtitle:"",bullets:[],skills:[],categories:[]}]});
+ const remove=i=>setProfile({...p,projects:items.filter((_,idx)=>idx!==i)});
+ return <Block title="Projects">
+  <div className="space-y-3">
+   {items.map((x,i)=><EntryCard key={i} onRemove={()=>remove(i)} removeLabel="Remove this project">
+    <div className="grid md:grid-cols-2 gap-2">
+     <Input placeholder="Project Name" value={x.name} set={v=>update(i,{name:v})}/>
+     <Input placeholder="Subtitle (e.g. Web Application (HTML, CSS, PHP))" value={x.subtitle} set={v=>update(i,{subtitle:v})}/>
+    </div>
+    <div>
+     <label className="text-xs text-slate-400">Bullets (one per line)</label>
+     <textarea value={x.bullets.join("\n")} onChange={e=>update(i,{bullets:e.target.value.split("\n")})} className="w-full h-24 bg-slate-950 border border-slate-700 rounded p-3 text-sm mt-1"/>
+    </div>
+    <Input placeholder="Skills used, comma separated (used for job matching, not printed)" value={(x.skills||[]).join(", ")} set={v=>update(i,{skills:v.split(",").map(s=>s.trim())})}/>
+    <Input placeholder="Career area tags, comma separated (e.g. Information Systems, MIS) — used for the compatibility score, not printed" value={(x.categories||[]).join(", ")} set={v=>update(i,{categories:v.split(",").map(s=>s.trim())})}/>
+   </EntryCard>)}
+  </div>
+  <AddButton onClick={add}>Add Project</AddButton>
+ </Block>
+}
+
+function SkillsEditor({p,setProfile}){
+ const groups=p.skills;
+ const update=(i,patch)=>setProfile({...p,skills:groups.map((g,idx)=>idx===i?{...g,...patch}:g)});
+ const add=()=>setProfile({...p,skills:[...groups,{category:"",items:[]}]});
+ const remove=i=>setProfile({...p,skills:groups.filter((_,idx)=>idx!==i)});
+ return <Block title="Skills">
+  <p className="text-xs text-slate-500 mb-3">Grouped like "Software Testing: Manual Testing, Test Case Design, ...". Add as many categories as you need — this is exactly what prints in Core Skills.</p>
+  <div className="space-y-3">
+   {groups.map((g,i)=><EntryCard key={i} onRemove={()=>remove(i)} removeLabel="Remove this category">
+    <Input placeholder="Category label (e.g. Software Testing)" value={g.category} set={v=>update(i,{category:v})}/>
+    <div>
+     <label className="text-xs text-slate-400">Items (comma separated)</label>
+     <textarea value={g.items.join(", ")} onChange={e=>update(i,{items:e.target.value.split(",").map(s=>s.trim())})} className="w-full h-16 bg-slate-950 border border-slate-700 rounded p-3 text-sm mt-1"/>
+    </div>
+   </EntryCard>)}
+  </div>
+  <AddButton onClick={add}>Add Skill Category</AddButton>
+ </Block>
+}
+
+function ReferencesEditor({p,setProfile}){
+ const items=p.references||[];
+ const update=(i,patch)=>setProfile({...p,references:items.map((x,idx)=>idx===i?{...x,...patch}:x)});
+ const add=()=>setProfile({...p,references:[...items,{name:"",title:"",email:"",phone:""}]});
+ const remove=i=>setProfile({...p,references:items.filter((_,idx)=>idx!==i)});
+ return <Block title="References">
+  <p className="text-xs text-slate-500 mb-3">Optional, and only for people who have agreed to be a reference. This stays in your browser unless you export your profile — leave it empty to omit the section entirely.</p>
+  <div className="space-y-3">
+   {items.map((x,i)=><EntryCard key={i} onRemove={()=>remove(i)} removeLabel="Remove this reference">
+    <div className="grid md:grid-cols-2 gap-2">
+     <Input placeholder="Name" value={x.name} set={v=>update(i,{name:v})}/>
+     <Input placeholder="Title / Relationship" value={x.title} set={v=>update(i,{title:v})}/>
+    </div>
+    <div className="grid md:grid-cols-2 gap-2">
+     <Input placeholder="Email" value={x.email} set={v=>update(i,{email:v})}/>
+     <Input placeholder="Phone" value={x.phone} set={v=>update(i,{phone:v})}/>
+    </div>
+   </EntryCard>)}
+  </div>
+  <AddButton onClick={add}>Add Reference</AddButton>
+ </Block>
+}
+
+function Preferences({p,setProfile,notify}){
+ const [newTitle,setNewTitle]=useState("");
+ const toggle=(arr,v)=>arr.includes(v)?arr.filter(x=>x!==v):[...arr,v];
+ const categories=["Software Development","Information Technology","Information Systems","MIS","Management & Business","Business Analysis","Data & Reporting","Application Support","Software Quality Assurance"];
+ return <section className="space-y-5"><div><h2 className="text-xl font-bold">Career Preferences</h2><p className="text-sm text-slate-400">Turn career areas on or off. Your job search and relevance analysis follow these preferences.</p></div>
+ <Block title="Career Areas"><div className="grid md:grid-cols-2 gap-2">{categories.map(c=><label key={c} className="bg-slate-900 border border-slate-800 p-3 rounded cursor-pointer text-sm"><input type="checkbox" checked={p.preferences.categories.includes(c)} onChange={()=>setProfile({...p,preferences:{...p.preferences,categories:toggle(p.preferences.categories,c)}})} className="mr-2"/>{c}</label>)}</div></Block>
+ <Block title="Target Job Titles"><div className="flex flex-wrap gap-2">{p.preferences.titles.map(t=><span key={t} className="bg-cyan-950 border border-cyan-900 text-cyan-200 px-3 py-1 rounded-full text-xs">{t}<button className="ml-2 text-red-300" onClick={()=>setProfile({...p,preferences:{...p.preferences,titles:p.preferences.titles.filter(x=>x!==t)}})}>×</button></span>)}</div><div className="flex gap-2 mt-4"><input value={newTitle} onChange={e=>setNewTitle(e.target.value)} placeholder="Add job title" className="bg-slate-950 border border-slate-700 rounded p-2 flex-1 text-sm"/><button onClick={()=>{if(newTitle.trim()){setProfile({...p,preferences:{...p.preferences,titles:[...p.preferences.titles,newTitle.trim()]}});setNewTitle("");notify("Job title added.")}}} className="bg-cyan-600 px-3 rounded text-sm">Add</button></div></Block>
+ <Block title="Search Guardrails"><p className="text-sm text-slate-400 mb-2">Excluded roles are kept out of your preferred targets.</p><textarea value={p.preferences.excluded.join("\n")} onChange={e=>setProfile({...p,preferences:{...p.preferences,excluded:e.target.value.split("\n").map(x=>x.trim()).filter(Boolean)}})} className="w-full h-24 bg-slate-950 border border-slate-700 rounded p-3 text-sm"/></Block>
+ <Block title="Expected Salary"><p className="text-sm text-slate-400 mb-2">Optional. Used only to compare a job's advertised pay against what you're looking for, in the Job Requirements panel. Leave it blank and nothing is assumed.</p><div className="flex items-center gap-2 text-sm"><span className="text-slate-400">Tk</span><input type="number" min="0" step="1000" aria-label="Expected minimum monthly salary" value={p.preferences.expectedSalaryMin??""} onChange={e=>setProfile({...p,preferences:{...p.preferences,expectedSalaryMin:e.target.value===""?null:Math.max(0,Number(e.target.value))}})} placeholder="e.g. 30000" className="bg-slate-950 border border-slate-700 rounded p-2 w-40"/><span className="text-slate-400">per month, minimum</span></div></Block>
+ </section>
+}
+
+function ResumePanel({job,p,updateJob,notify,versions,recordVersion,openApplications}){
+ // The text the pipeline found, unless a fuller post was pasted in the keyword box below.
+ const jd=job.pastedDescription!=null?job.pastedDescription:(job.description||"");
+ const view={...job,description:jd};
+ const recommended=bestFitStrategy(view);
+ const [strategy,setStrategy]=useState(()=>job.selectedStrategy||recommended);
+ const cfg=ROLE_STRATEGIES[strategy];
+ const a=analyzeJob({...view,category:strategy},p);
+
+ // Recruiter keywords: read from the post, then checked against what the profile really says.
+ // Choices belong to this one job, so every job's resume is tailored on its own.
+ const rk=normalizeDecisions(job.resumeKeywords);
+ const setRk=patch=>updateJob(job.id,{resumeKeywords:{...rk,...patch}});
+ const evidence=useMemo(()=>keywordEvidence(p),[p]);
+ const found=useMemo(()=>extractKeywords(jd,job.title,job.company),[jd,job.title,job.company]);
+ const kws=useMemo(()=>annotateKeywords(found,evidence),[found,evidence]);
+ const requirements=useMemo(()=>analyzeRequirements(kws,jd,job.title,job,p),[kws,jd,job,p]);
+ // Only what you pressed Add for, each slotted into the Master Profile category it actually belongs
+ // to (Databases, Software Testing, Legal, ...) rather than dumped in one flat list. A field with no
+ // matching category of its own gets a new one, named after that field.
+ const addedKw=rk.enabled?pickForResume(kws,rk):[];
+ const keyItems=addedKw.map(k=>k.display);
+ const skillRows=placeKeywords(p.skills,addedKw);
+
+ // Most relevant experience first (by how many of the post's keywords each entry holds), and within
+ // each entry the most relevant bullets first.
+ const exp=rankExperience(p.experience,found).map(e=>({...e,bullets:[...e.bullets].filter(Boolean).sort((x,y)=>scoreBullet(y,view,found)-scoreBullet(x,view,found))}));
+ const projects=[...p.projects].sort((x,y)=>projectScore(y,strategy,view,found)-projectScore(x,strategy,view,found)).slice(0,3);
+ const autoSummary=strategy==="General"?generalSummary(p,job,keyItems):summaryFor(strategy);
+ const autoHeadline=p.personal.headline||(strategy==="General"?job.title:cfg.headline);
+ const autoExperienceText=exp.map(e=>`${e.role}, ${e.company} — ${[e.location,e.duration].filter(Boolean).join(" | ")}\n${e.bullets.map(b=>"• "+b).join("\n")}`).join("\n\n");
+ const autoProjectsText=projects.map(x=>`${x.name}${x.subtitle?", "+x.subtitle:""}\n${x.bullets.filter(Boolean).map(b=>"• "+b).join("\n")}`).join("\n\n");
+ const contact=[p.personal.location,p.personal.phone,p.personal.email,p.personal.linkedin,p.personal.github,p.personal.portfolio].filter(Boolean).join(" | ");
+
+ const ov=job.resumeOverrides||null;
+ const finalHeadline=ov?ov.headline:autoHeadline;
+ const finalSummary=ov?ov.summary:autoSummary;
+ const finalExperienceText=ov?ov.experienceText:autoExperienceText;
+ const finalProjectsText=ov?ov.projectsText:autoProjectsText;
+
+ const [editMode,setEditMode]=useState(false);
+ const [draft,setDraft]=useState(null);
+ const enterEdit=()=>{setDraft({headline:finalHeadline||"",summary:finalSummary,experienceText:finalExperienceText,projectsText:finalProjectsText});setEditMode(true)};
+ const saveEdit=()=>{
+  updateJob(job.id,{resumeOverrides:{headline:draft.headline,summary:draft.summary,experienceText:draft.experienceText,projectsText:draft.projectsText}});
+  setEditMode(false);notify("Resume edits saved.");
+ };
+ const resetToAuto=()=>{updateJob(job.id,{resumeOverrides:null});setEditMode(false);notify("Reverted to the auto-generated resume.")};
+
+ // One plain document holds everything the resume shows. The preview, the PDF, the DOCX, the TXT and the
+ // version recorded when you apply are all rendered from it, so they cannot disagree.
+ const docFor=rows=>buildResumeDoc({profile:p,headline:finalHeadline,contact,summary:finalSummary,skillRows:rows,experience:exp,projects,
+  overridden:!!ov,experienceText:finalExperienceText,projectsText:finalProjectsText});
+ const doc=docFor(skillRows);
+ const makeText=()=>resumeDocToText(doc);
+ // How much of the post's keyword list the finished resume contains, with and without your chosen keywords.
+ const coverBefore=keywordCoverage(kws,resumeDocToText(docFor(p.skills)));
+ const coverNow=keywordCoverage(kws,resumeDocToText(doc));
+ // Application Pack: built from the same keywords, requirements and Add choices as everything above,
+ // saved per job only where you edit it, so a fresh choice or a new post regenerates the rest.
+ const pack=buildApplicationPack({profile:p,job,kws,addedKw,text:jd,requirements,coverBefore,coverNow,score:a.score});
+ const apSaved=job.applicationPack||{};
+ const setAp=patch=>updateJob(job.id,{applicationPack:{...apSaved,...patch}});
+ const packTexts={
+  coverLetter:apSaved.coverLetter!=null?apSaved.coverLetter:pack.coverLetter.text,
+  email:apSaved.email!=null?apSaved.email:pack.email.text,
+  recruiter:apSaved.recruiter!=null?apSaved.recruiter:pack.recruiter.text
+ };
+ // Every download carries the same name as the file the Application Pack suggests: resume_company_role_date.
+ const fileStem=pack.filename.replace(/\.pdf$/i,"");
+ const downloadTxt=()=>download(`${fileStem}.txt`,makeText());
+ const downloadPDF=()=>renderResumePDF(doc,`${fileStem}.pdf`);
+ const downloadDOCX=()=>renderResumeDOCX(doc,`${fileStem}.docx`);
+
+ // Sent versions: a snapshot of this resume, cover letter, email and keywords exactly as they stand.
+ const mine=versionsForJob(versions,job);
+ const snapshot=()=>recordVersion({job:{...job,description:jd},doc,strategy,strategyLabel:cfg.label,keywordsAdded:addedKw.map(k=>k.display),
+  pack:packTexts,salary:pack.salary,report:pack.report,description:jd,fileName:pack.filename});
+ const versionNote=(r,lead)=>!r.ok?`${lead}${lead?" but ":""}${r.message}`
+  :r.added?`${lead}${lead?". ":""}Recorded exactly this resume, cover letter, email and keywords. Find it under Applications.`
+  :`${lead}${lead?". ":""}Nothing has changed since the version recorded on ${formatDay(r.version.appliedOn)}, so no new one was added.`;
+ const recordNow=()=>notify(versionNote(snapshot(),""));
+ const markApplied=()=>{
+  const r=snapshot();
+  updateJob(job.id,{status:"Applied",selectedStrategy:strategy});
+  notify(versionNote(r,"Marked Applied"));
+ };
+ const appliedLike=["Applied","Interview","Rejected","Offer"].includes(job.status);
+
+ const print=()=>window.print();
+ const setStatus=status=>{updateJob(job.id,{status,selectedStrategy:strategy});notify(`Status updated to ${status}.`)};
+ return <section className="space-y-5">
+  <div className="flex flex-wrap justify-between gap-3"><div><h2 className="text-xl font-bold">Recruiter-Style ATS Resume{ov&&<span className="text-[10px] text-amber-300 font-normal ml-2">(manually edited)</span>}</h2><p className="text-sm text-cyan-400">{job.title} · {job.company}</p><p className="text-xs text-slate-500 mt-1">One-page, single-column, text-first resume layout.</p></div><div className="no-print flex flex-wrap gap-2"><button onClick={()=>editMode?setEditMode(false):enterEdit()} className="bg-amber-600 px-3 py-2 rounded text-xs">{editMode?"Cancel Edit":"Edit Content"}</button><button onClick={downloadTxt} className="bg-slate-800 px-3 py-2 rounded text-xs">TXT</button><button onClick={downloadPDF} className="bg-cyan-600 px-3 py-2 rounded text-xs">Download PDF</button><button onClick={downloadDOCX} className="bg-blue-600 px-3 py-2 rounded text-xs">Download DOCX</button><button onClick={print} className="bg-slate-800 px-3 py-2 rounded text-xs">Print</button></div></div>
+
+  {editMode&&draft&&<div className="no-print bg-slate-900 border border-amber-700 rounded-xl p-5 space-y-3">
+   <h3 className="font-semibold text-amber-300">Editing this resume's content</h3>
+   <p className="text-xs text-slate-500">Changes here apply only to this job's resume. Core Skills, Education and References always come straight from your Master Profile. Switching strategy below discards unsaved edits.</p>
+   <div><label className="text-xs text-slate-400">Headline</label><input value={draft.headline} onChange={e=>setDraft({...draft,headline:e.target.value})} className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-sm mt-1"/></div>
+   <div><label className="text-xs text-slate-400">Professional Summary</label><textarea value={draft.summary} onChange={e=>setDraft({...draft,summary:e.target.value})} className="w-full h-24 bg-slate-950 border border-slate-700 rounded p-3 text-sm mt-1"/></div>
+   <div><label className="text-xs text-slate-400">Professional Experience</label><textarea value={draft.experienceText} onChange={e=>setDraft({...draft,experienceText:e.target.value})} className="w-full h-40 bg-slate-950 border border-slate-700 rounded p-3 text-sm font-mono mt-1"/></div>
+   <div><label className="text-xs text-slate-400">Projects</label><textarea value={draft.projectsText} onChange={e=>setDraft({...draft,projectsText:e.target.value})} className="w-full h-32 bg-slate-950 border border-slate-700 rounded p-3 text-sm font-mono mt-1"/></div>
+   <div className="flex flex-wrap gap-2"><button onClick={saveEdit} className="bg-emerald-600 px-4 py-2 rounded text-xs">Save Edits</button><button onClick={()=>setEditMode(false)} className="bg-slate-800 px-4 py-2 rounded text-xs">Cancel</button>{ov&&<button onClick={resetToAuto} className="bg-red-900 px-4 py-2 rounded text-xs">Reset to Auto-generated</button>}</div>
+  </div>}
+
+  <div className="no-print bg-slate-900 border border-slate-800 rounded-xl p-5"><div className="flex justify-between items-center mb-3"><div><h3 className="font-semibold">Resume Strategy</h3><p className="text-xs text-slate-500">Auto-picked from this job's title and description — pick a different one any time.</p></div><span className="text-xs text-cyan-300">{cfg.label}</span></div><div className="grid md:grid-cols-4 gap-2">{Object.entries(ROLE_STRATEGIES).map(([k,v])=><button key={k} onClick={()=>{setStrategy(k);setEditMode(false);updateJob(job.id,{selectedStrategy:k})}} className={`p-3 rounded-lg border text-left text-xs ${strategy===k?'border-cyan-500 bg-cyan-950/50':'border-slate-800 bg-slate-950'}`}><b>{v.label}</b>{k===recommended&&<span className="ml-1 text-[9px] text-emerald-400">(recommended)</span>}<span className="block text-slate-500 mt-1">{k}</span></button>)}</div></div>
+  <RequirementsPanel req={requirements}/>
+  <KeywordPanel job={job} jd={jd} kws={kws} rk={rk} setRk={setRk} updateJob={updateJob} coverBefore={coverBefore} coverNow={coverNow} keyCount={addedKw.length}/>
+  <div className="grid md:grid-cols-2 gap-4 no-print"><Block title={`Compatibility Analysis: ${a.score}%`}><div className="grid grid-cols-2 gap-2"><Metric label="Title fit" value={a.titleFit}/><Metric label="Level fit" value={a.levelFit}/><Metric label="Skills" value={a.skillFit}/><Metric label="Preference" value={a.prefFit}/></div><p className="text-xs text-emerald-300 mt-3">Matched: {a.matched.slice(0,10).join(", ")||"None"}</p><p className="text-xs text-amber-300 mt-2">Potential gaps: {a.missing.slice(0,8).join(", ")||"None detected"}</p></Block><Block title="ATS Quality"><CheckRow ok text="Single-column, standard section headings"/><CheckRow ok text="No graphics, tables, icons, sidebars, or decorative resume elements"/><CheckRow ok text="Plain-text contact information"/><CheckRow ok={a.missing.length<8} text="Job keywords reviewed without inventing qualifications"/><p className="text-[11px] text-slate-500 mt-3">Compatibility is an internal estimate, not a real employer ATS score.</p></Block></div>
+  <ResumePreview doc={doc}/>
+  <ApplicationPack job={job} pack={pack} texts={packTexts} saved={apSaved} setAp={setAp} notify={notify}/>
+  <div className="no-print space-y-2">
+   <div className="flex flex-wrap gap-2 justify-end"><button onClick={()=>setStatus("Saved")} className="bg-slate-800 px-3 py-2 rounded text-xs">Save</button><button onClick={()=>setStatus("Awaiting Approval")} className="bg-amber-600 px-3 py-2 rounded text-xs">Send to Approval</button>{appliedLike&&<button data-testid="record-version" onClick={recordNow} title="Records this resume, cover letter, email and keywords exactly as they are now" className="bg-slate-800 border border-emerald-700 text-emerald-300 px-3 py-2 rounded text-xs">Record current version</button>}<button data-testid="mark-applied" onClick={markApplied} title="Marks the job Applied and records exactly what this resume, cover letter and email say now" className="bg-emerald-600 px-3 py-2 rounded text-xs">Mark Applied</button>{job.url&&<a href={job.url} target="_blank" rel="noopener" className="bg-cyan-700 px-3 py-2 rounded text-xs">Open Job</a>}</div>
+   <p data-testid="versions-line" className="text-[11px] text-slate-500 text-right">{mine.length?<>{mine.length} recorded version{mine.length===1?"":"s"} for this job, latest {formatDay(mine[0].appliedOn)}. <button onClick={()=>openApplications(mine[0].id)} className="text-cyan-400 underline">View in Applications</button></>:"Nothing recorded for this job yet. Mark Applied keeps a copy of exactly what this resume, cover letter and email say."}</p>
+  </div>
+ </section>
+}
+/* ---- Recruiter keywords (extraction lives in keywords.js) ---- */
+const KW_TIERS=[
+ ["must","Must-have","Under the post's requirements, or marked required. Recruiters search for these first."],
+ ["important","Important","Named in the day-to-day duties."],
+ ["nice","Nice to have","Marked preferred, or a plus."]
+];
+const KW_EVIDENCE={
+ skills:{label:"In your profile",cls:"text-emerald-300",pill:"bg-emerald-900/40 text-emerald-200 border-emerald-800"},
+ prose:{label:"Only in your experience text",cls:"text-cyan-300",pill:"bg-cyan-950/40 text-cyan-300 border-cyan-700 border-dashed"},
+ none:{label:"Not in your profile",cls:"text-amber-300",pill:"bg-slate-900 text-slate-300 border-slate-700"}
+};
+const kwDecision=(k,rk)=>rk.added.includes(k.key)?"added":rk.skipped.includes(k.key)?"skipped":"undecided";
+const kwToggle=(list,key)=>list.includes(key)?list.filter(x=>x!==key):[...list,key];
+
+// One keyword you decide on. Nothing reaches the resume until you press Add.
+function KeywordCard({k,rk,onAdd,onSkip}){
+ const d=kwDecision(k,rk);
+ const grade=k.evidence||"none";
+ const ev=KW_EVIDENCE[grade];
+ const box={added:"bg-emerald-950/40 border-emerald-700",skipped:"bg-slate-950 border-slate-800 opacity-60",undecided:"bg-slate-950 border-slate-700"}[d];
+ return <div data-testid="kw-item" data-key={k.key} data-decision={d} data-evidence={grade} className={"border rounded-lg p-2.5 flex flex-col gap-1.5 "+box}>
+  <span className={"text-sm font-medium "+(d==="skipped"?"line-through text-slate-500":"text-slate-100")}>{k.display}{k.source==="mined"&&<span className="opacity-60" title="Found in this post itself, not in the built-in skill list">*</span>}{k.hardRequirement&&<span data-testid="kw-years" title="The post states a specific number of years for this, not just a bare mention" className="ml-1.5 text-[9.5px] px-1.5 py-0.5 rounded border border-amber-700 text-amber-300 bg-amber-950/40 align-middle">{k.yearsRequired}+ yrs</span>}</span>
+  <span className={"text-[10.5px] "+ev.cls} data-testid="kw-evidence">{ev.label}{d==="added"&&grade!=="skills"?" · you added it, so keep it only if it is true":""}</span>
+  <div className="flex gap-1.5">
+   <button type="button" data-testid="kw-add" aria-pressed={d==="added"} onClick={onAdd} className={"px-2.5 py-1 rounded text-[11px] border "+(d==="added"?"bg-emerald-600 border-emerald-500 text-white":"bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800")}>{d==="added"?"✓ Added":"Add"}</button>
+   <button type="button" data-testid="kw-skip" aria-pressed={d==="skipped"} onClick={onSkip} className={"px-2.5 py-1 rounded text-[11px] border "+(d==="skipped"?"bg-slate-700 border-slate-500 text-white":"bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800")}>{d==="skipped"?"✕ Not added":"Not add"}</button>
+  </div>
+ </div>
+}
+// A read-only keyword (degrees in the panel, everything in the Add Job preview).
+function KeywordPill({k}){
+ const grade=k.evidence||"none";
+ return <span data-testid="kw-chip" data-key={k.key} data-state={grade} title={KW_EVIDENCE[grade].label} className={"inline-flex items-center border rounded-full px-2.5 py-1 text-[11px] "+KW_EVIDENCE[grade].pill}>{grade==="skills"&&<span aria-hidden="true" className="mr-1">✓</span>}{k.display}{k.source==="mined"&&<span className="opacity-60">*</span>}</span>
+}
+function KeywordLegend(){
+ return <p className="text-[11px] text-slate-500">
+  <span className="text-emerald-300">In your profile</span>: you list it as a skill, a project's tech or a job title. <span className="text-cyan-300">Only in your experience text</span>: a sentence mentions it but no skill line does. <span className="text-amber-300">Not in your profile</span>: it appears nowhere in what you wrote. That note is information for you: you decide, and only what you press Add for reaches the resume. * marks a term read from this post itself.
+ </p>
+}
+/* ---- Job Requirements: eleven groups from analyzeRequirements (keywords.js), read-only ---- */
+const REQ_STATE_STYLE={
+ match:{cls:"text-emerald-300",dot:"bg-emerald-400"},
+ partial:{cls:"text-cyan-300",dot:"bg-cyan-400"},
+ gap:{cls:"text-amber-300",dot:"bg-amber-400"},
+ unknown:{cls:"text-slate-400",dot:"bg-slate-500"}
+};
+function ReqCompare({compare}){
+ if(!compare)return null;
+ const s=REQ_STATE_STYLE[compare.state]||REQ_STATE_STYLE.unknown;
+ return <p className={"text-xs flex gap-2 items-start mt-1 "+s.cls} data-testid="req-compare" data-state={compare.state}><span className={"mt-1 w-1.5 h-1.5 rounded-full shrink-0 "+s.dot}/>{compare.note}</p>
+}
+// A skill-list group (Domain / Certifications / Language). Required/Preferred/Tools stay a one-line
+// summary here — their full, decidable list is one scroll down in Recruiter Keywords, so this does
+// not repeat it.
+function ReqSkillGroup({title,group,hint}){
+ if(!group||!group.items.length)return null;
+ return <div data-testid={"req-"+title.toLowerCase().replace(/[^a-z]+/g,"-")}>
+  <p className="text-xs"><b className="text-slate-200">{title}</b> <span className="text-slate-500">{group.matched} of {group.total} in your profile{hint?" · "+hint:""}</span></p>
+  <div className="flex flex-wrap gap-1.5 mt-1.5">{group.items.map(k=><KeywordPill key={k.key} k={k}/>)}</div>
+ </div>
+}
+function RequirementsPanel({req}){
+ if(!req)return null;
+ const any=req.education||req.experience||req.location||req.salary||req.responsibilities.items.length||req.domain.items.length||req.certifications.items.length||req.language.items.length;
+ if(!any)return <div className="no-print bg-slate-900 border border-slate-800 rounded-xl p-5" data-testid="requirements-panel"><h3 className="font-semibold">Job Requirements</h3><p className="text-xs text-slate-500 mt-1">This post didn't say enough to break down — see Recruiter Keywords below for what it does mention.</p></div>;
+ return <div className="no-print bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4" data-testid="requirements-panel">
+  <div><h3 className="font-semibold">Job Requirements</h3><p className="text-xs text-slate-500 mt-1">What this post actually asks for, compared against your Master Profile. Read-only — decide what goes on the resume in Recruiter Keywords below.</p></div>
+  <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-xs">
+   <div className="bg-slate-950 rounded p-2" data-testid="req-required"><p className="text-slate-500">Required</p><p className="font-bold text-lg">{req.required.matched} <span className="text-slate-500 text-xs font-normal">of {req.required.total}</span></p></div>
+   <div className="bg-slate-950 rounded p-2" data-testid="req-preferred"><p className="text-slate-500">Preferred</p><p className="font-bold text-lg">{req.preferred.matched} <span className="text-slate-500 text-xs font-normal">of {req.preferred.total}</span></p></div>
+   <div className="bg-slate-950 rounded p-2" data-testid="req-tools"><p className="text-slate-500">Tools/Technologies</p><p className="font-bold text-lg">{req.tools.matched} <span className="text-slate-500 text-xs font-normal">of {req.tools.total}</span></p></div>
+  </div>
+  {req.responsibilities.items.length>0&&<div data-testid="req-responsibilities"><p className="text-xs"><b className="text-slate-200">Responsibilities</b> <span className="text-slate-500">what the role actually involves day to day</span></p><ul className="list-disc ml-4 mt-1.5 text-xs text-slate-300 space-y-0.5">{req.responsibilities.items.map((r,i)=><li key={i}>{r}</li>)}</ul></div>}
+  {req.education&&<div data-testid="req-education"><p className="text-xs"><b className="text-slate-200">Education</b> <span className="text-slate-500">{req.education.items.map(k=>k.display).join(", ")}</span></p><ReqCompare compare={req.education.compare}/></div>}
+  {req.experience&&<div data-testid="req-experience"><p className="text-xs"><b className="text-slate-200">Experience</b> <span className="text-slate-500">{req.experience.text}</span></p><ReqCompare compare={req.experience.compare}/></div>}
+  <ReqSkillGroup title="Domain knowledge" group={req.domain}/>
+  <ReqSkillGroup title="Certifications" group={req.certifications}/>
+  <ReqSkillGroup title="Language" group={req.language}/>
+  {req.location&&<div data-testid="req-location"><p className="text-xs"><b className="text-slate-200">Location</b> <span className="text-slate-500">{req.location.text}{req.location.distanceKm!=null?` · ${req.location.distanceKm} km from your area`:""}</span></p><ReqCompare compare={req.location.compare}/></div>}
+  {req.salary&&<div data-testid="req-salary"><p className="text-xs"><b className="text-slate-200">Salary</b> <span className="text-slate-500">{req.salary.text||"not stated"}</span></p><ReqCompare compare={req.salary.compare}/></div>}
+ </div>
+}
+function KeywordPanel({job,jd,kws,rk,setRk,updateJob,coverBefore,coverNow,keyCount}){
+ const [all,setAll]=useState(false);
+ const addable=kws.filter(k=>k.kind!=="degree");
+ const degrees=kws.filter(k=>k.kind==="degree");
+ const inProfile=addable.filter(k=>k.evidence==="skills");
+ const mustHaves=addable.filter(k=>k.tier==="must");
+ const nAdded=addable.filter(k=>rk.added.includes(k.key)).length;
+ const nSkipped=addable.filter(k=>rk.skipped.includes(k.key)).length;
+ const toggleAdd=k=>setRk({added:kwToggle(rk.added,k.key),skipped:rk.skipped.filter(x=>x!==k.key)});
+ const toggleSkip=k=>setRk({skipped:kwToggle(rk.skipped,k.key),added:rk.added.filter(x=>x!==k.key)});
+ const addMany=list=>{const keys=list.map(k=>k.key);setRk({added:[...new Set([...rk.added,...keys])],skipped:rk.skipped.filter(x=>!keys.includes(x))})};
+ const pct=c=>c.total?Math.round(100*c.found/c.total):0;
+ const truncated=KW_TIERS.some(([t])=>addable.filter(k=>k.tier===t).length>12);
+ const btn="px-3 py-1.5 rounded text-xs border border-slate-700 bg-slate-950 hover:bg-slate-800 text-slate-200";
+ return <div className="no-print bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4" data-testid="keyword-panel">
+  <div className="flex flex-wrap justify-between gap-3">
+   <div><h3 className="font-semibold">Recruiter Keywords for this job</h3>
+    <p className="text-xs text-cyan-400 mt-0.5">{job.title}{job.company?" · "+job.company:""}</p>
+    <p className="text-xs text-slate-500 mt-1">Read from this job post, whatever the field. Nothing is on the resume until you press <b className="text-slate-300">Add</b>; <b className="text-slate-300">Not add</b> keeps it off. An added keyword joins the Core Skills category it fits — Databases, Software Testing, Legal, whatever the post calls for — or gets a new category of its own if none fits. Your choices belong to this job's resume only, so every job has its own.</p></div>
+   <label className="flex items-center gap-2 text-xs text-slate-300 self-start"><input type="checkbox" data-testid="kw-enabled" checked={rk.enabled} onChange={e=>setRk({enabled:e.target.checked})}/> Add my chosen keywords to Core Skills</label>
+  </div>
+  {jd.trim().length<200&&<p className="text-xs text-amber-300" data-testid="kw-thin">This post has very little text ({jd.trim().length} characters), so few keywords can be read from it. Open the box at the bottom and paste the full job description.</p>}
+  {kws.length===0?<p className="text-sm text-amber-300" data-testid="kw-empty">No recognisable keywords found in this post. Paste the full job description below.</p>:<>
+   <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+    <div className="bg-slate-950 rounded p-2"><p className="text-slate-500">Keywords in the post</p><p className="font-bold text-lg" data-testid="kw-total">{addable.length}</p></div>
+    <div className="bg-slate-950 rounded p-2"><p className="text-slate-500">Added to this resume</p><p className="font-bold text-lg text-emerald-300" data-testid="kw-added">{nAdded}</p></div>
+    <div className="bg-slate-950 rounded p-2"><p className="text-slate-500">Resume keyword match</p><p className="font-bold text-lg" data-testid="kw-cover">{pct(coverBefore)}% <span className="text-slate-500">→</span> <span className="text-cyan-300">{pct(coverNow)}%</span></p></div>
+    <div className="bg-slate-950 rounded p-2"><p className="text-slate-500">Must-haves covered</p><p className="font-bold text-lg" data-testid="kw-must">{coverNow.mustFound} of {coverNow.mustTotal}</p></div>
+   </div>
+   <div className="flex flex-wrap items-center gap-2">
+    <button type="button" data-testid="kw-add-mine" onClick={()=>addMany(inProfile)} disabled={!inProfile.length} className={btn+(inProfile.length?"":" opacity-40 cursor-not-allowed")}>Add all in my profile ({inProfile.length})</button>
+    <button type="button" data-testid="kw-add-must" onClick={()=>addMany(mustHaves)} disabled={!mustHaves.length} className={btn+(mustHaves.length?"":" opacity-40 cursor-not-allowed")}>Add all must-haves ({mustHaves.length})</button>
+    <button type="button" data-testid="kw-clear" onClick={()=>setRk({added:[],skipped:[]})} className={btn}>Clear all choices</button>
+    <span className="text-xs text-slate-500" data-testid="kw-counts">{nAdded} added · {nSkipped} not added · {addable.length-nAdded-nSkipped} still to decide</span>
+   </div>
+   {keyCount>15&&<p className="text-xs text-amber-300" data-testid="kw-long">{keyCount} keywords are added so far. Recruiters skim about 10 to 15 in Core Skills, so consider Not add for the weakest.</p>}
+   <div className="space-y-4">{KW_TIERS.map(([tier,label,hint])=>{
+    const list=addable.filter(k=>k.tier===tier);
+    if(!list.length)return null;
+    const shown=all?list:list.slice(0,12);
+    return <div key={tier} data-testid={"kw-tier-"+tier}>
+     <p className="text-xs"><b className="text-slate-200">{label}</b> <span className="text-slate-500">({list.length}) {hint}</span></p>
+     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-2">{shown.map(k=><KeywordCard key={k.key} k={k} rk={rk} onAdd={()=>toggleAdd(k)} onSkip={()=>toggleSkip(k)}/>)}</div>
+     {list.length>shown.length&&<p className="text-[11px] text-slate-500 mt-1">+{list.length-shown.length} more in this group</p>}
+    </div>})}</div>
+   {truncated&&<button type="button" onClick={()=>setAll(!all)} className="text-xs text-cyan-400 underline">{all?"Show fewer":"Show every keyword"}</button>}
+   {degrees.length>0&&<div data-testid="kw-degrees"><p className="text-xs"><b className="text-slate-200">Education the post asks for</b> <span className="text-slate-500">Your Education section shows these; they are never added to Core Skills.</span></p><div className="flex flex-wrap gap-1.5 mt-1.5">{degrees.map(k=><KeywordPill key={k.key} k={k}/>)}</div></div>}
+   <KeywordLegend/>
+  </>}
+  <details className="text-xs" data-testid="kw-jd-box">
+   <summary className="cursor-pointer text-cyan-300">Paste or edit the full job description ({jd.length.toLocaleString()} characters)</summary>
+   <p className="text-slate-500 mt-2">Copy the whole post from the job site and paste it here. The keywords, the recommended resume strategy and the match score all update.</p>
+   <textarea data-testid="kw-jd" value={jd} onChange={e=>updateJob(job.id,{pastedDescription:e.target.value})} className="w-full h-48 bg-slate-950 border border-slate-700 rounded p-3 mt-2 text-xs"/>
+   {job.pastedDescription!=null&&<button onClick={()=>updateJob(job.id,{pastedDescription:undefined})} className="mt-2 text-amber-300 underline">Restore the original text</button>}
+  </details>
+ </div>
+}
+// Shown under the description box on Add Job, before the job is even saved.
+function KeywordPreview({title,company,text,p}){
+ const deferred=React.useDeferredValue(text);
+ const evidence=useMemo(()=>keywordEvidence(p),[p]);
+ const kws=useMemo(()=>deferred&&deferred.trim().length>=40?annotateKeywords(extractKeywords(deferred,title,company),evidence):[],[deferred,title,company,evidence]);
+ if(!kws.length)return null;
+ const mine=kws.filter(k=>k.kind!=="degree"&&k.evidence==="skills").length;
+ return <div className="border border-slate-800 rounded-lg p-4 space-y-3 bg-slate-950/40" data-testid="keyword-preview">
+  <p className="text-sm"><b>{kws.length} recruiter keywords</b> found in this post, <span className="text-emerald-300">{mine} already in your profile</span>. After adding the job, open its resume and press Add for the ones you want on it.</p>
+  {KW_TIERS.map(([tier,label])=>{const list=kws.filter(k=>k.tier===tier);return list.length?<div key={tier}><p className="text-xs text-slate-400">{label} ({list.length})</p><div className="flex flex-wrap gap-1.5 mt-1">{list.slice(0,18).map(k=><KeywordPill key={k.key} k={k}/>)}{list.length>18&&<span className="text-[11px] text-slate-500 self-center">+{list.length-18} more</span>}</div></div>:null})}
+  <KeywordLegend/>
+ </div>
+}
+/* ---- Application Pack (generation lives in applypack.js). Nothing here sends anything anywhere. ---- */
+function fallbackCopy(text,done){
+ const t=document.createElement("textarea");t.value=text;t.style.position="fixed";t.style.opacity="0";
+ document.body.appendChild(t);t.select();
+ try{document.execCommand("copy");done()}catch(e){}
+ document.body.removeChild(t);
+}
+function copyText(text,notify,label){
+ const done=()=>notify&&notify((label||"Text")+" copied.");
+ if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(text).then(done,()=>fallbackCopy(text,done));
+ else fallbackCopy(text,done);
+}
+const PACK_STATE={done:{icon:"✓",cls:"text-emerald-300"},todo:{icon:"○",cls:"text-amber-300"},info:{icon:"•",cls:"text-slate-400"},warn:{icon:"!",cls:"text-red-300"}};
+const packBtn="px-2.5 py-1 rounded text-[11px] border border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200";
+
+function PackPart({id,label,generated,value,setValue,resetValue,counter,rows,notify}){
+ const edited=value!==generated;
+ const left=apCountPlaceholders(value);
+ return <div data-testid={"pack-"+id} className="space-y-1.5">
+  <div className="flex flex-wrap items-center justify-between gap-2">
+   <p className="text-xs"><b className="text-slate-200">{label}</b> <span className={"ml-1 "+counter.cls} data-testid={"pack-"+id+"-count"}>{counter.text}</span>{left>0&&<span className="ml-2 text-amber-300" data-testid={"pack-"+id+"-left"}>{left} [EDIT THIS] left</span>}{edited&&<span className="ml-2 text-cyan-300" data-testid={"pack-"+id+"-edited"}>edited</span>}</p>
+   <div className="flex gap-1.5">
+    <button type="button" data-testid={"pack-"+id+"-copy"} onClick={()=>copyText(value,notify,label)} className={packBtn}>Copy</button>
+    {edited&&<button type="button" data-testid={"pack-"+id+"-reset"} onClick={resetValue} className={packBtn}>Reset to generated</button>}
+   </div>
+  </div>
+  <textarea data-testid={"pack-"+id+"-text"} aria-label={label} rows={rows} value={value} onChange={e=>setValue(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded p-3 text-xs leading-5"/>
+ </div>
+}
+function ApplicationPack({job,pack,texts,saved,setAp,notify}){
+ const rep=pack.report;
+ const bodyWords=coverLetterBodyWords(texts.coverLetter);
+ const okWords=bodyWords>=120&&bodyWords<=180;
+ const recChars=texts.recruiter.length;
+ const checklist=buildChecklist({job,texts,docs:pack.docs,filename:pack.filename,needsCoverLetter:pack.needsCoverLetter,applyEmail:pack.applyEmail});
+ const reset=key=>()=>setAp({[key]:undefined});
+ return <div className="no-print bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-5" data-testid="application-pack">
+  <div><h3 className="font-semibold">Application Pack</h3>
+   <p className="text-xs text-cyan-400 mt-0.5">{job.title}{job.company?" · "+job.company:""}</p>
+   <p className="text-xs text-slate-500 mt-1">Built from your Master Profile and this post. Every line is your own fact, a quote from the post, or an <b className="text-slate-300">[EDIT THIS]</b> where only you know the answer. <b className="text-slate-300">Nothing is sent for you</b>: read it, copy it, send it yourself.</p></div>
+
+  <div className="bg-slate-950 rounded-lg p-3 space-y-2 text-xs" data-testid="pack-report">
+   <p><b className="text-slate-200">Keywords added</b> {rep.keywordsAdded.length?<span data-testid="pack-added" className="text-emerald-300">{rep.keywordsAdded.join(", ")}</span>:<span className="text-slate-500" data-testid="pack-added">none yet: press Add in Recruiter Keywords above</span>}</p>
+   <div><p><b className="text-slate-200">Important gaps</b></p>{rep.gaps.length?<ul className="list-disc ml-4 mt-1 text-amber-200 space-y-0.5" data-testid="pack-gaps">{rep.gaps.map((g,i)=><li key={i}>{g}</li>)}</ul>:<p className="text-slate-500 mt-1" data-testid="pack-gaps">None found in the requirements this post states.</p>}</div>
+   <p data-testid="pack-match"><b className="text-slate-200">Estimated match</b> before <b>{rep.matchBefore}/100</b> → after <b className="text-cyan-300">{rep.matchAfter}/100</b> <span className="text-slate-500">(keyword coverage of your resume, not an employer's score)</span>{rep.roleFit!=null&&<span className="text-slate-400"> · role fit {rep.roleFit}/100</span>}</p>
+  </div>
+
+  <div data-testid="pack-salary" className="text-xs">
+   <p><b className="text-slate-200">Expected salary field</b> {pack.salary.amount!=null&&<><b className="text-cyan-300" data-testid="pack-salary-amount">{pack.salary.amount.toLocaleString("en-US")} Tk</b> <button type="button" data-testid="pack-salary-copy" onClick={()=>copyText(String(pack.salary.amount),notify,"Salary")} className={packBtn+" ml-1"}>Copy</button></>}</p>
+   <p className="text-slate-400 mt-0.5" data-testid="pack-salary-note">{pack.salary.note}</p>
+  </div>
+
+  <PackPart id="cover" label="Cover letter" generated={pack.coverLetter.text} value={texts.coverLetter} setValue={v=>setAp({coverLetter:v})} resetValue={reset("coverLetter")} rows={17} notify={notify}
+   counter={{text:`${bodyWords} words (target 120-180)`,cls:okWords?"text-emerald-300":"text-amber-300"}}/>
+  {pack.coverLetter.notes.length>0&&texts.coverLetter===pack.coverLetter.text&&<ul className="text-[11px] text-slate-500 list-disc ml-4" data-testid="pack-cover-notes">{pack.coverLetter.notes.map((n,i)=><li key={i}>{n}</li>)}</ul>}
+  <PackPart id="email" label="Email draft" generated={pack.email.text} value={texts.email} setValue={v=>setAp({email:v})} resetValue={reset("email")} rows={15} notify={notify}
+   counter={{text:`${apWords(texts.email)} words`,cls:"text-slate-400"}}/>
+  <PackPart id="recruiter" label="Recruiter / LinkedIn message" generated={pack.recruiter.text} value={texts.recruiter} setValue={v=>setAp({recruiter:v})} resetValue={reset("recruiter")} rows={4} notify={notify}
+   counter={{text:`${recChars} of 300 characters`,cls:recChars<=300?"text-emerald-300":"text-amber-300"}}/>
+
+  <div data-testid="pack-checklist"><p className="text-xs"><b className="text-slate-200">Checklist</b></p>
+   <ul className="mt-1.5 space-y-1">{checklist.map(i=>{const s=PACK_STATE[i.state];return <li key={i.key} data-testid={"check-"+i.key} data-state={i.state} className="text-xs flex gap-2 items-start"><span className={"w-4 shrink-0 text-center "+s.cls}>{s.icon}</span><span><span className="text-slate-200">{i.label}</span> <span className="text-slate-500">{i.note}</span></span></li>})}</ul>
+  </div>
+
+  <div className="flex flex-wrap items-center gap-2 text-xs" data-testid="pack-file">
+   <span className="text-slate-400">Suggested file name</span><code className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-200" data-testid="pack-filename">{pack.filename}</code>
+   <button type="button" data-testid="pack-filename-copy" onClick={()=>copyText(pack.filename,notify,"File name")} className={packBtn}>Copy</button>
+   {job.url&&<a href={job.url} target="_blank" rel="noopener noreferrer" className={packBtn+" text-cyan-300"} data-testid="pack-open">Open application page</a>}
+  </div>
+ </div>
+}
+function ResumeSection({title,children}){return <section className="mb-4"><h2 className="text-[10.5px] tracking-widest font-bold border-b border-black pb-1 mb-2">{title}</h2>{children}</section>}
+// The resume as a page. It draws a resume document (resumedoc.js), the same object the PDF, DOCX and TXT
+// are made from, so this is what those files say. Also used to show a recorded version.
+function ResumePreview({doc:d}){
+ return <div className="bg-white text-black max-w-[794px] mx-auto p-8 md:p-10 shadow-2xl rounded print-resume">
+  <header className="border-b pb-3 mb-4"><h1 className="text-3xl font-black tracking-wide">{(d.name||"YOUR NAME").toUpperCase()}</h1>{d.headline&&<p className="text-[12px] font-bold text-sky-700 mt-1 tracking-wide">{d.headline.toUpperCase()}</p>}<p className="text-[10px] mt-1 leading-4">{d.contact}</p></header>
+  <ResumeSection title="PROFESSIONAL SUMMARY"><p className="text-[10.5px] leading-5">{d.summary}</p></ResumeSection>
+  <ResumeSection title="CORE SKILLS"><div className="space-y-1" data-testid="core-skills">{d.skillRows.map((g,i)=><p key={i} className="text-[10px] leading-4"><b>{g.category}:</b> {g.items.join(", ")}</p>)}</div></ResumeSection>
+  <ResumeSection title="PROFESSIONAL EXPERIENCE">{d.overridden?<pre className="text-[10px] leading-4 whitespace-pre-wrap font-sans">{d.experienceText}</pre>:d.experience.map((e,i)=><div key={i} className="mb-3"><div className="flex justify-between text-[10.5px]"><b>{e.title}</b><span>{e.meta}</span></div><ul className="list-disc ml-5 mt-1 text-[10px] leading-4">{e.bullets.map((b,n)=><li key={n}>{b}</li>)}</ul></div>)}</ResumeSection>
+  <ResumeSection title="PROJECTS">{d.overridden?<pre className="text-[10px] leading-4 whitespace-pre-wrap font-sans">{d.projectsText}</pre>:d.projects.map((x,i)=><div key={i} className="mb-3"><p className="text-[10.5px]"><b>{x.name||x.title}</b>{x.subtitle&&<span>, {x.subtitle}</span>}</p><ul className="list-disc ml-5 mt-1 text-[10px] leading-4">{x.bullets.map((b,n)=><li key={n}>{b}</li>)}</ul></div>)}</ResumeSection>
+  <ResumeSection title="EDUCATION">{d.education.map((e,i)=><div key={i} className="mb-2"><div className="flex justify-between text-[10.5px]"><b>{e.degree}</b><span>{e.date}</span></div><p className="text-[10px] leading-4">{e.detail}</p></div>)}</ResumeSection>
+  {d.references.length>0&&<ResumeSection title="REFERENCES"><div className="grid grid-cols-2 gap-4">{d.references.map((r,i)=><div key={i} className="text-[10px] leading-4"><p className="font-bold text-[10.5px]">{r.name}</p><p>{r.title}</p><p>{r.contact}</p></div>)}</div></ResumeSection>}
+ </div>
+}
+
+/* ---- Applications: the recorded versions (versions.js) ---- */
+const versionStem=v=>(v.fileName||`resume_${v.appliedOn}`).replace(/\.(pdf|docx|txt)$/i,"");
+const rupees=n=>Number(n).toLocaleString("en-US")+" Tk";
+
+function VersionDetail({v,prev,job,onUpdate,openJob,notify}){
+ const [note,setNote]=useState(v.note||"");
+ const d=diffVersions(prev,v);
+ const posted=v.salary.postedText||(v.salary.postedMin!=null?rupees(v.salary.postedMin)+(v.salary.postedMax!=null&&v.salary.postedMax!==v.salary.postedMin?" to "+rupees(v.salary.postedMax):""):"not stated");
+ const texts=[["cover","Cover letter",v.pack.coverLetter],["email","Email draft",v.pack.email],["recruiter","Recruiter / LinkedIn message",v.pack.recruiter]];
+ return <div data-testid="version-detail" className="mt-4 border-t border-slate-800 pt-4 space-y-4">
+  <div className="text-xs text-slate-400 space-y-1">
+   <p>Recorded {new Date(v.appliedAt).toLocaleString()} when you pressed Mark Applied or Record current version. It is the copy the app held then; it cannot know what you actually attached or typed into an email, so compare it with what you really sent.</p>
+   <p>Pay in the post: <span className="text-slate-200">{posted}</span> · Suggested ask: <span className="text-slate-200">{v.salary.suggested!=null?rupees(v.salary.suggested):"none"}</span>{v.salary.note&&<span className="text-slate-500"> ({v.salary.note})</span>}</p>
+   {v.report.matchAfter!=null&&<p>Keyword match: {v.report.matchBefore}/100 before, {v.report.matchAfter}/100 after your Add choices{v.report.roleFit!=null&&<> · Role fit {v.report.roleFit}%</>}</p>}
+   {v.report.gaps.length>0&&<div><p>Gaps the report listed:</p><ul className="list-disc ml-5 text-amber-200">{v.report.gaps.map((g,i)=><li key={i}>{g}</li>)}</ul></div>}
+  </div>
+  <div><label className="text-xs text-slate-400">Your note (interview date, who replied, what to remember)</label>
+   <textarea data-testid="version-note" value={note} onChange={e=>setNote(e.target.value)} onBlur={()=>{if(note!==(v.note||""))onUpdate(v.id,{note})}} className="w-full h-16 bg-slate-950 border border-slate-700 rounded p-2 text-sm mt-1"/></div>
+  <div><p className="text-xs font-semibold text-slate-300 mb-1">Compared with the previous version for this job</p>
+   {d.first?<p data-testid="version-diff" className="text-xs text-slate-400">This is the first version recorded for this job.</p>
+    :d.identical?<p data-testid="version-diff" className="text-xs text-slate-400">Identical to the previous version.</p>
+    :<div data-testid="version-diff" className="text-xs space-y-0.5">{d.changed.length>0&&<p className="text-slate-200">Changed: {d.changed.join(", ")}</p>}{d.keywordsAdded.length>0&&<p className="text-emerald-300">Keywords added: {d.keywordsAdded.join(", ")}</p>}{d.keywordsRemoved.length>0&&<p className="text-amber-300">Keywords removed: {d.keywordsRemoved.join(", ")}</p>}</div>}
+  </div>
+  <div><p className="text-xs font-semibold text-slate-300 mb-2">Resume, as recorded</p><div data-testid="version-preview"><ResumePreview doc={v.doc}/></div></div>
+  {texts.map(([id,label,text])=><div key={id}><div className="flex items-center gap-2 mb-1"><p className="text-xs font-semibold text-slate-300">{label}, as recorded</p><button type="button" data-testid={"version-copy-"+id} onClick={()=>copyText(text,notify,label)} className={packBtn}>Copy</button></div><pre data-testid={"version-"+id} className="whitespace-pre-wrap font-sans text-xs bg-slate-950 border border-slate-800 rounded p-3 text-slate-200">{text||"(empty)"}</pre></div>)}
+  <details><summary className="text-xs text-slate-400 cursor-pointer">The job post as it was when recorded</summary><pre data-testid="version-description" className="whitespace-pre-wrap font-sans text-xs bg-slate-950 border border-slate-800 rounded p-3 mt-2 text-slate-300 max-h-80 overflow-auto">{v.description||"(not kept)"}</pre></details>
+  <div className="flex flex-wrap gap-2 text-xs">{job?<button onClick={()=>openJob(job)} className={packBtn}>Open this job</button>:<span className="text-slate-500">This job is no longer in your list; the record above is still complete.</span>}{v.url&&<a href={v.url} target="_blank" rel="noopener noreferrer" className={packBtn+" text-cyan-300"}>Open application page</a>}</div>
+ </div>
+}
+
+function ApplicationsPanel({versions,ready,error,jobs,openId,setOpenId,onUpdate,onDelete,onImport,openJob,notify}){
+ const [q,setQ]=useState("");
+ const [confirmId,setConfirmId]=useState(null);
+ const list=sortNewest(versions).filter(v=>[v.company,v.title,v.fileName,v.strategyLabel,v.keywordsAdded.join(" "),v.note].join(" ").toLowerCase().includes(q.trim().toLowerCase()));
+ const jobFor=v=>jobs.find(j=>(v.jobId&&j.id===v.jobId)||(v.jobFingerprint&&j.fingerprint===v.jobFingerprint));
+ const kb=Math.max(1,Math.round(versionsStorageBytes(versions)/1024));
+ const exportAll=()=>download(`careerpilot-applications-${vnLocalDate(new Date())}.json`,JSON.stringify({app:"careerpilot-bd",kind:"recorded-versions",exportedAt:new Date().toISOString(),versions},null,2),"application/json");
+ const importFile=e=>{
+  const f=e.target.files[0];e.target.value="";
+  if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+   try{
+    const data=JSON.parse(r.result);
+    const raw=Array.isArray(data)?data:(data&&Array.isArray(data.versions)?data.versions:null);
+    if(!raw)throw new Error("no versions");
+    const valid=normalizeVersions(raw).length;
+    const res=onImport(raw);
+    const skipped=raw.length-valid,already=valid-res.added;
+    notify(`Imported ${res.added} new version${res.added===1?"":"s"}${already>0?`, ${already} already here`:""}${skipped>0?`, ${skipped} skipped as not valid`:""}.`);
+   }catch(err){notify("That file is not a CareerPilot applications export.")}
+  };
+  r.readAsText(f);
+ };
+ return <section className="space-y-4" data-testid="applications-panel">
+  <div><h2 className="text-xl font-bold">Applications</h2><p className="text-sm text-slate-400">The resume, cover letter, email and keywords exactly as they were when you pressed Mark Applied (or Record current version), one entry per version. If an interview comes, this is the wording the employer received.</p></div>
+  {error&&<div data-testid="versions-error" className="bg-red-950/40 border border-red-800 text-red-200 text-xs rounded-lg p-3">{error}</div>}
+  <div className="no-print flex flex-wrap items-center gap-2 text-xs">
+   <input data-testid="versions-search" aria-label="Search recorded versions" placeholder="Search company, role, keyword, note..." value={q} onChange={e=>setQ(e.target.value)} className="bg-slate-900 border border-slate-700 rounded px-3 py-2 w-72"/>
+   <button data-testid="versions-export" onClick={exportAll} disabled={!versions.length} className="bg-slate-800 px-3 py-2 rounded disabled:opacity-40">Export JSON</button>
+   <label className="bg-slate-800 px-3 py-2 rounded cursor-pointer">Import JSON<input data-testid="versions-import" type="file" accept=".json,application/json" className="hidden" onChange={importFile}/></label>
+   <span data-testid="versions-storage" className="text-slate-500">{versions.length} version{versions.length===1?"":"s"} · about {kb} KB of the browser's roughly 5 MB, shared with your jobs and profile</span>
+  </div>
+  <p className="text-[11px] text-slate-500">These are stored encrypted with your vault password, and that password cannot be recovered. Export now and then. The export file is <b className="text-slate-300">not</b> encrypted (it holds your phone and email), so keep it somewhere private.</p>
+  {!list.length&&<div data-testid="versions-empty" className="text-slate-400 bg-slate-900 border border-slate-800 rounded-xl p-8 text-center">{versions.length?"No recorded version matches that search.":"Nothing recorded yet. Open a job's resume and press Mark Applied to keep a copy of exactly what it says."}</div>}
+  <div className="space-y-3">{list.map(v=>{
+   const sameJob=versionsForJob(versions,{id:v.jobId,fingerprint:v.jobFingerprint});
+   const at=sameJob.findIndex(x=>x.id===v.id);
+   const prev=sameJob[at+1]||null;
+   const job=jobFor(v);
+   const open=openId===v.id;
+   return <div key={v.id} data-testid="version-card" data-id={v.id} className={"bg-slate-900 border rounded-xl p-4 "+(open?"border-cyan-700":"border-slate-800")}>
+    <div className="flex flex-wrap justify-between gap-3">
+     <div className="min-w-0">
+      <p className="font-bold">{v.title||"Untitled role"} <span className="text-cyan-400 font-normal">· {v.company||"Unknown company"}</span></p>
+      <p className="text-xs text-slate-400 mt-0.5">Applied {formatDay(v.appliedOn)}{sameJob.length>1?` · version ${sameJob.length-at} of ${sameJob.length} for this job`:""}{job&&<> · <span data-testid="version-status" className="text-slate-300">{job.status}</span></>}</p>
+      <p className="text-xs text-slate-500 mt-1">File <code className="text-slate-300" data-testid="version-file">{v.fileName||"(none)"}</code> · Strategy <span className="text-slate-300" data-testid="version-strategy">{v.strategyLabel||v.strategy||"-"}</span></p>
+      <p className="text-xs mt-1.5 flex flex-wrap gap-1" data-testid="version-keywords"><span className="text-slate-500 mr-1">Keywords added</span>{v.keywordsAdded.length?v.keywordsAdded.map(k=><span key={k} className="bg-emerald-950/50 text-emerald-200 border border-emerald-800 px-2 py-0.5 rounded-full">{k}</span>):<span className="text-slate-500">none</span>}</p>
+      {v.note&&<p className="text-xs text-amber-200 mt-1.5" data-testid="version-note-preview">Note: {v.note}</p>}
+     </div>
+     <div className="no-print flex flex-wrap items-start gap-1.5">
+      <button data-testid="version-open" onClick={()=>setOpenId(open?null:v.id)} className={packBtn+" text-cyan-300"}>{open?"Hide":"View"}</button>
+      <button data-testid="version-pdf" onClick={()=>renderResumePDF(v.doc,versionStem(v)+".pdf")} className={packBtn}>PDF</button>
+      <button data-testid="version-docx" onClick={()=>renderResumeDOCX(v.doc,versionStem(v)+".docx")} className={packBtn}>DOCX</button>
+      <button data-testid="version-txt" onClick={()=>download(versionStem(v)+".txt",resumeDocToText(v.doc))} className={packBtn}>TXT</button>
+      {confirmId===v.id
+       ?<><button data-testid="version-delete-confirm" onClick={()=>{onDelete(v.id);setConfirmId(null);notify("Version deleted.")}} className="px-2.5 py-1 rounded text-[11px] bg-red-800 text-white">Delete for good</button><button onClick={()=>setConfirmId(null)} className={packBtn}>Keep</button></>
+       :<button data-testid="version-delete" onClick={()=>setConfirmId(v.id)} className={packBtn+" text-red-300"}>Delete</button>}
+     </div>
+    </div>
+    {open&&<VersionDetail key={v.id} v={v} prev={prev} job={job} onUpdate={onUpdate} openJob={openJob} notify={notify}/>}
+   </div>})}
+  </div>
+ </section>
+}
+
+function CheckRow({ok,text}){return <p className="text-xs flex gap-2 items-start"><span className={ok?'text-emerald-400':'text-amber-400'}>{ok?'✓':'!'}</span>{text}</p>}
+
+const MANUAL_KEY="careerpilot_bd_v2_manual_checked";
+const localToday=()=>new Date().toLocaleDateString("en-CA");
+const daysSince=d=>Math.round((new Date(localToday())-new Date(d))/86400000);
+const isWebUrl=u=>typeof u==="string"&&(u.startsWith("https://")||u.startsWith("http://"));
+// Boards the pipeline cannot read (bot protection, no terms permission, no structured data).
+// The list lives in config/manual_sites.json so it can be edited without touching this file.
+function ManualSites({p}){
+ const titles=(p.preferences&&p.preferences.titles)||[];
+ const [data,setData]=useState(null);
+ const [failed,setFailed]=useState(false);
+ const [title,setTitle]=useState(titles[0]||"");
+ const [checked,setChecked]=useState(()=>{try{return JSON.parse(localStorage.getItem(MANUAL_KEY)||"{}")}catch{return {}}});
+ useEffect(()=>{
+  fetch("config/manual_sites.json",{cache:"no-cache"}).then(r=>{if(!r.ok)throw new Error("HTTP "+r.status);return r.json()}).then(setData).catch(()=>setFailed(true));
+ },[]);
+ useEffect(()=>{try{localStorage.setItem(MANUAL_KEY,JSON.stringify(checked))}catch{}},[checked]);
+ const today=localToday();
+ const sites=((data&&data.sites)||[]).filter(s=>isWebUrl(s.url));
+ const automatic=((data&&data.automatic)||[]).filter(s=>isWebUrl(s.url));
+ const groups=[...new Set(sites.map(s=>s.group||"Other"))];
+ const doneToday=sites.filter(s=>checked[s.id]===today).length;
+ const toggle=id=>setChecked(c=>{const n={...c};if(n[id]===today)delete n[id];else n[id]=today;return n});
+ const searchLink=s=>isWebUrl(s.searchUrl)&&title?s.searchUrl.split("{query}").join(encodeURIComponent(title)):null;
+ return <section className="space-y-6">
+  <div><h2 className="text-xl font-bold">Manual Sites</h2><p className="text-sm text-slate-400 mt-1">Job sites the system cannot read for you, each with the honest reason. Open them yourself, then tick them off. Your ticks stay in this browser.</p></div>
+  {failed&&<div className="bg-amber-950/40 border border-amber-800 rounded-xl p-4 text-sm text-amber-200">Could not load config/manual_sites.json. Open the dashboard from its GitHub Pages address (or with start.bat) rather than double-clicking the file.</div>}
+  {!data&&!failed&&<div className="text-slate-400 text-sm">Loading the list...</div>}
+  {data&&<>
+   <div className="no-print flex flex-wrap items-center gap-3 text-xs bg-slate-900 border border-slate-800 rounded-xl p-4">
+    <label className="flex items-center gap-2 text-slate-300">Search these sites for
+     <select aria-label="Target title" value={title} onChange={e=>setTitle(e.target.value)} className="bg-slate-950 border border-slate-700 rounded px-2 py-2">{titles.map(t=><option key={t} value={t}>{t}</option>)}</select>
+    </label>
+    <span className="text-slate-500" data-testid="manual-progress">{doneToday} of {sites.length} checked today</span>
+   </div>
+   {groups.map(g=><div key={g} data-testid="manual-group">
+    <h3 className="font-semibold text-cyan-300 mb-2">{g}</h3>
+    <div className="grid lg:grid-cols-2 gap-3">{sites.filter(s=>(s.group||"Other")===g).map(s=>{
+     const last=checked[s.id];const isToday=last===today;const sl=searchLink(s);
+     return <div key={s.id} data-testid="manual-site" className={"border rounded-xl p-4 "+(isToday?"bg-emerald-950/30 border-emerald-900":"bg-slate-900 border-slate-800")}>
+      <div className="flex justify-between gap-3"><b>{s.name}</b><span className={"text-[11px] whitespace-nowrap "+(isToday?"text-emerald-300":"text-slate-500")}>{isToday?"Checked today":last?`Last checked ${last} (${daysSince(last)} days ago)`:"Never checked"}</span></div>
+      {s.note&&<p className="text-sm text-slate-300 mt-1">{s.note}</p>}
+      {s.why&&<p className="text-xs text-slate-500 mt-2"><span className="text-slate-400">Why not automatic:</span> {s.why}</p>}
+      <div className="flex flex-wrap gap-2 mt-3 text-xs">
+       {sl&&<a href={sl} target="_blank" rel="noopener noreferrer" className="bg-cyan-600 px-3 py-2 rounded">Search "{title}"</a>}
+       <a href={s.url} target="_blank" rel="noopener noreferrer" className="bg-slate-800 px-3 py-2 rounded text-cyan-300">Open site</a>
+       <button onClick={()=>toggle(s.id)} className="bg-slate-800 px-3 py-2 rounded">{isToday?"Undo":"Mark checked today"}</button>
+      </div>
+     </div>})}</div>
+   </div>)}
+   {automatic.length>0&&<div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+    <h3 className="font-semibold">Already checked for you</h3>
+    <p className="text-xs text-slate-400 mt-1">These arrive in Job Analysis by themselves twice a day, so there is nothing to do here.</p>
+    <ul className="mt-3 space-y-1 text-sm">{automatic.map(s=><li key={s.id}><a href={s.url} target="_blank" rel="noopener noreferrer" className="text-cyan-300 underline">{s.name}</a><span className="text-slate-500"> · {s.note}</span></li>)}</ul>
+   </div>}
+  </>}
+ </section>
+}
+function Tracker({jobs,setJobs,versions,versionsReady,openApplications}){
+ const statuses=["Awaiting Review","Saved","Awaiting Approval","Applied","Interview","Rejected","Offer"];
+ const appliedLike=["Applied","Interview","Rejected","Offer"];
+ return <section><h2 className="text-xl font-bold mb-4">Application Tracker</h2><div className="space-y-3">{jobs.map(j=>{
+  const mine=versionsForJob(versions,j);
+  return <div key={j.id} className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-wrap justify-between gap-3"><div><b>{j.title}</b><p className="text-sm text-slate-400">{j.company}</p>
+   {mine.length>0&&<button data-testid="tracker-versions" onClick={()=>openApplications(mine[0].id)} className="text-xs text-cyan-400 underline mt-1">{mine.length} recorded version{mine.length===1?"":"s"}</button>}
+   {versionsReady&&!mine.length&&appliedLike.includes(j.status)&&<p data-testid="no-version-nudge" className="text-xs text-amber-300 mt-1 max-w-md">No version recorded for this application. Open this job's resume and press Record current version to keep a copy; it will hold what the resume says now, which may differ from what you sent earlier.</p>}
+  </div><select value={j.status} onChange={e=>setJobs(jobs.map(x=>x.id===j.id?{...x,status:e.target.value}:x))} className="bg-slate-950 border border-slate-700 rounded p-2 text-sm">{statuses.map(s=><option key={s}>{s}</option>)}</select></div>})}</div></section>
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
