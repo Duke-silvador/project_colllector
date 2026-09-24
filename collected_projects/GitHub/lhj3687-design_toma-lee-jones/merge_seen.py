@@ -1,0 +1,381 @@
+"""GitHub push가 충돌났을 때 seen_items.json의 상태를 안전하게 병합합니다.
+
+- seen: 두 실행이 확인한 매물/가격을 모두 유지합니다(최근에 본 쪽을 뒤로 보내 오래된 것부터 잘라냅니다).
+- sent_alerts: 합집합으로 보존해 이미 전송된 알림이 대기열에 되살아나도 재전송하지 않습니다.
+- pending: 고유 alert_id(구버전은 caption) 기준으로 합치되 sent_alerts에 있는 항목은 제거합니다.
+- relist_fingerprints: 재출품 감지용 지문 기록도 두 쪽 다 유지합니다(합집합, 최신 쪽 우선).
+  기준가는 **양쪽이 같은 매물을 가리킬 때만** 낮은 쪽을 취합니다(`same_subject`).
+- pending_relists: 판정을 미뤄 둔 재출품 후보도 합칩니다(먼저 시작한 쪽의 시각을 남깁니다).
+  주인이 서로 다르면 시계는 다시 세되 **더 최근에 물어본 쪽**을 남기고, `fresh`는 살립니다.
+  `checks`·`skips`처럼 한 방향으로만 가는 값은 큰 쪽을, 적어 둔 판정(`verdict`)은
+  있는 쪽을 남깁니다.
+- known_keywords: 이미 한 번이라도 조회한 키워드 목록도 합집합으로 유지합니다.
+- keyword_checked_at: 키워드별 마지막 조회 시각은 더 늦은 쪽을 남깁니다.
+"""
+import json
+import sys
+
+# 상한은 check_mercari.py와 반드시 같아야 합니다(테스트가 확인합니다).
+# 어긋나면 충돌 병합 때마다 상태가 조용히 깎입니다. 값의 근거는 그쪽 주석 참고.
+# (2026-09-21: seen 은 30,000 -> 200,000. '작업 상한'이 아니라 안전 그물입니다.)
+MAX_SEEN_ITEMS = 200000
+MAX_RELIST_FINGERPRINTS = 30000
+MAX_SENT_ALERTS = 20000
+MAX_PENDING_ALERTS = 500
+MAX_PENDING_RELISTS = 500
+# 보류 기록에 적어 둘 수 있는 판정. check_mercari.py의 같은 이름과 맞아야 합니다
+# (테스트가 확인합니다). 여기서도 아는 이유는 아래 merge_pending_relists 참고 —
+# 이 값이 한쪽에만 있을 때 **없는 쪽이 이기면 적어 둔 답이 사라집니다.**
+RELIST_VERDICTS = ("alive", "gone", "unconfirmed")
+SUPPORTED_FINGERPRINT_PREFIXES = ("seller:", "title:")
+# 숍스 상품은 sellerId가 0으로 내려옵니다. 그 시절 지문은 지금 조회되지 않습니다.
+UNKNOWN_SELLER_IDS = {"", "0", "none", "null"}
+
+
+def read_json(path: str, required: bool = False) -> dict:
+    """상태 파일을 읽습니다. required면 읽지 못할 때 조용히 넘어가지 않습니다.
+
+    /tmp/mine.json은 방금 이 실행이 모은 결과입니다. 읽지 못했을 때 빈 dict로
+    대신하면, 원격 상태만 남은 파일을 '병합 결과'라며 그대로 push해서 이번 실행의
+    알림과 가격 기록이 소리 없이 사라집니다. 그럴 바에는 병합을 실패시키는 편이
+    낫습니다 — push_state.sh가 실패로 받아 재시도하거나 멈추고, 상태는 보존됩니다.
+    (/tmp/theirs.json은 원격에 파일이 없을 때 정상적으로 비어 있을 수 있어 관대합니다.)
+    """
+    try:
+        with open(path) as file:
+            data = json.load(file)
+    except Exception as exc:
+        if required:
+            print(f"[병합 중단] {path}를 읽지 못했습니다: {exc}", file=sys.stderr)
+            raise SystemExit(1)
+        return {}
+    if isinstance(data, dict):
+        return data
+    if required:
+        print(f"[병합 중단] {path}의 형식이 올바르지 않습니다(dict가 아님)", file=sys.stderr)
+        raise SystemExit(1)
+    return {}
+
+
+def alert_key(entry: dict) -> str:
+    value = entry.get("alert_id")
+    if value:
+        return str(value)
+    return f"legacy:{entry.get('caption', '')}"
+
+
+def unique_recent(values: list, limit: int) -> list[str]:
+    result = []
+    known = set()
+    for value in values:
+        value = str(value)
+        if value and value not in known:
+            result.append(value)
+            known.add(value)
+    return result[-limit:]
+
+
+def merge_pending(theirs: list, mine: list, sent_alerts: list) -> list:
+    sent_keys = set(sent_alerts)
+    pending_keys = set()
+    result = []
+    for entry in theirs + mine:
+        if not isinstance(entry, dict):
+            continue
+        # 본문이 없는 항목은 전송 단계에서 터지고, 터지면 대기열에 그대로 남아
+        # 다음 실행도 같은 자리에서 터집니다. check_mercari.py와 같은 기준으로 걸러 냅니다.
+        caption = entry.get("caption")
+        if not isinstance(caption, str) or not caption.strip():
+            continue
+        key = alert_key(entry)
+        if key in sent_keys or key in pending_keys:
+            continue
+        normalized = dict(entry)
+        normalized.setdefault("alert_id", key)
+        result.append(normalized)
+        pending_keys.add(key)
+    if len(result) > MAX_PENDING_ALERTS:
+        # 상한을 넘겨 알림이 버려지는 상황은 조용히 넘어가면 안 됩니다.
+        # check_mercari.py의 deduplicate_pending과 같은 기준으로 알립니다 —
+        # 여기서만 말없이 버리면 '보낸 적도 없는데 사라진 알림'이 됩니다.
+        print(
+            f"[경고] 병합된 대기 알림이 상한({MAX_PENDING_ALERTS}건)을 넘어 "
+            f"오래된 {len(result) - MAX_PENDING_ALERTS}건을 버립니다",
+            file=sys.stderr,
+        )
+    return result[-MAX_PENDING_ALERTS:]
+
+
+def price_floor(record):
+    """그 매물의 '실제로 알림을 보낸 역대 최저가'. 없으면 None."""
+    if isinstance(record, dict):
+        value = record.get("last_alert_price")
+        return value if isinstance(value, int) else None
+    return record if isinstance(record, int) else None
+
+
+def same_subject(theirs, mine) -> bool:
+    """두 기록이 **같은 매물**을 말하고 있는가.
+
+    `seen`의 값에는 매물 ID가 없습니다 — 키가 곧 매물 ID라 양쪽이 언제나 같은 매물입니다.
+    `relist_fingerprints`는 다릅니다. 키는 지문이고 주인(`item_id`)이 값 안에 들어 있어서,
+    두 실행이 **서로 다른 매물**을 그 지문의 주인으로 보고 있을 수 있습니다.
+    """
+    if not isinstance(theirs, dict) or not isinstance(mine, dict):
+        return True
+    theirs_id, mine_id = theirs.get("item_id"), mine.get("item_id")
+    if theirs_id is None or mine_id is None:
+        return True
+    return theirs_id == mine_id
+
+
+def merge_price_record(theirs, mine):
+    """같은 매물이 양쪽에 다 있을 때 가격 기록을 합칩니다.
+
+    `last_alert_price`는 '실제로 알림을 보낸 역대 최저가'라 **내려가기만 합니다.**
+    그런데 병합은 양쪽에 다 있는 키를 `mine`(내 실행)으로 덮어쓰는데, 내 실행이 상대보다
+    **먼저 시작했으면** 그 값은 상대가 이미 내려놓은 기준을 모르는 옛날 값입니다.
+    그대로 덮으면 기준가가 위로 올라갑니다.
+
+    실측(2026-09-13 17:12 ~ 09-14 17:51 UTC, PR #23 머지 뒤): 기준가가 올라간 자리가
+    **245건**이고 전부 `queue Mercari alerts` 커밋 — 즉 조회 단계 push의 병합입니다.
+    그중 **210건**이 '인하 알림을 보내 내려간 값에서 그 직전 값으로 **정확히** 되돌아간'
+    자리였습니다. 사용자에게 닿은 피해는 그중 일부입니다(이미 알린 최저가보다 비싼 값을
+    '역대 최저가'라고 주장한 인하 알림이 머지 뒤 2건).
+
+    나머지는 다음 실행이 스스로 되돌리고 `sent_alerts`가 중복을 막습니다. 그래도
+    기준이 위로 가는 것은 PR #23이 없앤 바로 그 결함이라, 남은 경로도 막습니다.
+
+    **단, 양쪽이 같은 매물을 말하고 있을 때만입니다.** 기준가는 매물 하나에 붙은 값이라,
+    지문의 주인이 양쪽에서 다르면 낮은 쪽을 취하는 순간 살아남은 매물이 **남의 기준가**를
+    물려받습니다. 실측(PR #34 머지 뒤 8.4시간에 7건 / 지문 3개, 전부 `queue Mercari alerts`
+    커밋이고 머지 전에는 이 모양이 **0건**입니다):
+
+        seller:119903670:hermesカーディガンレディース古着中古送料無料
+          지문  {'item_id': 'a4pPNJARPBEuwTDW6Ac5AJ',
+                 'last_alert_price': 40700, 'last_seen_price': 82600}
+          seen['a4pPNJARPBEuwTDW6Ac5AJ'] = {'last_alert_price': 82600, ...}
+
+    ¥40,700은 **직전 주인**(2JVKR8qmuQv9xX3FR2pyH2)의 기준가입니다. 지문 하나가 기준가와
+    주인을 서로 다른 매물에서 가져온 셈이라, 값이 스스로 모순입니다(한 번도 알린 적 없는
+    가격이 '역대 최저 알림가'로 앉아 있고 그게 마지막 관측가보다 쌉니다). 이 지문을
+    물려받는 다음 매물은 ¥82,600짜리인데 기준가가 ¥40,700이라 ¥39,700 아래로 떨어지기
+    전에는 인하 알림이 **한 건도** 나가지 않습니다 — 조용히 삼켜지는 쪽입니다.
+
+    주인이 다르면 낮은 쪽을 고르지 않고 `mine`을 그대로 씁니다(PR #34 이전 동작).
+    `mine`의 기준가는 `mine`의 주인에게 붙은 값이고, 남는 주인이 그쪽이기 때문입니다.
+    """
+    if not same_subject(theirs, mine):
+        return mine
+    floors = [value for value in (price_floor(theirs), price_floor(mine))
+              if isinstance(value, int)]
+    if not floors:
+        return mine
+    lowest = min(floors)
+    if not isinstance(mine, dict):
+        return lowest
+    if mine.get("last_alert_price") == lowest:
+        return mine
+    # 나머지 필드와 순서는 그대로 mine 을 따릅니다. last_seen_price 는 참고용이라
+    # 판정에 쓰이지 않으므로 손대지 않습니다.
+    return {**mine, "last_alert_price": lowest}
+
+
+def merge_ordered(theirs: dict, mine: dict, limit: int, merge_values=None) -> dict:
+    """두 쪽을 합치되, 양쪽에 다 있는 키는 '최근에 본 쪽'(mine)의 순서를 따릅니다.
+
+    상태 파일은 뒤에서부터 limit개만 남기므로, 최근 확인한 항목이 뒤로 가야
+    오래 올라와 있는 매물이 먼저 잘려 나가 '신규'로 오인되는 일이 없습니다.
+
+    **값까지 mine 으로 덮으면 안 되는 것이 있습니다.** `merge_values`를 주면 양쪽에 다
+    있는 키에 대해 그 함수로 값을 합칩니다(`merge_price_record` 참고).
+    """
+    merged = {key: value for key, value in theirs.items() if key not in mine}
+    for key, value in mine.items():
+        if merge_values is not None and key in theirs:
+            value = merge_values(theirs[key], value)
+        merged[key] = value
+    return dict(list(merged.items())[-limit:])
+
+
+def asked_at(entry: dict) -> float:
+    """이 보류 기록을 **마지막으로 물어본 시각**. 없으면 보류를 시작한 시각으로 대신합니다.
+
+    `checked_at`은 '못 물어본 실행에서도 적어 두는' 값이라, 두 기록 중 어느 쪽이 그
+    매물을 더 최근에 들여다봤는지를 그대로 말해 줍니다.
+    """
+    for key in ("checked_at", "since"):
+        value = entry.get(key)
+        if isinstance(value, (int, float)):
+            return float(value)
+    return float("-inf")
+
+
+def merge_pending_relists(theirs: dict, mine: dict, seen: dict) -> dict:
+    """판정을 미뤄 둔 재출품 후보를 합칩니다.
+
+    두 쪽이 같은 매물을 보고 있으면 **먼저 시작한 쪽의 since와 더 많이 센 checks**를
+    남깁니다. 늦게 시작한 쪽을 그대로 쓰면 실행이 겹칠 때마다 시계가 0으로 되돌아가,
+    직접 조회가 계속 실패할 때 포기하는 자리에 영영 닿지 못합니다
+    (checks는 '물어봤는데 답을 못 얻은 횟수'입니다).
+
+    **지문의 주인(matched_id)이 서로 다르면** 두 쪽은 다른 질문을 확인하고 있어 시계를
+    합칠 수 없습니다. 그렇다고 `mine`을 그냥 쓰면, **그 매물을 이번 실행에서 보지도 않은
+    쪽**이 이깁니다. 실측(2026-09-14, 보류에 올라온 96건):
+
+        matched_id 가 바뀐 자리 62건
+          그중 '더 최근에 물어본 쪽'을 버린 자리          27건
+          그중 fresh(처음 봤을 때 갓 올라온 매물) 가 꺼진 자리  1건
+
+    두 기록이 몇 분씩 **번갈아** 들어앉습니다. `checked_at`이 그대로 멈춰 있는 것이
+    증거입니다 — 판정이 건드렸다면 그 실행의 시각으로 올라갔을 값입니다.
+
+        08:19:13  matched 2JRVKPyG…  checks 1  checked_at 08:17:41
+        08:20:33  matched 2JRVKQ2m…  checks 0  checked_at 06:31:42   <- 되돌아감
+        08:21:51  matched 2JRVKPyG…  checks 1  checked_at 08:17:41
+        …16분 동안 13번, checks 는 1과 0 사이만 오갑니다
+
+    `MIN_RELIST_ABSENCE_CHECKS`가 2인데 **한 번도 2에 닿지 못합니다**(실측: 보류 96건의
+    최대 checks 가 {0회 20건, 1회 57건, 2회 19건}). 그래서 주인이 다르면 **더 최근에
+    물어본 쪽**(`checked_at`)을 남깁니다. 고를 수 없으면 예전처럼 `mine`입니다.
+
+    `fresh`만은 어느 쪽을 고르든 **둘 중 하나라도 켜져 있으면 켭니다.** 이 값은 질문이
+    아니라 **매물 자신의 성질**('처음 봤을 때 갓 올라온 매물이었는가')이고, 여기서 꺼지면
+    나중에 '별개의 매물'로 결론이 나도 그때 다시 잰 값은 기준선이 전진한 뒤라 False여서
+    **신규 알림이 조용히 사라집니다.** 실제로 한 건 그렇게 됐습니다(m51322745277 —
+    09-14 10:12 병합에서 fresh 가 꺼졌고, seen 에는 들어갔는데 알림은 나가지 않았습니다).
+
+    이미 seen에 들어간 매물의 기록은 버립니다(상대 실행이 먼저 판정을 끝냈다는 뜻).
+    """
+    merged = {}
+    for source in (theirs, mine):
+        if not isinstance(source, dict):
+            continue
+        for item_id, entry in source.items():
+            if not isinstance(entry, dict) or item_id in seen:
+                continue
+            current = merged.get(item_id)
+            if current is None:
+                merged[item_id] = dict(entry)
+                continue
+            if current.get("matched_id") != entry.get("matched_id"):
+                # 다른 질문입니다. 시계는 합칠 수 없지만 '누가 더 최근에 봤는가'는
+                # 고를 수 있습니다. 같으면 예전처럼 mine(뒤에 오는 쪽)입니다.
+                winner = entry if asked_at(entry) >= asked_at(current) else current
+                merged[item_id] = {
+                    **winner,
+                    "fresh": bool(current.get("fresh")) or bool(entry.get("fresh")),
+                }
+                continue
+            combined = dict(current)
+            # 방향이 하나뿐인 값들입니다. `skips`가 `checks`와 같이 있는 이유:
+            # 둘은 서로 다른 갈래를 세고(답이 안 옴 / 아예 못 물어봄) 문턱도 다르지만,
+            # **둘 다 뒤로 가면 안 됩니다.** 여기에 안 적으면 `dict(current)`가 상대
+            # 쪽 값을 그대로 들고 가 내 실행이 센 것이 조용히 사라지고, 포기 조건에
+            # 영영 닿지 못합니다 — `checks`가 1과 0 사이를 오가던 그 고장입니다.
+            for key, pick in (
+                ("since", min), ("checks", max), ("skips", max), ("checked_at", max)
+            ):
+                values = [v for v in (current.get(key), entry.get(key)) if isinstance(v, (int, float))]
+                if values:
+                    combined[key] = pick(values)
+            combined["fresh"] = bool(current.get("fresh")) or bool(entry.get("fresh"))
+            # 적어 둔 판정도 한쪽에만 있을 수 있습니다. 없는 쪽이 이기면 **그 매물이
+            # 검색 창 밖에 있는 동안 물어본 답이 통째로 사라지고**, 다시 물어야 합니다.
+            # 둘 다 있으면 **더 최근에 물어본 쪽**을 남깁니다(같은 질문에 대한 답이라
+            # 보통 같지만, 갈리면 늦은 쪽이 지금에 가깝습니다).
+            #
+            # 시각까지 같으면 **'없어짐'이 집니다.** 틀렸을 때 치르는 값이 한쪽으로
+            # 기울어 있기 때문입니다 — 재출품을 신규로 오인하면 알림이 한 건 더 가서
+            # 눈에 보이지만, 별개의 매물을 재출품으로 오인하면 그 매물의 신규 알림이
+            # **조용히 삼켜집니다**(confirm_disappearance 주석과 같은 이유).
+            answers = [
+                (asked_at(source), source["verdict"] != "gone", source["verdict"])
+                for source in (current, entry)
+                if source.get("verdict") in RELIST_VERDICTS
+            ]
+            if answers:
+                combined["verdict"] = max(answers)[2]
+            merged[item_id] = combined
+    return dict(list(merged.items())[-MAX_PENDING_RELISTS:])
+
+
+def merge_checked_at(theirs: dict, mine: dict) -> dict:
+    merged = dict(theirs)
+    for keyword, value in mine.items():
+        current = merged.get(keyword)
+        if not isinstance(current, (int, float)) or (
+            isinstance(value, (int, float)) and value > current
+        ):
+            merged[keyword] = value
+    return merged
+
+
+def is_usable_fingerprint(key: str) -> bool:
+    """check_mercari.py와 같은 기준. 현재 코드가 조회하지 않는 지문을 걸러냅니다.
+
+    'seller:0:'처럼 판매자 ID를 모르던 시절의 지문은 지금 'title:' 형식으로 대체되어
+    영영 조회되지 않으므로 함께 버립니다.
+    """
+    key = str(key)
+    if not key.startswith(SUPPORTED_FINGERPRINT_PREFIXES):
+        return False
+    parts = key.split(":")
+    if parts[0] == "seller" and len(parts) > 1 and parts[1].strip().lower() in UNKNOWN_SELLER_IDS:
+        return False
+    return True
+
+
+def prune_fingerprints(fingerprints: dict) -> dict:
+    """check_mercari.py의 prune_fingerprints와 같은 기준(값이 dict인 것만 남김)."""
+    return {
+        key: value
+        for key, value in fingerprints.items()
+        if is_usable_fingerprint(key) and isinstance(value, dict)
+    }
+
+
+def main() -> None:
+    mine = read_json("/tmp/mine.json", required=True)
+    theirs = read_json("/tmp/theirs.json")
+
+    merged_seen = merge_ordered(theirs.get("seen", {}), mine.get("seen", {}), MAX_SEEN_ITEMS,
+                                merge_values=merge_price_record)
+    sent_alerts = unique_recent(theirs.get("sent_alerts", []) + mine.get("sent_alerts", []), MAX_SENT_ALERTS)
+    merged_pending = merge_pending(theirs.get("pending", []), mine.get("pending", []), sent_alerts)
+    merged_fingerprints = merge_ordered(
+        prune_fingerprints(theirs.get("relist_fingerprints", {})),
+        prune_fingerprints(mine.get("relist_fingerprints", {})),
+        MAX_RELIST_FINGERPRINTS,
+        # 지문도 같은 기준가를 들고 다닙니다. 재출품이 물려받는 값이라 여기서 올라가면
+        # 그 값이 새 ID로 그대로 옮겨 갑니다.
+        merge_values=merge_price_record,
+    )
+    merged_known_keywords = sorted(set(theirs.get("known_keywords", [])) | set(mine.get("known_keywords", [])))
+    merged_checked_at = merge_checked_at(
+        theirs.get("keyword_checked_at", {}) or {}, mine.get("keyword_checked_at", {}) or {}
+    )
+    merged_pending_relists = merge_pending_relists(
+        theirs.get("pending_relists", {}) or {},
+        mine.get("pending_relists", {}) or {},
+        merged_seen,
+    )
+
+    with open("/tmp/merged.json", "w") as file:
+        json.dump(
+            {
+                "seen": merged_seen,
+                "pending": merged_pending,
+                "sent_alerts": sent_alerts,
+                "relist_fingerprints": merged_fingerprints,
+                "known_keywords": merged_known_keywords,
+                "keyword_checked_at": merged_checked_at,
+                "pending_relists": merged_pending_relists,
+            },
+            file,
+            ensure_ascii=False,
+        )
+
+
+if __name__ == "__main__":
+    main()
