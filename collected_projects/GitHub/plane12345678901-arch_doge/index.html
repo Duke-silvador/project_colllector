@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dungeon Bumbles</title>
+  <style>
+    :root {
+      --ink: #251b38;
+      --paper: #fff7d6;
+      --cream: #f7eac0;
+      --purple: #6d4baa;
+      --purple-dark: #40286f;
+      --hot: #ef476f;
+      --sun: #ffd166;
+      --mint: #70d6a5;
+      --shadow: #d4b878;
+      --pixel: 4px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--paper);
+      color: var(--ink);
+      font-family: "Courier New", Courier, monospace;
+      image-rendering: pixelated;
+    }
+
+    .page {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 28px 16px;
+      background:
+        linear-gradient(90deg, rgba(64,40,111,.035) 1px, transparent 1px) 0 0 / 24px 24px,
+        linear-gradient(rgba(64,40,111,.035) 1px, transparent 1px) 0 0 / 24px 24px,
+        var(--paper);
+    }
+
+    .cabinet {
+      width: min(1040px, 100%);
+      border: var(--pixel) solid var(--ink);
+      box-shadow: 10px 10px 0 var(--shadow);
+      background: var(--cream);
+    }
+
+    .topbar {
+      min-height: 78px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 14px 20px;
+      border-bottom: var(--pixel) solid var(--ink);
+      background: var(--purple);
+      color: var(--paper);
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-mark {
+      width: 40px; height: 40px; position: relative;
+      background: var(--sun); border: var(--pixel) solid var(--ink);
+      box-shadow: 4px 4px 0 var(--purple-dark);
+    }
+    .brand-mark:before, .brand-mark:after { content: ""; position: absolute; background: var(--ink); }
+    .brand-mark:before { width: 8px; height: 8px; top: 8px; left: 8px; box-shadow: 16px 0 0 var(--ink), 8px 14px 0 var(--ink); }
+    .brand-mark:after { width: 6px; height: 6px; bottom: 6px; left: 17px; }
+    .eyebrow { margin: 0 0 3px; font-size: 11px; letter-spacing: 2px; color: var(--sun); font-weight: 700; }
+    .brand h1 { margin: 0; font-size: clamp(19px, 3vw, 28px); letter-spacing: -1px; }
+    .version { border: 2px solid var(--sun); padding: 7px 9px; color: var(--sun); font-size: 11px; white-space: nowrap; }
+
+    .game-shell { padding: 22px; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    .hero-screen { min-height: 530px; display: grid; place-items: center; padding: 24px; }
+    .hero-card { width: min(720px, 100%); text-align: center; }
+    .pixel-title { margin: 0; color: var(--purple-dark); font-size: clamp(34px, 8vw, 72px); line-height: .95; letter-spacing: -5px; text-shadow: 5px 5px 0 var(--sun); }
+    .subtitle { margin: 23px auto 0; max-width: 500px; font-size: 14px; line-height: 1.65; }
+    .start-button, .small-button {
+      border: var(--pixel) solid var(--ink); background: var(--hot); color: white; cursor: pointer;
+      font: inherit; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+      box-shadow: 6px 6px 0 var(--ink); transition: transform .08s, box-shadow .08s;
+    }
+    .start-button { margin-top: 30px; padding: 17px 30px; font-size: 17px; }
+    .start-button:hover, .small-button:hover { transform: translate(3px, 3px); box-shadow: 3px 3px 0 var(--ink); }
+    .start-button:active, .small-button:active { transform: translate(6px, 6px); box-shadow: none; }
+    .keys { margin: 38px auto 0; display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; font-size: 11px; }
+    kbd { padding: 6px 8px; border: 2px solid var(--ink); background: var(--paper); box-shadow: 3px 3px 0 var(--shadow); }
+
+    .hud { display: grid; grid-template-columns: 1.25fr 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+    .hud-box { border: 3px solid var(--ink); padding: 10px 12px; background: var(--paper); min-height: 65px; }
+    .hud-label { display: block; margin-bottom: 6px; font-size: 10px; letter-spacing: 1px; font-weight: 700; }
+    .bar { height: 14px; border: 2px solid var(--ink); background: #f1c9ae; }
+    .bar > span { display: block; height: 100%; width: 100%; background: var(--hot); transition: width .2s; }
+    .stat-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 700; }
+    .stat-line strong { color: var(--purple); font-size: 17px; }
+
+    .arena-wrap { position: relative; border: var(--pixel) solid var(--ink); background: var(--purple-dark); padding: 10px; box-shadow: 6px 6px 0 var(--shadow); }
+    canvas { display: block; width: 100%; height: auto; max-height: 570px; background: #302058; }
+    .message { min-height: 50px; display: flex; align-items: center; justify-content: center; text-align: center; padding: 12px; margin-top: 14px; border: 3px solid var(--ink); background: var(--paper); font-size: 13px; line-height: 1.4; }
+    .under-arena { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-top: 16px; }
+    .legend { font-size: 11px; line-height: 1.7; }
+    .legend b { color: var(--purple); }
+    .controls { display: grid; grid-template-columns: repeat(3, 42px); grid-template-rows: repeat(2, 42px); gap: 5px; }
+    .control-btn { border: 3px solid var(--ink); background: var(--sun); color: var(--ink); font: 700 18px "Courier New"; cursor: pointer; box-shadow: 3px 3px 0 var(--ink); }
+    .control-btn:hover { background: var(--mint); }
+    .control-btn:nth-child(1) { grid-column: 2; }
+    .control-btn:nth-child(2) { grid-column: 1; grid-row: 2; }
+    .control-btn:nth-child(3) { grid-column: 2; grid-row: 2; }
+    .control-btn:nth-child(4) { grid-column: 3; grid-row: 2; }
+    .mobile-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; margin-top: 9px; }
+    .mobile-action { border: 3px solid var(--ink); background: var(--paper); color: var(--ink); padding: 9px 10px; font: 700 11px "Courier New"; cursor: pointer; box-shadow: 3px 3px 0 var(--ink); touch-action: manipulation; }
+    .mobile-action.active { background: var(--mint); }
+    .mobile-action.attack { background: var(--hot); color: white; }
+    .small-button { padding: 10px 12px; font-size: 11px; background: var(--purple); }
+
+    .end-screen { min-height: 530px; display: grid; place-items: center; text-align: center; }
+    .end-screen h2 { font-size: clamp(29px, 6vw, 54px); margin: 0; color: var(--purple-dark); }
+    .result { margin: 16px 0 26px; line-height: 1.8; }
+    .tip { color: var(--purple); font-size: 11px; }
+
+    @media (max-width: 680px) {
+      .page { padding: 0; display: block; }
+      .cabinet { min-height: 100vh; border-width: 0; box-shadow: none; }
+      .topbar { padding: 12px 14px; }
+      .game-shell { padding: 12px 10px 20px; }
+      .hero-screen, .end-screen { min-height: calc(100vh - 110px); padding: 12px 4px; }
+      .hud { grid-template-columns: 1fr 1fr; }
+      .hud-box:first-child { grid-column: span 2; }
+      .under-arena { align-items: center; flex-direction: column; }
+      .legend { width: 100%; text-align: center; }
+      .controls { flex-shrink: 0; }
+      .control-btn { width: 48px; height: 48px; }
+      .mobile-action { min-height: 42px; padding-inline: 12px; }
+      .version { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="cabinet" aria-label="Dungeon Bumbles game">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true"></div>
+          <div><p class="eyebrow">A tiny adventure</p><h1>DUNGEON BUMBLES</h1></div>
+        </div>
+        <div class="version">BUILD 08 // LOCAL</div>
+      </header>
+
+      <div class="game-shell">
+        <section id="titleScreen" class="screen active hero-screen">
+          <div class="hero-card">
+            <p class="eyebrow">WELCOME, LITTLE HERO</p>
+            <h2 class="pixel-title">BUMP.<br>FIGHT.<br>BUMBLE.</h2>
+            <p class="subtitle">A cozy-cursed 8-bit dungeon crawler. Explore room by room, bonk monsters, find snacks, and see how deep your tiny boots can go.</p>
+            <button id="startBtn" class="start-button">▶ Start game</button>
+            <div class="keys"><span><kbd>WASD</kbd> move</span><span><kbd>ARROWS</kbd> move</span><span><kbd>SPACE</kbd> attack</span><span><kbd>1 / 2</kbd> sword / arrow</span></div>
+          </div>
+        </section>
+
+        <section id="gameScreen" class="screen">
+          <div class="hud">
+            <div class="hud-box"><span class="hud-label">BUMBLE HP</span><div class="bar"><span id="hpBar"></span></div></div>
+            <div class="hud-box"><span class="hud-label">DUNGEON</span><div class="stat-line"><span>ROOM</span><strong id="roomStat">01</strong></div></div>
+            <div class="hud-box"><span class="hud-label">SCORE</span><div class="stat-line"><span>✦</span><strong id="scoreStat">000</strong></div></div>
+          </div>
+          <div class="arena-wrap"><canvas id="gameCanvas" width="768" height="512" aria-label="Dungeon game board"></canvas></div>
+          <div id="message" class="message" aria-live="polite">Move into a monster to bonk it. Find the golden door!</div>
+          <div class="under-arena">
+            <div class="legend"><b>GOAL:</b> find the key, defeat every monster, then unlock the door.<br><b>TIP:</b> pink potions restore 1 HP. Gold chests add score.</div>
+            <div>
+              <div class="controls" aria-label="Touch controls"><button class="control-btn" data-move="up" aria-label="Move up">▲</button><button class="control-btn" data-move="left" aria-label="Move left">◀</button><button class="control-btn" data-move="down" aria-label="Move down">▼</button><button class="control-btn" data-move="right" aria-label="Move right">▶</button></div>
+              <div class="mobile-actions"><button class="mobile-action active" data-weapon="sword">1 SWORD</button><button class="mobile-action" data-weapon="arrow">2 BOW</button><button class="mobile-action attack" id="touchAttack">ATTACK</button></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="endScreen" class="screen end-screen">
+          <div><p class="eyebrow">RUN COMPLETE</p><h2 id="endTitle">THE DUNGEON WINS</h2><p id="endResult" class="result"></p><p class="tip">Every great hero started by pressing start.</p><button id="restartBtn" class="start-button">↻ Try again</button></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (() => {
+      const canvas = document.getElementById('gameCanvas');
+      const ctx = canvas.getContext('2d');
+      const titleScreen = document.getElementById('titleScreen');
+      const gameScreen = document.getElementById('gameScreen');
+      const endScreen = document.getElementById('endScreen');
+      const hpBar = document.getElementById('hpBar');
+      const roomStat = document.getElementById('roomStat');
+      const scoreStat = document.getElementById('scoreStat');
+      const message = document.getElementById('message');
+      const endTitle = document.getElementById('endTitle');
+      const endResult = document.getElementById('endResult');
+
+      const TILE = 32, COLS = 24, ROWS = 16;
+      const COLORS = { ink:'#251b38', wall:'#5a3e89', floor:'#9b79b9', floor2:'#a985c3', player:'#70d6a5', enemy:'#ef476f', gold:'#ffd166', paper:'#fff7d6', door:'#70d6a5' };
+      let state;
+
+      function roomWalls(room) {
+        const walls = [];
+        const add = (x, y, w, h) => { for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) walls.push({ x: xx, y: yy }); };
+        add(6, 2, 1, 5); add(6, 10, 1, 4); add(17, 2, 1, 4); add(17, 10, 1, 4);
+        if (room >= 2) { add(9, 5, 5, 1); add(10, 10, 1, 4); }
+        if (room >= 3) { add(12, 2, 1, 4); add(13, 12, 5, 1); }
+        if (room >= 4) { add(8, 7, 4, 1); add(14, 4, 1, 4); }
+        return walls;
+      }
+
+      function createRoom(room) {
+        const enemySets = {
+          1: [{ x: 15, y: 7, type: 'Gloom Bug' }, { x: 9, y: 12, type: 'Gloom Bug' }],
+          2: [{ x: 15, y: 3, type: 'Moss Muncher' }, { x: 14, y: 8, type: 'Moss Muncher' }, { x: 19, y: 11, type: 'Gloom Bug' }],
+          3: [{ x: 15, y: 3, type: 'Moss Muncher' }, { x: 14, y: 8, type: 'Gloom Bug' }, { x: 19, y: 11, type: 'Gloom Bug' }, { x: 9, y: 8, type: 'Moss Muncher' }],
+          4: [{ x: 18, y: 8, type: 'Dread Bumbler', boss: true }]
+        };
+        return {
+        enemies: enemySets[room].map(enemy => ({ ...enemy, alive: true, hits: 0, requiredHits: 0 })),
+          walls: roomWalls(room),
+          key: { x: 20, y: 3, collected: false },
+          chest: { x: 3 + room * 2, y: 4, open: false },
+          potion: { x: 3 + room * 2, y: 12, used: false },
+          door: { x: 21, y: 8 }
+        };
+      }
+
+      function freshState() {
+        return { room: 1, score: 0, hp: 5, maxHp: 5, weapon: 'sword', player: { x: 3, y: 8 }, ...createRoom(1), gameOver: false, won: false, flash: 0, attackAnim: 0 };
+      }
+
+      function startGame() { state = freshState(); show(gameScreen); updateHud(); render(); say('Find the key, defeat every monster, then unlock the door! Sword: 2 blocks. Press 2 for arrows.'); }
+      function show(screen) { [titleScreen, gameScreen, endScreen].forEach(s => s.classList.remove('active')); screen.classList.add('active'); }
+      function say(text) { message.textContent = text; }
+      function updateHud() { hpBar.style.width = Math.max(0, state.hp / state.maxHp * 100) + '%'; roomStat.textContent = String(state.room).padStart(2, '0'); scoreStat.textContent = String(state.score).padStart(3, '0'); }
+      function switchWeapon(weapon) { if (!state || state.gameOver || state.won) return; state.weapon = weapon; document.querySelectorAll('[data-weapon]').forEach(button => button.classList.toggle('active', button.dataset.weapon === weapon)); say(weapon === 'sword' ? 'Sword equipped — attack monsters within 2 blocks.' : 'Bow equipped — arrows reach up to 5 blocks away.'); render(); }
+
+      function inBounds(x, y) { return x > 0 && x < COLS - 1 && y > 0 && y < ROWS - 1; }
+      function isBlocked(x, y) { return !inBounds(x, y) || state.walls.some(wall => wall.x === x && wall.y === y); }
+      function monsterTurn() {
+        if (!state || state.gameOver || state.won) return;
+        let attackers = 0;
+        state.enemies.forEach(enemy => {
+          if (!enemy.alive) return;
+          const distance = Math.abs(enemy.x - state.player.x) + Math.abs(enemy.y - state.player.y);
+          if (distance <= 1) {
+            state.hp--; attackers++;
+            return;
+          }
+          const dx = Math.sign(state.player.x - enemy.x), dy = Math.sign(state.player.y - enemy.y);
+          const choices = Math.abs(state.player.x - enemy.x) >= Math.abs(state.player.y - enemy.y)
+            ? [[enemy.x + dx, enemy.y], [enemy.x, enemy.y + dy]]
+            : [[enemy.x, enemy.y + dy], [enemy.x + dx, enemy.y]];
+          const occupied = (x, y) => state.enemies.some(other => other !== enemy && other.alive && other.x === x && other.y === y);
+          const next = choices.find(([x, y]) => !isBlocked(x, y) && !occupied(x, y) && !(x === state.player.x && y === state.player.y));
+          if (next) { enemy.x = next[0]; enemy.y = next[1]; }
+        });
+        if (attackers > 0) {
+          state.flash = 8; updateHud();
+          if (state.hp <= 0) { finish(false); return; }
+          say(attackers === 1 ? 'A monster is within 2 blocks and attacks! -1 HP.' : attackers + ' monsters are within 2 blocks and attack! -' + attackers + ' HP.');
+        }
+      }
+      function move(dx, dy) {
+        if (!state || state.gameOver || state.won) return;
+        const nx = state.player.x + dx, ny = state.player.y + dy;
+        if (isBlocked(nx, ny)) { say('A suspiciously solid wall. Try another way.'); return; }
+        const target = state.enemies.findIndex(enemy => enemy.alive && nx === enemy.x && ny === enemy.y);
+        if (target !== -1) { attack(target); if (!state.gameOver && !state.won) monsterTurn(); render(); return; }
+        state.player.x = nx; state.player.y = ny;
+        collect(); if (!state.gameOver && !state.won) monsterTurn(); render();
+      }
+      function attack(index) {
+        const range = state.weapon === 'sword' ? 2 : 5;
+        if (index === undefined) {
+          const targets = state.enemies.map((enemy, enemyIndex) => ({ enemy, enemyIndex, distance: Math.abs(enemy.x - state.player.x) + Math.abs(enemy.y - state.player.y) })).filter(target => target.enemy.alive && target.distance <= range).sort((a, b) => a.distance - b.distance);
+          index = targets.length ? targets[0].enemyIndex : -1;
+        }
+        if (index === -1) { say('No monster is within ' + range + ' blocks for the ' + state.weapon + '.'); return; }
+        const enemy = state.enemies[index];
+        state.attackAnim = 8;
+        if (enemy.requiredHits === 0) enemy.requiredHits = enemy.boss ? 3 : (Math.random() < 0.75 ? 1 : 2);
+        enemy.hits++;
+        if (enemy.hits >= enemy.requiredHits) {
+          enemy.alive = false; state.score += 25; state.flash = 8; updateHud(); render(); say((state.weapon === 'sword' ? 'SLASH!' : 'THWIP!') + ' The ' + enemy.type + ' scatters into tiny stars.');
+        } else {
+          state.flash = 8; updateHud(); render(); say('That one is extra tough! One more ' + state.weapon + ' hit will finish the ' + enemy.type + '.');
+        }
+      }
+      function collect() {
+        if (state.player.x === state.chest.x && state.player.y === state.chest.y && !state.chest.open) { state.chest.open = true; state.score += 50; say('Treasure! +50 score. The chest contained one very shiny button.'); updateHud(); }
+        if (state.player.x === state.potion.x && state.player.y === state.potion.y && !state.potion.used) { state.potion.used = true; state.hp = Math.min(state.maxHp, state.hp + 1); say('A little pink potion! +1 HP.'); updateHud(); }
+        if (state.player.x === state.key.x && state.player.y === state.key.y && !state.key.collected) { state.key.collected = true; state.score += 25; say('You found the key! Now defeat every monster and find the locked door.'); updateHud(); }
+        if (state.player.x === state.door.x && state.player.y === state.door.y) {
+          if (!state.key.collected) { say('The door is locked. Find the tiny golden key first.'); return; }
+          if (state.enemies.some(enemy => enemy.alive)) { say('The door is locked. Every monster must be defeated first.'); return; }
+          if (state.room >= 4) { finish(true); return; }
+          state.room++; state.score += 100; state.player = { x: 3, y: 8 }; Object.assign(state, createRoom(state.room)); updateHud(); say(state.room === 4 ? 'LEVEL 4: The Dread Bumbler awaits beyond the walls!' : 'Deeper! Room ' + String(state.room).padStart(2, '0') + ' has more monsters and trickier walls.'); render();
+        }
+      }
+      function finish(won) { state.gameOver = !won; state.won = won; show(endScreen); endTitle.textContent = won ? 'DUNGEON BUMBLED!' : 'THE DUNGEON WINS'; endResult.innerHTML = won ? 'You reached the bottom with <b>' + state.score + ' points</b> and ' + state.hp + ' HP left.<br>The dungeon is already nervous about your rematch.' : 'You made it to room ' + state.room + ' with <b>' + state.score + ' points</b>.<br>That was a brave little run.'; }
+
+      function drawTile(x, y, color) { ctx.fillStyle = color; ctx.fillRect(x * TILE, y * TILE, TILE, TILE); }
+      function pixelRect(x, y, w, h, color) { ctx.fillStyle = color; ctx.fillRect(x, y, w, h); }
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (let y = 0; y < ROWS; y++) for (let x = 0; x < COLS; x++) {
+          const border = x === 0 || y === 0 || x === COLS - 1 || y === ROWS - 1;
+          drawTile(x, y, border ? COLORS.wall : ((x + y) % 3 ? COLORS.floor : COLORS.floor2));
+          if (!border && (x * 3 + y * 7) % 17 === 0) pixelRect(x*TILE+9, y*TILE+10, 3, 3, '#8966aa');
+        }
+        state.walls.forEach(wall => { drawTile(wall.x, wall.y, COLORS.wall); pixelRect(wall.x*TILE+4, wall.y*TILE+4, 24, 4, '#7955a3'); });
+        // key and locked doorway
+        if (!state.key.collected) { pixelRect(state.key.x*TILE+14,state.key.y*TILE+8,5,18,COLORS.ink); pixelRect(state.key.x*TILE+8,state.key.y*TILE+12,17,7,COLORS.gold); pixelRect(state.key.x*TILE+8,state.key.y*TILE+18,6,6,COLORS.gold); pixelRect(state.key.x*TILE+17,state.key.y*TILE+22,7,4,COLORS.gold); }
+        drawTile(state.door.x, state.door.y, state.key.collected ? COLORS.door : COLORS.wall); pixelRect(state.door.x*TILE+8, state.door.y*TILE+6, 16, 26, COLORS.ink); pixelRect(state.door.x*TILE+13, state.door.y*TILE+11, 11, 21, state.key.collected ? COLORS.gold : '#7955a3'); pixelRect(state.door.x*TILE+21, state.door.y*TILE+22, 3, 3, COLORS.ink);
+        if (!state.chest.open) { pixelRect(state.chest.x*TILE+5,state.chest.y*TILE+12,22,14,COLORS.ink); pixelRect(state.chest.x*TILE+7,state.chest.y*TILE+8,18,13,COLORS.gold); pixelRect(state.chest.x*TILE+14,state.chest.y*TILE+13,5,7,COLORS.ink); } else { pixelRect(state.chest.x*TILE+5,state.chest.y*TILE+15,22,10,COLORS.ink); pixelRect(state.chest.x*TILE+7,state.chest.y*TILE+10,18,8,COLORS.gold); }
+        if (!state.potion.used) { pixelRect(state.potion.x*TILE+12,state.potion.y*TILE+8,9,6,COLORS.paper); pixelRect(state.potion.x*TILE+8,state.potion.y*TILE+14,17,13,COLORS.enemy); pixelRect(state.potion.x*TILE+13,state.potion.y*TILE+8,7,5,COLORS.mint); }
+        state.enemies.forEach(enemy => { if (!enemy.alive) return; const ex=enemy.x*TILE, ey=enemy.y*TILE; pixelRect(ex+6,ey+9,21,16,COLORS.ink); pixelRect(ex+9,ey+5,15,21,COLORS.enemy); pixelRect(ex+4,ey+12,5,8,COLORS.enemy); pixelRect(ex+23,ey+12,5,8,COLORS.enemy); pixelRect(ex+12,ey+11,4,5,COLORS.paper); pixelRect(ex+20,ey+11,4,5,COLORS.paper); pixelRect(ex+13,ey+12,2,3,COLORS.ink); pixelRect(ex+21,ey+12,2,3,COLORS.ink); if (enemy.boss) { pixelRect(ex+7,ey+2,5,6,COLORS.gold); pixelRect(ex+14,ey,5,8,COLORS.gold); pixelRect(ex+21,ey+2,5,6,COLORS.gold); pixelRect(ex+10,ey+17,4,4,COLORS.gold); pixelRect(ex+20,ey+17,4,4,COLORS.gold); } });
+        const px=state.player.x*TILE, py=state.player.y*TILE; pixelRect(px+7,py+10,19,17,COLORS.ink); pixelRect(px+9,py+7,15,19,COLORS.player); pixelRect(px+4,py+15,5,9,COLORS.player); pixelRect(px+23,py+15,5,9,COLORS.player); pixelRect(px+12,py+12,3,4,COLORS.ink); pixelRect(px+19,py+12,3,4,COLORS.ink); pixelRect(px+12,py+21,10,3,COLORS.ink);
+        drawWeapon(px, py);
+        if (state.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(0,0,canvas.width,canvas.height); state.flash--; }
+        if (state.attackAnim > 0) { state.attackAnim--; requestAnimationFrame(render); }
+      }
+      function drawWeapon(px, py) {
+        const swing = state.attackAnim > 0 ? Math.min(1, (8 - state.attackAnim) / 3) : 0;
+        if (state.weapon === 'sword') {
+          const reach = 9 + Math.round(swing * 12);
+          pixelRect(px + 24, py + 14 - Math.round(swing * 7), 5, 5, COLORS.gold);
+          pixelRect(px + 27, py + 10 - Math.round(swing * 11), reach, 4, COLORS.paper);
+          pixelRect(px + 29 + reach, py + 10 - Math.round(swing * 11), 4, 4, COLORS.ink);
+          pixelRect(px + 24, py + 18, 8, 4, COLORS.ink);
+        } else {
+          pixelRect(px + 25, py + 8, 3, 18, COLORS.gold);
+          pixelRect(px + 22, py + 6, 3, 4, COLORS.gold);
+          pixelRect(px + 25, py + 4, 3, 4, COLORS.gold);
+          pixelRect(px + 28, py + 6, 3, 4, COLORS.gold);
+          const arrowLength = state.attackAnim > 0 ? 19 + Math.round(swing * 16) : 13;
+          pixelRect(px + 27, py + 15, arrowLength, 3, COLORS.paper);
+          pixelRect(px + 27 + arrowLength, py + 13, 5, 7, COLORS.ink);
+        }
+      }
+      function render() { draw(); }
+      function keyHandler(e) { const keys = { ArrowUp:[0,-1], w:[0,-1], ArrowDown:[0,1], s:[0,1], ArrowLeft:[-1,0], a:[-1,0], ArrowRight:[1,0], d:[1,0] }; if (e.key === '1') { e.preventDefault(); switchWeapon('sword'); return; } if (e.key === '2') { e.preventDefault(); switchWeapon('arrow'); return; } if (e.key === ' ') { e.preventDefault(); attack(); if (!state.gameOver && !state.won) monsterTurn(); render(); return; } const moveBy = keys[e.key] || keys[e.key.toLowerCase()]; if (moveBy) { e.preventDefault(); move(...moveBy); } }
+
+      document.getElementById('startBtn').addEventListener('click', startGame);
+      document.getElementById('restartBtn').addEventListener('click', startGame);
+      document.addEventListener('keydown', keyHandler);
+      document.querySelectorAll('[data-move]').forEach(btn => btn.addEventListener('click', () => { const dir = {up:[0,-1],down:[0,1],left:[-1,0],right:[1,0]}[btn.dataset.move]; move(...dir); }));
+      document.querySelectorAll('[data-weapon]').forEach(btn => btn.addEventListener('click', () => switchWeapon(btn.dataset.weapon)));
+      document.getElementById('touchAttack').addEventListener('click', () => { attack(); if (!state.gameOver && !state.won) monsterTurn(); render(); });
+      startGame(); show(titleScreen);
+    })();
+  </script>
+</body>
+</html>
