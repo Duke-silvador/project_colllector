@@ -1,0 +1,325 @@
+#!/usr/bin/env python3
+"""ARC-Bench adapter entrypoint for ShallowCode.
+
+Contract (see https://github.com/octos-org/arc-adapter):
+
+    python main.py <requirement_path> [--output-dir DIR] [--type web] [--web-port N]
+
+- requirement_path: argv[1] or env ARCBENCH_TASK_DIR
+- output dir:       --output-dir or env ARCBENCH_TEMPLATE_DIR; when both are
+                    absent the TS entry defaults to <system tmp>/shallowcode-local/main
+- model channel:    OPENAI_API_KEY / OPENAI_BASE_URL / MODEL (injected by the platform,
+                    optionally merged from a local .env by the TS pipeline)
+
+The Python layer only resolves paths and drives the Node pipeline
+(`npx tsx index.ts`); it never touches port 3000 during generation.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+ARC_EVAL_PORT = 3000
+DEFAULT_OUTPUT_SUBDIR = "shallowcode-local/main"
+MIN_NODE_VERSION = (20, 18, 1)
+# The gateway is shared and can be slow to answer its first request; keep the
+# preflight bounded but tolerant enough that a cold start does not kill the run.
+PROBE_ATTEMPTS = 3
+PROBE_TIMEOUT_SECONDS = 60
+PROBE_BACKOFF_SECONDS = 5
+
+
+def npm_cmd() -> str:
+    return "npm.cmd" if os.name == "nt" else "npm"
+
+
+def npx_cmd() -> str:
+    return "npx.cmd" if os.name == "nt" else "npx"
+
+
+def check_node_version() -> None:
+    try:
+        completed = subprocess.run(
+            ["node", "--version"], capture_output=True, text=True, check=True
+        )
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise RuntimeError(f"node is not available: {error}")
+    parts = completed.stdout.strip().lstrip("v").split(".")
+    version = tuple(int(p) for p in parts[:3]) + (0,) * (3 - len(parts[:3]))
+    if version < MIN_NODE_VERSION:
+        raise RuntimeError(
+            f"node {'.'.join(map(str, version))} is too old; "
+            f"minimum is {'.'.join(map(str, MIN_NODE_VERSION))}"
+        )
+    log(f"node version {completed.stdout.strip()}")
+
+
+def log(message: str) -> None:
+    print(f"[shallowcode] {message}", file=sys.stderr, flush=True)
+
+
+def load_env_file(root: Path) -> dict[str, str]:
+    env_path = root / ".env"
+    if not env_path.is_file():
+        return {}
+    values: dict[str, str] = {}
+    for line in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        trimmed = line.strip()
+        if not trimmed or trimmed.startswith("#"):
+            continue
+        separator = trimmed.find("=")
+        if separator <= 0:
+            continue
+        key = trimmed[:separator].strip()
+        value = trimmed[separator + 1 :].strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        values[key] = value
+    return values
+
+
+GATEWAY_VARS = ("OPENAI_API_KEY", "OPENAI_BASE_URL", "MODEL")
+
+# The evaluation container's path to registry.npmjs.org / playwright CDN is slow;
+# default to npmmirror. Real environment variables always win.
+MIRROR_ENV_DEFAULTS = {
+    "npm_config_registry": "https://registry.npmmirror.com",
+    "NPM_CONFIG_REGISTRY": "https://registry.npmmirror.com",
+    "PLAYWRIGHT_DOWNLOAD_HOST": "https://npmmirror.com/mirrors/playwright",
+    # `playwright install` garbage-collects browsers it considers unused. The
+    # shared /ms-playwright store is also what the platform's own Playwright
+    # uses at evaluation time, so pruning it can delete the evaluator's browser
+    # and fail every test with "Executable doesn't exist".
+    "PLAYWRIGHT_SKIP_BROWSER_GC": "1",
+}
+
+
+def ensure_mirror_env() -> None:
+    for key, value in MIRROR_ENV_DEFAULTS.items():
+        if not (os.environ.get(key) or "").strip():
+            os.environ[key] = value
+
+
+CGROUP_MEMORY_FILES = (
+    "/sys/fs/cgroup/memory.max",
+    "/sys/fs/cgroup/memory.current",
+    "/sys/fs/cgroup/memory.events",
+    "/sys/fs/cgroup/memory/memory.limit_in_bytes",
+    "/sys/fs/cgroup/memory/memory.usage_in_bytes",
+)
+
+
+def cgroup_memory_summary() -> str:
+    """Best-effort container memory state; counters are cumulative and do not identify which process was killed."""
+    parts: list[str] = []
+    for entry in CGROUP_MEMORY_FILES:
+        path = Path(entry)
+        try:
+            if not path.is_file():
+                continue
+            value = " ".join(path.read_text(encoding="utf-8", errors="replace").split())
+        except OSError:
+            continue
+        parts.append(f"{path.name}={value}")
+    return "; ".join(parts)
+
+
+def resolve_gateway_env(root: Path) -> dict[str, str]:
+    values = {name: (os.environ.get(name) or "").strip() for name in GATEWAY_VARS}
+    if not all(values.values()):
+        for key, value in load_env_file(root).items():
+            if key in values and not values[key]:
+                values[key] = value
+    return values
+
+
+def probe_model_endpoint(env: dict[str, str]) -> None:
+    # Diagnostics (no secrets): which endpoint did the runner inject?
+    base_url = env["OPENAI_BASE_URL"].rstrip("/")
+    log(f"[env] OPENAI_BASE_URL={base_url}")
+    log(f"[env] MODEL={env['MODEL']}")
+    if not env["OPENAI_API_KEY"]:
+        raise RuntimeError("OPENAI_API_KEY is empty; the runner did not inject model credentials")
+    if not env["OPENAI_BASE_URL"]:
+        raise RuntimeError("OPENAI_BASE_URL is empty; the runner did not inject a model endpoint")
+    if not env["MODEL"]:
+        raise RuntimeError("MODEL is empty; the runner did not inject a model name")
+    url = base_url + "/chat/completions"
+    payload = json.dumps({
+        "model": env["MODEL"],
+        "messages": [{"role": "user", "content": "ping"}],
+        "max_tokens": 5,
+        "stream": False,
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {env['OPENAI_API_KEY']}",
+        },
+        method="POST",
+    )
+    last_error: BaseException | None = None
+    for attempt in range(1, PROBE_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=PROBE_TIMEOUT_SECONDS) as response:
+                log(f"model endpoint reachable: {url} -> HTTP {response.status}")
+            return
+        except urllib.error.HTTPError as error:
+            # Any HTTP response proves the endpoint is reachable; auth or model
+            # errors surface later with full detail from the real calls.
+            log(f"model endpoint reachable: {url} -> HTTP {error.code}")
+            return
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            last_error = error
+            if attempt >= PROBE_ATTEMPTS:
+                break
+            delay = PROBE_BACKOFF_SECONDS * attempt
+            log(f"model endpoint probe attempt {attempt}/{PROBE_ATTEMPTS} failed: {error}; retrying in {delay}s")
+            time.sleep(delay)
+    raise RuntimeError(
+        f"model endpoint unreachable after {PROBE_ATTEMPTS} attempts: {url} ({last_error})"
+    )
+
+
+def run(command: list[str], cwd: Path) -> None:
+    run_with_env(command, cwd, None)
+
+
+def run_with_env(command: list[str], cwd: Path, env: dict[str, str] | None) -> None:
+    log(f"run: {' '.join(command)} (cwd={cwd})")
+    completed = subprocess.run(command, cwd=str(cwd), check=False, env=env)
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"command failed with exit code {completed.returncode}: {' '.join(command)}"
+        )
+
+
+def try_run(command: list[str], cwd: Path) -> bool:
+    log(f"run (best effort): {' '.join(command)} (cwd={cwd})")
+    completed = subprocess.run(command, cwd=str(cwd), check=False)
+    return completed.returncode == 0
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="ShallowCode ARC-Bench adapter")
+    parser.add_argument(
+        "requirement_path",
+        nargs="?",
+        default=(os.environ.get("ARCBENCH_TASK_DIR") or "").strip() or None,
+        help="requirement tree directory (defaults to ARCBENCH_TASK_DIR)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=(os.environ.get("ARCBENCH_TEMPLATE_DIR") or "").strip() or None,
+        help="delivery directory (defaults to ARCBENCH_TEMPLATE_DIR)",
+    )
+    parser.add_argument("--type", default="web", help="task type (accepted, unused)")
+    parser.add_argument(
+        "--web-port",
+        default=(os.environ.get("ARCBENCH_WEB_PORT") or os.environ.get("ARC_WEB_PORT")
+                 or str(ARC_EVAL_PORT)).strip(),
+        help="port the platform uses to reach the site at evaluation time",
+    )
+    return parser.parse_args()
+
+
+def ensure_node_runtime(root: Path) -> None:
+    if not (root / "node_modules").exists():
+        try:
+            run([npm_cmd(), "ci"], root)
+        except RuntimeError:
+            log("npm ci failed, falling back to npm install")
+            run([npm_cmd(), "install", "--no-audit", "--no-fund"], root)
+    else:
+        log("node_modules present, skipping npm ci")
+    if not try_run([npx_cmd(), "playwright", "install", "chromium"], root):
+        log("playwright install failed; continuing (browsers may already exist)")
+
+
+def check_template(output_dir: Path) -> bool:
+    frontend_ok = (output_dir / "frontend").is_dir()
+    backend_ok = (output_dir / "backend").is_dir()
+    if not (frontend_ok and backend_ok):
+        log(
+            "template is incomplete: expected <output>/frontend and <output>/backend "
+            f"(frontend={frontend_ok}, backend={backend_ok})"
+        )
+        return False
+    return True
+
+
+def main() -> int:
+    args = parse_args()
+    if not args.requirement_path:
+        log("missing requirement directory: pass argv[1] or set ARCBENCH_TASK_DIR")
+        return 2
+
+    root = Path(__file__).resolve().parent
+    requirement_dir = Path(args.requirement_path).expanduser().resolve()
+    output_dir = Path(args.output_dir or (Path(tempfile.gettempdir()) / DEFAULT_OUTPUT_SUBDIR))
+    if not args.output_dir:
+        log(f"no --output-dir given; using default {output_dir}")
+    output_dir = output_dir.expanduser().resolve()
+
+    if not (requirement_dir / "requirements.yaml").is_file():
+        log(f"requirements.yaml not found under {requirement_dir}")
+        return 2
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    ensure_mirror_env()
+    log(f"eval port is {args.web_port}; generation never binds it")
+    memory = cgroup_memory_summary()
+    if memory:
+        log(f"cgroup memory at start: {memory}")
+
+    try:
+        probe_model_endpoint(resolve_gateway_env(root))
+        check_node_version()
+        ensure_node_runtime(root)
+    except RuntimeError as error:
+        log(str(error))
+        return 1
+
+    budget = (os.environ.get("SHALLOW_BUDGET_MS") or "0").strip() or "0"
+    env = dict(os.environ)
+    env["SHALLOW_EVAL_PORT"] = str(args.web_port)
+    command = [
+        npx_cmd(),
+        "tsx",
+        "index.ts",
+        "--requirements-dir",
+        str(requirement_dir),
+        "--output-dir",
+        str(output_dir),
+        "--budget-ms",
+        budget,
+    ]
+    try:
+        run_with_env(command, root, env)
+        exit_code = 0
+    except RuntimeError as error:
+        log(str(error))
+        exit_code = 1
+    memory = cgroup_memory_summary()
+    if memory:
+        log(f"cgroup memory after pipeline: {memory}")
+
+    if not check_template(output_dir):
+        return 1
+    log(f"pipeline finished with exit code {exit_code}")
+    return exit_code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
