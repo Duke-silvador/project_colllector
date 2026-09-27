@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <script>
+    // Holli Bot for iPhone signs in, pays on Stripe and connects services in
+    // a Safari sheet, which comes back here with ?app=ios (src/account/ios-app.js).
+    // In the sheet, this hands what came back to the iPhone app, which opens
+    // Holli Bot with it; src/main.js then opens nothing here. In the app
+    // itself (window.holliNative), this is Holli Bot as usual.
+    if (/[?&]app=ios(&|$)/.test(location.search) && !window.holliNative) {
+      window.holliReturning = true;
+      location.replace(`hollibot://return${location.search}${location.hash}`);
+    }
+  </script>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
+  <script>
+    // iPhone and iPad zoom in on a text box when it's tapped, and stay zoomed
+    // in. A maximum scale of 1 stops that, and pinching still zooms there
+    // (Safari lets people pinch whatever a page says). Other phones don't zoom
+    // in on text boxes, and there it would stop pinching, so it's only for
+    // iPhone and iPad (which calls itself a Mac with a touch screen). A double
+    // tap doesn't zoom anywhere: styles.css, touch-action.
+    if (/iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)) {
+      document.querySelector('meta[name="viewport"]').content += ', maximum-scale=1';
+    }
+  </script>
+  <title>Holli Bot</title>
+  <meta name="description" content="Holli Bot — your own multi-agent AI assistant. Bring your own key: create bots with their own names, personalities and deep memory that can talk to each other." />
+  <meta name="theme-color" content="#121212" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <!-- "default", not "black-translucent": under a see-through status bar, iOS 26
+       makes a home-screen app one status bar short and leaves an empty strip
+       below it that nothing can paint (WebKit bug 301108). With "default" the
+       app starts below the status bar, which takes the theme color. -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Holli Bot" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="stylesheet" href="styles.css" />
+  <!-- The font it's set in (styles.css --font): LT Institute on a computer, Satoshi on a phone or tablet. -->
+  <link rel="preload" href="vendor/fonts/lt-institute/LTInstitute-SemiBold.otf" as="font" type="font/otf" crossorigin media="(hover: hover) and (pointer: fine)" />
+  <link rel="preload" href="vendor/fonts/satoshi/Satoshi-Variable.woff2" as="font" type="font/woff2" crossorigin media="not all and (hover: hover) and (pointer: fine)" />
+  <link rel="modulepreload" href="vendor/preact.js" />
+  <link rel="modulepreload" href="src/core/app.js" />
+</head>
+<body>
+  <div id="app"></div>
+  <!-- Holli Bot for Mac's window: its top, where its buttons are, drags it (styles.css, .mac-app). -->
+  <div class="mac-titlebar" aria-hidden="true"></div>
+  <div id="boot" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg,#121212)">
+    <!-- Holli's cloud, hopping while the app loads (styles.css, "the splash"). -->
+    <svg class="boot-bot" viewBox="0 0 100 100" width="84" height="84" role="img" aria-label="Loading Holli Bot">
+      <ellipse class="boot-shadow" cx="50" cy="95" rx="26" ry="3.5" fill="none" />
+      <g class="boot-body">
+        <path d="M27 82C14 82 5 74 5 63C5 53 12 46 22 45C22 32 33 22 46 23C53 15 67 14 75 23C85 25 92 33 91 43C97 47 99 54 97 62C95 74 86 82 74 82C68 88 58 89 50 84C43 88 33 88 27 82Z" fill="#1482FF"/>
+        <g class="boot-eye l" transform="translate(41 56)"><line x1="0" y1="-7.2" x2="0" y2="7.2" stroke="#ffffff" stroke-width="6.1" stroke-linecap="round"/></g>
+        <g class="boot-eye r" transform="translate(61 56)"><line x1="0" y1="-7.2" x2="0" y2="7.2" stroke="#ffffff" stroke-width="6.1" stroke-linecap="round"/></g>
+      </g>
+    </svg>
+  </div>
+  <script>
+    // Holli Bot for Mac's own window (desktop/src/app-window.js, src/ui/mac-app.js):
+    // the page goes up to the window's top edge, with room there for its
+    // buttons, except full screen, where they're gone (styles.css).
+    if (window.holliBotMac) {
+      document.documentElement.classList.add('mac-app');
+      if (window.holliBotMac.fullScreen) document.documentElement.classList.add('mac-fullscreen');
+    }
+    // Where the app asks you to sign in (src/account/account.js), the white
+    // pages come before the app: welcome and sign-in while signed out, a new
+    // account's first bot (?code=), and the plan page (src/main.js) back from
+    // Stripe (?checkout=) until Stripe confirms the payment.
+    // Those start on white rather than flashing the dark splash first. Only
+    // Holli Bot's own session counts: Macronaut shares the site's storage.
+    // Otherwise the splash is in the app's look as it last opened here
+    // (src/ui/app.js): Light or Dark, or the page's own Black.
+    // Where sign-in works (src/account/account.js signInWorksHere): the site,
+    // the app on the Holli Bot website (/app/), and localhost.
+    try {
+      const theme = localStorage.getItem('holly.theme');
+      if (theme === 'light' || theme === 'dark') {
+        document.documentElement.setAttribute('data-theme', theme);
+        document.querySelector('meta[name="theme-color"]').content = theme === 'light' ? '#fcfcfc' : '#1a1a1c';
+      }
+      const signInHere = location.origin === 'https://xgamer791.github.io'
+        || (location.origin === 'https://wordpress-1595519-6695444.cloudwaysapps.com' && location.pathname.startsWith('/app/'))
+        || (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(location.origin) && !navigator.webdriver);
+      if (signInHere && (/[?&](code|checkout)=/.test(location.search) || localStorage.getItem('holly.subscribePage')
+        || !localStorage.getItem('__convexAuthJWT_httpsimpressiveferret800convexcloud'))) {
+        document.documentElement.classList.add('signed-out');
+        document.querySelector('meta[name="theme-color"]').content = '#ffffff';
+      }
+    } catch (e) { /* storage blocked */ }
+  </script>
+  <noscript><p style="color:#ddd;padding:24px;font-family:Satoshi,sans-serif">Holli Bot needs JavaScript.</p></noscript>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
