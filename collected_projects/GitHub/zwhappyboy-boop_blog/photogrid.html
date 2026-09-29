@@ -1,0 +1,198 @@
+<!doctype html><html lang="zh-CN"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="批量上传图片，按宫格样式拼接成一张大图，间距/圆角/背景自由调节，纯本地处理图片不上传 · 宫格拼图工具">
+<link rel="canonical" href="https://zhouyixuan.com/photogrid.html">
+<link rel="alternate" hreflang="zh-CN" href="https://zhouyixuan.com/photogrid.html"><link rel="alternate" hreflang="en" href="https://zhouyixuan.com/en/photogrid.html"><link rel="alternate" hreflang="ja" href="https://zhouyixuan.com/ja/photogrid.html"><link rel="alternate" hreflang="ko" href="https://zhouyixuan.com/ko/photogrid.html"><link rel="alternate" hreflang="es" href="https://zhouyixuan.com/es/photogrid.html"><link rel="alternate" hreflang="fr" href="https://zhouyixuan.com/fr/photogrid.html"><link rel="alternate" hreflang="de" href="https://zhouyixuan.com/de/photogrid.html"><link rel="alternate" hreflang="pt" href="https://zhouyixuan.com/pt/photogrid.html"><link rel="alternate" hreflang="x-default" href="https://zhouyixuan.com/photogrid.html">
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8950518028405500" crossorigin="anonymous"></script><script async src="https://www.googletagmanager.com/gtag/js?id=G-1GK46TTPQC"></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-1GK46TTPQC');</script>
+<title>宫格拼图工具 - 万能工具箱</title>
+<link rel="stylesheet" href="style.css">
+<style>
+
+#pg-app{max-width:1100px;margin:0 auto;padding:20px}
+.pg-layout{display:grid;grid-template-columns:220px 1fr 260px;gap:16px}
+@media(max-width:900px){.pg-layout{grid-template-columns:1fr}}
+.pg-panel{background:#fafbfd;border:1px solid #d7dee9;border-radius:14px;padding:14px;min-width:0}
+.pg-panel h3{font-size:14px;color:#33415e;margin:0 0 10px;font-weight:700}
+.pg-panel .pg-sec{margin-bottom:14px}
+.pg-panel .pg-sec:last-child{margin-bottom:0}
+.pg-sec-title{font-size:12px;color:#42506b;font-weight:700;margin:0 0 8px}
+.pg-zone{display:block;border:2px dashed #c5cdd9;border-radius:12px;padding:22px 12px;text-align:center;cursor:pointer;transition:border-color .2s,background .2s;background:#fff}
+.pg-zone:hover{border-color:#2563eb;background:#f0f5ff}
+.pg-zone.drag{border-color:#2563eb;background:#eef5ff}
+.pg-zone .ic{font-size:30px;display:block;margin-bottom:6px}
+.pg-zone .hint{font-size:13px;color:#42506b;font-weight:600}
+.pg-zone .sub-hint{font-size:12px;color:#728095;margin-top:4px}
+.pg-list{display:flex;flex-direction:column;gap:6px;margin-top:10px;max-height:320px;overflow:auto}
+.pg-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid #e2e7ef;border-radius:8px;background:#fff;cursor:grab}
+.pg-item.dragging{opacity:.5}
+.pg-item .thumb{width:34px;height:34px;border-radius:6px;object-fit:cover;background:#f0f5ff;flex-shrink:0}
+.pg-item .name{flex:1;font-size:12px;color:#42506b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pg-item .idx{font-size:11px;color:#728095;background:#e8edf5;border-radius:4px;padding:1px 5px;flex-shrink:0}
+.pg-item .del{cursor:pointer;color:#c0392b;font-weight:700;flex-shrink:0;padding:0 4px;font-size:14px}
+.pg-item .del:hover{color:#e74c3c}
+.pg-item.empty-item{background:#fdf6ec;border-color:#f0d9b5;color:#9a6b3f}
+.pg-item.empty-item .thumb{background:#f8e9d4;display:flex;align-items:center;justify-content:center;color:#b07a3e;font-size:16px}
+.pg-mini-btns{display:flex;gap:8px;margin-top:10px}
+.pg-mini-btns button{flex:1;padding:7px 0;border:1px solid #d7dee9;border-radius:8px;background:#fff;color:#42506b;font-size:12px;font-weight:600;cursor:pointer}
+.pg-mini-btns button:hover{border-color:#2563eb;color:#2563eb}
+.pg-prev{position:relative;display:flex;align-items:center;justify-content:center;min-height:420px;background:repeating-conic-gradient(#f0f2f7 0 25%,#fff 0 50%) 50%/22px 22px;border:1px solid #e2e7ef;border-radius:14px;overflow:hidden}
+.pg-canvas{max-width:100%;overflow:auto;padding:12px}
+#pgCanvas{display:block;max-width:100%;height:auto;border-radius:4px;box-shadow:0 1px 6px rgba(0,0,0,.12)}
+.pg-prev .ph{color:#728095;font-size:14px;text-align:center;padding:40px 20px;line-height:1.8}
+.pg-prev .ph b{display:block;font-size:16px;color:#42506b;margin-bottom:6px}
+.pg-gridset{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.pg-gridset button{padding:6px 10px;border:1px solid #d7dee9;border-radius:8px;background:#fff;color:#3a4a68;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+.pg-gridset button:hover{border-color:#2563eb;color:#2563eb}
+.pg-gridset button.active{background:#2563eb;border-color:#2563eb;color:#fff}
+.pg-custom-row{display:flex;align-items:center;gap:8px;margin-top:6px}
+.pg-custom-row label{font-size:12px;color:#728095}
+.pg-custom-row input{width:52px;padding:5px 8px;border:1px solid #d7dee9;border-radius:8px;font-size:13px;text-align:center;background:#fff;color:#1c2b45}
+.pg-preset{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.pg-preset button{padding:6px 10px;border:1px solid #d7dee9;border-radius:8px;background:#fff;color:#3a4a68;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+.pg-preset button:hover{border-color:#2563eb;color:#2563eb}
+.pg-preset button.active{background:#f0f5ff;border-color:#2563eb;color:#2563eb}
+.pg-slider-row{display:flex;align-items:center;gap:8px;margin:6px 0}
+.pg-slider-row label{font-size:12px;color:#728095;width:56px;flex-shrink:0}
+.pg-slider-row input[type=range]{flex:1;accent-color:#2563eb}
+.pg-slider-row .val{font-size:12px;color:#728095;min-width:34px;text-align:right}
+.pg-seg{display:flex;flex-wrap:wrap;gap:6px}
+.pg-seg button{padding:6px 10px;border:1px solid #d7dee9;border-radius:8px;background:#fff;color:#3a4a68;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+.pg-seg button:hover{border-color:#2563eb;color:#2563eb}
+.pg-seg button.active{background:#2563eb;border-color:#2563eb;color:#fff}
+.pg-bgrow{display:flex;align-items:center;gap:8px;margin-top:8px}
+.pg-bgrow label{font-size:12px;color:#728095;flex-shrink:0}
+.pg-bgrow input[type=color]{width:34px;height:28px;border:1px solid #d7dee9;border-radius:6px;padding:2px;background:#fff;cursor:pointer}
+.pg-bgrow input[type=text]{flex:1;padding:5px 8px;border:1px solid #d7dee9;border-radius:8px;font-size:12px;background:#fff;color:#1c2b45}
+.pg-bgrow .swatch{width:24px;height:24px;border-radius:6px;border:1px solid #d7dee9;cursor:pointer;flex-shrink:0}
+.pg-note{font-size:11px;color:#728095;line-height:1.6;margin-top:6px}
+.pg-btm{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:16px;padding:14px 16px;background:#f0f5ff;border:1px solid #d7dee9;border-radius:14px}
+.pg-btm label{font-size:13px;color:#42506b;font-weight:600;display:flex;align-items:center;gap:4px}
+.pg-btm select{padding:6px 10px;border:1px solid #d7dee9;border-radius:8px;font-size:13px;background:#fff;color:#1c2b45}
+.pg-btm .qualityrow{display:flex;align-items:center;gap:6px}
+.pg-btm .qualityrow input[type=range]{width:90px;accent-color:#2563eb}
+.pg-btm .qualityrow .qval{font-size:12px;color:#728095;min-width:26px}
+.pg-btn{padding:11px 26px;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .15s;background:#2563eb;color:#fff;margin-left:auto}
+.pg-btn:hover{opacity:.88}
+.pg-btn:disabled{opacity:.4;cursor:not-allowed}
+body.dark .pg-panel{background:#171d28;border-color:#303846}
+body.dark .pg-panel h3{color:#c7d2e4}
+body.dark .pg-zone{background:#11151f;border-color:#303846}
+body.dark .pg-zone:hover{background:#1a2230;border-color:#3b82f6}
+body.dark .pg-zone .hint{color:#aebad0}
+body.dark .pg-item{background:#11151f;border-color:#303846}
+body.dark .pg-item .name{color:#c7d2e4}
+body.dark .pg-item .idx{background:#1a2230;color:#aebad0}
+body.dark .pg-item.empty-item{background:#241a0e;border-color:#5a4220;color:#d9b98c}
+body.dark .pg-mini-btns button{background:#11151f;border-color:#303846;color:#c7d2e4}
+body.dark .pg-mini-btns button:hover{border-color:#3b82f6;color:#60a5fa}
+body.dark .pg-gridset button,body.dark .pg-preset button,body.dark .pg-seg button{background:#11151f;border-color:#303846;color:#c7d2e4}
+body.dark .pg-gridset button:hover,body.dark .pg-preset button:hover,body.dark .pg-seg button:hover{border-color:#3b82f6;color:#60a5fa}
+body.dark .pg-gridset button.active,body.dark .pg-seg button.active{background:#3b82f6;border-color:#3b82f6;color:#fff}
+body.dark .pg-preset button.active{background:#1a2a45;border-color:#3b82f6;color:#60a5fa}
+body.dark .pg-custom-row input,body.dark .pg-bgrow input[type=text]{background:#11151f;border-color:#303846;color:#dbe4f2}
+body.dark .pg-bgrow input[type=color]{background:#11151f;border-color:#303846}
+body.dark .pg-slider-row label,body.dark .pg-custom-row label,body.dark .pg-bgrow label{color:#aebad0}
+body.dark .pg-note{color:#8b98b0}
+body.dark .pg-btm{background:#171d28;border-color:#303846}
+body.dark .pg-btm label{color:#aebad0}
+body.dark .pg-btm select{background:#11151f;border-color:#303846;color:#dbe4f2}
+body.dark .pg-btm .qval{color:#aebad0}
+body.dark .pg-prev{background:#11151f;border-color:#303846}
+body.dark .pg-prev .ph{color:#8b98b0}
+body.dark .pg-prev .ph b{color:#c7d2e4}
+
+</style></head><body>
+<script>document.addEventListener('click',function l(){document.removeEventListener('click',l);var s=document.createElement('script');s.dataset.zone='11774159';s.src='https://nap5k.com/tag.min.js';document.body.appendChild(s)},{once:true})</script>
+
+<header><b id="brand" onclick="location.href='index.html'" data-href="index.html">🧰 <span data-t="brand">宫格拼图工具</span></b><nav id="navmenus"></nav><div class="navright"><label class="langlabel" for="lang" data-t="langLabel">中文</label>
+<select id="lang"><option value="zh-CN" selected>中文</option><option value="en">English</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="es">Español</option><option value="fr">Français</option><option value="de">Deutsch</option><option value="pt">Português</option></select><button id="theme">🌙</button></div></header>
+<section class="hero"><small data-t="eyebrow">免费 · 快速 · 隐私优先</small><h1 data-t="pgTitle">宫格拼图工具</h1><p data-t="pgDesc">批量上传图片，按宫格样式拼接成一张大图，间距/圆角/背景自由调节，纯本地处理图片不上传</p></section>
+
+<div id="pg-app">
+  <div class="pg-layout">
+    <div class="pg-panel">
+      <h3 data-t="pgMaterials">素材管理</h3>
+      <label class="pg-zone" id="pgDrop" for="pgFile">
+        <span class="ic">🖼️</span>
+        <span class="hint" data-t="pgDrop">点击选择图片</span>
+        <span class="sub-hint" data-t="pgDropSub">支持批量，或拖入页面任意位置</span>
+        <input id="pgFile" type="file" accept="image/*" multiple style="display:none">
+      </label>
+      <div class="pg-list" id="pgList"></div>
+      <div class="pg-mini-btns">
+        <button id="pgAddEmpty" data-t="pgAddEmpty">+ 添加空格</button>
+        <button id="pgClear" data-t="pgClear">× 清空</button>
+      </div>
+    </div>
+    <div class="pg-panel">
+      <h3 data-t="pgPrev">拼图预览</h3>
+      <div class="pg-prev" id="pgPrevBox">
+        <div class="ph" id="pgPh"><b data-t="pgPreviewTitle">预览区</b><span data-t="pgPreviewDesc">上传图片后在此实时预览拼图效果</span></div>
+        <div class="pg-canvas" id="pgCanvasWrap" style="display:none"><canvas id="pgCanvas" width="0" height="0"></canvas></div>
+      </div>
+    </div>
+    <div class="pg-panel">
+      <h3 data-t="pgSettings">参数设置</h3>
+      <div class="pg-sec">
+        <div class="pg-sec-title" data-t="pgLayout">宫格布局</div>
+        <div class="pg-gridset" id="pgGridPreset">
+          <button data-g="1x2">1×2</button><button data-g="2x1">2×1</button><button data-g="2x2">2×2</button><button data-g="2x3">2×3</button><button data-g="3x2">3×2</button><button data-g="3x3" class="active">3×3</button><button data-g="3x4">3×4</button><button data-g="4x4">4×4</button><button data-g="5x5">5×5</button>
+        </div>
+        <div class="pg-custom-row">
+          <label data-t="pgRows">行</label><input type="number" id="pgRows" min="1" max="10" value="3">
+          <label data-t="pgCols">列</label><input type="number" id="pgCols" min="1" max="10" value="3">
+          <button id="pgApplyCustom" data-t="pgApply">应用</button>
+        </div>
+      </div>
+      <div class="pg-sec">
+        <div class="pg-sec-title" data-t="pgStylePreset">风格预设</div>
+        <div class="pg-preset" id="pgPresets">
+          <button data-p="classic" data-t="pgPClassic">经典方格</button>
+          <button data-p="album" data-t="pgPAlbum">白边相框</button>
+          <button data-p="rounded" data-t="pgPRounded">圆角卡片</button>
+          <button data-p="dark" data-t="pgPDark">深色缝隙</button>
+          <button data-p="soft" data-t="pgPSoft">柔和留白</button>
+        </div>
+      </div>
+      <div class="pg-sec">
+        <div class="pg-sec-title" data-t="pgSpacing">间距与圆角</div>
+        <div class="pg-slider-row"><label data-t="pgGap">间距</label><input type="range" id="pgGap" min="0" max="50" value="8"><span class="val" id="pgGapVal">8px</span></div>
+        <div class="pg-slider-row"><label data-t="pgRadius">圆角</label><input type="range" id="pgRadius" min="0" max="40" value="0"><span class="val" id="pgRadiusVal">0px</span></div>
+      </div>
+      <div class="pg-sec">
+        <div class="pg-sec-title" data-t="pgFill">填充模式</div>
+        <div class="pg-seg" id="pgFillSeg">
+          <button data-f="cover" class="active" data-t="pgFillCover">裁剪铺满</button>
+          <button data-f="fit" data-t="pgFillFit">完整显示</button>
+        </div>
+        <div class="pg-note" data-t="pgFillNote">完整显示：原图不裁剪，空缺用背景填充</div>
+      </div>
+      <div class="pg-sec">
+        <div class="pg-sec-title" data-t="pgBg">背景样式</div>
+        <div class="pg-seg" id="pgBgSeg">
+          <button data-b="solid" class="active" data-t="pgBgSolid">纯色</button>
+          <button data-b="gradient" data-t="pgBgGrad">双色渐变</button>
+          <button data-b="blur" data-t="pgBgBlur">图片模糊</button>
+        </div>
+        <div class="pg-bgrow" id="pgBgRow"><label data-t="pgBgColor">背景色</label><input type="color" id="pgBgColor" value="#f2f4f8"></div>
+        <div class="pg-bgrow" id="pgBgRow2" style="display:none"><label data-t="pgBgColor2">第二色</label><input type="color" id="pgBgColor2" value="#dbe4f0"></div>
+        <div class="pg-note" data-t="pgBgNote">背景色同时作为格子缝隙颜色</div>
+      </div>
+    </div>
+  </div>
+  <div class="pg-btm">
+    <label data-t="pgSize">尺寸</label>
+    <select id="pgSize"><option value="1080">1080 px</option><option value="1440">1440 px</option><option value="2048" selected>2048 px</option></select>
+    <label data-t="pgFormat">格式</label>
+    <select id="pgFormat"><option value="png">PNG</option><option value="jpeg">JPG</option><option value="webp">WebP</option></select>
+    <label data-t="pgQuality">质量</label>
+    <span class="qualityrow"><input type="range" id="pgQuality" min="50" max="100" value="92"><span class="qval" id="pgQualityVal">92</span></span>
+    <button class="pg-btn" id="pgExport" data-t="pgExport">生成并下载</button>
+  </div>
+</div>
+<footer>© 2026 All-in-One Online Tools · <a href="#" data-page="privacy" data-t="privacy">隐私政策</a> · <a href="#" data-page="terms" data-t="terms">服务条款</a> · <a href="#" data-page="contact" data-t="contact">联系我们</a></footer>
+<div id="modal" class="modal"><div class="box"><button id="close">×</button><h2 id="mt"></h2><p id="md"></p><div id="mb"></div></div></div>
+<script>window.pageLang="zh-CN";window.autoTool="photogrid"</script>
+<script src="script.js?v=20260928c"></script>
+<script>!function(){"use strict";const e={"zh-CN":{pgTitle:"宫格拼图工具",pgDesc:"批量上传图片，按宫格样式拼接成一张大图，间距/圆角/背景自由调节，纯本地处理图片不上传",pgMaterials:"素材管理",pgDrop:"点击选择图片",pgDropSub:"支持批量，或拖入页面任意位置",pgAddEmpty:"+ 添加空格",pgClear:"× 清空",pgPrev:"拼图预览",pgPreviewTitle:"预览区",pgPreviewDesc:"上传图片后在此实时预览拼图效果",pgSettings:"参数设置",pgLayout:"宫格布局",pgRows:"行",pgCols:"列",pgApply:"应用",pgStylePreset:"风格预设",pgPClassic:"经典方格",pgPAlbum:"白边相框",pgPRounded:"圆角卡片",pgPDark:"深色缝隙",pgPSoft:"柔和留白",pgSpacing:"间距与圆角",pgGap:"间距",pgRadius:"圆角",pgFill:"填充模式",pgFillCover:"裁剪铺满",pgFillFit:"完整显示",pgFillNote:"完整显示：原图不裁剪，空缺用背景填充",pgBg:"背景样式",pgBgSolid:"纯色",pgBgGrad:"双色渐变",pgBgBlur:"图片模糊",pgBgColor:"背景色",pgBgColor2:"第二色",pgBgNote:"背景色同时作为格子缝隙颜色",pgSize:"尺寸",pgFormat:"格式",pgQuality:"质量",pgExport:"生成并下载",pgNoImg:"请先上传图片",pgGen:"正在生成…",pgDone:"生成完成，已开始下载",pgEmptyCell:"空白格",pgDel:"删除",pgImg:"图片",pgRotate:"旋转",pgTip1:"• 拖拽左侧素材可调整顺序",pgTip2:"• 点击图片可旋转 90°",pgTip3:"• 「添加空格」可插入空白格",pgTip4:"• 全部在浏览器本地完成，不上传任何图片"},en:{pgTitle:"Photo Grid Maker",pgDesc:"Batch upload photos and combine them into a grid collage with adjustable gap, radius and background. 100% local, no upload",pgMaterials:"Materials",pgDrop:"Click to select photos",pgDropSub:"Multi-select or drag & drop anywhere",pgAddEmpty:"+ Empty Cell",pgClear:"× Clear",pgPrev:"Preview",pgPreviewTitle:"Preview",pgPreviewDesc:"Upload photos to preview the collage in real time",pgSettings:"Settings",pgLayout:"Grid Layout",pgRows:"Rows",pgCols:"Cols",pgApply:"Apply",pgStylePreset:"Style Preset",pgPClassic:"Classic Grid",pgPAlbum:"Album Frame",pgPRounded:"Rounded Cards",pgPDark:"Dark Gutters",pgPSoft:"Soft Margin",pgSpacing:"Spacing & Radius",pgGap:"Gap",pgRadius:"Radius",pgFill:"Fill Mode",pgFillCover:"Crop to Fill",pgFillFit:"Fit Whole",pgFillNote:"Fit: images are not cropped, gaps are filled with the background",pgBg:"Background",pgBgSolid:"Solid",pgBgGrad:"Gradient",pgBgBlur:"Image Blur",pgBgColor:"Color",pgBgColor2:"Color 2",pgBgNote:"Background color is also used for grid gutters",pgSize:"Size",pgFormat:"Format",pgQuality:"Quality",pgExport:"Generate & Download",pgNoImg:"Please upload photos first",pgGen:"Generating…",pgDone:"Done! Download started",pgEmptyCell:"Empty",pgDel:"Delete",pgImg:"Image",pgRotate:"Rotate",pgTip1:"• Drag photos on the left to reorder",pgTip2:"• Click a photo to rotate it 90°",pgTip3:'• "Empty Cell" inserts a blank slot',pgTip4:"• Everything runs locally in your browser — no upload"},ja:{pgTitle:"フォトグリッドメーカー",pgDesc:"写真を一括アップロードし、グリッドレイアウトで1枚の画像に結合。間隔・角丸・背景を自由に調整、すべてローカル処理",pgMaterials:"素材管理",pgDrop:"画像を選択",pgDropSub:"複数選択、またはページ内へドラッグ＆ドロップ",pgAddEmpty:"+ 空白マス",pgClear:"× クリア",pgPrev:"プレビュー",pgPreviewTitle:"プレビュー",pgPreviewDesc:"画像を追加するとここにリアルタイム表示されます",pgSettings:"設定",pgLayout:"グリッドレイアウト",pgRows:"行",pgCols:"列",pgApply:"適用",pgStylePreset:"スタイルプリセット",pgPClassic:"クラシック",pgPAlbum:"アルバム枠",pgPRounded:"角丸カード",pgPDark:"ダークグリッド",pgPSoft:"ソフト余白",pgSpacing:"間隔と角丸",pgGap:"間隔",pgRadius:"角丸",pgFill:"フィット",pgFillCover:"トリミング",pgFillFit:"全体表示",pgFillNote:"全体表示：元画像をトリミングせず、余白は背景で埋めます",pgBg:"背景",pgBgSolid:"単色",pgBgGrad:"グラデーション",pgBgBlur:"画像ぼかし",pgBgColor:"背景色",pgBgColor2:"第二色",pgBgNote:"背景色はグリッドの隙間色としても使われます",pgSize:"サイズ",pgFormat:"形式",pgQuality:"品質",pgExport:"生成してダウンロード",pgNoImg:"先に画像をアップロードしてください",pgGen:"生成中…",pgDone:"完了！ダウンロード開始",pgEmptyCell:"空",pgDel:"削除",pgImg:"画像",pgRotate:"回転",pgTip1:"左の素材をドラッグして並べ替え",pgTip2:"画像をクリックで90°回転",pgTip3:"「空白マス」で空白スロットを挿入",pgTip4:"すべてブラウザ内でローカル処理、アップロードなし"},ko:{pgTitle:"포토 그리드 메이커",pgDesc:"사진을 일괄 업로드하여 그리드 레이아웃으로 한 장의 이미지로 결합. 간격/모서리/배경 자유 설정, 전부 로컬 처리",pgMaterials:"사진 관리",pgDrop:"사진 선택",pgDropSub:"다중 선택 또는 페이지에 드래그 앤 드롭",pgAddEmpty:"+ 빈칸 추가",pgClear:"× 초기화",pgPrev:"미리보기",pgSettings:"설정",pgLayout:"그리드 레이아웃",pgRows:"행",pgCols:"열",pgApply:"적용",pgStylePreset:"스타일 프리셋",pgPClassic:"클래식",pgPAlbum:"앨범 프레임",pgPRounded:"둥근 카드",pgPDark:"다크 그리드",pgPSoft:"소프트 여백",pgSpacing:"간격 & 모서리",pgGap:"간격",pgRadius:"모서리",pgFill:"채우기",pgFillCover:"크롭 채움",pgFillFit:"전체 표시",pgFillNote:"전체 표시: 원본을 자르지 않고 빈 공간은 배경으로 채움",pgBg:"배경",pgBgSolid:"단색",pgBgGrad:"그라데이션",pgBgBlur:"이미지 블러",pgBgColor:"배경색",pgBgColor2:"두 번째 색",pgBgNote:"배경색은 그리드 간격 색으로도 사용됩니다",pgSize:"크기",pgFormat:"형식",pgQuality:"품질",pgExport:"생성 & 다운로드",pgNoImg:"사진을 먼저 업로드하세요",pgGen:"생성 중…",pgDone:"완료! 다운로드 시작",pgEmptyCell:"빈칸",pgDel:"삭제",pgImg:"이미지",pgRotate:"회전",pgTip1:"왼쪽 사진을 드래그해 순서 변경",pgTip2:"항목을 클릭하면 90° 회전",pgTip3:"빈칸 추가로 공백 슬롯 생성",pgTip4:"모두 브라우저에서 로컬 처리, 업로드 없음"},es:{pgTitle:"Creador de Collage",pgDesc:"Sube fotos en lote y combínalas en un collage de cuadrícula. Ajusta espacio, radio y fondo libremente. 100% local, sin subir",pgMaterials:"Fotos",pgDrop:"Haz clic para elegir",pgDropSub:"Selección múltiple o arrastra a la página",pgAddEmpty:"+ Celda vacía",pgClear:"× Limpiar",pgPrev:"Vista previa",pgSettings:"Ajustes",pgLayout:"Diseño de cuadrícula",pgRows:"Filas",pgCols:"Cols",pgApply:"Aplicar",pgStylePreset:"Estilos",pgPClassic:"Clásico",pgPAlbum:"Marco de álbum",pgPRounded:"Tarjetas redondeadas",pgPDark:"Cuadrícula oscura",pgPSoft:"Margen suave",pgSpacing:"Espaciado y radio",pgGap:"Espaciado",pgRadius:"Radio",pgFill:"Relleno",pgFillCover:"Cubrir",pgFillFit:"Ajustar",pgFillNote:"Ajustar: no recorta la imagen, los huecos se rellenan con el fondo",pgBg:"Fondo",pgBgSolid:"Sólido",pgBgGrad:"Gradiente",pgBgBlur:"Desenfoque",pgBgColor:"Color",pgBgColor2:"2.º color",pgBgNote:"El color de fondo también es el de las uniones",pgSize:"Tamaño",pgFormat:"Formato",pgQuality:"Calidad",pgExport:"Generar y descargar",pgNoImg:"Sube fotos primero",pgGen:"Generando…",pgDone:"¡Listo! Descarga iniciada",pgEmptyCell:"Vacío",pgDel:"Eliminar",pgImg:"Imagen",pgRotate:"Rotar",pgTip1:"Arrastra las fotos de la izquierda para ordenar",pgTip2:"Clic en un elemento para rotar 90°",pgTip3:'"Celda vacía" inserta un hueco',pgTip4:"Todo se procesa localmente, sin subir nada"},fr:{pgTitle:"Créateur de Collage",pgDesc:"Téléchargez des photos en masse et assemblez-les en grille. Espacement, coins, fond réglables. 100% local, aucun upload",pgMaterials:"Photos",pgDrop:"Choisir des photos",pgDropSub:"Sélection multiple ou glisser-déposer",pgAddEmpty:"+ Cellule vide",pgClear:"× Effacer",pgPrev:"Aperçu",pgSettings:"Paramètres",pgLayout:"Grille",pgRows:"Lignes",pgCols:"Cols",pgApply:"Appliquer",pgStylePreset:"Styles",pgPClassic:"Classique",pgPAlbum:"Cadre album",pgPRounded:"Cartes arrondies",pgPDark:"Grille sombre",pgPSoft:"Marges souples",pgSpacing:"Espacement et rayon",pgGap:"Espacement",pgRadius:"Rayon",pgFill:"Remplissage",pgFillCover:"Couverture",pgFillFit:"Ajuster",pgFillNote:"Ajuster : image non recadrée, les trous sont remplis par le fond",pgBg:"Fond",pgBgSolid:"Uni",pgBgGrad:"Dégradé",pgBgBlur:"Flou",pgBgColor:"Couleur",pgBgColor2:"2e couleur",pgBgNote:"La couleur de fond sert aussi aux rainures",pgSize:"Taille",pgFormat:"Format",pgQuality:"Qualité",pgExport:"Générer et télécharger",pgNoImg:"Téléchargez des photos d'abord",pgGen:"Génération…",pgDone:"Terminé ! Téléchargement",pgEmptyCell:"Vide",pgDel:"Supprimer",pgImg:"Image",pgRotate:"Pivoter",pgTip1:"Glissez les photos à gauche pour réordonner",pgTip2:"Cliquez un élément pour pivoter 90°",pgTip3:"« Cellule vide » insère un emplacement",pgTip4:"Tout est traité localement, rien n'est envoyé"},de:{pgTitle:"Fotocollage-Generator",pgDesc:"Laden Sie Fotos in Massen hoch und setzen Sie sie zu einem Rastercollage zusammen. Abstand, Ecken, Hintergrund frei einstellbar. Alles lokal",pgMaterials:"Fotos",pgDrop:"Fotos auswählen",pgDropSub:"Mehrfachauswahl oder Drag & Drop",pgAddEmpty:"+ Leere Zelle",pgClear:"× Leeren",pgPrev:"Vorschau",pgSettings:"Einstellungen",pgLayout:"Raster-Layout",pgRows:"Zeilen",pgCols:"Spalten",pgApply:"Anwenden",pgStylePreset:"Vorlagen",pgPClassic:"Klassisch",pgPAlbum:"Albumrahmen",pgPRounded:"Abgerundete Karten",pgPDark:"Dunkles Raster",pgPSoft:"Weiche Ränder",pgSpacing:"Abstand & Ecken",pgGap:"Abstand",pgRadius:"Eckenradius",pgFill:"Füllung",pgFillCover:"Bedecken",pgFillFit:"Anpassen",pgFillNote:"Anpassen: Bild wird nicht beschnitten, Lücken mit Hintergrund gefüllt",pgBg:"Hintergrund",pgBgSolid:"Einfarbig",pgBgGrad:"Verlauf",pgBgBlur:"Weichzeichnen",pgBgColor:"Farbe",pgBgColor2:"2. Farbe",pgBgNote:"Hintergrundfarbe gilt auch für die Rasterfugen",pgSize:"Größe",pgFormat:"Format",pgQuality:"Qualität",pgExport:"Generieren & Download",pgNoImg:"Bitte zuerst Fotos hochladen",pgGen:"Generiere…",pgDone:"Fertig! Download",pgEmptyCell:"Leer",pgDel:"Löschen",pgImg:"Bild",pgRotate:"Drehen",pgTip1:"Fotos links ziehen zum Sortieren",pgTip2:"Element klicken zum Drehen 90°",pgTip3:'„Leere Zelle" fügt Platzhalter ein',pgTip4:"Alles wird lokal verarbeitet, kein Upload"},pt:{pgTitle:"Criador de Colagem",pgDesc:"Carregue fotos em lote e combine-as em uma colagem de grade. Espaçamento, raio e fundo ajustáveis. 100% local, sem upload",pgMaterials:"Fotos",pgDrop:"Escolher fotos",pgDropSub:"Seleção múltipla ou arraste para a página",pgAddEmpty:"+ Célula vazia",pgClear:"× Limpar",pgPrev:"Prévia",pgSettings:"Configurações",pgLayout:"Layout de grade",pgRows:"Linhas",pgCols:"Cols",pgApply:"Aplicar",pgStylePreset:"Estilos",pgPClassic:"Clássico",pgPAlbum:"Moldura de álbum",pgPRounded:"Cards arredondados",pgPDark:"Grade escura",pgPSoft:"Margem suave",pgSpacing:"Espaçamento e raio",pgGap:"Espaçamento",pgRadius:"Raio",pgFill:"Preenchimento",pgFillCover:"Cobrir",pgFillFit:"Ajustar",pgFillNote:"Ajustar: não corta a imagem, os vãos são preenchidos pelo fundo",pgBg:"Fundo",pgBgSolid:"Sólido",pgBgGrad:"Gradiente",pgBgBlur:"Desfoque",pgBgColor:"Cor",pgBgColor2:"2.ª cor",pgBgNote:"A cor do fundo também é usada nas frestas",pgSize:"Tamanho",pgFormat:"Formato",pgQuality:"Qualidade",pgExport:"Gerar e baixar",pgNoImg:"Carregue fotos primeiro",pgGen:"Gerando…",pgDone:"Pronto! Download",pgEmptyCell:"Vazio",pgDel:"Excluir",pgImg:"Imagem",pgRotate:"Girar",pgTip1:"Arraste as fotos à esquerda para ordenar",pgTip2:"Clique em um item para girar 90°",pgTip3:'"Célula vazia" insere um slot vazio',pgTip4:"Tudo é processado localmente, nada é enviado"}};let t=window.pageLang||"zh-CN";e[t]||(t="en");const a=function(a){return e[t]&&e[t][a]||e.en[a]||a},g=function(e){return document.querySelector(e)};let p=[],o=3,r=3,l=8,i=0,n="cover",s="solid",d="#f2f4f8",u="#dbe4f0";function c(){document.querySelectorAll("[data-t]").forEach(function(a){var g=a.getAttribute("data-t");e[t]&&e[t][g]&&(a.textContent=e[t][g])})}function m(e){[].forEach.call(e,function(e){var t;e.type.indexOf("image/")||(t=e,new Promise(function(e,a){var g=URL.createObjectURL(t),p=new Image;p.onload=function(){e(p)},p.onerror=function(){URL.revokeObjectURL(g),a(new Error("load fail"))},p.src=g})).then(function(e){p.push({img:e,rot:0}),f(),h()}).catch(function(){})})}function f(){var e=g("#pgList");e.innerHTML="",p.forEach(function(t,g){var o=document.createElement("div");o.className="pg-item"+(t.empty?" empty-item":""),o.draggable=!t.empty,o.setAttribute("data-idx",g);var r=document.createElement("span");if(r.className="thumb",t.empty)r.textContent="□";else{var l=document.createElement("img");l.className="thumb",l.src=t.img.src,r.appendChild(l)}var i=document.createElement("span");i.className="name",i.textContent=t.empty?a("pgEmptyCell"):a("pgImg")+" "+(g+1);var n=document.createElement("span");n.className="idx",n.textContent=g+1;var s=document.createElement("span");s.className="del",s.textContent="×",s.title=a("pgDel"),s.addEventListener("click",function(e){e.stopPropagation(),p.splice(g,1),f(),h()}),o.appendChild(r),o.appendChild(i),o.appendChild(n),o.appendChild(s),o.addEventListener("click",function(){t.empty||(t.rot=(t.rot+90)%360,f(),h())}),o.addEventListener("dragstart",function(e){e.dataTransfer.setData("text/plain",String(g)),o.classList.add("dragging")}),o.addEventListener("dragend",function(){o.classList.remove("dragging")}),o.addEventListener("dragover",function(e){e.preventDefault()}),o.addEventListener("drop",function(e){e.preventDefault();var t=parseInt(e.dataTransfer.getData("text/plain"),10);if(!isNaN(t)){var a=g;if(t!==a){var o=p.splice(t,1)[0];p.splice(a,0,o),f(),h()}}}),e.appendChild(o)})}function v(e,t,a,g,p,o){o=Math.min(o,g/2,p/2),e.beginPath(),e.moveTo(t+o,a),e.arcTo(t+g,a,t+g,a+p,o),e.arcTo(t+g,a+p,t,a+p,o),e.arcTo(t,a+p,t,a,o),e.arcTo(t,a,t+g,a,o),e.closePath()}function C(e,t){var a=p.length;if(0===a)return null;var g=Math.round(l*t/480),c=Math.round(i*t/480),m=(t-g*(r-1))/r,f=m,C=Math.round(f*o+g*(o-1));e.width=t,e.height=C;var h=e.getContext("2d");if(h.fillStyle=d,h.fillRect(0,0,t,C),"gradient"===s){var b=h.createLinearGradient(0,0,t,C);b.addColorStop(0,d),b.addColorStop(1,u),h.fillStyle=b,h.fillRect(0,0,t,C)}if("blur"===s){var y=p.find(function(e){return e&&!e.empty&&e.img});y&&(h.save(),h.filter="blur(18px)",h.drawImage(y.img,0,0,t,C),h.restore())}for(var E=0;E<o;E++)for(var S=0;S<r;S++){var D=S*(m+g),P=E*(f+g),B=p[E*r+S];if(h.save(),c>0&&v(h,D,P,m,f,c),c>0||(h.beginPath(),h.rect(D,P,m,f)),h.clip(),!B||B.empty)h.fillStyle="gradient"===s?"#eef2f8":d,h.fillRect(D,P,m,f);else{var F=B.img.naturalWidth||B.img.width,L=B.img.naturalHeight||B.img.height,R=B.rot||0;if(h.translate(D+m/2,P+f/2),h.rotate(R*Math.PI/180),"cover"===n){var A=Math.max(m/F,f/L),T=F*A,G=L*A;h.drawImage(B.img,-T/2,-G/2,T,G)}else{var w=Math.min(m/F,f/L),k=F*w,x=L*w;h.drawImage(B.img,-k/2,-x/2,k,x)}}h.restore()}return{w:t,h:C}}function h(){var e=g("#pgCanvas"),t=g("#pgCanvasWrap"),a=g("#pgPh");if(0===p.length)return t.style.display="none",void(a.style.display="");a.style.display="none",t.style.display="";var o=C(e,480);o&&(e.style.width=Math.min(o.w,t.clientWidth-24)+"px",e.style.height="auto")}var b=g("#pgFile");function y(e,t,a){o=e,r=t,g("#pgRows").value=e,g("#pgCols").value=t,[].forEach.call(document.querySelectorAll("#pgGridPreset button"),function(a){a.classList.toggle("active",a.getAttribute("data-g")===e+"x"+t)}),h()}function E(e,t,a,p){var o=g(e),r=g(t);function l(){r.textContent=o.value+a,p(parseInt(o.value,10))}o.addEventListener("input",l),l()}g("#pgDrop").addEventListener("click",function(e){e.target!==b&&(e.preventDefault(),e.stopPropagation(),b.click())},!0),g("#pgFile").addEventListener("change",function(e){m(e.target.files),e.target.value=""}),g("#pgDrop").addEventListener("dragover",function(e){e.preventDefault(),this.classList.add("drag")}),g("#pgDrop").addEventListener("dragleave",function(){this.classList.remove("drag")}),g("#pgDrop").addEventListener("drop",function(e){e.preventDefault(),this.classList.remove("drag"),m(e.dataTransfer.files)}),document.addEventListener("dragover",function(e){e.target.closest&&!e.target.closest("#pgDrop")&&e.preventDefault()}),document.addEventListener("drop",function(e){e.target.closest&&!e.target.closest("#pgDrop")&&e.preventDefault()}),g("#pgAddEmpty").addEventListener("click",function(){p.push({empty:!0}),f(),h()}),g("#pgClear").addEventListener("click",function(){p=[],f(),h()}),g("#pgGridPreset").addEventListener("click",function(e){var t=e.target.closest("button");if(t){var a=t.getAttribute("data-g").split("x");y(parseInt(a[0],10),parseInt(a[1],10))}}),g("#pgApplyCustom").addEventListener("click",function(){var e=parseInt(g("#pgRows").value,10)||3,t=parseInt(g("#pgCols").value,10)||3;y(e=Math.max(1,Math.min(10,e)),t=Math.max(1,Math.min(10,t)))}),E("#pgGap","#pgGapVal","px",function(e){l=e,h()}),E("#pgRadius","#pgRadiusVal","px",function(e){i=e,h()}),g("#pgFillSeg").addEventListener("click",function(e){var t=e.target.closest("button");t&&(n=t.getAttribute("data-f"),[].forEach.call(this.children,function(e){e.classList.toggle("active",e===t)}),h())}),g("#pgBgSeg").addEventListener("click",function(e){var t=e.target.closest("button");t&&(s=t.getAttribute("data-b"),[].forEach.call(this.children,function(e){e.classList.toggle("active",e===t)}),g("#pgBgRow2").style.display="gradient"===s?"":"none",h())}),g("#pgBgColor").addEventListener("input",function(e){d=e.target.value,h()}),g("#pgBgColor2").addEventListener("input",function(e){u=e.target.value,h()}),g("#pgPresets").addEventListener("click",function(e){var t=e.target.closest("button");if(t){var a={classic:{g:8,r:0,bg:"#f2f4f8",bg2:"#dbe4f0",fm:"cover",bm:"solid"},album:{g:16,r:0,bg:"#ffffff",bg2:"#eef2f8",fm:"cover",bm:"solid"},rounded:{g:8,r:24,bg:"#f0f0f6",bg2:"#e4e8f0",fm:"cover",bm:"solid"},dark:{g:6,r:0,bg:"#16181d",bg2:"#2a2e37",fm:"cover",bm:"solid"},soft:{g:24,r:0,bg:"#f7f7fa",bg2:"#e9ecf4",fm:"cover",bm:"solid"}},p=a[t.getAttribute("data-p")]||a.classic;l=p.g,i=p.r,d=p.bg,u=p.bg2,n=p.fm,s=p.bm,g("#pgGap").value=l,g("#pgGapVal").textContent=l+"px",g("#pgRadius").value=i,g("#pgRadiusVal").textContent=i+"px",g("#pgBgColor").value=d,g("#pgBgColor2").value=u,[].forEach.call(document.querySelectorAll("#pgFillSeg button"),function(e){e.classList.toggle("active",e.getAttribute("data-f")===n)}),[].forEach.call(document.querySelectorAll("#pgBgSeg button"),function(e){e.classList.toggle("active",e.getAttribute("data-b")===s)}),[].forEach.call(this.children,function(e){e.classList.toggle("active",e===t)}),g("#pgBgRow2").style.display="gradient"===s?"":"none",h()}}),g("#pgQuality").addEventListener("input",function(e){g("#pgQualityVal").textContent=e.target.value}),g("#pgExport").addEventListener("click",function(){if(0!==p.length){var e=parseInt(g("#pgSize").value,10),t=g("#pgFormat").value,o=parseInt(g("#pgQuality").value,10),r=document.createElement("canvas");if(C(r,e)){var l={png:"image/png",jpeg:"image/jpeg",webp:"image/webp"}[t]||"image/png",i=t;r.toBlob(function(e){var t=URL.createObjectURL(e),g=document.createElement("a");g.href=t,g.download="photogrid_"+Date.now()+"."+i,document.body.appendChild(g),g.click(),setTimeout(function(){document.body.removeChild(g),URL.revokeObjectURL(t)},200),alert(a("pgDone"))},l,o)}}else alert(a("pgNoImg"))}),c(),f(),h();var S=g("#lang");S.addEventListener("change",function(){t=S.value,e[t]||(t="en"),c()})}();</script>
+</body></html>
