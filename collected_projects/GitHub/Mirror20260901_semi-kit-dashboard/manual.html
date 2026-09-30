@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>半品齐套管理看板 — 操作手册</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#F6F8FB;--card:#fff;--text:#152033;--text2:#637089;
+  --blue:#2F6BFF;--green:#16A37B;--orange:#E8760B;--red:#DC3545;
+  --border:#E6EAF2;--radius:10px;
+  --shadow:0 1px 4px rgba(0,0,0,.06);
+}
+html{font-size:15px;scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);line-height:1.7;min-height:100vh}
+a{color:var(--blue);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* === 导航 === */
+.sidebar{position:fixed;top:0;left:0;width:240px;height:100vh;background:#1a2236;color:#c5cee0;padding:24px 0;overflow-y:auto;z-index:100;transition:transform .3s}
+.sidebar h2{font-size:1rem;font-weight:700;color:#fff;padding:0 20px 16px;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:8px}
+.sidebar a{display:block;padding:8px 20px;color:#9ba8c2;font-size:.85rem;border-left:3px solid transparent;transition:all .15s}
+.sidebar a:hover,.sidebar a.active{color:#fff;background:rgba(255,255,255,.06);border-left-color:var(--blue);text-decoration:none}
+.sidebar .nav-group{font-size:.7rem;text-transform:uppercase;letter-spacing:.08em;color:#5a6a88;padding:16px 20px 6px;font-weight:600}
+
+/* === 主内容 === */
+.main{margin-left:240px;padding:40px 48px 80px;max-width:960px}
+h1{font-size:1.8rem;font-weight:700;margin-bottom:8px;color:var(--text)}
+.subtitle{font-size:1rem;color:var(--text2);margin-bottom:40px}
+h2{font-size:1.35rem;font-weight:700;margin:48px 0 16px;padding-bottom:10px;border-bottom:2px solid var(--blue);color:var(--text)}
+h2 .step-num{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;background:var(--blue);color:#fff;border-radius:50%;font-size:.85rem;margin-right:10px;vertical-align:middle}
+h3{font-size:1.05rem;font-weight:600;margin:28px 0 10px;color:var(--text)}
+p,li{margin-bottom:8px}
+ul,ol{padding-left:1.2em;margin-bottom:16px}
+
+/* === 卡片 === */
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:24px 28px;margin:16px 0;box-shadow:var(--shadow)}
+.card-title{font-weight:600;font-size:.95rem;margin-bottom:12px;color:var(--text)}
+
+/* === 提示框 === */
+.tip{border-radius:var(--radius);padding:16px 20px;margin:16px 0;font-size:.9rem;line-height:1.6}
+.tip-info{background:#EBF3FF;border-left:4px solid var(--blue);color:#1a3a6e}
+.tip-warn{background:#FFF7E6;border-left:4px solid var(--orange);color:#6b3a00}
+.tip-success{background:#E8F8F0;border-left:4px solid var(--green);color:#0a4a2e}
+.tip-danger{background:#FDECEA;border-left:4px solid var(--red);color:#6b1a1a}
+.tip strong{display:block;margin-bottom:4px}
+
+/* === 表格 === */
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:.88rem}
+th{background:#EDF1F7;font-weight:600;text-align:left;padding:10px 14px;border:1px solid var(--border)}
+td{padding:10px 14px;border:1px solid var(--border)}
+code{background:#f0f3f8;padding:1px 6px;border-radius:4px;font-size:.85rem;font-family:"SF Mono",Consolas,"Courier New",monospace}
+
+/* === 代码块 === */
+.code-block{background:#1a2236;color:#e4e8f1;padding:16px 20px;border-radius:var(--radius);font-family:"SF Mono",Consolas,"Courier New",monospace;font-size:.85rem;line-height:1.6;overflow-x:auto;margin:12px 0;white-space:pre-wrap;word-break:break-all}
+.code-block .seg{display:inline;padding:2px 6px;border-radius:3px;margin:0 1px;font-weight:600}
+.seg1{background:#2F6BFF33;color:#7EB3FF}
+.seg2{background:#16A37B33;color:#5ED4A5}
+.seg3{background:#E8760B33;color:#F5B870}
+.seg4{background:#DC354533;color:#F58B8B}
+.seg5{background:#9B59B633;color:#C9A0DC}
+.seg6{background:#637089;color:#9ba8c2}
+
+/* === 步骤 === */
+.step{display:flex;gap:16px;margin:16px 0;align-items:flex-start}
+.step-badge{flex-shrink:0;width:32px;height:32px;background:var(--blue);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9rem}
+.step-body{flex:1}
+
+/* === 流程图 === */
+.flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:20px 0;font-size:.88rem}
+.flow-item{background:var(--card);border:2px solid var(--blue);border-radius:8px;padding:8px 16px;font-weight:600;color:var(--blue)}
+.flow-arrow{color:var(--text2);font-size:1.2rem}
+
+/* === 打印 === */
+@media print{
+  .sidebar{display:none}
+  .main{margin-left:0;padding:20px}
+  .card{break-inside:avoid;box-shadow:none;border:1px solid #ccc}
+  h2{break-after:avoid}
+}
+@media(max-width:768px){
+  .sidebar{transform:translateX(-100%)}
+  .main{margin-left:0;padding:20px 16px}
+  table{font-size:.8rem}
+  th,td{padding:6px 8px}
+}
+</style>
+</head>
+<body>
+
+<!-- 侧边导航 -->
+<nav class="sidebar">
+  <h2>📦 操作手册</h2>
+  <div class="nav-group">基础信息</div>
+  <a href="#overview">系统概述</a>
+  <a href="#access">系统访问</a>
+  <a href="#qrcode">二维码格式</a>
+  <a href="#rules">业务规则</a>
+  <div class="nav-group">操作步骤</div>
+  <a href="#step-bom">导入BOM数据</a>
+  <a href="#step-order">设置工单</a>
+  <a href="#step-pallet">设置栈板号</a>
+  <a href="#step-scan">扫码操作</a>
+  <div class="nav-group">功能说明</div>
+  <a href="#search">查询与搜索</a>
+  <a href="#dashboard">齐套看板</a>
+  <a href="#export">数据导出</a>
+  <div class="nav-group">附录</div>
+  <a href="#faq">常见问题</a>
+</nav>
+
+<!-- 主内容 -->
+<main class="main">
+
+<h1>半品齐套管理看板 — 操作手册</h1>
+<p class="subtitle">组装部培训用 · 版本 2026.09.05</p>
+
+<!-- ========== 系统概述 ========== -->
+<h2 id="overview">系统概述</h2>
+<div class="card">
+  <p>半品齐套管理看板用于管理半成品的入库、出库和齐套分析。通过扫描产线上的二维码标签，系统自动记录每次扫码操作，实时计算库存，并在看板上展示每个成品料号的齐套状态。</p>
+  <p><strong>核心功能：</strong></p>
+  <ul>
+    <li><strong>BOM导入</strong> — 加载成品与半品的对应关系</li>
+    <li><strong>工单管理</strong> — 设置当前生产的工单号及数量</li>
+    <li><strong>扫码录入</strong> — 扫码枪或手机相机扫描半成品标签</li>
+    <li><strong>库存计算</strong> — 自动统计各半品当前库存</li>
+    <li><strong>齐套看板</strong> — 实时显示每个成品的齐套情况</li>
+    <li><strong>数据导出</strong> — 导出CSV/Excel台账</li>
+  </ul>
+</div>
+
+<!-- ========== 系统访问 ========== -->
+<h2 id="access">系统访问</h2>
+<div class="card">
+  <p><strong>访问地址：</strong><a href="https://mirror20260901.github.io/semi-kit-dashboard/" target="_blank" rel="noopener noreferrer">https://mirror20260901.github.io/semi-kit-dashboard/</a></p>
+  <p><strong>使用设备：</strong>电脑浏览器（推荐Chrome/Edge）或手机浏览器</p>
+  <p><strong>多人协作：</strong>多人可在各自设备上同时打开该地址，扫码数据通过云端自动同步</p>
+  <div class="tip tip-info">
+    <strong>💡 提示</strong>
+    首次打开或长时间未更新时，请关闭页面重新打开，系统会自动加载最新版本。
+  </div>
+</div>
+
+<!-- ========== 二维码格式 ========== -->
+<h2 id="qrcode">二维码标签格式</h2>
+<div class="card">
+  <p>每根半成品的标签上有一个二维码，扫码后得到的内容格式如下：</p>
+
+  <div class="code-block"><span class="seg seg1">工单号</span>｜<span class="seg seg2">半品料号</span>｜<span class="seg seg3">线长</span>｜<span class="seg seg4">数量(包规)</span>｜<span class="seg seg5">批次</span>｜<span class="seg seg6">流水号</span></div>
+
+  <p><strong>实际示例：</strong></p>
+  <div class="code-block">101396002｜8180900969-P1A1-P2B2｜00035｜00100｜260905｜00001</div>
+
+  <table>
+    <thead><tr><th>段落</th><th>字段名称</th><th>说明</th><th>示例</th></tr></thead>
+    <tbody>
+      <tr><td>第1段</td><td><strong>工单号</strong></td><td>当前生产工单编号</td><td>101396002</td></tr>
+      <tr><td>第2段</td><td><strong>半品料号</strong></td><td>该半成品的料号（含线序信息）</td><td>8180900969-P1A1-P2B2</td></tr>
+      <tr><td>第3段</td><td>线长</td><td>线材长度（系统暂不使用）</td><td>00035</td></tr>
+      <tr><td>第4段</td><td>数量（包规）</td><td>每箱装多少根，<strong>不计入库存</strong></td><td>00100</td></tr>
+      <tr><td>第5段</td><td><strong>批次</strong></td><td>生产日期，6位日期 YYMMDD</td><td>260905</td></tr>
+      <tr><td>第6段</td><td>流水号</td><td>序号（系统暂不使用）</td><td>00001</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tip tip-warn">
+    <strong>⚠️ 分隔符说明</strong>
+    各段之间用竖线分隔（支持全角 <code>｜</code> 和半角 <code>|</code>），系统会自动识别。
+  </div>
+</div>
+
+<!-- ========== 业务规则 ========== -->
+<h2 id="rules">业务规则</h2>
+
+<h3>📌 库存计数规则</h3>
+<div class="card">
+  <ul>
+    <li><strong>一根线 = 一个码 = 扫一次 = 库存+1</strong></li>
+    <li>标签上的"数量"是<strong>包规</strong>（每箱装多少根），<strong>不记入库存</strong></li>
+    <li>入库扫一次 → 库存+1；出库扫一次 → 库存-1</li>
+  </ul>
+</div>
+
+<h3>📌 工单与成品关系</h3>
+<div class="card">
+  <ul>
+    <li><strong>一个工单号可以对应多个成品料号</strong></li>
+    <li>扫码时，系统会自动在BOM中查找该半品料号属于哪个成品</li>
+    <li>只要半品料号在当前工单关联的<strong>任何一个成品</strong>的BOM中，就允许录入</li>
+  </ul>
+</div>
+
+<h3>📌 齐套判定</h3>
+<div class="card">
+  <ul>
+    <li>一个成品需要多种半品，每种半品的库存都 ≥ 需求量时，才算"可配套"</li>
+    <li><strong>最大缺口</strong> = 该成品下库存最多的半品数量 − 库存最少的半品数量</li>
+    <li>可配套数 = 所有半品中能配套的最小套数（受限于库存最少的那种半品）</li>
+  </ul>
+</div>
+
+<!-- ========== 操作步骤 ========== -->
+<h2 id="step-bom"><span class="step-num">1</span> 导入BOM数据</h2>
+<div class="card">
+  <p>BOM（物料清单）定义了每个成品需要哪些半品，是齐套分析的基础数据。</p>
+  <div class="step">
+    <div class="step-badge">1</div>
+    <div class="step-body">打开系统页面，找到顶部 <strong>"📂 BOM 数据管理"</strong> 区域</div>
+  </div>
+  <div class="step">
+    <div class="step-badge">2</div>
+    <div class="step-body">点击 <strong>"📋 批量录入"</strong> 按钮，选择BOM文件（Excel 或 CSV 格式）</div>
+  </div>
+  <div class="step">
+    <div class="step-badge">3</div>
+    <div class="step-body">系统自动解析文件，解析成功后会显示已加载的成品和半品数量</div>
+  </div>
+  <div class="tip tip-info">
+    <strong>💡 BOM文件格式要求</strong>
+    文件中需包含：成品料号、半品料号、接头规格等字段。系统会自动匹配列名识别。
+  </div>
+</div>
+
+<!-- ========== 设置工单 ========== -->
+<h2 id="step-order"><span class="step-num">2</span> 设置工单</h2>
+<div class="card">
+  <p>扫码前需要先确认当前生产的工单号和工单数量。</p>
+  <div class="step">
+    <div class="step-badge">1</div>
+    <div class="step-body">在 <strong>"📋 工单设置"</strong> 区域，输入<strong>工单号</strong>和<strong>工单数量</strong></div>
+  </div>
+  <div class="step">
+    <div class="step-badge">2</div>
+    <div class="step-body">点击 <strong>"✅ 确认"</strong> 按钮</div>
+  </div>
+  <div class="step">
+    <div class="step-badge">3</div>
+    <div class="step-body">确认成功后，工单信息会自动同步到后续的扫码记录中</div>
+  </div>
+
+  <table>
+    <thead><tr><th>字段</th><th>说明</th><th>示例</th></tr></thead>
+    <tbody>
+      <tr><td>工单号</td><td>当前生产工单编号</td><td>101396002</td></tr>
+      <tr><td>工单数量</td><td>本工单计划生产的成品数量</td><td>500</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tip tip-success">
+    <strong>✅ 提示</strong>
+    一个工单可以对应多个成品料号。设置工单后，扫描该工单下任何成品的半品都会被接受。
+  </div>
+</div>
+
+<!-- ========== 设置栈板号 ========== -->
+<h2 id="step-pallet"><span class="step-num">3</span> 设置栈板号</h2>
+<div class="card">
+  <p>栈板号用于标识扫码时半成品所在的栈板位置，方便后续追溯。</p>
+  <div class="step">
+    <div class="step-badge">1</div>
+    <div class="step-body">在扫码区域找到 <strong>"🏷️ 栈板号"</strong> 设置</div>
+  </div>
+  <div class="step">
+    <div class="step-badge">2</div>
+    <div class="step-body">选择<strong>栈板前缀</strong>（下拉框），可选值：<code>5B3F</code>、<code>2B3F</code>、<code>2B4F</code></div>
+  </div>
+  <div class="step">
+    <div class="step-badge">3</div>
+    <div class="step-body">输入<strong>序号</strong>（如 1、2、3...），系统自动拼接为完整栈板号</div>
+  </div>
+
+  <p><strong>栈板号格式示例：</strong></p>
+  <table>
+    <thead><tr><th>前缀</th><th>序号</th><th>完整栈板号</th></tr></thead>
+    <tbody>
+      <tr><td>5B3F</td><td>1</td><td>5B3F-0001</td></tr>
+      <tr><td>2B3F</td><td>15</td><td>2B3F-0015</td></tr>
+      <tr><td>2B4F</td><td>3</td><td>2B4F-0003</td></tr>
+    </tbody>
+  </table>
+
+  <div class="tip tip-info">
+    <strong>💡 自动保存</strong>
+    栈板号设置会自动保存，刷新页面后不会丢失，无需重复设置。
+  </div>
+</div>
+
+<!-- ========== 扫码操作 ========== -->
+<h2 id="step-scan"><span class="step-num">4</span> 扫码操作</h2>
+<div class="card">
+  <p>这是日常使用最核心的操作：扫描半成品标签上的二维码完成入库或出库。</p>
+</div>
+
+<h3>扫码方式</h3>
+<div class="card">
+  <table>
+    <thead><tr><th>方式</th><th>适用场景</th><th>操作</th></tr></thead>
+    <tbody>
+      <tr><td><strong>扫码枪</strong></td><td>电脑端，批量扫码</td><td>光标定位到扫码框，直接扫码即可</td></tr>
+      <tr><td><strong>📷 相机扫码</strong></td><td>手机端，或无扫码枪时</td><td>点击扫码框右侧的 📷 按钮，调用摄像头</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<h3>入库操作</h3>
+<div class="card">
+  <div class="step">
+    <div class="step-badge">1</div>
+    <div class="step-body">确认已选择 <strong>"📥 入库"</strong> 模式（默认即为入库）</div>
+  </div>
+  <div class="step">
+    <div class="step-badge">2</div>
+    <div class="step-body">将扫码枪对准标签二维码扫描（或点击📷用手机相机扫码）</div>
+  </div>
+  <div class="step">
+    <div class="step-badge">3</div>
+    <div class="step-body">扫码成功后，系统自动识别半品料号，该半品<strong>库存 +1</strong></div>
+  </div>
+  <div class="step">
+    <div class="step-badge">4</div>
+    <div class="step-body">扫码记录立即出现在下方 <strong>"📋 扫码记录"</strong> 列表中</div>
+  </div>
+</div>
+
+<h3>出库操作</h3>
+<div class="card">
+  <div class="step">
+    <div class="step-badge">1</div>
+    <div class="step-body">点击切换到 <strong>"📤 出库"</strong> 模式</div>
+  </div>
+  <div class="step">
+    <div class="step-badge">2</div>
+    <div class="step-body">扫描标签二维码</div>
+  </div>
+  <div class="step">
+    <div class="step-badge">3</div>
+    <div class="step-body">扫码成功后，该半品<strong>库存 -1</strong></div>
+  </div>
+</div>
+
+<h3>扫码状态说明</h3>
+<div class="card">
+  <table>
+    <thead><tr><th>状态提示</th><th>含义</th></tr></thead>
+    <tbody>
+      <tr><td style="color:var(--green);font-weight:600">✅ 入库成功</td><td>扫码正常，库存已+1</td></tr>
+      <tr><td style="color:var(--red);font-weight:600">🚨 重复扫码警报</td><td>该码已经扫过（同方向），不会重复计数</td></tr>
+      <tr><td style="color:var(--red);font-weight:600">❌ 不在当前工单BOM中</td><td>该半品料号不属于当前工单关联的任何成品</td></tr>
+      <tr><td style="color:var(--orange);font-weight:600">⚠️ 请确认工单</td><td>尚未设置工单或工单信息不匹配</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="flow">
+  <div class="flow-item">扫码</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-item">识别格式</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-item">BOM校验</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-item">记录入库/出库</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-item">库存更新</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-item">看板刷新</div>
+</div>
+
+<!-- ========== 查询与搜索 ========== -->
+<h2 id="search">查询与搜索</h2>
+<div class="card">
+  <p>在 <strong>"📋 扫码记录"</strong> 区域，可以通过搜索框快速找到需要的记录。</p>
+
+  <h3>支持的搜索字段</h3>
+  <table>
+    <thead><tr><th>搜索内容</th><th>示例</th></tr></thead>
+    <tbody>
+      <tr><td>唯一码（完整扫码内容）</td><td>101396002｜8180900969...</td></tr>
+      <tr><td>半品料号</td><td>8180900969-P1A1-P2B2</td></tr>
+      <tr><td>工单号</td><td>101396002</td></tr>
+      <tr><td>栈板号</td><td>5B3F-0001</td></tr>
+      <tr><td>批次</td><td>260905</td></tr>
+    </tbody>
+  </table>
+
+  <h3>操作步骤</h3>
+  <div class="step">
+    <div class="step-badge">1</div>
+    <div class="step-body">在搜索框中输入关键词</div>
+  </div>
+  <div class="step">
+    <div class="step-badge">2</div>
+    <div class="step-body">点击 <strong>"🔍 查询"</strong> 按钮进行筛选</div>
+  </div>
+  <div class="step">
+    <div class="step-badge">3</div>
+    <div class="step-body">点击 <strong>"🔄 显示全部"</strong> 清除筛选，恢复所有记录</div>
+  </div>
+
+  <p><strong>日期筛选：</strong>还可以按日期筛选，选择日期后点击"🔍 查询"即可只看当天的记录。</p>
+</div>
+
+<!-- ========== 齐套看板 ========== -->
+<h2 id="dashboard">齐套看板</h2>
+<div class="card">
+  <p>看板区域实时展示每个成品料号的齐套情况，随着扫码操作自动更新。</p>
+
+  <h3>看板指标说明</h3>
+  <table>
+    <thead><tr><th>列名</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td><strong>成品料号</strong></td><td>BOM中定义的成品编号</td></tr>
+      <tr><td><strong>半品数</strong></td><td>该成品需要的半品种类数</td></tr>
+      <tr><td><strong>可配套数</strong></td><td>当前库存能配套的最大套数（受限于最缺的半品）</td></tr>
+      <tr><td><strong>齐套状态</strong></td><td>可配套数 > 0 显示<span style="color:var(--green);font-weight:600">「可配套」</span>，否则显示<span style="color:var(--red);font-weight:600">「缺料」</span></td></tr>
+      <tr><td><strong>缺料半品</strong></td><td>库存不足需求量的半品种类数</td></tr>
+      <tr><td><strong>最大缺口</strong></td><td>该成品下库存最多的半品 − 库存最少的半品的差值</td></tr>
+    </tbody>
+  </table>
+
+  <h3>展开详情</h3>
+  <p>点击任意成品料号行可以展开，查看该成品下每种半品的详细信息：</p>
+  <table>
+    <thead><tr><th>列名</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>半品料号</td><td>半品的完整料号</td></tr>
+      <tr><td>接头规格</td><td>该半品的接头规格描述</td></tr>
+      <tr><td>库存</td><td>当前库存数量（<span style="color:var(--red)">红色</span>表示不足）</td></tr>
+      <tr><td>状态</td><td><span style="color:var(--green)">充足</span> / <span style="color:var(--orange)">低库存</span> / <span style="color:var(--red)">缺料</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ========== 数据导出 ========== -->
+<h2 id="export">数据导出</h2>
+
+<h3>CSV 导出</h3>
+<div class="card">
+  <p>点击 <strong>"💾 导出 CSV"</strong> 按钮，系统会将所有扫码记录导出为 CSV 文件。</p>
+  <p><strong>CSV 包含以下 10 列：</strong></p>
+  <table>
+    <thead><tr><th>列序</th><th>列名</th><th>数据来源</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>时间</td><td>扫码时间（精确到秒）</td></tr>
+      <tr><td>2</td><td>唯一码</td><td>完整扫码内容（6段拼接）</td></tr>
+      <tr><td>3</td><td>线序料号</td><td>二维码第2段（半品料号）</td></tr>
+      <tr><td>4</td><td>操作人</td><td>暂空（预留）</td></tr>
+      <tr><td>5</td><td>工单号</td><td>当前确认的工单号</td></tr>
+      <tr><td>6</td><td>工单数量</td><td>当前确认的工单数量</td></tr>
+      <tr><td>7</td><td>库位</td><td>二维码第1段（扫码内容中的工单号）</td></tr>
+      <tr><td>8</td><td>批次</td><td>二维码第5段（6位日期，如260905）</td></tr>
+      <tr><td>9</td><td>动作</td><td>入库 / 出库</td></tr>
+      <tr><td>10</td><td>栈板号</td><td>当前设置的栈板号（如5B3F-0001）</td></tr>
+    </tbody>
+  </table>
+  <div class="tip tip-info">
+    <strong>💡 提示</strong>
+    CSV 文件可用 Excel 或 WPS 打开。如打开后中文乱码，请在 Excel 中使用"数据 → 从文本/CSV"导入，选择 UTF-8 编码。
+  </div>
+</div>
+
+<h3>Excel 多Sheet导出</h3>
+<div class="card">
+  <p>系统还支持导出包含多个 Sheet 的 Excel 文件，包括 BOM 数据、工单信息、齐套看板和扫码区等。</p>
+  <p>点击 <strong>"📊 导出 Excel"</strong> 按钮即可下载。</p>
+</div>
+
+<!-- ========== 常见问题 ========== -->
+<h2 id="faq">常见问题</h2>
+
+<div class="card">
+  <h3>Q1：扫码后提示"不在当前工单BOM中"怎么办？</h3>
+  <p><strong>A：</strong>请检查以下几点：</p>
+  <ul>
+    <li>确认当前设置的工单号是否正确</li>
+    <li>确认该半品料号确实属于当前工单关联的成品BOM</li>
+    <li>如果BOM尚未导入，请先导入BOM数据</li>
+  </ul>
+</div>
+
+<div class="card">
+  <h3>Q2：为什么扫同一个码会提示"重复扫码"？</h3>
+  <p><strong>A：</strong>系统会自动检测重复扫码。同一个码在同一方向（入库或出库）只能扫一次。如果需要同一半品增加库存，应该扫不同流水号的标签。</p>
+</div>
+
+<div class="card">
+  <h3>Q3：标签上的数量（包规）为什么没有计入库存？</h3>
+  <p><strong>A：</strong>这是设计规则。标签上的数量表示每箱装多少根（包规），<strong>不是库存数</strong>。每扫一次码 = 一根线 = 库存+1。包规只作为参考信息记录，不参与库存计算。</p>
+</div>
+
+<div class="card">
+  <h3>Q4：一个工单可以扫多种不同成品的半品吗？</h3>
+  <p><strong>A：</strong>可以。一个工单号可以对应多个成品料号，扫描这些成品下任意半品都会被接受。系统会自动在BOM中查找匹配关系。</p>
+</div>
+
+<div class="card">
+  <h3>Q5：刷新页面后数据会丢失吗？</h3>
+  <p><strong>A：</strong>不会。扫码记录保存在云端，刷新页面后会自动恢复。栈板号设置也保存在本地，刷新不会丢失。</p>
+</div>
+
+<div class="card">
+  <h3>Q6：多人同时扫码会冲突吗？</h3>
+  <p><strong>A：</strong>不会。多人可以在各自的设备上同时打开系统扫码，数据通过云端实时同步。每台设备的库存也会自动从初始值 + 所有扫码记录重新计算，确保数据一致。</p>
+</div>
+
+<div class="card">
+  <h3>Q7：批次信息（如260905）代表什么？</h3>
+  <p><strong>A：</strong>批次是二维码标签第5段的6位日期数字，格式为 YYMMDD。例如 <code>260905</code> 表示 2026年9月5日生产。批次信息会记录到扫码记录和导出的CSV中，方便追溯。</p>
+</div>
+
+<div class="card">
+  <h3>Q8：导出的CSV文件用Excel打开中文乱码怎么办？</h3>
+  <p><strong>A：</strong>CSV 文件使用 UTF-8 编码。在 Excel 中请通过以下方式打开：</p>
+  <ol>
+    <li>打开 Excel → 点击"数据"选项卡</li>
+    <li>选择"从文本/CSV"</li>
+    <li>选择导出的文件</li>
+    <li>在编码选择中选 <strong>UTF-8</strong></li>
+    <li>点击"加载"</li>
+  </ol>
+</div>
+
+<div class="tip tip-success" style="margin-top:40px">
+  <strong>📞 技术支持</strong>
+  如有操作问题或系统异常，请联系系统管理员。系统地址：<a href="https://mirror20260901.github.io/semi-kit-dashboard/" target="_blank" rel="noopener noreferrer">https://mirror20260901.github.io/semi-kit-dashboard/</a>
+</div>
+
+</main>
+
+<script>
+// 导航高亮
+const links = document.querySelectorAll('.sidebar a');
+const sections = document.querySelectorAll('h2[id]');
+function onScroll(){
+  let current = '';
+  sections.forEach(s => {
+    if(window.scrollY >= s.offsetTop - 100) current = s.id;
+  });
+  links.forEach(a => {
+    a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+  });
+}
+window.addEventListener('scroll', onScroll);
+onScroll();
+
+// 平滑滚动
+links.forEach(a => {
+  a.addEventListener('click', e => {
+    const id = a.getAttribute('href').slice(1);
+    const el = document.getElementById(id);
+    if(el){
+      e.preventDefault();
+      el.scrollIntoView({behavior:'smooth',block:'start'});
+    }
+  });
+});
+</script>
+</body>
+</html>

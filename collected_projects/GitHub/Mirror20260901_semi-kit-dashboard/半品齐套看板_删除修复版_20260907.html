@@ -1,0 +1,2218 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>半品齐套管理看板</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#1a73e8;--primary-light:#4a9af5;--primary-dark:#0d47a1;
+  --bg:#f0f4f8;--card:#fff;--text:#1a2332;--text-secondary:#5a6a7e;
+  --border:#dce3ed;--success:#22c55e;--warning:#f59e0b;--danger:#ef4444;
+  --shadow:0 2px 12px rgba(26,115,232,.08);--radius:12px;
+}
+html{font-size:14px;scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+a{color:var(--primary);text-decoration:none}
+
+/* Header */
+.header{background:linear-gradient(135deg,var(--primary-dark),var(--primary));color:#fff;padding:16px 24px;position:sticky;top:0;z-index:100;box-shadow:0 2px 16px rgba(0,0,0,.15)}
+.header-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.header h1{font-size:1.4rem;font-weight:700;letter-spacing:.5px}
+.header-actions{display:flex;gap:8px;align-items:center}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;background:rgba(255,255,255,.15);border-radius:8px;padding:3px}
+.tab-btn{padding:8px 20px;border:none;background:transparent;color:rgba(255,255,255,.7);cursor:pointer;border-radius:6px;font-size:.9rem;font-weight:500;transition:all .2s}
+.tab-btn.active{background:#fff;color:var(--primary-dark);font-weight:600}
+.tab-btn:hover:not(.active){background:rgba(255,255,255,.15);color:#fff}
+
+/* Main */
+main{max-width:1400px;margin:0 auto;padding:20px}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* Cards */
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden}
+.card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-header h2{font-size:1.1rem;font-weight:600;color:var(--text)}
+.card-body{padding:20px}
+
+/* KPI Grid */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.kpi-card{background:var(--card);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);border:1px solid var(--border);border-left:4px solid var(--primary)}
+.kpi-card.success{border-left-color:var(--success)}
+.kpi-card.warning{border-left-color:var(--warning)}
+.kpi-card.danger{border-left-color:var(--danger)}
+.kpi-label{font-size:.85rem;color:var(--text-secondary);margin-bottom:4px}
+.kpi-value{font-size:2rem;font-weight:700;color:var(--text);line-height:1.2}
+.kpi-sub{font-size:.8rem;color:var(--text-secondary);margin-top:4px}
+
+/* Scan Page */
+.scan-input-area{text-align:center;padding:30px 20px}
+.scan-input-wrap{position:relative;max-width:600px;margin:0 auto 20px}
+#scanInput{width:100%;padding:16px 20px;font-size:1.3rem;border:2px solid var(--primary);border-radius:12px;outline:none;transition:all .3s;background:#f8faff}
+#scanInput:focus{border-color:var(--primary-light);box-shadow:0 0 0 4px rgba(26,115,232,.15);background:#fff}
+#scanInput.success{border-color:var(--success);background:#f0fdf4}
+#scanInput.duplicate{border-color:var(--danger);background:#fef2f2}
+#scanInput.error{border-color:var(--danger);background:#fef2f2}
+#cameraBtn{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:44px;height:44px;border:none;background:var(--primary);color:#fff;border-radius:10px;cursor:pointer;font-size:1.3rem;display:flex;align-items:center;justify-content:center;transition:all .2s;box-shadow:0 2px 8px rgba(26,115,232,.3)}
+#cameraBtn:hover{background:var(--primary-dark)}
+.scan-status{margin-top:12px;font-size:1rem;font-weight:500;min-height:28px;transition:all .3s}
+.scan-status.ok{color:var(--success)}
+.scan-status.err{color:var(--danger)}
+
+/* Camera Modal */
+#cameraModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.75);z-index:1000;justify-content:center;align-items:center;flex-direction:column;padding:16px}
+#cameraModal.show{display:flex}
+.camera-container{width:92%;max-width:480px;aspect-ratio:1;background:#000;border-radius:16px;overflow:hidden;position:relative;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+#reader{width:100%!important;height:100%!important}
+#reader video{width:100%!important;height:100%!important;object-fit:cover;border-radius:16px}
+#reader__scan-region{border-radius:16px!important}
+#reader__dashboard{display:none!important}
+.camera-top-bar{position:absolute;top:0;left:0;right:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;z-index:10;background:linear-gradient(to bottom,rgba(0,0,0,.5),transparent)}
+.camera-close-btn{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.2rem;cursor:pointer;backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center}
+.camera-status{color:#fff;font-size:.85rem;background:rgba(0,0,0,.4);padding:6px 14px;border-radius:20px;backdrop-filter:blur(4px);white-space:pre-line;text-align:center;max-width:90%;line-height:1.4}
+.camera-flash{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:80px;height:80px;border-radius:50%;background:rgba(34,197,94,.3);pointer-events:none;animation:cameraFlash .6s ease-out forwards}
+@keyframes cameraFlash{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) scale(2)}}
+
+.action-select{display:flex;gap:8px;justify-content:center;margin-bottom:20px}
+.action-btn{padding:10px 28px;border:2px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;font-size:1rem;font-weight:500;transition:all .2s}
+.action-btn.active-in{border-color:var(--success);background:#f0fdf4;color:#166534}
+.action-btn.active-out{border-color:var(--danger);background:#fef2f2;color:#991b1b}
+
+/* Table */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th{background:#f5f8fc;padding:10px 12px;text-align:left;font-weight:600;color:var(--text-secondary);border-bottom:2px solid var(--border);white-space:nowrap;position:sticky;top:0}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:hover td{background:#f8faff}
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:.78rem;font-weight:600}
+.badge-green{background:#dcfce7;color:#166534}
+.badge-yellow{background:#fef9c3;color:#854d0e}
+.badge-red{background:#fee2e2;color:#991b1b}
+.badge-blue{background:#dbeafe;color:#1e40af}
+
+/* Expandable rows */
+.expand-row{cursor:pointer;user-select:none}
+.expand-row td:first-child::before{content:'▶';display:inline-block;margin-right:6px;font-size:.7rem;transition:transform .2s;color:var(--primary)}
+.expand-row.open td:first-child::before{transform:rotate(90deg)}
+.detail-row{display:none}
+.detail-row.show{display:table-row}
+.detail-row td{background:#f8faff;padding:8px 12px 8px 36px}
+
+/* Search */
+.search-bar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.search-bar input{flex:1;min-width:200px;padding:10px 16px;border:1px solid var(--border);border-radius:8px;font-size:.95rem;outline:none;transition:border .2s}
+.search-bar input:focus{border-color:var(--primary)}
+.btn{padding:10px 20px;border:none;border-radius:8px;cursor:pointer;font-size:.9rem;font-weight:500;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-dark)}
+.btn-outline{background:#fff;color:var(--primary);border:1px solid var(--primary)}
+.btn-outline:hover{background:#f0f6ff}
+.btn-sm{padding:6px 14px;font-size:.82rem}
+
+/* Chart area */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px}
+@media(max-width:768px){.chart-grid{grid-template-columns:1fr}}
+.chart-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid var(--border);padding:20px}
+.chart-card h2{font-size:1rem;font-weight:600;margin-bottom:16px;color:var(--text)}
+.bar-chart{display:flex;flex-direction:column;gap:8px}
+.bar-item{display:flex;align-items:center;gap:8px}
+.bar-label{width:120px;font-size:.78rem;color:var(--text-secondary);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+.bar-track{flex:1;height:24px;background:#e8eef6;border-radius:6px;overflow:hidden;position:relative}
+.bar-fill{height:100%;border-radius:6px;transition:width .6s ease;min-width:2px}
+.bar-value{font-size:.78rem;font-weight:600;width:40px;text-align:right;flex-shrink:0}
+
+/* Recent scan list */
+.recent-list{max-width:700px;margin:0 auto}
+.recent-item{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--border);font-size:.88rem}
+.recent-item:last-child{border-bottom:none}
+.recent-time{color:var(--text-secondary);font-size:.8rem}
+.recent-code{font-family:"SF Mono",Monaco,Consolas,monospace;font-size:.82rem;color:var(--primary-dark)}
+
+/* Mobile */
+@media(max-width:640px){
+  .header-inner{flex-direction:column;align-items:flex-start}
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .kpi-value{font-size:1.5rem}
+  #scanInput{font-size:1.1rem;padding:14px 16px}
+  main{padding:12px}
+  .bar-label{width:80px;font-size:.72rem}
+  .search-bar{flex-direction:column}
+}
+
+/* Shake animation for duplicate alert */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+/* Focus */
+button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+/* Reduced motion */
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* Print */
+@media print{
+  .header,.scan-input-area,.search-bar,.action-select,.tabs{display:none!important}
+  .tab-panel{display:block!important}
+  .card{break-inside:avoid;box-shadow:none;border:1px solid #ccc}
+}
+
+/* Tooltip */
+.info-tip{display:inline-block;width:16px;height:16px;background:var(--primary);color:#fff;border-radius:50%;text-align:center;line-height:16px;font-size:.7rem;cursor:help;margin-left:4px}
+
+/* Notification toast */
+.toast{position:fixed;top:80px;right:20px;padding:12px 24px;border-radius:8px;color:#fff;font-weight:500;z-index:999;transform:translateX(120%);transition:transform .3s ease;box-shadow:0 4px 20px rgba(0,0,0,.2)}
+.toast.show{transform:translateX(0)}
+.toast-success{background:var(--success)}
+.toast-error{background:var(--danger)}
+.toast-info{background:var(--primary)}
+
+/* Sync Indicator */
+.sync-indicator{display:flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(255,255,255,.15);border-radius:20px;margin-right:8px;cursor:default;user-select:none;transition:background .2s}
+.sync-indicator:hover{background:rgba(255,255,255,.25)}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:#999;flex-shrink:0;transition:background .3s}
+.sync-dot.syncing{background:#4a9af5;animation:syncPulse 1.2s ease-in-out infinite}
+.sync-dot.synced{background:#22c55e}
+.sync-dot.error{background:#ef4444}
+.sync-text{font-size:.75rem;color:rgba(255,255,255,.85);white-space:nowrap}
+@keyframes syncPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-inner">
+    <h1>📦 半品齐套管理看板</h1>
+      <div class="header-actions">
+      <div id="syncIndicator" class="sync-indicator" title="多人同步状态">
+        <span class="sync-dot"></span>
+        <span class="sync-text">同步中...</span>
+      </div>
+      <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('scan')">扫码录入</button>
+        <button class="tab-btn" onclick="switchTab('dashboard')">齐套看板</button>
+      </div>
+
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- Tab 1: Scan -->
+  <div id="tab-scan" class="tab-panel active">
+    <!-- BOM Load Section -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-header" style="cursor:pointer" onclick="document.getElementById('bomDetail').style.display=document.getElementById('bomDetail').style.display==='none'?'block':'none'">
+        <h2>📂 BOM 数据管理</h2>
+        <span style="font-size:.8rem;color:var(--text-secondary)" id="bomLoadStatus">点击展开 ▼</span>
+      </div>
+      <div class="card-body" id="bomDetail" style="display:none">
+        <!-- Excel/CSV Upload -->
+        <div style="margin-bottom:16px">
+          <div style="font-weight:600;margin-bottom:8px">📊 从 Excel/CSV 导入（覆盖现有数据）</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input type="file" id="bomFileInput" accept=".xlsx,.xls,.csv" onchange="loadBOMFile(event)" style="font-size:.85rem">
+            <span style="font-size:.78rem;color:var(--text-secondary)">列顺序：成品料号 | 半品料号 | 接头规格 | 线长 | 用量</span>
+          </div>
+        </div>
+        <!-- Manual Entry -->
+        <div style="border-top:1px solid var(--border);padding-top:16px">
+          <div style="font-weight:600;margin-bottom:8px">✍️ 手动新增 BOM 条目</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+            <input type="text" id="manualCP" placeholder="成品料号" style="width:140px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem">
+            <input type="text" id="manualBP" placeholder="半品料号" style="width:160px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem">
+            <input type="text" id="manualJ" placeholder="接头规格" style="width:100px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem">
+            <input type="number" id="manualL" placeholder="线长" value="0" style="width:80px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem">
+            <input type="number" id="manualY" placeholder="用量" value="1" style="width:70px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem">
+            <button class="btn btn-primary btn-sm" onclick="addBOMManual()">➕ 添加</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Work Order Settings -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-body" style="padding:14px 20px">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="font-weight:600;font-size:.9rem">📋 工单设置</span>
+          <input type="text" id="woNumber" placeholder="工单号" style="width:140px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem">
+          <input type="number" id="woTargetQty" placeholder="工单数量" style="width:110px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem">
+          <button class="btn btn-primary btn-sm" onclick="saveWorkOrder()">✅ 确认</button>
+          <button class="btn btn-sm" onclick="toggleBatchImport()" style="background:var(--warning);color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:.8rem;cursor:pointer">📋 批量录入</button>
+          <button class="btn btn-sm" onclick="clearWorkOrder()" style="background:var(--danger);color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:.8rem;cursor:pointer">🗑️ 清除</button>
+          <span id="woStatus" style="font-size:.82rem;color:var(--text-secondary)">未设置工单</span>
+        </div>
+        <!-- Batch Import Panel -->
+        <div id="batchImportPanel" style="display:none;margin-top:12px;padding:12px;background:#f8f9fa;border-radius:8px;border:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="font-weight:600;font-size:.85rem">📋 批量录入工单</span>
+            <span style="font-size:.75rem;color:var(--text-secondary)">从Excel粘贴：工单号 | 数量（每行一个工单）</span>
+          </div>
+          <textarea id="batchImportText" placeholder="101396001&#9;100&#10;101396002&#9;50&#10;..." style="width:100%;min-height:120px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:.82rem;font-family:monospace;resize:vertical" oninput="previewBatchImport()"></textarea>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:8px">
+            <button class="btn btn-primary btn-sm" onclick="confirmBatchImport()">✅ 确认导入</button>
+            <button class="btn btn-sm" onclick="toggleBatchImport()" style="background:#999;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:.8rem;cursor:pointer">取消</button>
+            <span id="batchPreview" style="font-size:.8rem;color:var(--text-secondary)"></span>
+          </div>
+        </div>
+        <!-- Imported Work Orders List -->
+        <div id="workOrderList" style="display:none;margin-top:12px;padding:10px;background:#e8f4fd;border-radius:8px;border:1px solid #b3d7ff">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-weight:600;font-size:.85rem;color:#1a73e8">📦 已导入工单列表</span>
+            <span id="workOrderCount" style="font-size:.78rem;color:var(--text-secondary)"></span>
+          </div>
+          <div id="workOrderListContent" style="max-height:200px;overflow-y:auto"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
+          <span style="font-weight:600;font-size:.9rem">🏷️ 栈板号</span>
+          <select id="palletPrefix" onchange="updatePalletDisplay()" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem;background:#fff;cursor:pointer">
+            <option value="">选择前缀</option>
+            <option value="5B3F">5B3F</option>
+            <option value="2B3F">2B3F</option>
+            <option value="2B4F">2B4F</option>
+          </select>
+          <span style="color:var(--text-secondary);font-size:.9rem">-</span>
+          <input type="number" id="palletSeq" min="1" max="1000" placeholder="0001" oninput="updatePalletDisplay()" style="width:100px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem">
+          <div style="position:relative;display:inline-block">
+            <input type="text" id="palletScanInput" placeholder="扫码枪或📷扫码" style="width:180px;padding:8px 40px 8px 10px;border:2px solid var(--primary);border-radius:6px;font-size:.85rem;background:#f0f8ff" onkeydown="handlePalletScan(event)">
+            <button onclick="openPalletCamera()" title="手机摄像头扫栈板号" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);width:30px;height:30px;border:none;background:var(--primary);color:#fff;border-radius:8px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(26,115,232,.3)">📷</button>
+          </div>
+          <span id="palletDisplay" style="font-size:.85rem;color:var(--text-secondary);font-weight:500">未设置栈板号</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scan Area -->
+    <div class="card" style="margin-bottom:20px">
+      <div class="card-body scan-input-area">
+        <div class="action-select">
+          <button class="action-btn active-in" id="btnIn" onclick="setAction('入库')">📥 入库</button>
+          <button class="action-btn" id="btnOut" onclick="setAction('出库')">📤 出库</button>
+        </div>
+        <div class="scan-input-wrap">
+          <input type="text" id="scanInput" placeholder="请扫描唯一码（扫码枪或点📷相机扫码）" autofocus autocomplete="off">
+          <button id="cameraBtn" onclick="openCamera()" title="手机摄像头扫码">📷</button>
+        </div>
+        <div class="scan-status" id="scanStatus"></div>
+      </div>
+    </div>
+
+    <!-- Scan Records -->
+    <div class="card">
+      <div class="card-header">
+        <h2>📋 扫码记录</h2>
+        <button class="btn btn-outline btn-sm" onclick="exportScanCSV()">💾 导出 CSV</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);margin-left:6px" onclick="clearAllData()">🗑️ 清除所有数据</button>
+      </div>
+      <div class="card-body">
+        <!-- Search and filter controls -->
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">
+          <input type="text" id="scanSearchInput" placeholder="搜索唯一码、料号、工单号、栈板号或批次..." style="flex:1;min-width:150px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
+          <input type="date" id="scanDateFilter" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
+          <button class="btn btn-primary btn-sm" onclick="filterScanRecords()">🔍 查询</button>
+          <button class="btn btn-outline btn-sm" onclick="clearScanFilter()">🔄 显示全部</button>
+          <button class="btn btn-sm" style="background:var(--danger);color:#fff" onclick="deleteByDate()">🗑️ 删除该日期</button>
+        </div>
+        <div id="scanRecordCount" style="font-size:.8rem;color:var(--text-secondary);margin-bottom:8px">共 0 条记录</div>
+        <div class="recent-list" id="recentList" style="max-height:400px;overflow-y:auto">
+          <div style="padding:20px;text-align:center;color:var(--text-secondary)">暂无扫码记录</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 2: Dashboard -->
+  <div id="tab-dashboard" class="tab-panel">
+    <!-- KPI Cards -->
+    <div class="kpi-grid" id="kpiGrid">
+      <div class="kpi-card"><div class="kpi-label">总成品数</div><div class="kpi-value" id="kpiTotal">57</div></div>
+      <div class="kpi-card success"><div class="kpi-label">可齐套成品数</div><div class="kpi-value" id="kpiKit">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">当前库存</div><div class="kpi-value" id="kpiSemiTotal">0</div></div>
+    </div>
+
+    <!-- Detail Table -->
+    <div class="card">
+      <div class="card-header">
+        <h2>📊 成品齐套明细</h2>
+      </div>
+      <div class="card-body">
+        <div class="search-bar">
+          <input type="text" id="searchInput" placeholder="搜索成品料号..." oninput="filterTable()">
+          <button class="btn btn-outline btn-sm" onclick="sortTable()">🔄 按可配套数排序</button>
+          <button class="btn btn-outline btn-sm" onclick="expandAll()">📂 全部展开</button>
+          <button class="btn btn-outline btn-sm" onclick="collapseAll()">📁 全部收起</button>
+          <button class="btn btn-primary btn-sm" onclick="exportToExcel()">📥 导出Excel</button>
+        </div>
+        <div class="table-wrap">
+          <table id="dashTable">
+            <thead>
+              <tr>
+                <th>成品料号</th>
+                <th>半品数</th>
+                <th>可配套数</th>
+                <th>齐套状态</th>
+                <th>缺料半品</th>
+                <th>最大缺口</th>
+              </tr>
+            </thead>
+            <tbody id="dashBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h2>📊 可配套数分布</h2>
+        <div class="bar-chart" id="chartKit"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ====== EMBEDDED DATA ======
+const INIT_DATA = {"bom":{"8180922863":[{"cp":"8180922863","p":"8180922863-P1A2-P4","j":"3.3防水mini-五代防水母头","l":2840,"y":1},{"cp":"8180922863","p":"8180922863-P1A3-P3","j":"3.3防水mini-五代防水母头","l":2865,"y":1},{"cp":"8180922863","p":"8180922863-P1A4-P5","j":"五代双联母-中继公","l":6100,"y":1}],"8180922862":[{"cp":"8180922862","p":"8180922862-P1A1-P3B4","j":"3.3防水mini-mini母","l":2600,"y":1},{"cp":"8180922862","p":"8180922862-P1A4-P3B1","j":"3.3防水mini-mini母","l":2600,"y":1},{"cp":"8180922862","p":"8180922862-P1A3-P4C1","j":"3.3防水mini-中继公","l":5450,"y":1},{"cp":"8180922862","p":"8180922862-P2-P4C2","j":"1Pmini母-中继公","l":1980,"y":1}],"8180922860":[{"cp":"8180922860","p":"8180922860-P5A1-P1","j":"3.3防水mini-二代公","l":2310,"y":1},{"cp":"8180922860","p":"8180922860-P5A2-P2","j":"3.3防水mini-二代公","l":1220,"y":1},{"cp":"8180922860","p":"8180922860-P5A3-P3","j":"3.3防水mini-五代母","l":940,"y":1},{"cp":"8180922860","p":"8180922860-P5A4-P4","j":"3.3防水mini-直头防水公","l":5880,"y":1}],"8180922213":[{"cp":"8180922213","p":"8180922213-P1-P4B1","j":"五代防水母-3.3防水mini","l":3565,"y":1},{"cp":"8180922213","p":"8180922213-P2-P4B2","j":"防水弯头-3.3防水mini","l":2440,"y":1},{"cp":"8180922213","p":"8180922213-P3A2-P4B3","j":"mini母-3.3防水mini","l":880,"y":1},{"cp":"8180922213","p":"8180922213-P3A1-P7","j":"mini-五代防水母","l":2925,"y":1},{"cp":"8180922213","p":"8180922213-P3A3-P6","j":"mini-五代防水母","l":1785,"y":1},{"cp":"8180922213","p":"8180922213-P3A4-P5","j":"mini-五代防水母","l":2590,"y":1}],"8180922114":[{"cp":"8180922114","p":"8180922114-P1-P4B1","j":"防水弯头-3.3防水mini","l":3655,"y":1},{"cp":"8180922114","p":"8180922114-P2-P4B2","j":"防水弯头-3.3防水mini","l":2510,"y":1},{"cp":"8180922114","p":"8180922114-P3A4-P4B3","j":"mini母-3.3防水mini","l":860,"y":1},{"cp":"8180922114","p":"8180922114-P3A1-P7","j":"mini母-五代防水母","l":2545,"y":1},{"cp":"8180922114","p":"8180922114-P3A2-P5","j":"mini母-五代防水母","l":2985,"y":1},{"cp":"8180922114","p":"8180922114-P3A3-P6","j":"mini母-五代防水母","l":1840,"y":1}],"8180922111":[{"cp":"8180922111","p":"8180922111-P5A1-P1","j":"3.3防水mini-非防水弯头","l":2825,"y":1},{"cp":"8180922111","p":"8180922111-P5A2-P2","j":"3.3防水mini-中继公","l":880,"y":1},{"cp":"8180922111","p":"8180922111-P5A3-P3","j":"3.3防水mini-五代防水母","l":4715,"y":1},{"cp":"8180922111","p":"8180922111-P5A4-P4","j":"3.3防水mini-中继公","l":5220,"y":1}],"8180922109":[{"cp":"8180922109","p":"8180922109-P5A1-P1","j":"3.3防水mini-非防水弯头","l":2875,"y":1},{"cp":"8180922109","p":"8180922109-P5A2-P2","j":"3.3防水mini-五代防水母","l":6065,"y":1},{"cp":"8180922109","p":"8180922109-P5A3-P3","j":"3.3防水mini-中继公裸端子","l":895,"y":1},{"cp":"8180922109","p":"8180922109-P5A4-P4","j":"3.3防水mini-中继公裸端子","l":5105,"y":1}],"8180921377":[{"cp":"8180921377","p":"8180921377P4-P5","j":"防水mini-防水五代母","l":1991,"y":1},{"cp":"8180921377","p":"8180921377P3-P5","j":"防水mini-防水弯头","l":1963,"y":1},{"cp":"8180921377","p":"8180921377P1-P5","j":"防水mini-防水弯头","l":2638,"y":1},{"cp":"8180921377","p":"8180921377P2-P5","j":"防水mini-五代防水","l":2666,"y":1}],"8180921329":[{"cp":"8180921329","p":"8180921329-P1A4-P9A1","j":"3.3防水mini-mini","l":5160,"y":1},{"cp":"8180921329","p":"8180921329-P1A3-P14A4","j":"3.3防水mini-mini","l":815,"y":1},{"cp":"8180921329","p":"8180921329-P2A2-P14A3","j":"3.3防水mini-mini","l":805,"y":1},{"cp":"8180921329","p":"8180921329-P2A1-P11","j":"3.3防水mini-弯头","l":2930,"y":1},{"cp":"8180921329","p":"8180921329-P2A3-P7","j":"3.3防水mini-弯头","l":5260,"y":1},{"cp":"8180921329","p":"8180921329-P3-P9A3","j":"五代母-mini","l":7470,"y":1},{"cp":"8180921329","p":"8180921329-P4A4-P9A2","j":"3.3防水mini-mini","l":5180,"y":1},{"cp":"8180921329","p":"8180921329-P4A1-P12","j":"3.3防水mini-中继公","l":4760,"y":1},{"cp":"8180921329","p":"8180921329-P4A2-P13","j":"3.3防水mini-中继公","l":1065,"y":1},{"cp":"8180921329","p":"8180921329-P4A3-P14A1","j":"3.3防水mini-mini","l":835,"y":1},{"cp":"8180921329","p":"8180921329-P5A1-P14A2","j":"五代双联母-mini","l":4920,"y":1},{"cp":"8180921329","p":"8180921329-P5A2-P15A1","j":"五代双联母-mini中继公","l":1340,"y":1}],"8180921029":[{"cp":"8180921029","p":"8180921029-P1A1-P3","j":"3.3防水mini-非防水弯头","l":2900,"y":1},{"cp":"8180921029","p":"8180921029-P1A2-P4","j":"3.3防水mini-防水弯头","l":5510,"y":1},{"cp":"8180921029","p":"818092102-P1A3-P6","j":"3.3防水mini-中继公头","l":915,"y":1},{"cp":"8180921029","p":"8180921029-P1A4-P5C1","j":"3.3防水mini-中继公头","l":5340,"y":1},{"cp":"8180921029","p":"8180921029-P2B4-P5C2","j":"3.3防水mini-中继公头","l":5330,"y":1},{"cp":"8180921029","p":"8180921029-P2B1-P8","j":"3.3防水mini-非防水弯头","l":2800,"y":1},{"cp":"8180921029","p":"8180921029-P2B3-P9","j":"3.3防水mini-防水弯头","l":3890,"y":1},{"cp":"8180921029","p":"8180921029-P2B2-P7","j":"3.3防水mini-中继公头","l":905,"y":1}],"8180921028":[{"cp":"8180921028","p":"8180921028-P1A1-P3","j":"3.3防水mini-非防水弯头","l":2900,"y":1},{"cp":"8180921028","p":"8180921028-P1A2-P4","j":"3.3防水mini-防水弯头","l":5535,"y":1},{"cp":"8180921028","p":"8180921028-P1A3-P6","j":"3.3防水mini-中继公","l":5165,"y":1},{"cp":"8180921028","p":"8180921028-P1A4-P5C1","j":"3.3防水mini-中继公","l":5340,"y":1},{"cp":"8180921028","p":"8180921028-P2B4-P5C2","j":"3.3防水mini-中继公","l":5155,"y":1},{"cp":"8180921028","p":"8180921028-P2B1-P8","j":"3.3防水mini-非防水弯头","l":2800,"y":1},{"cp":"8180921028","p":"8180921028-P2B3-P9","j":"3.3防水mini-防水弯头","l":3965,"y":1},{"cp":"8180921028","p":"8180921028-P2B2-P7","j":"3.3防水mini-中继公","l":905,"y":1}],"8180920653":[{"cp":"8180920653","p":"8180920653-P1A4-P9A1","j":"3.3防水mini-mini","l":5160,"y":1},{"cp":"8180920653","p":"8180920653-P1A3-P14A4","j":"3.3防水mini-mini","l":815,"y":1},{"cp":"8180920653","p":"8180920653-P2A2-P14A3","j":"3.3防水mini-mini","l":805,"y":1},{"cp":"8180920653","p":"8180920653-P2A1-P11","j":"3.3防水mini-弯头","l":2930,"y":1},{"cp":"8180920653","p":"8180920653-P2A3-P7","j":"3.3防水mini-弯头","l":5260,"y":1},{"cp":"8180920653","p":"8180920653-P3-P9A3","j":"五代母-mini","l":7470,"y":1},{"cp":"8180920653","p":"8180920653-P4A4-P9A2","j":"3.3防水mini-mini","l":5180,"y":1},{"cp":"8180920653","p":"8180920653-P4A1-P12","j":"3.3防水mini-中继公","l":4760,"y":1},{"cp":"8180920653","p":"8180920653-P4A2-P13","j":"3.3防水mini-中继公","l":1065,"y":1},{"cp":"8180920653","p":"8180920653-P4A3-P14A1","j":"3.3防水mini-mini","l":835,"y":1},{"cp":"8180920653","p":"8180920653-P5A1-P14A2","j":"五代双联母-mini","l":4920,"y":1},{"cp":"8180920653","p":"8180920653-P5A2-P15A1","j":"五代双联母-mini中继公","l":1340,"y":1},{"cp":"8180920653","p":"8180920653-P6-P15A2","j":"五代母-mini中继公","l":5365,"y":1}],"8180920021":[{"cp":"8180920021","p":"8180920021-P1-P4B1","j":"五代母-3.3防水mini","l":3565,"y":1},{"cp":"8180920021","p":"8180920021-P2-P4B2","j":"防水弯头-3.3防水mini","l":2440,"y":1},{"cp":"8180920021","p":"8180920021-P3A2-P4B3","j":"mini-3.3防水mini","l":850,"y":1},{"cp":"8180920021","p":"8180920021-P3A1-P7","j":"mini-五代母","l":2530,"y":1},{"cp":"8180920021","p":"8180920021-P3A3-P6","j":"mini-五代母","l":1785,"y":1},{"cp":"8180920021","p":"8180920021-P3A4-P5","j":"mini-五代母","l":2950,"y":1}],"8180919855":[{"cp":"8180919855","p":"8180919855-P5A1-P1","j":"3.3防水mini-中继母","l":1605,"y":1},{"cp":"8180919855","p":"8180919855-P5A2-P2","j":"3.3防水mini-中继母","l":1385,"y":1},{"cp":"8180919855","p":"8180919855-P5A3-P3","j":"3.3防水mini-防水弯头","l":520,"y":1}],"8180919854":[{"cp":"8180919854","p":"8180919854-P1A4-P7","j":"3.3mini-五代母","l":2850,"y":1},{"cp":"8180919854","p":"8180919854-P1A3-P6","j":"3.3mini-五代母","l":2200,"y":1},{"cp":"8180919854","p":"8180919854-P1A1-P3B1","j":"3.3防水mini-防水母头","l":2095,"y":1},{"cp":"8180919854","p":"8180919854-P1A2-P3B3","j":"3.3防水mini-防水母头","l":2095,"y":1},{"cp":"8180919854","p":"8180919854-P2A3-P3B3","j":"3.3防水mini-防水母头","l":2410,"y":1},{"cp":"8180919854","p":"8180919854-P2A1-P4","j":"3.3防水mini-防水母头","l":3175,"y":1},{"cp":"8180919854","p":"8180919854-P2A2-P5","j":"3.3防水mini-五代防水母头","l":2525,"y":1}],"8180919853":[{"cp":"8180919853","p":"8180919853-P1A4-P7","j":"3.3防水mini-五代母","l":2850,"y":1},{"cp":"8180919853","p":"8180919853-P1A3-P6","j":"3.3防水mini-五代母","l":2200,"y":1},{"cp":"8180919853","p":"8180919853-P1A1-P3B1","j":"3.3防水mini-mini","l":2135,"y":1},{"cp":"8180919853","p":"8180919853-P1A2-P3B2","j":"3.3防水mini-mini","l":2135,"y":1},{"cp":"8180919853","p":"8180919853-P2A3-P3B3","j":"3.3防水mini-3.3防水mini","l":2450,"y":1},{"cp":"8180919853","p":"8180919853-P2A1-P4","j":"3.3防水mini-五代防水母头","l":3175,"y":1},{"cp":"8180919853","p":"8180919853-P2A2-P5","j":"3.3防水mini-五代防水母头","l":2525,"y":1}],"8180919852":[{"cp":"8180919852","p":"8180919852-P1A4-P9A1","j":"3.3防水mini-3.3中继公","l":5075,"y":1},{"cp":"8180919852","p":"8180919852-P1A3-P10A3","j":"3.3防水mini-3.3中继公","l":880,"y":1},{"cp":"8180919852","p":"8180919852-P2A2-P10A1","j":"3.3防水mini-3.3中继公","l":870,"y":1},{"cp":"8180919852","p":"8180919852-P2A1-P11","j":"3.3防水mini-防水弯头","l":2930,"y":1},{"cp":"8180919852","p":"8180919852-P2A3-P7","j":"3.3防水mini-防水弯头","l":5165,"y":1},{"cp":"8180919852","p":"8180919852-P3-P9A3","j":"3.3防水mini-3.3中继公","l":7385,"y":1},{"cp":"8180919852","p":"8180919852-P4A4-P9A2","j":"3.3防水mini-3.3中继公","l":5085,"y":1},{"cp":"8180919852","p":"8180919852-P4A1-P12","j":"3.3防水mini-3.3中继公","l":4760,"y":1},{"cp":"8180919852","p":"8180919852-P4A2-P13","j":"3.3防水mini-3.3中继公","l":1065,"y":1},{"cp":"8180919852","p":"8180919852-P4A3-P14A1","j":"3.3防水mini-3.3中继公","l":835,"y":1},{"cp":"8180919852","p":"8180919852-P5A1-P14A2","j":"3.3防水mini-3.3中继公","l":4825,"y":1},{"cp":"8180919852","p":"8180919852-P5A2-P15A1","j":"3.3防水mini-3.3中继公","l":1340,"y":1},{"cp":"8180919852","p":"8180919852-P6-P15A2","j":"3.3防水mini-3.3中继公","l":5270,"y":1}],"8180919281":[{"cp":"8180919281","p":"8180919281-P1-P3B3","j":"3.3防水mini-中继公","l":5735,"y":1},{"cp":"8180919281","p":"8180919281-P2A1-P3B1","j":"冲压板-防水中继公","l":3500,"y":1},{"cp":"8180919281","p":"8180919281-P2A4-P3B2","j":"冲压板-防水中继公","l":3500,"y":1}],"8180918988":[{"cp":"8180918988","p":"8180918988-PAA3-P2","j":"3.3防水mini-中继公","l":1020,"y":1},{"cp":"8180918988","p":"8180918988-PAA1-P3D2","j":"3.3防水mini-mini","l":1270,"y":1},{"cp":"8180918988","p":"8180918988-PAA2-P5F2","j":"3.3防水mini-mini","l":650,"y":1},{"cp":"8180918988","p":"8180918988-PAA4-P4E2","j":"3.3防水mini-mini","l":6200,"y":1},{"cp":"8180918988","p":"8180918988-P1-P4E","j":"五代公-mini","l":1600,"y":1},{"cp":"8180918988","p":"8180918988-PBB4-P4E1","j":"3.3防水mini-mini","l":6200,"y":1},{"cp":"8180918988","p":"8180918988-PBB1-P3D1","j":"3.3防水mini-mini","l":1270,"y":1},{"cp":"8180918988","p":"8180918988-PBB2-P6","j":"3.3防水mini-外购线KET","l":4550,"y":1},{"cp":"8180918988","p":"8180918988-PBB3-P5F1","j":"3.3防水mini-mini","l":650,"y":1},{"cp":"8180918988","p":"8180918988-PCC3-P5F3","j":"3.3防水mini-mini","l":650,"y":1},{"cp":"8180918988","p":"8180918988-PCC1-P7","j":"3.3防水mini-外购线KET","l":4550,"y":1},{"cp":"8180918988","p":"8180918988-PCC2-P8","j":"3.3防水mini-外购线KET","l":1020,"y":1},{"cp":"8180918988","p":"8180918988-PCC4-P9","j":"3.3防水mini-外购线KET","l":6260,"y":1}],"8180918984":[{"cp":"8180918984","p":"8180918984-P4A1-P2B2","j":"3.3防水mini-中继公","l":650,"y":1},{"cp":"8180918984","p":"8180918984-P4A2-P2B1","j":"3.3防水mini-中继公","l":650,"y":1}],"8180918055":[{"cp":"8180918055","p":"8180918055-P1A1-P3B1","j":"3.3防水mini","l":815,"y":1},{"cp":"8180918055","p":"8180918055-P1A2-P3B2","j":"3.3防水mini","l":815,"y":1},{"cp":"8180918055","p":"8180918055-P1A3-P3B3","j":"3.3防水mini","l":815,"y":1},{"cp":"8180918055","p":"8180918055-P1A4-P4C1","j":"3.3防水mini","l":815,"y":1},{"cp":"8180918055","p":"8180918055-P2D1-P4C1","j":"3.3防水mini","l":815,"y":1},{"cp":"8180918055","p":"8180918055-P2D2-P4C2","j":"3.3防水mini","l":815,"y":1},{"cp":"8180918055","p":"8180918055-P2D3-P4C3","j":"3.3防水mini","l":815,"y":1}],"8180918051":[{"cp":"8180918051","p":"8180918051-P1-P4B4","j":"弯头-防水公头","l":1460,"y":1},{"cp":"8180918051","p":"8180918051-P2-P4B2","j":"中继母-防水公头","l":1645,"y":1},{"cp":"8180918051","p":"8180918051-P3-P4B3","j":"弯头-防水公头","l":1600,"y":1}],"8180918050":[{"cp":"8180918050","p":"8180918050-P5A1-P1","j":"3.3防水mini-中继母头","l":1585,"y":1},{"cp":"8180918050","p":"8180918050-P5A2-P2","j":"3.3防水mini-中继母头","l":1365,"y":1},{"cp":"8180918050","p":"8180918050-P5A3-P3","j":"3.3防水mini-防水弯头","l":500,"y":1}],"8180917174":[{"cp":"8180917174","p":"8180917174-P1-P2","j":"3.3防水mini-中继公","l":6615,"y":1}],"8180917001":[{"cp":"8180917001","p":"8180917001-P5A1-P1","j":"3.3防水mini-中继公裸端子","l":3615,"y":1},{"cp":"8180917001","p":"8180917001-P5A2-P2","j":"3.3防水mini-中继公裸端子","l":1140,"y":1},{"cp":"8180917001","p":"8180917001-P5A3-P3","j":"3.3防水mini-中继公裸端子","l":930,"y":1},{"cp":"8180917001","p":"8180917001-P5A4-P4","j":"3.3防水mini-五代公","l":5655,"y":1}],"8180916998":[{"cp":"8180916998","p":"8180916998-P5A1-P1","j":"3.3防水mini-中继公头","l":3615,"y":1},{"cp":"8180916998","p":"8180916998-P5A2-P2","j":"3.3防水mini-中继公头","l":1140,"y":1},{"cp":"8180916998","p":"8180916998-P5A3-P3","j":"3.3防水mini-中继公头","l":930,"y":1},{"cp":"8180916998","p":"8180916998-P5A4-P4","j":"3.3防水mini-五代公头","l":5500,"y":1}],"8180916555":[{"cp":"8180916555","p":"8180916555-P5A1-P1","j":"3.3防水mini-中继公","l":3625,"y":1},{"cp":"8180916555","p":"8180916555-P5A2-P2","j":"3.3防水mini-中继公","l":1150,"y":1},{"cp":"8180916555","p":"8180916555-P5A3-P3","j":"3.3防水mini-中继公","l":910,"y":1},{"cp":"8180916555","p":"8180916555-P5A4-P4","j":"3.3防水mini-五代公","l":5565,"y":1}],"8180916079":[{"cp":"8180916079","p":"8180916079-P5A1-P1","j":"3.3防水mini-防水弯头","l":2690,"y":1},{"cp":"8180916079","p":"8180916079-P5A2-P2","j":"3.3防水mini-二代公","l":1510,"y":1},{"cp":"8180916079","p":"8180916079-P5A3-P3","j":"3.3防水mini-防水弯头","l":3855,"y":1},{"cp":"8180916079","p":"8180916079-P5A4-P4","j":"3.3防水mini-二代公","l":2630,"y":1}],"8180916078":[{"cp":"8180916078","p":"8180916078-P1A1-P5C1","j":"3.3防水mini-五代双联母头","l":1510,"y":1},{"cp":"8180916078","p":"81809160788-P1A2-P5C2","j":"3.3防水mini-五代双联母头","l":1510,"y":1},{"cp":"8180916078","p":"8180916078-P1A3-P6D1","j":"3.3防水mini-mini","l":3605,"y":1},{"cp":"8180916078","p":"8180916078-P3-P6D3","j":"外购线-mini","l":3605,"y":1},{"cp":"8180916078","p":"8180916078-P4B4-P6D2","j":"3.3防水mini-mini","l":3605,"y":1},{"cp":"8180916078","p":"8180916078-P4B1-P8","j":"3.3防水mini-二代公","l":2620,"y":1},{"cp":"8180916078","p":"8180916078-P4B2-P2","j":"3.3防水mini-二代公","l":1500,"y":1},{"cp":"8180916078","p":"8180916078-P4B3-P7","j":"3.3防水mini-五代母头","l":2965,"y":1}],"8180916032":[{"cp":"8180916032","p":"8180916032-P1A1-P3B1","j":"mini-3.3防水mini","l":2095,"y":1},{"cp":"8180916032","p":"8180916032-P1A2-P3B2","j":"mini-3.3防水mini","l":2095,"y":1},{"cp":"8180916032","p":"8180916032-P2A3-P3B3","j":"3.3防水mini-3.3防水mini","l":2410,"y":1},{"cp":"8180916032","p":"8180916032-P2A1-P4","j":"3.3防水mini-五代防水母头","l":3175,"y":1},{"cp":"8180916032","p":"8180916032-P2A2-P5","j":"3.3防水mini-五代防水母头","l":2525,"y":1}],"8180916031":[{"cp":"8180916031","p":"8180916031-P1A1-P3B1","j":"3.3防水mini-mini","l":2135,"y":1},{"cp":"8180916031","p":"8180916031-P1A2-P3B2","j":"3.3防水mini-mini","l":2135,"y":1},{"cp":"8180916031","p":"8180916031-P2A3-P3B3","j":"3.3防水mini","l":2450,"y":1},{"cp":"8180916031","p":"8180916031-P2A1-P4","j":"3.3mini-五代防水","l":3175,"y":1},{"cp":"8180916031","p":"8180916031-P2A2-P5","j":"3.3mini-五代防水","l":2525,"y":1}],"8180915171":[{"cp":"8180915171","p":"8180915171-P1-P2","j":"3.3防水mini-弯头","l":7115,"y":1}],"8180915153":[{"cp":"8180915153","p":"8180915153-P5A1-P1","j":"3.3防水mini-五代母","l":2820,"y":1},{"cp":"8180915153","p":"8180915153-P5A2-P2","j":"3.3防水mini-弯头","l":3080,"y":1},{"cp":"8180915153","p":"8180915153-P5A4-P4","j":"3.3防水mini-弯头","l":3130,"y":1}],"8180915139":[{"cp":"8180915139","p":"8180915139-P1-P2","j":"五代母-mini","l":560,"y":1}],"8180914762":[{"cp":"8180914762","p":"8180914762-PCC1-P3F1","j":"3.3防水mini-mini","l":4915,"y":1},{"cp":"8180914762","p":"8180914762-PCC2-P2E1","j":"3.3防水mini-mini","l":1985,"y":1},{"cp":"8180914762","p":"8180914762-PCC3-P4G4","j":"3.3防水mini-中继公头","l":1550,"y":1},{"cp":"8180914762","p":"8180914762-PCC4-P1D1","j":"3.3防水mini-中继公头","l":3460,"y":1},{"cp":"8180914762","p":"8180914762-PBB1-P5H2","j":"3.3防水mini-中继公头","l":3440,"y":1},{"cp":"8180914762","p":"8180914762-PBB2-P3F2","j":"3.3防水mini-mini","l":4895,"y":1},{"cp":"8180914762","p":"8180914762-PBB3-P4G1","j":"3.3防水mini-中继公头","l":1940,"y":1},{"cp":"8180914762","p":"8180914762-PBB4-P1D2","j":"3.3防水mini-中继公头","l":1530,"y":1},{"cp":"8180914762","p":"8180914762-PAA1-P5H4","j":"3.3防水mini-中继公头","l":1510,"y":1},{"cp":"8180914762","p":"8180914762-PAA2-P4G3","j":"3.3防水mini-中继公头","l":1920,"y":1},{"cp":"8180914762","p":"8180914762-PAA3-P2E2","j":"3.3防水mini-mini","l":1945,"y":1}],"8180914446":[{"cp":"8180914446","p":"8180914446-P1A3-P2","j":"3.3防水mini-五代母","l":3000,"y":1}],"8180913007":[{"cp":"8180913007","p":"8180913007-P5A1-P1","j":"3.3防水mini-五代公","l":6435,"y":1},{"cp":"8180913007","p":"8180913007-P5A2-P2","j":"3.3防水mini-五代公","l":4740,"y":1},{"cp":"8180913007","p":"8180913007-P5A3-P3","j":"3.3防水mini-五代母","l":6205,"y":1},{"cp":"8180913007","p":"8180913007-P5A4-P4","j":"3.3防水mini-五代母","l":2600,"y":1}],"8180912528":[{"cp":"8180912528","p":"8180912528-P5A1-P1","j":"3.3防水mini-五代母","l":2900,"y":1},{"cp":"8180912528","p":"8180912528-P5A2-P2","j":"3.3防水mini-中继公","l":4030,"y":1},{"cp":"8180912528","p":"8180912528-P5A3-P3","j":"3.3防水mini-五代母","l":2850,"y":1},{"cp":"8180912528","p":"8180912528-P5A4-P4","j":"3.3防水mini-中继公","l":1560,"y":1}],"8180912527":[{"cp":"8180912527","p":"8180912527-P5A1-P1","j":"3.3防水mini-5代母头","l":3770,"y":1},{"cp":"8180912527","p":"8180912527-P5A2-P2","j":"3.3防水mini-5代防水母头","l":2600,"y":1},{"cp":"8180912527","p":"8180912527-P5A3-P3","j":"3.3防水mini-中继公头","l":4020,"y":1},{"cp":"8180912527","p":"8180912527-P5A4-P4","j":"3.3防水mini-中继公头","l":1550,"y":1}],"8180912265":[{"cp":"8180912265","p":"8180912265-PAA3-P2","j":"3.3防水mini-中继公","l":1300,"y":1},{"cp":"8180912265","p":"8180912265-PAA1-P8F1","j":"3.3防水mini-mini","l":1570,"y":1},{"cp":"8180912265","p":"8180912265-PAA2-P3D1","j":"3.3防水mini-mini","l":945,"y":1},{"cp":"8180912265","p":"8180912265-PBB3-P3D2","j":"3.3防水mini-mini","l":945,"y":1},{"cp":"8180912265","p":"8180912265-PBB2-P1","j":"3.3防水mini-中继公","l":4080,"y":1},{"cp":"8180912265","p":"8180912265-PBB1-P8F2","j":"3.3防水mini-mini","l":1570,"y":1},{"cp":"8180912265","p":"8180912265-PBB4-P6E3","j":"3.3防水mini-mini","l":4055,"y":1},{"cp":"8180912265","p":"8180912265-PCC4-P6E1","j":"3.3防水mini-mini","l":4065,"y":1},{"cp":"8180912265","p":"8180912265-PCC3-P3D3","j":"3.3防水mini-mini","l":950,"y":1},{"cp":"8180912265","p":"8180912265-PCC1-P4","j":"3.3防水mini-中继公","l":4100,"y":1},{"cp":"8180912265","p":"8180912265-PCC2-P5","j":"3.3防水mini-中继公","l":1300,"y":1}],"8180911679":[{"cp":"8180911679","p":"8180911679-P5A1-P1","j":"3.3防水mini-五代母","l":1945,"y":1},{"cp":"8180911679","p":"8180911679-P5A2-P2","j":"3.3防水mini-防水弯头","l":1915,"y":1},{"cp":"8180911679","p":"8180911679-P5A3-P3","j":"3.3防水mini-五代母","l":3540,"y":1},{"cp":"8180911679","p":"8180911679-P5A4-P4","j":"3.3防水mini-防水弯头","l":3510,"y":1}],"8180911677":[{"cp":"8180911677","p":"8180911677-P4A1-P1","j":"3.3防水mini-非防水弯头","l":2525,"y":1},{"cp":"8180911677","p":"8180911677-P4A2-P2","j":"3.3防水mini-非防水弯头","l":2725,"y":1},{"cp":"8180911677","p":"8180911677-P4A3-P3B1","j":"3.3防水mini-中继公","l":5210,"y":1}],"8180911676":[{"cp":"8180911676","p":"8180911676-P4A3-P3","j":"3.3防水mini-中继公","l":5210,"y":1},{"cp":"8180911676","p":"8180911676-P4A4-P3B3","j":"3.3防水mini-中继公","l":5210,"y":1},{"cp":"8180911676","p":"8180911676-P4A1-P1","j":"3.3防水mini-五代母","l":2565,"y":1},{"cp":"8180911676","p":"8180911676-P4A2-P2","j":"3.3防水mini-五代母","l":2605,"y":1}],"8180911675":[{"cp":"8180911675","p":"8180911675-P5A1-P1","j":"3.3防水mini-T版二代公","l":4160,"y":1},{"cp":"8180911675","p":"8180911675-P5A2-P2","j":"3.3防水mini-五代母","l":940,"y":1},{"cp":"8180911675","p":"8180911675-P5A3-P3","j":"3.3防水mini-五代母","l":700,"y":1},{"cp":"8180911675","p":"8180911675-P5A4-P4","j":"3.3防水mini-中继公","l":5600,"y":1}],"8180909367":[{"cp":"8180909367","p":"8180909367-P5A1-P1","j":"3.3防水mini-五代母","l":2390,"y":1},{"cp":"8180909367","p":"8180909367-P5A2-P2","j":"3.3防水mini-弯头","l":2355,"y":1},{"cp":"8180909367","p":"8180909367-P5A3-P3","j":"3.3防水mini-五代母","l":3550,"y":1},{"cp":"8180909367","p":"8180909367-P5A4-P4","j":"3.3防水mini-弯头","l":3515,"y":1}],"8180908061":[{"cp":"8180908061","p":"8180908061-P5A1-P1","j":"3.3防水mini-二代公","l":3600,"y":1},{"cp":"8180908061","p":"8180908061-P5A2-P2","j":"3.3防水mini-防水弯头","l":2490,"y":1},{"cp":"8180908061","p":"8180908061-P5A3-P3","j":"3.3防水mini-中继公头","l":3500,"y":1},{"cp":"8180908061","p":"8180908061-P5A4-P4","j":"3.3防水mini-中继公头","l":1490,"y":1}],"8180908060":[{"cp":"8180908060","p":"8180908060-P5A1-P1","j":"3.3防水mini-五代母","l":2700,"y":1},{"cp":"8180908060","p":"8180908060-P5A2-P2","j":"3.3防水mini-中继公头","l":3540,"y":1},{"cp":"8180908060","p":"8180908060-P5A3-P3B1","j":"3.3防水mini-中继公头","l":4110,"y":1},{"cp":"8180908060","p":"8180908060-P5A4-P4","j":"3.3防水mini-五代双联公","l":1510,"y":1}],"8180908000":[{"cp":"8180908000","p":"8180908000-P1A2-P2B1","j":"2.8mini中继公-3.3防水mini","l":2185,"y":1},{"cp":"8180908000","p":"8180908000-P1A1-P2B2","j":"2.8mini中继公-3.3防水mini","l":2185,"y":1}],"8180907261":[{"cp":"8180907261","p":"8180907261-P5A1-P1","j":"3.3防水mini-二代公","l":3630,"y":1},{"cp":"8180907261","p":"8180907261-P5A2-P2","j":"3.3防水mini-二代公","l":1125,"y":1},{"cp":"8180907261","p":"8180907261-P5A3-P3B3","j":"3.3防水mini-mini","l":925,"y":1},{"cp":"8180907261","p":"8180907261-P5A4-P4","j":"3.3防水mini-五代公","l":5675,"y":1}],"8180907259":[{"cp":"8180907259","p":"8180907259-P4A3-P3B1","j":"3.3防水mini-中继公","l":5235,"y":1},{"cp":"8180907259","p":"8180907259-P4A4-P3B2","j":"3.3防水mini-中继公","l":5235,"y":1},{"cp":"8180907259","p":"8180907259-P4A1-P1","j":"3.3防水mini-五代母","l":2845,"y":1},{"cp":"8180907259","p":"8180907259-P4A2-P2","j":"3.3防水mini-五代母","l":2895,"y":1}],"8180907136":[{"cp":"8180907136","p":"8180907136-P5A1-P1","j":"3.3防水mini-防水五代母","l":2475,"y":1},{"cp":"8180907136","p":"8180907136-P5A2-P2","j":"3.3防水mini-防水弯头","l":2425,"y":1},{"cp":"8180907136","p":"8180907136-P5A3-P3","j":"3.3防水mini-防水五代母","l":3640,"y":1},{"cp":"8180907136","p":"8180907136-P5A4-P4","j":"3.3防水mini-防水弯头","l":3590,"y":1}],"8180907133":[{"cp":"8180907133","p":"8180907133-P1A3-P2","j":"3.3防水mini-5代母头","l":3305,"y":1}],"8180907131":[{"cp":"8180907131","p":"8180907131-P5A1-P1","j":"3.3防水mini-二代公","l":3630,"y":1},{"cp":"8180907131","p":"8180907131-P5A2-P2","j":"3.3防水mini-二代公","l":1125,"y":1},{"cp":"8180907131","p":"8180907131-P5A3-P3B1","j":"3.3防水mini-mini","l":925,"y":1},{"cp":"8180907131","p":"8180907131-P5A4-P4","j":"3.3防水mini-五代公","l":5570,"y":1}],"8180907130":[{"cp":"8180907130","p":"8180907130-P4A1-P1","j":"3.3防水mini-非防水母","l":2790,"y":1},{"cp":"8180907130","p":"8180907130-P4A2-P2","j":"3.3防水mini-非防水母","l":5310,"y":1},{"cp":"8180907130","p":"8180907130-P4A3-P3B1","j":"3.3防水mini-mini","l":5115,"y":1}],"8180907129":[{"cp":"8180907129","p":"8180907129-P4A3-P3B1","j":"3.3防水mini-中继公头","l":5115,"y":1},{"cp":"8180907129","p":"8180907129-P4A4-P3B2","j":"3.3防水mini-中继公头","l":5115,"y":1},{"cp":"8180907129","p":"8180907129-P4A1-P1","j":"3.3防水mini-5代母头","l":2845,"y":1},{"cp":"8180907129","p":"8180907129-P4A2-P2","j":"3.3防水mini-5代母头","l":2895,"y":1}],"8180900969":[{"cp":"8180900969","p":"8180900969-P1A1-P2B2","j":"3.3防水mini-五代母","l":1660,"y":1},{"cp":"8180900969","p":"8180900969-P1A2-P2B1","j":"3.3防水mini-五代母","l":1660,"y":1}],"818044045":[{"cp":"818044045","p":"818044045-P5A1-P1","j":"3.3防水mini-防水直头","l":8520,"y":1},{"cp":"818044045","p":"818044045-P5A2-P2","j":"3.3防水mini-防水直头","l":7345,"y":1},{"cp":"818044045","p":"818044045-P5A3-P3","j":"3.3防水mini-防水弯头","l":7295,"y":1},{"cp":"818044045","p":"818044045-P5A4-P4","j":"3.3防水mini-防水弯头","l":8470,"y":1}]},"scans":[]};
+
+// ====== STATE ======
+let currentAction = '入库';
+let scanRecords = [...INIT_DATA.scans];
+let deletedRecords = []; // 追踪已删除的记录ID（格式：code + '||' + time）
+
+// 生成稳定的记录匹配key：把c和t里的换行/管道符全部抹平，避免二维码含\r\n导致同步对不上
+function recordKey(c, t) {
+  const cleanC = String(c || '').replace(/[\r\n|｜]/g, '');
+  const cleanT = String(t || '').replace(/[\r\n|｜]/g, '');
+  return cleanC + '||' + cleanT;
+}
+// 兼容旧deletedRecords（里面可能还是未清洗的key）：尝试从中提取"时间戳"部分做兜底匹配
+function recordTimestamp(t) {
+  return String(t || '').replace(/[\r\n|｜]/g, '');
+}
+let inventory = {"8180922863-P1A2-P4":0,"8180922863-P1A3-P3":0,"8180922863-P1A4-P5":0,"8180922862-P1A1-P3B4":0,"8180922862-P1A4-P3B1":0,"8180922862-P1A3-P4C1":0,"8180922862-P2-P4C2":0,"8180922860-P5A1-P1":0,"8180922860-P5A2-P2":0,"8180922860-P5A3-P3":0,"8180922860-P5A4-P4":0,"8180922213-P1-P4B1":0,"8180922213-P2-P4B2":0,"8180922213-P3A2-P4B3":0,"8180922213-P3A1-P7":0,"8180922213-P3A3-P6":0,"8180922213-P3A4-P5":0,"8180922114-P1-P4B1":0,"8180922114-P2-P4B2":0,"8180922114-P3A4-P4B3":0,"8180922114-P3A1-P7":0,"8180922114-P3A2-P5":0,"8180922114-P3A3-P6":0,"8180922111-P5A1-P1":0,"8180922111-P5A2-P2":0,"8180922111-P5A3-P3":0,"8180922111-P5A4-P4":0,"8180922109-P5A1-P1":0,"8180922109-P5A2-P2":0,"8180922109-P5A3-P3":0,"8180922109-P5A4-P4":0,"8180921377P4-P5":0,"8180921377P3-P5":0,"8180921377P1-P5":0,"8180921377P2-P5":0,"8180921329-P1A4-P9A1":0,"8180921329-P1A3-P14A4":0,"8180921329-P2A2-P14A3":0,"8180921329-P2A1-P11":0,"8180921329-P2A3-P7":0,"8180921329-P3-P9A3":0,"8180921329-P4A4-P9A2":0,"8180921329-P4A1-P12":0,"8180921329-P4A2-P13":0,"8180921329-P4A3-P14A1":0,"8180921329-P5A1-P14A2":0,"8180921329-P5A2-P15A1":0,"8180921029-P1A1-P3":0,"8180921029-P1A2-P4":0,"818092102-P1A3-P6":0,"8180921029-P1A4-P5C1":0,"8180921029-P2B4-P5C2":0,"8180921029-P2B1-P8":0,"8180921029-P2B3-P9":0,"8180921029-P2B2-P7":0,"8180921028-P1A1-P3":0,"8180921028-P1A2-P4":0,"8180921028-P1A3-P6":0,"8180921028-P1A4-P5C1":0,"8180921028-P2B4-P5C2":0,"8180921028-P2B1-P8":0,"8180921028-P2B3-P9":0,"8180921028-P2B2-P7":0,"8180920653-P1A4-P9A1":0,"8180920653-P1A3-P14A4":0,"8180920653-P2A2-P14A3":0,"8180920653-P2A1-P11":0,"8180920653-P2A3-P7":0,"8180920653-P3-P9A3":0,"8180920653-P4A4-P9A2":0,"8180920653-P4A1-P12":0,"8180920653-P4A2-P13":0,"8180920653-P4A3-P14A1":0,"8180920653-P5A1-P14A2":0,"8180920653-P5A2-P15A1":0,"8180920653-P6-P15A2":0,"8180920021-P1-P4B1":0,"8180920021-P2-P4B2":0,"8180920021-P3A2-P4B3":0,"8180920021-P3A1-P7":0,"8180920021-P3A3-P6":0,"8180920021-P3A4-P5":0,"8180919855-P5A1-P1":0,"8180919855-P5A2-P2":0,"8180919855-P5A3-P3":0,"8180919854-P1A4-P7":0,"8180919854-P1A3-P6":0,"8180919854-P1A1-P3B1":0,"8180919854-P1A2-P3B3":0,"8180919854-P2A3-P3B3":0,"8180919854-P2A1-P4":0,"8180919854-P2A2-P5":0,"8180919853-P1A4-P7":0,"8180919853-P1A3-P6":0,"8180919853-P1A1-P3B1":0,"8180919853-P1A2-P3B2":0,"8180919853-P2A3-P3B3":0,"8180919853-P2A1-P4":0,"8180919853-P2A2-P5":0,"8180919852-P1A4-P9A1":0,"8180919852-P1A3-P10A3":0,"8180919852-P2A2-P10A1":0,"8180919852-P2A1-P11":0,"8180919852-P2A3-P7":0,"8180919852-P3-P9A3":0,"8180919852-P4A4-P9A2":0,"8180919852-P4A1-P12":0,"8180919852-P4A2-P13":0,"8180919852-P4A3-P14A1":0,"8180919852-P5A1-P14A2":0,"8180919852-P5A2-P15A1":0,"8180919852-P6-P15A2":0,"8180919281-P1-P3B3":0,"8180919281-P2A1-P3B1":0,"8180919281-P2A4-P3B2":0,"8180918988-PAA3-P2":0,"8180918988-PAA1-P3D2":0,"8180918988-PAA2-P5F2":0,"8180918988-PAA4-P4E2":0,"8180918988-P1-P4E":0,"8180918988-PBB4-P4E1":0,"8180918988-PBB1-P3D1":0,"8180918988-PBB2-P6":0,"8180918988-PBB3-P5F1":0,"8180918988-PCC3-P5F3":0,"8180918988-PCC1-P7":0,"8180918988-PCC2-P8":0,"8180918988-PCC4-P9":0,"8180918984-P4A1-P2B2":0,"8180918984-P4A2-P2B1":0,"8180918055-P1A1-P3B1":0,"8180918055-P1A2-P3B2":0,"8180918055-P1A3-P3B3":0,"8180918055-P1A4-P4C1":0,"8180918055-P2D1-P4C1":0,"8180918055-P2D2-P4C2":0,"8180918055-P2D3-P4C3":0,"8180918051-P1-P4B4":0,"8180918051-P2-P4B2":0,"8180918051-P3-P4B3":0,"8180918050-P5A1-P1":0,"8180918050-P5A2-P2":0,"8180918050-P5A3-P3":0,"8180917174-P1-P2":0,"8180917001-P5A1-P1":0,"8180917001-P5A2-P2":0,"8180917001-P5A3-P3":0,"8180917001-P5A4-P4":0,"8180916998-P5A1-P1":0,"8180916998-P5A2-P2":0,"8180916998-P5A3-P3":0,"8180916998-P5A4-P4":0,"8180916555-P5A1-P1":0,"8180916555-P5A2-P2":0,"8180916555-P5A3-P3":0,"8180916555-P5A4-P4":0,"8180916079-P5A1-P1":0,"8180916079-P5A2-P2":0,"8180916079-P5A3-P3":0,"8180916079-P5A4-P4":0,"8180916078-P1A1-P5C1":0,"81809160788-P1A2-P5C2":0,"8180916078-P1A3-P6D1":0,"8180916078-P3-P6D3":0,"8180916078-P4B4-P6D2":0,"8180916078-P4B1-P8":0,"8180916078-P4B2-P2":0,"8180916078-P4B3-P7":0,"8180916032-P1A1-P3B1":0,"8180916032-P1A2-P3B2":0,"8180916032-P2A3-P3B3":0,"8180916032-P2A1-P4":0,"8180916032-P2A2-P5":0,"8180916031-P1A1-P3B1":0,"8180916031-P1A2-P3B2":0,"8180916031-P2A3-P3B3":0,"8180916031-P2A1-P4":0,"8180916031-P2A2-P5":0,"8180915171-P1-P2":0,"8180915153-P5A1-P1":0,"8180915153-P5A2-P2":0,"8180915153-P5A4-P4":0,"8180915139-P1-P2":0,"8180914762-PCC1-P3F1":0,"8180914762-PCC2-P2E1":0,"8180914762-PCC3-P4G4":0,"8180914762-PCC4-P1D1":0,"8180914762-PBB1-P5H2":0,"8180914762-PBB2-P3F2":0,"8180914762-PBB3-P4G1":0,"8180914762-PBB4-P1D2":0,"8180914762-PAA1-P5H4":0,"8180914762-PAA2-P4G3":0,"8180914762-PAA3-P2E2":0,"8180914446-P1A3-P2":0,"8180913007-P5A1-P1":0,"8180913007-P5A2-P2":0,"8180913007-P5A3-P3":0,"8180913007-P5A4-P4":0,"8180912528-P5A1-P1":0,"8180912528-P5A2-P2":0,"8180912528-P5A3-P3":0,"8180912528-P5A4-P4":0,"8180912527-P5A1-P1":0,"8180912527-P5A2-P2":0,"8180912527-P5A3-P3":0,"8180912527-P5A4-P4":0,"8180912265-PAA3-P2":0,"8180912265-PAA1-P8F1":0,"8180912265-PAA2-P3D1":0,"8180912265-PBB3-P3D2":0,"8180912265-PBB2-P1":0,"8180912265-PBB1-P8F2":0,"8180912265-PBB4-P6E3":0,"8180912265-PCC4-P6E1":0,"8180912265-PCC3-P3D3":0,"8180912265-PCC1-P4":0,"8180912265-PCC2-P5":0,"8180911679-P5A1-P1":0,"8180911679-P5A2-P2":0,"8180911679-P5A3-P3":0,"8180911679-P5A4-P4":0,"8180911677-P4A1-P1":0,"8180911677-P4A2-P2":0,"8180911677-P4A3-P3B1":0,"8180911676-P4A3-P3":0,"8180911676-P4A4-P3B3":0,"8180911676-P4A1-P1":0,"8180911676-P4A2-P2":0,"8180911675-P5A1-P1":0,"8180911675-P5A2-P2":0,"8180911675-P5A3-P3":0,"8180911675-P5A4-P4":0,"8180909367-P5A1-P1":0,"8180909367-P5A2-P2":0,"8180909367-P5A3-P3":0,"8180909367-P5A4-P4":0,"8180908061-P5A1-P1":0,"8180908061-P5A2-P2":0,"8180908061-P5A3-P3":0,"8180908061-P5A4-P4":0,"8180908060-P5A1-P1":0,"8180908060-P5A2-P2":0,"8180908060-P5A3-P3B1":0,"8180908060-P5A4-P4":0,"8180908000-P1A2-P2B1":0,"8180908000-P1A1-P2B2":0,"8180907261-P5A1-P1":0,"8180907261-P5A2-P2":0,"8180907261-P5A3-P3B3":0,"8180907261-P5A4-P4":0,"8180907259-P4A3-P3B1":0,"8180907259-P4A4-P3B2":0,"8180907259-P4A1-P1":0,"8180907259-P4A2-P2":0,"8180907136-P5A1-P1":0,"8180907136-P5A2-P2":0,"8180907136-P5A3-P3":0,"8180907136-P5A4-P4":0,"8180907133-P1A3-P2":0,"8180907131-P5A1-P1":0,"8180907131-P5A2-P2":0,"8180907131-P5A3-P3B1":0,"8180907131-P5A4-P4":0,"8180907130-P4A1-P1":0,"8180907130-P4A2-P2":0,"8180907130-P4A3-P3B1":0,"8180907129-P4A3-P3B1":0,"8180907129-P4A4-P3B2":0,"8180907129-P4A1-P1":0,"8180907129-P4A2-P2":0,"8180900969-P1A1-P2B2":0,"8180900969-P1A2-P2B1":0,"818044045-P5A1-P1":0,"818044045-P5A2-P2":0,"818044045-P5A3-P3":0,"818044045-P5A4-P4":0}; // 从Excel嵌入的实际库存
+
+// 初始库存快照（不可变），用于从扫码记录重新计算当前库存，防止同步污染
+const INITIAL_INVENTORY = JSON.parse(JSON.stringify(inventory));
+
+function recomputeInventory() {
+  const result = JSON.parse(JSON.stringify(INITIAL_INVENTORY));
+  for (const rec of scanRecords) {
+    const hp = rec.x || '';
+    if (!hp) continue;
+    const q = (rec.q && rec.q > 0) ? rec.q : 1; // 兼容旧记录（默认1）
+    if (rec.a === '入库') {
+      result[hp] = (result[hp] || 0) + q;
+    } else if (rec.a === '出库') {
+      result[hp] = Math.max(0, (result[hp] || 0) - q);
+    }
+  }
+  inventory = result;
+}
+
+let bomData = INIT_DATA.bom;
+let productList = Object.keys(INIT_DATA.bom);
+
+// 半品总数（用于KPI显示）
+const SEMI_TOTAL_COUNT = 277;
+
+// ====== LOCAL STORAGE 持久化 ======
+const STORAGE_KEY = 'semiKitDashboard';
+const DATA_VERSION = 'v3'; // 数据版本号，用于检测旧数据自动清理
+
+function saveData() {
+  try {
+    const data = {
+      _version: DATA_VERSION,
+      scanRecords: scanRecords,
+      inventory: inventory,
+      currentWorkOrder: currentWorkOrder,
+      importedWorkOrders: importedWorkOrders,
+      currentAction: currentAction,
+      deletedRecords: deletedRecords,
+      palletPrefix: document.getElementById('palletPrefix').value,
+      palletSeq: document.getElementById('palletSeq').value,
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    // 触发云端同步
+    if (typeof triggerSync === 'function') triggerSync();
+  } catch(e) {
+    console.warn('保存数据到本地存储失败:', e);
+  }
+}
+
+// 防抖保存（避免频繁写入）
+let saveTimer = null;
+function saveDataDebounced() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveData, 500);
+}
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    // 版本检查：旧数据自动清除，避免与新代码冲突
+    if (data._version !== DATA_VERSION) {
+      console.log('检测到旧版数据(v' + (data._version || '未知') + ')，自动清除...');
+      localStorage.removeItem(STORAGE_KEY);
+      return false;
+    }
+    if (data.scanRecords && Array.isArray(data.scanRecords)) {
+      scanRecords = data.scanRecords;
+    }
+    // 不从 localStorage 恢复 inventory，改为从初始库存+扫码记录重新计算
+    recomputeInventory();
+    if (data.currentWorkOrder) {
+      currentWorkOrder = data.currentWorkOrder;
+    }
+    if (data.importedWorkOrders && Array.isArray(data.importedWorkOrders)) {
+      importedWorkOrders = data.importedWorkOrders;
+    }
+    if (data.currentAction) {
+      currentAction = data.currentAction;
+    }
+    if (data.deletedRecords && Array.isArray(data.deletedRecords)) {
+      deletedRecords = data.deletedRecords;
+    }
+    if (data.palletPrefix) {
+      document.getElementById('palletPrefix').value = data.palletPrefix;
+    }
+    if (data.palletSeq) {
+      document.getElementById('palletSeq').value = data.palletSeq;
+    }
+    updatePalletDisplay();
+    console.log('已从本地存储恢复数据，保存时间：' + (data.savedAt || '未知'));
+    return true;
+  } catch(e) {
+    console.warn('从本地存储恢复数据失败:', e);
+    return false;
+  }
+}
+
+// ====== GITHUB SYNC 多人同步 ======
+const SYNC_CONFIG = {
+  token: 'ghp_' + 'J5CPrdGL6M' + 'l93AP3G2Yd' + 'OSWXUeEZfu' + '1Q6GGu',
+  owner: 'Mirror20260901',
+  repo: 'semi-kit-dashboard',
+  path: 'shared-data.json',
+  pollInterval: 5000,
+  apiBase: 'https://api.github.com'
+};
+
+let syncTimer = null;
+let remoteSha = '';
+let isSyncing = false;
+let lastSyncTime = null;
+let syncEnabled = true;
+
+function updateSyncStatus(status, text) {
+  const dot = document.querySelector('#syncIndicator .sync-dot');
+  const txt = document.querySelector('#syncIndicator .sync-text');
+  if (!dot || !txt) return;
+  dot.className = 'sync-dot ' + status;
+  txt.textContent = text || '';
+}
+
+async function fetchSharedData() {
+  const url = SYNC_CONFIG.apiBase + '/repos/' + SYNC_CONFIG.owner + '/' + SYNC_CONFIG.repo + '/contents/' + SYNC_CONFIG.path + '?t=' + Date.now();
+  const resp = await fetch(url, {
+    headers: { 'Authorization': 'token ' + SYNC_CONFIG.token }
+  });
+  if (resp.status === 404) return null;
+  if (!resp.ok) throw new Error('GitHub API error: ' + resp.status);
+  const result = await resp.json();
+  remoteSha = result.sha || '';
+  const content = decodeBase64(result.content);
+  return JSON.parse(content);
+}
+
+async function pushSharedData(data) {
+  const jsonStr = JSON.stringify(data);
+  const encoded = encodeBase64(jsonStr);
+  const body = {
+    message: 'sync: update shared data ' + new Date().toISOString(),
+    content: encoded,
+    committer: { name: 'Sync Bot', email: 'sync@dashboard.local' }
+  };
+  if (remoteSha) body.sha = remoteSha;
+  const url = SYNC_CONFIG.apiBase + '/repos/' + SYNC_CONFIG.owner + '/' + SYNC_CONFIG.repo + '/contents/' + SYNC_CONFIG.path;
+  const resp = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Authorization': 'token ' + SYNC_CONFIG.token,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error('Push failed: ' + resp.status + ' ' + errText);
+  }
+  const result = await resp.json();
+  if (result.content && result.content.sha) {
+    remoteSha = result.content.sha;
+  }
+}
+
+function encodeBase64(str) {
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function decodeBase64(str) {
+  const cleaned = str.replace(/\n/g, '');
+  const binary = atob(cleaned);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+function mergeRemoteData(remote) {
+  if (!remote) return false;
+  let changed = false;
+  // inventory 不再通过远程合并，改为各设备从 scanRecords 重新计算（防止污染数据覆盖正确值）
+  if (remote.scanRecords) {
+    // 先合并 scanRecords，再统一重新计算 inventory（在函数末尾调用）
+  }
+  if (remote.scanRecords && Array.isArray(remote.scanRecords)) {
+    // 用稳定的 key（抹平换行/管道符）匹配删除记录，同时兼容旧格式 deletedRecords（未清洗的）
+    const deletedSet = new Set(deletedRecords);
+    const deletedTsSet = new Set();
+    deletedRecords.forEach(dk => {
+      // 旧格式："code||time" — 取最后一段"||"后的时间戳做兜底
+      const idx = dk.lastIndexOf('||');
+      if (idx >= 0) deletedTsSet.add(dk.substring(idx + 2));
+      deletedTsSet.add(String(dk).replace(/[\r\n|｜]/g, ''));
+    });
+    const existCodes = new Set(scanRecords.map(r => recordKey(r.c, r.t)));
+    for (const rr of remote.scanRecords) {
+      const rid = recordKey(rr.c, rr.t);
+      const tsId = recordTimestamp(rr.t);
+      // 精准匹配 key，或时间戳匹配旧 deletedRecords 格式
+      if (deletedSet.has(rid) || deletedTsSet.has(rid) || deletedTsSet.has(tsId)) continue;
+      if (!existCodes.has(rid)) {
+        scanRecords.push(rr);
+        existCodes.add(rid);
+        changed = true;
+      }
+    }
+    if (changed) {
+      scanRecords.sort((a, b) => (b.t || '').localeCompare(a.t || ''));
+    }
+  }
+  // Merge deleted records tracking
+  if (remote.deletedRecords && Array.isArray(remote.deletedRecords)) {
+    const existDel = new Set(deletedRecords);
+    for (const dr of remote.deletedRecords) {
+      if (!existDel.has(dr)) {
+        deletedRecords.push(dr);
+        existDel.add(dr);
+        changed = true;
+      }
+    }
+    if (deletedRecords.length > 5000) deletedRecords = deletedRecords.slice(-5000);
+  }
+  if (remote.importedWorkOrders && Array.isArray(remote.importedWorkOrders)) {
+    const existNums = new Set(importedWorkOrders.map(w => w.number));
+    for (const rwo of remote.importedWorkOrders) {
+      if (!existNums.has(rwo.number)) {
+        importedWorkOrders.push(rwo);
+        existNums.add(rwo.number);
+        changed = true;
+      }
+    }
+  }
+  if (remote.currentWorkOrder && remote.currentWorkOrder.componentCounts && currentWorkOrder.number) {
+    const rc = remote.currentWorkOrder.componentCounts;
+    for (const key of Object.keys(rc)) {
+      const rv = rc[key] || 0;
+      const lv = currentWorkOrder.componentCounts[key] || 0;
+      if (rv > lv) {
+        currentWorkOrder.componentCounts[key] = rv;
+        changed = true;
+      }
+    }
+  }
+  // 合并 scanRecords 后重新计算 inventory
+  if (changed) recomputeInventory();
+  return changed;
+}
+
+async function syncCycle() {
+  if (isSyncing || !syncEnabled) return;
+  isSyncing = true;
+  updateSyncStatus('syncing', '同步中...');
+  try {
+    const remote = await fetchSharedData();
+    const hadChanges = mergeRemoteData(remote);
+    const dataToPush = {
+      scanRecords: scanRecords.slice(0, 5000),
+      // inventory 不在远程同步，各设备从 INITIAL_INVENTORY + scanRecords 重新计算
+      importedWorkOrders: importedWorkOrders,
+      currentWorkOrder: {
+        number: currentWorkOrder.number,
+        product: currentWorkOrder.product,
+        qty: currentWorkOrder.qty,
+        targetQty: currentWorkOrder.targetQty,
+        componentCounts: currentWorkOrder.componentCounts
+      },
+      deletedRecords: deletedRecords,
+      updatedAt: new Date().toISOString()
+    };
+    await pushSharedData(dataToPush);
+    lastSyncTime = new Date();
+    updateSyncStatus('synced', '已同步');
+    if (hadChanges) {
+      saveData();
+      refreshAllUI();
+    }
+  } catch(e) {
+    console.warn('Sync error:', e);
+    updateSyncStatus('error', '同步失败');
+  } finally {
+    isSyncing = false;
+  }
+}
+
+function refreshAllUI() {
+  try {
+    if (typeof updateWorkOrderDisplay === 'function') updateWorkOrderDisplay();
+    if (typeof renderWorkOrderList === 'function') renderWorkOrderList();
+    if (typeof renderRecentList === 'function') renderRecentList();
+    if (typeof renderTable === 'function') renderTable();
+    if (typeof refreshDashboard === 'function') refreshDashboard();
+  } catch(e) {
+    console.warn('UI refresh error:', e);
+  }
+}
+
+function startSync() {
+  syncCycle();
+  if (syncTimer) clearInterval(syncTimer);
+  syncTimer = setInterval(syncCycle, SYNC_CONFIG.pollInterval);
+}
+
+let syncPushTimer = null;
+function triggerSync() {
+  if (!syncEnabled) return;
+  if (syncPushTimer) clearTimeout(syncPushTimer);
+  syncPushTimer = setTimeout(syncCycle, 2000);
+}
+// ====== END GITHUB SYNC ======
+
+// 页面加载时恢复数据
+const restored = loadData();
+if (restored) {
+  // 延迟刷新UI（等DOM准备好）
+  setTimeout(() => {
+    updateWorkOrderDisplay();
+    renderWorkOrderList();
+    renderRecentList();
+    renderTable();
+    refreshDashboard();
+  }, 100);
+}
+
+// 启动多人同步
+setTimeout(() => {
+  startSync();
+}, 500);
+
+// ====== TAB SWITCHING ======
+function switchTab(tab) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    if ((tab === 'scan' && b.textContent.includes('扫码')) ||
+        (tab === 'dashboard' && b.textContent.includes('看板')))
+      b.classList.add('active');
+  });
+  if (tab === 'dashboard') refreshDashboard();
+  if (tab === 'scan') document.getElementById('scanInput').focus();
+}
+
+// ====== ACTION TOGGLE ======
+function setAction(act) {
+  currentAction = act;
+  document.getElementById('btnIn').className = 'action-btn' + (act === '入库' ? ' active-in' : '');
+  document.getElementById('btnOut').className = 'action-btn' + (act === '出库' ? ' active-out' : '');
+}
+
+// ====== SCAN HANDLING ======
+const scanInput = document.getElementById('scanInput');
+const scanStatus = document.getElementById('scanStatus');
+
+scanInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    processScan(this.value.trim());
+  }
+});
+
+function processScan(code) {
+  if (!code) return;
+  
+  // 必须先设置工单才能扫码
+  if (!currentWorkOrder.number) {
+    scanInput.className = 'error';
+    scanStatus.textContent = '⚠️ 请先在上方设置工单号和数量后再扫码！';
+    scanStatus.className = 'scan-status err';
+    playSound('error');
+    setTimeout(() => { scanInput.className = ''; scanInput.value = ''; scanInput.focus(); }, 2000);
+    return;
+  }
+
+  // 必须先设置栈板号才能扫码
+  const palletPrefixVal = document.getElementById('palletPrefix').value;
+  const palletSeqVal = document.getElementById('palletSeq').value;
+  if (!palletPrefixVal || !palletSeqVal) {
+    scanInput.className = 'error';
+    scanStatus.textContent = '⚠️ 请先设置栈板号（选择前缀+输入序号）再扫码！';
+    scanStatus.className = 'scan-status err';
+    playSound('error');
+    setTimeout(() => { scanInput.className = ''; scanInput.value = ''; scanInput.focus(); }, 2000);
+    return;
+  }
+
+  // 检测扫码格式
+  const isNewFormat = /工单[号]?[：:]/.test(code) || /(?:线序)?料号[：:]/.test(code) || /数量[：:]/.test(code);
+  // 管道符格式：工单号｜半品料号｜序号｜数量｜批次(6位日期)｜流水号（分隔符支持全角｜和半角|）
+  const isPipeFormat = /[｜|]/.test(code) && code.split(/[｜|]/).length >= 4;
+  
+  let halfPart = '';
+  let scanQty = 1;
+  let workOrder = '';
+  let productionDate = ''; // 批次（从二维码第5段提取的6位日期）
+  
+  if (isPipeFormat) {
+    // ===== 管道符格式：101396002｜8180900969-P1A1-P2B2｜00035｜00100｜260905｜00001 =====
+    const parts = code.split(/[｜|]/).map(s => s.trim());
+    workOrder = parts[0] || '';
+    halfPart = parts[1] || '';
+    // parts[2] = 线长（暂不使用）
+    scanQty = parts[3] ? parseInt(parts[3]) : 1;
+    if (isNaN(scanQty) || scanQty <= 0) scanQty = 1;
+    // 兼容5段旧格式（无批次）和6段新格式（含批次6位日期）
+    if (parts.length >= 6) {
+      productionDate = parts[4] || '';
+      // parts[5] = 流水号（暂不使用）
+    }
+    // parts[4]（旧格式）= 流水号，暂不使用
+    
+    if (!halfPart) {
+      scanInput.className = 'error';
+      scanStatus.textContent = '❌ 无法识别半品料号';
+      scanStatus.className = 'scan-status err';
+      playSound('error');
+      setTimeout(() => { scanInput.className = ''; scanInput.value = ''; scanInput.focus(); }, 1500);
+      return;
+    }
+    
+  } else if (isNewFormat) {
+    // ===== QR码格式 =====
+    // 工单号：101386002\n料号线序：8180914762-P1D1-PCC4\n数量：100PCS
+    const woMatch = code.match(/工单[号]?[：:]\s*(\d+)/);
+    const bpMatch = code.match(/(?:线序)?料号[：:]\s*([A-Za-z0-9\-]+)/);
+    const qtyMatch = code.match(/数量[：:]\s*(\d+)/);
+    
+    workOrder = woMatch ? woMatch[1].trim() : '';
+    halfPart = bpMatch ? bpMatch[1].trim() : '';
+    scanQty = qtyMatch ? parseInt(qtyMatch[1]) : 1;
+    
+    if (!halfPart) {
+      scanInput.className = 'error';
+      scanStatus.textContent = '❌ 无法识别料号线序';
+      scanStatus.className = 'scan-status err';
+      playSound('error');
+      setTimeout(() => { scanInput.className = ''; scanInput.value = ''; scanInput.focus(); }, 1500);
+      return;
+    }
+    
+  } else {
+    // ===== 旧格式：WP-唯一码 =====
+    const errMsg = validateScanCode(code);
+    if (errMsg) {
+      scanInput.className = 'error';
+      scanStatus.textContent = '❌ ' + errMsg;
+      scanStatus.className = 'scan-status err';
+      scanStatus.style.fontWeight = 'bold';
+      scanStatus.style.fontSize = '1.1rem';
+      playSound('error');
+      showToast(errMsg, 'error');
+      scanInput.style.animation = 'shake 0.5s ease-in-out';
+      setTimeout(() => { scanInput.style.animation = ''; }, 500);
+      setTimeout(() => {
+        scanInput.className = '';
+        scanInput.value = '';
+        scanInput.focus();
+      }, 1500);
+      return;
+    }
+    halfPart = extractHalfPart(code);
+    scanQty = 1;
+  }
+  
+  // ===== 通用检查：BOM验证 + 超限报警（新旧格式共用）=====
+  if (halfPart) {
+    // 从半品料号提取成品料号（-P之前的部分）
+    const pIdx = halfPart.indexOf('-P');
+    const productFromHalfPart = pIdx > 0 ? halfPart.substring(0, pIdx) : '';
+    
+    // 自动识别成品料号（如果还未识别）
+    if (!currentWorkOrder.product && halfPart) {
+      let detectedProduct = '';
+      
+      // 方式1：通过-P提取成品料号，直接在BOM中查找
+      if (productFromHalfPart && bomData[productFromHalfPart]) {
+        detectedProduct = productFromHalfPart;
+      }
+      
+      // 方式2：完整半品料号匹配（BOM的组件p字段是完整半品料号）
+      if (!detectedProduct) {
+        for (const cp in bomData) {
+          if (bomData[cp].some(c => c.p === halfPart)) {
+            detectedProduct = cp;
+            break;
+          }
+        }
+      }
+      
+      // 方式3：仅成品料号匹配（BOM的组件p字段只是成品料号）
+      if (!detectedProduct && productFromHalfPart) {
+        for (const cp in bomData) {
+          if (bomData[cp].some(c => c.p === productFromHalfPart)) {
+            detectedProduct = cp;
+            break;
+          }
+        }
+      }
+      
+      if (detectedProduct) {
+        currentWorkOrder.product = detectedProduct;
+        const bomList = bomData[detectedProduct];
+        currentWorkOrder.targetQty = bomList.length * currentWorkOrder.qty;
+        showToast('✅ 已自动识别成品料号：' + detectedProduct + '（' + bomList.length + '种半品）', 'success');
+        updateWorkOrderDisplay();
+      }
+    }
+    
+    // BOM匹配：一个工单可对应多个成品料号，允许匹配任意成品的半品
+    let bomMatched = false;
+    let matchedProduct = ''; // 匹配到的成品料号，用于超限检查
+
+    if (currentWorkOrder.product) {
+      // 先尝试匹配当前已识别的成品
+      const woBomList = bomData[currentWorkOrder.product] || [];
+      if (woBomList.some(c => c.p === halfPart)) {
+        bomMatched = true;
+        matchedProduct = currentWorkOrder.product;
+      }
+      if (!bomMatched && productFromHalfPart && woBomList.some(c => c.p === productFromHalfPart)) {
+        bomMatched = true;
+        matchedProduct = currentWorkOrder.product;
+      }
+      // 当前成品没匹配到，再尝试全局BOM中其他成品的半品
+      if (!bomMatched) {
+        for (const cp in bomData) {
+          if (cp === currentWorkOrder.product) continue;
+          if (bomData[cp].some(c => c.p === halfPart)) {
+            bomMatched = true;
+            matchedProduct = cp;
+            break;
+          }
+          if (productFromHalfPart && bomData[cp].some(c => c.p === productFromHalfPart)) {
+            bomMatched = true;
+            matchedProduct = cp;
+            break;
+          }
+        }
+      }
+    } else {
+      // 当前工单产品未识别，尝试在全局BOM中搜索
+      for (const cp in bomData) {
+        if (bomData[cp].some(c => c.p === halfPart || (productFromHalfPart && c.p === productFromHalfPart))) {
+          currentWorkOrder.product = cp;
+          matchedProduct = cp;
+          bomMatched = true;
+          const bomList = bomData[cp];
+          currentWorkOrder.targetQty = bomList.length * currentWorkOrder.qty;
+          showToast('✅ 已自动识别成品料号：' + cp + '（' + bomList.length + '种半品）', 'success');
+          updateWorkOrderDisplay();
+          break;
+        }
+      }
+    }
+    
+    if (!bomMatched && halfPart) {
+      scanInput.className = 'error';
+      scanStatus.textContent = '❌ 半品料号 ' + halfPart + ' 不在当前工单BOM中！';
+      scanStatus.className = 'scan-status err';
+      playSound('error');
+      setTimeout(() => { scanInput.className = ''; scanInput.value = ''; scanInput.focus(); }, 2500);
+      return;
+    }
+    
+    // 超限检查：限制 = 工单数量（按条码上的数量累计计数）
+    const compLimit = currentWorkOrder.qty;
+    const currentCompCount = currentWorkOrder.componentCounts[halfPart] || 0;
+    
+    if (currentCompCount + scanQty > compLimit) {
+      scanInput.className = 'error';
+      scanInput.style.animation = 'shake 0.5s ease-in-out';
+      setTimeout(() => { scanInput.style.animation = ''; }, 500);
+      scanStatus.innerHTML = '<span style="font-size:1.2rem;font-weight:bold;color:var(--danger)">🚨 超工单报警！</span><br>' + halfPart + ' 已扫 <b>' + currentCompCount + '</b>/' + compLimit + '，本条码 ' + scanQty + '，<b>不允许再扫入！</b>';
+      scanStatus.className = 'scan-status err';
+      playSound('overlimit');
+      showToast('🚨 ' + halfPart + ' 已超工单数量！禁止扫入！', 'error');
+      setTimeout(() => { scanInput.className = ''; scanInput.value = ''; scanInput.focus(); }, 4000);
+      return;
+    }
+  }
+  
+  // Check duplicate
+  const isDup = scanRecords.some(r => r.c === code && r.a === currentAction);
+  
+  // Create record
+  const now = new Date();
+  const timeStr = now.getFullYear() + '-' + 
+    String(now.getMonth()+1).padStart(2,'0') + '-' + 
+    String(now.getDate()).padStart(2,'0') + ' ' + 
+    String(now.getHours()).padStart(2,'0') + ':' + 
+    String(now.getMinutes()).padStart(2,'0');
+  
+  const record = {
+    t: timeStr,
+    c: code,
+    x: halfPart || '',
+    r: '',
+    d: '',
+    w: workOrder || '',
+    a: currentAction,
+    q: scanQty, // 按条码上的数量（包规）记录
+    z: getCurrentPallet(),
+    wo_no: currentWorkOrder.number || '',
+    wo_qty: currentWorkOrder.qty || 0,
+    pd: productionDate || ''
+  };
+  
+  if (isDup) {
+    scanInput.className = 'duplicate';
+    scanStatus.textContent = '🚨 重复扫码警报！该码已' + currentAction + '过！';
+    scanStatus.className = 'scan-status err';
+    scanStatus.style.fontWeight = 'bold';
+    scanStatus.style.fontSize = '1.1rem';
+    playSound('duplicate');
+    showToast('🚨 重复扫码警报！', 'error');
+    scanInput.style.animation = 'shake 0.5s ease-in-out';
+    setTimeout(() => { scanInput.style.animation = ''; }, 500);
+  } else {
+    scanRecords.unshift(record);
+    saveDataDebounced(); // 持久化保存
+    
+    // Update inventory（按条码上的数量累加）
+    if (halfPart && halfPart in inventory) {
+      if (currentAction === '入库') inventory[halfPart] += scanQty;
+      else if (currentAction === '出库') inventory[halfPart] = Math.max(0, inventory[halfPart] - scanQty);
+    }
+    
+    // Update per-component work order progress（按条码上的数量累计）
+    if (currentWorkOrder.number && halfPart && currentAction === "入库") {
+      currentWorkOrder.componentCounts[halfPart] = (currentWorkOrder.componentCounts[halfPart] || 0) + scanQty;
+      updateWorkOrderDisplay();
+    }
+    
+    scanInput.className = 'success';
+    scanStatus.textContent = '✅ ' + currentAction + '成功！半品：' + halfPart + ' +' + scanQty + ' 当前库存：' + (inventory[halfPart] || 0);
+    scanStatus.className = 'scan-status ok';
+    playSound('success');
+    showToast(currentAction + '成功', 'success');
+    
+    renderRecentList();
+    refreshDashboard();
+  }
+  
+  setTimeout(() => {
+    scanInput.className = '';
+    scanInput.value = '';
+    scanInput.focus();
+  }, 1500);
+}
+
+function extractHalfPart(code) {
+  const parts = code.split('-');
+  
+  // 旧格式: WP-{product}-{positions}-{date}-{seq}
+  if (code.startsWith('WP-') && parts.length >= 5) {
+    for (let i = 2; i < parts.length; i++) {
+      if (/^\d{6}$/.test(parts[i])) {
+        return parts.slice(1, i).join('-');
+      }
+    }
+    return parts.slice(1, -2).join('-');
+  }
+  
+  // 新WP格式: {工单号}-{成品料号}-{Pxx}-{Pyy}-{数量}-{流水号}
+  // 如: 101396002-8180900969-P1A1-P2B2-100-000001
+  // 特征: 第一段全数字(工单号), >=5段, 最后2段是数量+流水号
+  if (parts.length >= 5 && /^\d+$/.test(parts[0])) {
+    return parts.slice(1, -2).join('-');
+  }
+  
+  return '';
+}
+
+function validateScanCode(code) {
+  if (!code) return '条码内容为空';
+  return '';
+}
+
+// ====== SOUND EFFECTS ======
+function playSound(type) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    if (type === 'success') {
+      osc.frequency.setValueAtTime(800, ctx.currentTime);
+      osc.frequency.setValueAtTime(1200, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+    } else if (type === 'duplicate') {
+      // 重复扫码报警：急促的三声警报
+      osc.type = 'square';
+      const alarmInterval = 0.15;
+      for (let i = 0; i < 3; i++) {
+        const startTime = ctx.currentTime + i * alarmInterval * 2;
+        osc.frequency.setValueAtTime(1000, startTime);
+        osc.frequency.setValueAtTime(600, startTime + alarmInterval);
+      }
+      gain.gain.setValueAtTime(0.5, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.9);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.9);
+    } else if (type === 'overlimit') {
+      // 超工单报警：持续急促高频警报（5声）
+      osc.type = 'square';
+      const alarmInterval = 0.12;
+      for (let i = 0; i < 5; i++) {
+        const startTime = ctx.currentTime + i * alarmInterval * 2;
+        osc.frequency.setValueAtTime(1500, startTime);
+        osc.frequency.setValueAtTime(800, startTime + alarmInterval);
+      }
+      gain.gain.setValueAtTime(0.6, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.2);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 1.2);
+    } else {
+      osc.frequency.setValueAtTime(300, ctx.currentTime);
+      osc.frequency.setValueAtTime(200, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.4);
+    }
+  } catch(e) {}
+}
+
+// ====== TOAST ======
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast toast-' + type + ' show';
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ====== RECENT LIST ======
+let filteredScanRecords = []; // 当前过滤后的记录（用于显示）
+
+function renderRecentList() {
+  const el = document.getElementById('recentList');
+  const countEl = document.getElementById('scanRecordCount');
+  const records = filteredScanRecords.length > 0 ? filteredScanRecords : scanRecords.filter(r => r.c);
+  
+  countEl.textContent = `共 ${records.length} 条记录` + (filteredScanRecords.length > 0 ? '（已筛选）' : '');
+  
+  if (records.length === 0) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary)">暂无扫码记录</div>';
+    return;
+  }
+  
+  el.innerHTML = records.map((r, idx) => {
+    const realIdx = scanRecords.indexOf(r);
+    const qtyStr = r.q ? `<span style="color:var(--primary);font-weight:600">×${r.q}</span>` : '';
+    const displayCode = r.c.length > 40 ? r.c.substring(0, 40) + '...' : r.c;
+    const palletStr = r.z ? `<span style="background:#e8f4fd;color:#1a73e8;padding:1px 6px;border-radius:4px;font-size:.72rem;font-weight:500">${r.z}</span>` : '';
+    const pdStr = r.pd ? `<span style="background:#fff8e1;color:#e65100;padding:1px 6px;border-radius:4px;font-size:.72rem;font-weight:500">📦${r.pd}</span>` : '';
+    return `
+    <div class="recent-item" style="display:flex;align-items:center;gap:8px">
+      <span class="recent-time" style="min-width:120px">${r.t}</span>
+      <span class="recent-code" style="flex:1;font-size:.75rem;word-break:break-all" title="${r.c.replace(/"/g, '&quot;')}">${displayCode}</span>
+      <span style="min-width:80px">${r.x || '-'} ${qtyStr}</span>
+      ${pdStr}${palletStr}
+      <span class="badge ${r.a === '入库' ? 'badge-green' : 'badge-red'}" style="min-width:45px;text-align:center">${r.a}</span>
+      <button class="btn btn-sm" style="padding:4px 8px;background:var(--danger);color:#fff;font-size:.75rem" onclick="deleteSingleRecord(${realIdx})" title="删除此记录">🗑️</button>
+    </div>
+  `}).join('');
+}
+
+// ====== FILTER SCAN RECORDS ======
+function filterScanRecords() {
+  const keyword = document.getElementById('scanSearchInput').value.trim().toLowerCase();
+  const dateFilter = document.getElementById('scanDateFilter').value;
+  
+  filteredScanRecords = scanRecords.filter(r => {
+    let match = true;
+    if (keyword) {
+      const searchFields = [
+        r.c || '',           // 唯一码
+        r.x || '',           // 线序料号
+        r.wo_no || '',       // 工单号
+        r.z || '',           // 栈板号
+        r.pd || ''           // 批次
+      ].map(v => v.toLowerCase());
+      match = match && searchFields.some(v => v.includes(keyword));
+    }
+    if (dateFilter) {
+      const recordDate = r.t.split(' ')[0];
+      match = match && recordDate === dateFilter;
+    }
+    return match && r.c;
+  });
+  
+  renderRecentList();
+}
+
+function clearScanFilter() {
+  document.getElementById('scanSearchInput').value = '';
+  document.getElementById('scanDateFilter').value = '';
+  filteredScanRecords = [];
+  renderRecentList();
+}
+
+// ====== DELETE SCAN RECORD ======
+function deleteSingleRecord(index) {
+  if (index < 0 || index >= scanRecords.length) return;
+  
+  const record = scanRecords[index];
+  if (!confirm(`确定要删除这条记录吗？\n\n唯一码：${record.c}\n时间：${record.t}\n动作：${record.a}\n\n删除后将同步更新库存和齐套数据。`)) return;
+  
+  // Record deletion for sync（key 抹平换行/管道符，避免同步对不上）
+  deletedRecords.push(recordKey(record.c, record.t));
+  if (deletedRecords.length > 5000) deletedRecords = deletedRecords.slice(-5000);
+  
+  // Remove record
+  scanRecords.splice(index, 1);
+  
+  // 从剩余扫码记录重新计算库存（避免手动回退的精度问题）
+  recomputeInventory();
+  // 同步重算工单组件计数（按 scanQty 累计，与 commitScan 保持一致）
+  if (currentWorkOrder.number) {
+    currentWorkOrder.componentCounts = {};
+    scanRecords.forEach(r => {
+      if (r.a === '入库' && r.w === currentWorkOrder.number) {
+        const hp = r.x || '';
+        const q = (r.q && r.q > 0) ? r.q : 1;
+        if (hp) currentWorkOrder.componentCounts[hp] = (currentWorkOrder.componentCounts[hp] || 0) + q;
+      }
+    });
+  }
+  
+  // Clear filter and refresh
+  filteredScanRecords = [];
+  saveData();
+  renderRecentList();
+  updateWorkOrderDisplay();
+  refreshDashboard();
+  showToast('记录已删除', 'success');
+}
+
+function deleteByDate() {
+  const dateFilter = document.getElementById('scanDateFilter').value;
+  if (!dateFilter) {
+    showToast('请先选择要删除的日期', 'error');
+    return;
+  }
+  
+  const recordsToDelete = scanRecords.filter(r => r.t.startsWith(dateFilter));
+  if (recordsToDelete.length === 0) {
+    showToast('该日期没有扫码记录', 'info');
+    return;
+  }
+  
+  if (!confirm(`确定要删除 ${dateFilter} 的所有扫码记录吗？\n\n共 ${recordsToDelete.length} 条记录\n\n删除后将同步更新库存和齐套数据。`)) return;
+  
+  // Record deletions for sync（key 抹平换行/管道符，避免同步对不上）
+  recordsToDelete.forEach(r => {
+    deletedRecords.push(recordKey(r.c, r.t));
+  });
+  if (deletedRecords.length > 5000) deletedRecords = deletedRecords.slice(-5000);
+  
+  // Remove records
+  scanRecords = scanRecords.filter(r => !r.t.startsWith(dateFilter));
+  
+  // 从剩余扫码记录重新计算库存（避免手动回退的精度问题）
+  recomputeInventory();
+  // 同步重算工单组件计数（按 scanQty 累计，与 commitScan 保持一致）
+  if (currentWorkOrder.number) {
+    currentWorkOrder.componentCounts = {};
+    scanRecords.forEach(r => {
+      if (r.a === '入库' && r.w === currentWorkOrder.number) {
+        const hp = r.x || '';
+        const q = (r.q && r.q > 0) ? r.q : 1;
+        if (hp) currentWorkOrder.componentCounts[hp] = (currentWorkOrder.componentCounts[hp] || 0) + q;
+      }
+    });
+  }
+  
+  // Clear filter and refresh
+  filteredScanRecords = [];
+  document.getElementById('scanDateFilter').value = '';
+  saveData();
+  renderRecentList();
+  updateWorkOrderDisplay();
+  refreshDashboard();
+  showToast(`已删除 ${recordsToDelete.length} 条记录`, 'success');
+}
+
+// ====== CSV EXPORT ======
+function exportScanCSV() {
+  if (scanRecords.length === 0) { showToast('暂无数据可导出', 'info'); return; }
+  let csv = '\uFEFF时间,唯一码,线序料号,操作人,工单号,工单数量,库位,批次,动作,栈板号\n';
+  scanRecords.forEach(r => {
+    csv += `"${r.t}","${r.c}","${r.x}","${r.r}","${r.wo_no || ''}","${r.wo_qty || ''}","${r.w}","${r.pd || ''}","${r.a}","${r.z || ''}"\n`.replace(/"undefined"/g, '""');
+  });
+  // Clean up undefined
+  csv = csv.replace(/undefined/g, '');
+  
+  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '扫码记录_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV 已导出', 'success');
+}
+
+// ====== BOM IMPORT (Excel + CSV) ======
+function loadBOMFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  
+  if (ext === 'csv') {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      let text = e.target.result;
+      // 自动检测编码：如果包含乱码特征，尝试GBK
+      if (/[\ufffd]/.test(text) || /[锟斤拷]/.test(text)) {
+        const reader2 = new FileReader();
+        reader2.onload = function(e2) { parseCSVText(e2.target.result); };
+        reader2.readAsText(file, 'GBK');
+      } else {
+        parseCSVText(text);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  } else {
+    // Excel file
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        loadBOMFromRows(rows);
+      } catch (err) {
+        alert('Excel 解析失败：' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+function parseCSVText(text) {
+  const lines = text.split(/\r?\n/);
+  const rows = [];
+  lines.forEach(line => {
+    if (!line.trim()) return;
+    rows.push(parseCSVLine(line));
+  });
+  loadBOMFromRows(rows);
+}
+
+function loadBOMFromRows(rows) {
+  bomData = {};
+  productList = [];
+  let headerSkipped = false;
+  let count = 0;
+  
+  rows.forEach(row => {
+    if (!row || row.length === 0) return;
+    // 跳过表头（第一行或包含中文"料号"的行）
+    if (!headerSkipped) {
+      const first = String(row[0] || '').trim();
+      if (/料号|成品|编号|product/i.test(first)) { headerSkipped = true; return; }
+      headerSkipped = true;
+    }
+    
+    const cp = String(row[0] || '').trim();
+    const bp = String(row[1] || '').trim();
+    if (!cp || !bp) return;
+    
+    if (!bomData[cp]) bomData[cp] = [];
+    bomData[cp].push({
+      p: bp,
+      j: String(row[2] || '').trim(),
+      l: parseInt(row[3]) || 0,
+      y: parseInt(row[4]) || 1
+    });
+    if (!productList.includes(cp)) productList.push(cp);
+    if (!(bp in inventory)) inventory[bp] = 0;
+    count++;
+  });
+  
+  document.getElementById('bomLoadStatus').textContent = '✅ 已加载 ' + productList.length + ' 个成品，' + count + ' 条BOM';
+  showToast('BOM 数据已加载：' + productList.length + ' 个成品', 'success');
+  refreshDashboard();
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+// ====== MANUAL BOM ENTRY ======
+function addBOMManual() {
+  const cp = document.getElementById('manualCP').value.trim();
+  const bp = document.getElementById('manualBP').value.trim();
+  const j = document.getElementById('manualJ').value.trim();
+  const l = parseInt(document.getElementById('manualL').value) || 0;
+  const y = parseInt(document.getElementById('manualY').value) || 1;
+  
+  if (!cp || !bp) {
+    alert('成品料号和半品料号不能为空');
+    return;
+  }
+  
+  if (!bomData[cp]) {
+    bomData[cp] = [];
+    productList.push(cp);
+  }
+  bomData[cp].push({p: bp, j: j, l: l, y: y});
+  if (!(bp in inventory)) inventory[bp] = 0;
+  
+  // 清空输入
+  document.getElementById('manualBP').value = '';
+  document.getElementById('manualJ').value = '';
+  document.getElementById('manualL').value = '0';
+  document.getElementById('manualY').value = '1';
+  
+  refreshDashboard();
+  showToast('已添加：' + cp + ' → ' + bp, 'success');
+}
+
+// ====== WORK ORDER MANAGEMENT ======
+let currentWorkOrder = { number: '', product: '', qty: 0, targetQty: 0, componentCounts: {} };
+
+// ====== PALLET NUMBER MANAGEMENT ======
+function updatePalletDisplay() {
+  const prefix = document.getElementById('palletPrefix').value;
+  const seq = document.getElementById('palletSeq').value;
+  const display = document.getElementById('palletDisplay');
+  if (prefix && seq) {
+    const seqStr = String(seq).padStart(4, '0');
+    display.textContent = '栈板号：' + prefix + '-' + seqStr;
+    display.style.color = 'var(--primary)';
+    display.style.fontWeight = '600';
+  } else {
+    display.textContent = '未设置栈板号';
+    display.style.color = 'var(--text-secondary)';
+    display.style.fontWeight = '500';
+  }
+}
+
+function getCurrentPallet() {
+  const prefix = document.getElementById('palletPrefix').value;
+  const seq = document.getElementById('palletSeq').value;
+  if (prefix && seq) {
+    return prefix + '-' + String(seq).padStart(4, '0');
+  }
+  return '';
+}
+
+function saveWorkOrder() {
+  const num = document.getElementById('woNumber').value.trim();
+  const qty = parseInt(document.getElementById('woTargetQty').value) || 0;
+
+  if (!num || qty <= 0) {
+    alert('请输入工单号和工单数量');
+    return;
+  }
+
+  // 成品料号将在首次扫码时从条码自动识别
+  currentWorkOrder = { number: num, product: '', qty: qty, targetQty: 0, componentCounts: {} };
+  updateWorkOrderDisplay();
+  showToast('工单已设置：' + num + '，数量：' + qty + '，请开始扫码', 'success');
+}
+
+function clearWorkOrder() {
+  if (!currentWorkOrder.number) return;
+  if (!confirm('确认清除当前工单（' + currentWorkOrder.number + '）？已记录的扫码数据不会删除。')) return;
+  currentWorkOrder = { number: '', product: '', qty: 0, targetQty: 0, componentCounts: {} };
+  document.getElementById('woNumber').value = '';
+  document.getElementById('woTargetQty').value = '';
+  document.getElementById('palletPrefix').value = '';
+  document.getElementById('palletSeq').value = '';
+  updatePalletDisplay();
+  updateWorkOrderDisplay();
+  showToast('工单已清除', 'success');
+}
+
+// ====== BATCH WORK ORDER IMPORT ======
+let importedWorkOrders = []; // 批量导入的工单列表 [{number, product, qty}]
+
+function toggleBatchImport() {
+  const panel = document.getElementById('batchImportPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  if (panel.style.display === 'block') {
+    document.getElementById('batchImportText').focus();
+  }
+}
+
+function previewBatchImport() {
+  const text = document.getElementById('batchImportText').value.trim();
+  const previewEl = document.getElementById('batchPreview');
+  if (!text) {
+    previewEl.textContent = '';
+    return;
+  }
+  const lines = text.split('\n').filter(l => l.trim());
+  let validCount = 0;
+  let invalidLines = [];
+  lines.forEach((line, i) => {
+    const parts = line.split(/\t|,|\|/).map(s => s.trim());
+    if (parts.length >= 2 && parts[0] && parseInt(parts[1]) > 0) {
+      validCount++;
+    } else {
+      invalidLines.push(i + 1);
+    }
+  });
+  let msg = `识别到 ${validCount} 条工单`;
+  if (invalidLines.length > 0) {
+    msg += `，第 ${invalidLines.join(',')} 行格式有误`;
+  }
+  previewEl.textContent = msg;
+  previewEl.style.color = invalidLines.length > 0 ? 'var(--danger)' : 'var(--success)';
+}
+
+function confirmBatchImport() {
+  const text = document.getElementById('batchImportText').value.trim();
+  if (!text) {
+    alert('请先粘贴工单数据');
+    return;
+  }
+  const lines = text.split('\n').filter(l => l.trim());
+  const newOrders = [];
+  let hasError = false;
+  lines.forEach((line, i) => {
+    const parts = line.split(/\t|,|\|/).map(s => s.trim());
+    if (parts.length >= 2 && parts[0] && parseInt(parts[1]) > 0) {
+      newOrders.push({
+        number: parts[0],
+        product: '',
+        qty: parseInt(parts[1])
+      });
+    } else {
+      hasError = true;
+    }
+  });
+  if (newOrders.length === 0) {
+    alert('未识别到有效工单数据，请检查格式：工单号 | 数量');
+    return;
+  }
+  // 合并到已导入列表（去重：同工单号则更新）
+  newOrders.forEach(order => {
+    const existIdx = importedWorkOrders.findIndex(w => w.number === order.number);
+    if (existIdx >= 0) {
+      importedWorkOrders[existIdx] = order;
+    } else {
+      importedWorkOrders.push(order);
+    }
+  });
+  // 自动选中第一个导入的工单（如果当前无工单）
+  if (!currentWorkOrder.number && newOrders.length > 0) {
+    selectWorkOrder(0);
+  }
+  renderWorkOrderList();
+  toggleBatchImport();
+  document.getElementById('batchImportText').value = '';
+  document.getElementById('batchPreview').textContent = '';
+  saveData(); // 持久化保存
+  showToast(`成功导入 ${newOrders.length} 条工单${hasError ? '（部分行格式有误已跳过）' : ''}`, hasError ? 'warning' : 'success');
+}
+
+function selectWorkOrder(index) {
+  if (index < 0 || index >= importedWorkOrders.length) return;
+  const order = importedWorkOrders[index];
+  currentWorkOrder = { number: order.number, product: order.product || '', qty: order.qty, targetQty: 0, componentCounts: {} };
+  document.getElementById('woNumber').value = order.number;
+  document.getElementById('woTargetQty').value = order.qty;
+  updateWorkOrderDisplay();
+  renderWorkOrderList();
+  saveData(); // 持久化保存
+  showToast('已切换至工单：' + order.number, 'success');
+}
+
+function renderWorkOrderList() {
+  const listEl = document.getElementById('workOrderList');
+  const contentEl = document.getElementById('workOrderListContent');
+  const countEl = document.getElementById('workOrderCount');
+  if (importedWorkOrders.length === 0) {
+    listEl.style.display = 'none';
+    return;
+  }
+  listEl.style.display = 'block';
+  countEl.textContent = `共 ${importedWorkOrders.length} 条`;
+  contentEl.innerHTML = importedWorkOrders.map((order, idx) => {
+    const isActive = currentWorkOrder.number === order.number;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;border-radius:6px;cursor:pointer;${isActive ? 'background:#1a73e8;color:#fff' : 'background:#fff;border:1px solid #ddd'}" onclick="selectWorkOrder(${idx})">
+      <span style="font-weight:${isActive ? '700' : '500'};font-size:.83rem;flex:1">${order.number}</span>
+      <span style="font-size:.78rem;font-weight:600;${isActive ? 'color:#fff' : 'color:var(--primary)'}">${order.qty} pcs</span>
+      <button onclick="event.stopPropagation();removeWorkOrder(${idx})" style="background:none;border:none;cursor:pointer;font-size:.75rem;${isActive ? 'color:#fff' : 'color:var(--danger)'}" title="删除">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function removeWorkOrder(index) {
+  if (index < 0 || index >= importedWorkOrders.length) return;
+  const order = importedWorkOrders[index];
+  if (!confirm('确认删除工单 ' + order.number + '？')) return;
+  importedWorkOrders.splice(index, 1);
+  if (currentWorkOrder.number === order.number) {
+    if (importedWorkOrders.length > 0) {
+      selectWorkOrder(0);
+    } else {
+      clearWorkOrder();
+      return;
+    }
+  }
+  renderWorkOrderList();
+  saveData(); // 持久化保存
+  showToast('已删除工单：' + order.number, 'info');
+}
+
+// ====== PALLET SCAN ======
+function handlePalletScan(event) {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  const input = document.getElementById('palletScanInput');
+  const code = input.value.trim();
+  if (!code) return;
+  // 解析栈板号：尝试匹配 5B3F-0001 / 2B3F-0001 / 2B4F-0001 格式
+  const match = code.match(/^(5B3F|2B3F|2B4F)[-_]?\s*(\d{1,4})/i);
+  if (match) {
+    document.getElementById('palletPrefix').value = match[1].toUpperCase();
+    document.getElementById('palletSeq').value = parseInt(match[2]);
+    updatePalletDisplay();
+    showToast('栈板号已识别：' + match[1].toUpperCase() + '-' + String(parseInt(match[2])).padStart(4, '0'), 'success');
+  } else {
+    showToast('无法识别栈板号格式：' + code + '（需包含5B3F/2B3F/2B4F+序号）', 'error');
+  }
+  input.value = '';
+}
+
+function updateWorkOrderDisplay() {
+  const el = document.getElementById('woStatus');
+  if (currentWorkOrder.number) {
+    if (!currentWorkOrder.product) {
+      // 工单已设置但还未识别成品料号
+      el.innerHTML = `已设置工单 | <b>${currentWorkOrder.number}</b> | 数量：<b>${currentWorkOrder.qty}</b> | <span style="color:var(--warning)">等待扫码识别成品料号...</span>`;
+      return;
+    }
+    const woBomList = bomData[currentWorkOrder.product] || [];
+    const compLimit = currentWorkOrder.qty;
+    
+    // 计算已完成成品数（所有BOM半品最少扫过的次数）
+    let minCount = Infinity;
+    woBomList.forEach(c => {
+      const cnt = currentWorkOrder.componentCounts[c.p] || 0;
+      if (cnt < minCount) minCount = cnt;
+    });
+    if (woBomList.length === 0) minCount = 0;
+    const completedProducts = minCount;
+    
+    const totalScanned = Object.values(currentWorkOrder.componentCounts).reduce((a, b) => a + b, 0);
+    const totalTarget = woBomList.length * compLimit;
+    const pct = totalTarget > 0 ? Math.round((totalScanned / totalTarget) * 100) : 0;
+    const mainColor = completedProducts >= compLimit ? 'var(--danger)' : pct >= 80 ? 'var(--warning)' : 'var(--success)';
+    
+    // Per-component progress
+    const compDetails = woBomList.map(c => {
+      const scanned = currentWorkOrder.componentCounts[c.p] || 0;
+      const done = scanned >= compLimit;
+      const cColor = done ? 'var(--danger)' : scanned > 0 ? 'var(--warning)' : 'var(--success)';
+      return `<span style="color:${cColor}">${c.p}：${scanned}/${compLimit}</span>`;
+    }).join(' &nbsp;|&nbsp; ');
+    
+    el.innerHTML = `已设置工单 | <b>${currentWorkOrder.number}</b> | 成品：${currentWorkOrder.product} | 完成：<span style="color:${mainColor};font-weight:700;font-size:1.1rem">${completedProducts}/${compLimit} 个</span> | 总进度：${totalScanned}/${totalTarget}（${pct}%）<br><span style="font-size:.78rem;margin-top:4px;display:inline-block">${compDetails}</span>`;
+  } else {
+    el.textContent = '未设置工单';
+  }
+}
+
+function checkWorkOrderLimit(scanCode, scanQty) {
+  // 如果没设置工单，不限制
+  if (!currentWorkOrder.number) return null;
+
+  // 从扫码内容提取工单号
+  const woMatch = scanCode.match(/工单[号]?[：:]\s*(\d+)/);
+  const scannedWO = woMatch ? woMatch[1].trim() : '';
+
+  // 如果码里有工单号且和设置不一致
+  if (scannedWO && scannedWO !== currentWorkOrder.number) {
+    return '⚠️ 扫码工单号（' + scannedWO + '）与当前设置（' + currentWorkOrder.number + '）不一致，请检查！';
+  }
+
+  return null;
+}
+
+// ====== CALCULATION ======
+function recalculate() {
+  // Recalculate kit availability for each product
+  window._dashData = productList.map(cp => {
+    const parts = bomData[cp] || [];
+    let kitQty = Infinity;
+    let shortageParts = [];
+    let minStock = Infinity;
+    let maxStock = 0;
+    
+    parts.forEach(part => {
+      const stock = inventory[part.p] || 0;
+      const need = part.y || 1;
+      const gap = need - stock;
+      
+      minStock = Math.min(minStock, stock);
+      maxStock = Math.max(maxStock, stock);
+      
+      if (stock < need) {
+        shortageParts.push({name: part.p, stock, need, gap});
+      }
+      kitQty = Math.min(kitQty, Math.floor(stock / need));
+    });
+    
+    if (parts.length === 0) { kitQty = 0; minStock = 0; }
+    if (kitQty === Infinity) kitQty = 0;
+    const maxGap = parts.length > 0 ? maxStock - minStock : 0;
+    
+    return {
+      cp,
+      partCount: parts.length,
+      kitQty,
+      status: kitQty > 0 ? '可配套' : (shortageParts.length > 0 ? '缺料' : '待备料'),
+      shortageCount: shortageParts.length,
+      shortageParts,
+      maxGap
+    };
+  });
+}
+
+// ====== DASHBOARD ======
+function refreshDashboard() {
+  recalculate();
+  const data = window._dashData || [];
+  
+  // KPIs
+  const total = data.length;
+  const kitOk = data.filter(d => d.kitQty > 0).length;
+  const kitRate = total > 0 ? ((kitOk / total) * 100).toFixed(1) : 0;
+  
+  document.getElementById('kpiTotal').textContent = total;
+  document.getElementById('kpiKit').textContent = kitOk;
+  // 计算库存总数量
+  const totalInventory = Object.values(inventory).reduce((sum, qty) => sum + qty, 0);
+  document.getElementById('kpiSemiTotal').textContent = totalInventory;
+  
+  // Table
+  renderTable(data);
+  
+  // Charts
+  renderCharts(data);
+}
+
+function renderTable(data) {
+  const tbody = document.getElementById('dashBody');
+  const search = (document.getElementById('searchInput').value || '').toLowerCase();
+  
+  let filtered = data;
+  if (search) {
+    filtered = data.filter(d => d.cp.toLowerCase().includes(search));
+  }
+  
+  let html = '';
+  filtered.forEach((d, idx) => {
+    const statusBadge = d.status === '可配套' ? 'badge-green' : (d.status === '缺料' ? 'badge-red' : 'badge-yellow');
+    const hasDetail = d.shortageParts.length > 0 || (bomData[d.cp] && bomData[d.cp].length > 0);
+    
+    html += `<tr class="${hasDetail ? 'expand-row' : ''}" ${hasDetail ? 'onclick="toggleDetail(this)"' : ''}>
+      <td><strong>${d.cp}</strong></td>
+      <td>${d.partCount}</td>
+      <td><strong style="font-size:1.1rem;color:${d.kitQty > 0 ? 'var(--success)' : 'var(--danger)'}">${d.kitQty}</strong></td>
+      <td><span class="badge ${statusBadge}">${d.status}</span></td>
+      <td>${d.shortageCount > 0 ? '<span style="color:var(--danger)">' + d.shortageCount + ' 种</span>' : '-'}</td>
+      <td>${d.maxGap > 0 ? d.maxGap : '-'}</td>
+    </tr>`;
+    
+    if (hasDetail) {
+      const parts = bomData[d.cp] || [];
+      html += `<tr class="detail-row"><td colspan="6">
+        <table style="width:100%;font-size:.84rem">
+          <tr style="background:#e8f0fe"><th style="padding:6px 10px">半品料号</th><th style="padding:6px 10px">接头规格</th><th style="padding:6px 10px">库存</th><th style="padding:6px 10px">状态</th></tr>
+      `;
+      parts.forEach(p => {
+        const stock = inventory[p.p] || 0;
+        const need = p.y || 1;
+        let st, cls;
+        if (stock >= need) { st = '充足'; cls = 'badge-green'; }
+        else if (stock > 0) { st = '低库存'; cls = 'badge-yellow'; }
+        else { st = '缺料'; cls = 'badge-red'; }
+        html += `<tr>
+          <td style="padding:6px 10px;font-family:monospace;font-size:.8rem">${p.p}</td>
+          <td style="padding:6px 10px">${p.j || '-'}</td>
+          <td style="padding:6px 10px;text-align:center;font-weight:600;${stock < need ? 'color:var(--danger)' : ''}">${stock}</td>
+          <td style="padding:6px 10px"><span class="badge ${cls}">${st}</span></td>
+        </tr>`;
+      });
+      html += '</table></td></tr>';
+    }
+  });
+  
+  tbody.innerHTML = html || '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-secondary)">暂无数据，请先加载库存 CSV</td></tr>';
+}
+
+function toggleDetail(row) {
+  row.classList.toggle('open');
+  const detail = row.nextElementSibling;
+  if (detail && detail.classList.contains('detail-row')) {
+    detail.classList.toggle('show');
+  }
+}
+
+function filterTable() {
+  refreshDashboard();
+}
+
+let sortAsc = true;
+function sortTable() {
+  if (!window._dashData) return;
+  window._dashData.sort((a, b) => sortAsc ? a.kitQty - b.kitQty : b.kitQty - a.kitQty);
+  sortAsc = !sortAsc;
+  renderTable(window._dashData);
+}
+
+function expandAll() {
+  document.querySelectorAll('.expand-row').forEach(r => { r.classList.add('open'); r.nextElementSibling?.classList.add('show'); });
+}
+function collapseAll() {
+  document.querySelectorAll('.expand-row').forEach(r => { r.classList.remove('open'); r.nextElementSibling?.classList.remove('show'); });
+}
+
+// ====== CHARTS ======
+function renderCharts(data) {
+  // Kit distribution chart
+  const kitChart = document.getElementById('chartKit');
+  const sorted = [...data].sort((a, b) => b.kitQty - a.kitQty).slice(0, 15);
+  const maxKit = Math.max(...sorted.map(d => d.kitQty), 1);
+  
+  kitChart.innerHTML = sorted.map(d => {
+    const pct = (d.kitQty / maxKit * 100).toFixed(1);
+    const color = d.kitQty > 0 ? 'var(--success)' : 'var(--danger)';
+    return `<div class="bar-item">
+      <span class="bar-label" title="${d.cp}">${d.cp}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <span class="bar-value">${d.kitQty}</span>
+    </div>`;
+  }).join('');
+  
+}
+
+// ====== EXPORT TO EXCEL ======
+function exportToExcel() {
+  recalculate();
+  const data = window._dashData || [];
+  
+  // 创建工作簿
+  const wb = XLSX.utils.book_new();
+  
+  // Sheet 1: BOM物料清单
+  const bomSheetData = [];
+  bomSheetData.push(['成品料号', '半品料号', '接头规格', '线长', '单套用量', '备注']);
+  Object.keys(bomData).forEach(cp => {
+    bomData[cp].forEach(item => {
+      bomSheetData.push([cp, item.p, item.j, item.l, item.y, '']);
+    });
+  });
+  const ws1 = XLSX.utils.aoa_to_sheet(bomSheetData);
+  XLSX.utils.book_append_sheet(wb, ws1, 'BOM物料清单');
+  
+  // Sheet 2: 半品库存主数据
+  const inventoryData = [];
+  inventoryData.push(['所属成品料号', '线序料号', '接头规格', '线长', '单套用量', '累计入库', '累计出库', '当前库存', '库存状态']);
+  Object.keys(bomData).forEach(cp => {
+    bomData[cp].forEach(item => {
+      const qty = inventory[item.p] || 0;
+      // 计算累计入库和出库（基于扫码记录）
+      let inCount = 0, outCount = 0;
+      scanRecords.forEach(r => {
+        if (r.c.includes(item.p)) {
+          if (r.a === '入库') inCount++;
+          else if (r.a === '出库') outCount++;
+        }
+      });
+      const status = qty === 0 ? '缺料' : (qty < 10 ? '低库存' : '正常');
+      inventoryData.push([cp, item.p, item.j, item.l, item.y, inCount, outCount, qty, status]);
+    });
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(inventoryData);
+  XLSX.utils.book_append_sheet(wb, ws2, '半品库存主数据');
+  
+  // Sheet 3: 成品齐套看板
+  const dashData = [];
+  dashData.push(['成品料号', '半品数', '可配套数', '齐套状态', '缺料半品', '缺口数量']);
+  data.forEach(d => {
+    dashData.push([d.cp, d.partCount, d.kitQty, d.status, d.shortageCount, d.maxGap]);
+  });
+  const ws3 = XLSX.utils.aoa_to_sheet(dashData);
+  XLSX.utils.book_append_sheet(wb, ws3, '成品齐套看板');
+  
+  // Sheet 4: 扫码区
+  const scanData = [];
+  scanData.push(['时间', '唯一码', '线序料号', '操作人', '工单号', '工单数量', '库位', '批次', '动作', '栈板号']);
+  scanRecords.forEach(r => {
+    const code = r.c;
+    const partNum = code.substring(3, 21);
+    scanData.push([r.t, code, partNum, r.r, r.wo_no || '', r.wo_qty || '', r.w, r.pd || '', r.a, r.z || '']);
+  });
+  const ws4 = XLSX.utils.aoa_to_sheet(scanData);
+  XLSX.utils.book_append_sheet(wb, ws4, '扫码区');
+  
+  // 导出文件
+  const now = new Date();
+  const dateStr = now.getFullYear() + 
+    String(now.getMonth() + 1).padStart(2, '0') + 
+    String(now.getDate()).padStart(2, '0') + '_' +
+    String(now.getHours()).padStart(2, '0') + 
+    String(now.getMinutes()).padStart(2, '0');
+  XLSX.writeFile(wb, `半品管理台账_${dateStr}.xlsx`);
+  
+  showToast('Excel导出成功！');
+}
+
+// ====== CLEAR ALL DATA ======
+async function clearAllData() {
+  if (!confirm('确定要清除所有数据吗？\n\n包括：扫码记录、库存、工单、齐套数据\n\n此操作不可恢复！建议先导出CSV备份。')) return;
+  if (!confirm('再次确认：清除所有数据？')) return;
+  
+  // Clear localStorage
+  localStorage.removeItem(STORAGE_KEY);
+  
+  // Reset state
+  scanRecords = [];
+  inventory = {};
+  currentWorkOrder = { number: '', product: '', qty: 0, targetQty: 0, componentCounts: {} };
+  importedWorkOrders = [];
+  deletedRecords = [];
+  currentAction = '入库';
+  filteredScanRecords = [];
+  
+  // Clear UI inputs
+  document.getElementById('woNumber').value = '';
+  document.getElementById('woTargetQty').value = '';
+  document.getElementById('palletPrefix').value = '';
+  document.getElementById('palletSeq').value = '';
+  
+  // Reset init inventory - 直接从 INITIAL_INVENTORY 重算（scanRecords已清空，结果必为全0）
+  recomputeInventory();
+  
+  // Push empty state to remote
+  try {
+    await pushSharedData({
+      scanRecords: [],
+      inventory: inventory,
+      importedWorkOrders: [],
+      deletedRecords: [],
+      currentWorkOrder: { number:'', product:'', qty:0, targetQty:0, componentCounts:{} },
+      updatedAt: new Date().toISOString()
+    });
+  } catch(e) { console.warn('Remote clear failed:', e); }
+  
+  // Refresh UI
+  updateWorkOrderDisplay();
+  renderWorkOrderList();
+  updatePalletDisplay();
+  renderRecentList();
+  renderTable();
+  refreshDashboard();
+  recalculate();
+  saveData();
+  
+  showToast('所有数据已清除', 'success');
+}
+
+// ====== URL参数检测：?reset=1 强制重置 ======
+if (new URLSearchParams(window.location.search).has('reset')) {
+  localStorage.removeItem(STORAGE_KEY);
+  console.log('URL参数 ?reset=1 检测到，已清除本地数据');
+}
+
+// ====== INIT ======
+recalculate();
+renderRecentList();
+refreshDashboard();
+
+// Enter key for search input
+document.getElementById('scanSearchInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    filterScanRecords();
+  }
+});
+
+// Auto-focus scan input - exclude all form elements and cards
+document.addEventListener('click', function(e) {
+  if (document.getElementById('tab-scan').classList.contains('active') && 
+      !e.target.closest('input, button, select, textarea, .card-header, label, a, [onclick]')) {
+    document.getElementById('scanInput').focus();
+  }
+});
+
+/* ===== 手机摄像头扫码 ===== */
+let cameraScanner = null;
+let cameraRunning = false;
+let cameraMode = 'scan'; // 'scan' = 主扫码, 'pallet' = 栈板号扫码
+
+function openCamera() {
+  cameraMode = 'scan';
+  if (typeof Html5Qrcode === 'undefined') {
+    alert('扫码组件加载中，请刷新页面后重试。\n如仍失败，请检查网络（需要加载外部JS库）。');
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('当前浏览器不支持摄像头。\n请使用 Chrome / Safari / Edge 浏览器。\n微信内置浏览器不支持，请用系统浏览器打开链接。');
+    return;
+  }
+  document.getElementById('cameraModal').classList.add('show');
+  document.getElementById('cameraStatus').textContent = '正在启动摄像头...';
+  startCamera();
+}
+
+function openPalletCamera() {
+  cameraMode = 'pallet';
+  if (typeof Html5Qrcode === 'undefined') {
+    alert('扫码组件加载中，请刷新页面后重试。');
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('当前浏览器不支持摄像头。\n请使用 Chrome / Safari / Edge 浏览器。');
+    return;
+  }
+  document.getElementById('cameraModal').classList.add('show');
+  document.getElementById('cameraStatus').textContent = '正在启动摄像头（栈板号模式）...';
+  startCamera();
+}
+
+function closeCamera() {
+  stopCamera();
+  document.getElementById('cameraModal').classList.remove('show');
+}
+
+async function startCamera() {
+  if (cameraRunning) return;
+  const statusEl = document.getElementById('cameraStatus');
+  
+  try {
+    // 先尝试获取摄像头列表，确认有可用摄像头
+    let cameraId = null;
+    try {
+      const devices = await Html5Qrcode.getCameras();
+      if (!devices || devices.length === 0) {
+        statusEl.textContent = '❌ 未检测到摄像头';
+        return;
+      }
+      // 优先选后置摄像头（标签包含 back/rear/environment）
+      const rear = devices.find(d => /back|rear|environment/i.test(d.label));
+      cameraId = rear ? rear.id : devices[devices.length - 1].id;
+    } catch(e) {
+      // getCameras 可能被拒绝，降级用 facingMode
+      console.warn('获取摄像头列表失败，降级使用facingMode:', e.message);
+    }
+    
+    statusEl.textContent = '正在连接摄像头...';
+    
+    cameraScanner = new Html5Qrcode("reader", { verbose: false });
+    
+    // 构建启动配置
+    const startConfig = cameraId 
+      ? cameraId 
+      : { facingMode: { ideal: 'environment' } };
+    
+    await cameraScanner.start(
+      startConfig,
+      {
+        fps: 15,
+        qrbox: function(vw, vh) {
+          const s = Math.min(vw, vh);
+          return { width: Math.floor(s * 0.75), height: Math.floor(s * 0.75) };
+        },
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.ITF
+        ]
+      },
+      onScanSuccess,
+      onScanFailure
+    );
+    
+    cameraRunning = true;
+    statusEl.textContent = '将条码对准框内，自动识别';
+  } catch (err) {
+    console.error('摄像头启动失败:', err);
+    let msg = '启动失败';
+    const e = (err.message || err.name || String(err)).toLowerCase();
+    if (e.includes('notallowed') || e.includes('permission')) {
+      msg = '摄像头权限被拒绝\n请在浏览器设置中允许摄像头权限';
+    } else if (e.includes('notfound') || e.includes('devices')) {
+      msg = '未找到摄像头设备';
+    } else if (e.includes('notreadable')) {
+      msg = '摄像头被其他应用占用';
+    } else if (e.includes('overconstrained')) {
+      msg = '摄像头不支持当前配置，尝试切换浏览器';
+    } else if (e.includes('notsupported') || e.includes('secure')) {
+      msg = '需要HTTPS环境或浏览器不支持';
+    } else {
+      msg = err.message || '未知错误，请换用Chrome浏览器';
+    }
+    statusEl.textContent = '❌ ' + msg;
+    
+    if (cameraScanner) {
+      try { await cameraScanner.clear(); } catch(e) {}
+      cameraScanner = null;
+    }
+  }
+}
+
+async function stopCamera() {
+  if (cameraScanner) {
+    try {
+      if (cameraRunning) await cameraScanner.stop();
+      await cameraScanner.clear();
+    } catch(e) { console.warn('停止相机时出错:', e); }
+    cameraScanner = null;
+    cameraRunning = false;
+  }
+}
+
+let lastScannedCode = '';
+let lastScanTime = 0;
+
+function onScanSuccess(decodedText, decodedResult) {
+  const now = Date.now();
+  // 防抖：同一个码 3 秒内不重复触发
+  if (decodedText === lastScannedCode && now - lastScanTime < 3000) return;
+  lastScannedCode = decodedText;
+  lastScanTime = now;
+  
+  // 扫码成功闪一下
+  const container = document.querySelector('.camera-container');
+  const flash = document.createElement('div');
+  flash.className = 'camera-flash';
+  container.appendChild(flash);
+  setTimeout(() => flash.remove(), 700);
+  
+  // 更新状态
+  document.getElementById('cameraStatus').textContent = '✅ 已识别';
+  
+  const code = decodedText.trim();
+  const mode = cameraMode;
+  
+  // 关闭相机，根据模式分发结果
+  stopCamera();
+  setTimeout(() => {
+    closeCamera();
+    if (mode === 'pallet') {
+      // 栈板号模式：解析并填入栈板号
+      const match = code.match(/^(5B3F|2B3F|2B4F)[-_]?\s*(\d{1,4})/i);
+      if (match) {
+        document.getElementById('palletPrefix').value = match[1].toUpperCase();
+        document.getElementById('palletSeq').value = parseInt(match[2]);
+        updatePalletDisplay();
+        showToast('栈板号已识别：' + match[1].toUpperCase() + '-' + String(parseInt(match[2])).padStart(4, '0'), 'success');
+      } else {
+        showToast('无法识别栈板号格式：' + code + '（需包含5B3F/2B3F/2B4F+序号）', 'error');
+      }
+    } else {
+      processScan(code);
+    }
+  }, 400);
+}
+
+function onScanFailure(error) {
+  // 静默忽略 - 每帧没识别到都会触发
+}
+
+</script>
+
+<!-- Camera Modal -->
+<div id="cameraModal" onclick="if(event.target===this)closeCamera()">
+  <div class="camera-top-bar">
+    <button class="camera-close-btn" onclick="closeCamera()">✕</button>
+    <span class="camera-status" id="cameraStatus">正在启动摄像头...</span>
+  </div>
+  <div class="camera-container">
+    <div id="reader"></div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>KHR Live Timing</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111;
+            color: #eee;
+            margin: 30px;
+        }
+
+        h1 {
+            margin-bottom: 5px;
+        }
+
+        #status {
+            color: #aaa;
+            margin-bottom: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 8px;
+            border-bottom: 1px solid #333;
+            text-align: left;
+        }
+
+        th {
+            color: #aaa;
+        }
+
+        .gain {
+            color: #7cff7c;
+        }
+
+        .loss {
+            color: #ff7777;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>KHR Live Timing</h1>
+
+<div id="status">Loading live timing...</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Pos</th>
+            <th>#</th>
+            <th>Driver</th>
+            <th>Team</th>
+            <th>Start</th>
+            <th>+/-</th>
+            <th>Laps</th>
+            <th>Gap</th>
+            <th>Interval</th>
+            <th>Last Lap</th>
+            <th>Best Lap</th>
+        </tr>
+    </thead>
+
+    <tbody id="timing"></tbody>
+</table>
+
+<script>
+
+const BIN_ID = "6ab9e050ffd5d16053363c53";
+
+const DATA_URL =
+    "https://api.jsonbin.io/v3/b/" +
+    BIN_ID +
+    "/latest";
+
+function formatTime(value) {
+
+    if (value === null ||
+        value === undefined ||
+        value === "") {
+        return "-";
+    }
+
+    if (typeof value === "number") {
+        return value.toFixed(3);
+    }
+
+    return value;
+}
+
+async function loadTiming() {
+
+    try {
+
+        const response = await fetch(
+            DATA_URL + "?t=" + Date.now(),
+            {
+                cache: "no-store"
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error(
+                "HTTP " + response.status
+            );
+        }
+
+        const json = await response.json();
+
+        // JSONBin wraps our data inside "record"
+        const data = json.record || json;
+
+        const status =
+            document.getElementById("status");
+
+        const table =
+            document.getElementById("timing");
+
+        table.innerHTML = "";
+
+        if (!data.drivers) {
+
+            status.textContent =
+                "Waiting for live race data...";
+
+            return;
+        }
+
+        const age =
+            Math.round(
+                (Date.now() -
+                new Date(data.timestamp).getTime())
+                / 1000
+            );
+
+        status.textContent =
+            "LIVE • " +
+            data.driverCount +
+            " drivers • data age " +
+            age +
+            "s";
+
+        data.drivers.forEach(function(driver) {
+
+            const row =
+                document.createElement("tr");
+
+            let gainClass = "";
+
+            if (driver.positionsGained > 0) {
+                gainClass = "gain";
+            }
+
+            if (driver.positionsGained < 0) {
+                gainClass = "loss";
+            }
+
+            row.innerHTML =
+                "<td>" + driver.position + "</td>" +
+                "<td>" + driver.number + "</td>" +
+                "<td>" + driver.name + "</td>" +
+                "<td>" + (driver.team || "-") + "</td>" +
+                "<td>" + driver.startPosition + "</td>" +
+                "<td class='" + gainClass + "'>" +
+                    driver.positionsGained +
+                "</td>" +
+                "<td>" +
+                    (driver.lapsCompleted ?? "-") +
+                "</td>" +
+                "<td>" + formatTime(driver.gap) + "</td>" +
+                "<td>" + formatTime(driver.interval) + "</td>" +
+                "<td>" + formatTime(driver.lastLap) + "</td>" +
+                "<td>" + formatTime(driver.bestLap) + "</td>";
+
+            table.appendChild(row);
+        });
+
+    }
+    catch (error) {
+
+        document.getElementById("status")
+            .textContent =
+            "Timing feed unavailable: " +
+            error.message;
+    }
+}
+
+// Initial load
+loadTiming();
+
+// Refresh every 15 seconds
+setInterval(loadTiming, 15000);
+
+</script>
+
+</body>
+</html>

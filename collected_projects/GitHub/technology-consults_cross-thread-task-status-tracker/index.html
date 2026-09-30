@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>All Threads Status Board</title>
+<link rel="stylesheet" href="/p/assets/board.css">
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+<div class="topbar"><div class="brand">Status Board</div><span class="ver">v1</span></div>
+<h1>All Threads Status Board</h1>
+<p>Every tracked item across all threads, grouped by state.</p>
+<p class="updated-line">Board data last updated: <span id="lastUpdated">…</span> — refreshed by Bandhu on every status change.</p>
+<p>Entries describe where each discussion lives; the board cannot deep-link into individual chat messages. Each card names its task-tracker thread — use chat search to jump to it.</p>
+</header>
+<div class="controls" id="filtersBox">
+<div class="frow fhead"><span class="ftitle">Filters</span><button id="fToggle" class="ftoggle" type="button">Hide filters</button></div>
+<div id="fBody">
+<div class="row"><input type="search" id="q" placeholder="Search title and details…"></div>
+<div class="row"><div class="chips" id="statusChips"></div></div>
+<div class="row">
+<select id="threadSel"><option value="">All threads</option></select>
+<select id="assignedSel"><option value="">Assigned: all</option><option value="BalRam">Assigned: BalRam</option><option value="Bandhu">Assigned: Bandhu</option><option value="Unassigned">Unassigned</option></select>
+<select id="sortSel">
+<option value="status">Sort: by Status</option>
+<option value="thread">Sort: by Thread</option>
+<option value="priority">Sort: by Priority</option>
+<option value="due">Sort: by Due date</option>
+<option value="updated">Sort: by Updated (newest)</option>
+</select>
+<span class="viewtoggle"><button id="vFlat" class="on">Flat</button><button id="vGroup">By thread</button></span>
+<label class="toggle"><input type="checkbox" id="showDates"> show created + updated dates</label>
+</div>
+<div class="row" id="nextDueRow" style="display:none">
+<label class="toggle">Next dues window:
+<select id="nDays"><option value="7">7 days</option><option value="14" selected>14 days</option><option value="30">30 days</option></select>
+</label>
+</div>
+</div>
+<div class="fsummary" id="fSummary" style="display:none"></div>
+</div>
+<div class="count-line" id="countLine"></div>
+<div class="duesoon" id="dueSoon" style="display:none"></div>
+<div id="board" class="flat"></div>
+<footer id="foot"></footer>
+</div>
+<script>
+"use strict";
+const STATUS = {
+  blocked:{label:"Blocked", cls:"b-blocked", rank:1},
+  blocked_discuss:{label:"Blocked — discussing", cls:"b-blocked_discuss", rank:2},
+  pending_review:{label:"Pending review", cls:"b-pending_review", rank:3},
+  pending_review_post_discussion:{label:"Review — clarifying", cls:"b-pending_review_post_discussion", rank:4},
+  not_approved:{label:"Not approved — rework", cls:"b-not_approved", rank:5},
+  todo:{label:"To-do", cls:"b-todo", rank:6},
+  in_progress:{label:"In progress", cls:"b-in_progress", rank:7},
+  blocked_completed:{label:"Finished — awaiting review", cls:"b-blocked_completed", rank:8},
+  blocked_approved:{label:"Blocked — then approved", cls:"b-blocked_approved", rank:9},
+  approved:{label:"Approved", cls:"b-approved", rank:10},
+  parked:{label:"Parked", cls:"b-parked", rank:11},
+  completed:{label:"Completed — wrapping up", cls:"b-completed", rank:12},
+  done:{label:"Done", cls:"b-done", rank:13},
+  rejected:{label:"Rejected", cls:"b-rejected", rank:14}
+};
+// Buttons each status shows. Clicking one copies a paste-message for the chat;
+// Bandhu applies the move on the board. Review verdicts carry the decision.
+const TRANSITIONS = {
+  todo:[
+    {label:"Approve", to:"approved"},
+    {label:"Start work", to:"in_progress"},
+    {label:"Park", to:"parked"},
+    {label:"Reject", to:"rejected"}
+  ],
+  approved:[
+    {label:"Start work", to:"in_progress"},
+    {label:"Block", to:"blocked"},
+    {label:"Park", to:"parked"},
+    {label:"Reject", to:"rejected"}
+  ],
+  in_progress:[
+    {label:"Mark finished", to:"blocked_completed"},
+    {label:"Block", to:"blocked"},
+    {label:"Park", to:"parked"}
+  ],
+  blocked:[
+    {label:"Discuss", to:"blocked_discuss"},
+    {label:"Mark cleared", to:"in_progress"},
+    {label:"Park", to:"parked"}
+  ],
+  blocked_discuss:[
+    {label:"Back to blocked", to:"blocked"},
+    {label:"Resume work", to:"in_progress"},
+    {label:"Park", to:"parked"}
+  ],
+  pending_review:[
+    {label:"Approve", to:"done", review:"approved"},
+    {label:"Reject", to:"done", review:"rejected"},
+    {label:"Ask for clarification", to:"pending_review_post_discussion"}
+  ],
+  pending_review_post_discussion:[
+    {label:"Approve", to:"done", review:"approved"},
+    {label:"Reject", to:"done", review:"rejected"},
+    {label:"Send clarification", to:"pending_review"}
+  ],
+  not_approved:[
+    {label:"Start rework", to:"in_progress"},
+    {label:"Park", to:"parked"},
+    {label:"Reject", to:"rejected"}
+  ],
+  parked:[
+    {label:"Unpark", to:"todo"},
+    {label:"Reject", to:"rejected"}
+  ]
+};
+const SMART = [
+  {key:"overdue", label:"Overdue"},
+  {key:"next_dues", label:"Next dues"}
+];
+const PRI_NAMES = ["Low","Medium","High","Higher","Highest"];
+const TERMINAL = new Set(["done","rejected"]);
+const state = {q:"", status:"", thread:"", assigned:"", sort:"status", view:"flat", nDays:14, showDates:false, showAllChips:false, collapsed:false, data:null, byId:{}};
+const $ = id => document.getElementById(id);
+// Filters persist across refresh in this browser (per-device, nothing leaves the device).
+const FKEY="boardFilters.v1";
+function saveFilters(){
+  try{
+    localStorage.setItem(FKEY, JSON.stringify({
+      q:state.q, status:state.status, thread:state.thread, assigned:state.assigned,
+      sort:state.sort, view:state.view, nDays:state.nDays, showDates:state.showDates,
+      collapsed:state.collapsed
+    }));
+  }catch(e){}
+}
+function loadFilters(){
+  try{
+    const f=JSON.parse(localStorage.getItem(FKEY)||"null");
+    if(!f||typeof f!=="object") return null;
+    const out={};
+    if(typeof f.q==="string") out.q=f.q;
+    if(typeof f.status==="string") out.status=f.status;
+    if(typeof f.thread==="string") out.thread=f.thread;
+    if(typeof f.assigned==="string") out.assigned=f.assigned;
+    if(typeof f.sort==="string") out.sort=f.sort;
+    if(f.view==="flat"||f.view==="grouped") out.view=f.view;
+    if(f.nDays===7||f.nDays===14||f.nDays===30) out.nDays=f.nDays;
+    if(typeof f.showDates==="boolean") out.showDates=f.showDates;
+    if(typeof f.collapsed==="boolean") out.collapsed=f.collapsed;
+    return out;
+  }catch(e){ return null; }
+}
+// One-line text of the active filters, shown when the filter panel is collapsed.
+function filterSummary(){
+  const parts=[];
+  const sm = state.status==="" ? "All statuses"
+    : state.status==="overdue" ? "Overdue"
+    : state.status==="next_dues" ? "Next dues"
+    : ((STATUS[state.status]||{}).label||state.status);
+  parts.push("Status: "+sm);
+  const th = state.thread==="" ? "All threads"
+    : ((state.data&&state.data.threads[state.thread]&&state.data.threads[state.thread].name)||state.thread);
+  parts.push("Thread: "+th);
+  parts.push("Assigned: "+(state.assigned===""?"all":state.assigned));
+  const sortNames={status:"by Status",thread:"by Thread",priority:"by Priority",due:"by Due date",updated:"by Updated"};
+  parts.push("Sort: "+(sortNames[state.sort]||state.sort));
+  parts.push("View: "+(state.view==="grouped"?"By thread":"Flat"));
+  if(state.q) parts.push('Search: "'+state.q+'"');
+  if(state.showDates) parts.push("Dates shown");
+  return parts.join("  ·  ");
+}
+function applyCollapse(){
+  const c=!!state.collapsed;
+  $("fBody").style.display=c?"none":"";
+  $("fSummary").style.display=c?"":"none";
+  $("fToggle").textContent=c?"Show filters":"Hide filters";
+  if(c) $("fSummary").textContent=filterSummary();
+}
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+// Weblinks inside already-escaped text become real links with shortened display
+// text, so long URLs can't stretch the card grid on narrow screens.
+const linkify = s => String(s).replace(/https?:\/\/[^\s<]+/g, m => {
+  let trail = "";
+  const tm = m.match(/[.,;:!?)\]]+$/);
+  if(tm){ trail = tm[0]; m = m.slice(0, -trail.length); }
+  const raw = m.replace(/&(quot|#39|lt|gt);/g, (e,n)=>({quot:'"',"#39":"'","lt":"<","gt":">"}[n])).replace(/&amp;/g, "&");
+  let label = m.replace(/^https?:\/\//, "");
+  if(label.length > 38) label = label.slice(0, 36) + "…";
+  return '<a href="' + esc(raw) + '" target="_blank" rel="noopener">' + label + "</a>" + trail;
+});
+const daysBetween = (a,b) => Math.round((new Date(b+"T00:00:00") - new Date(a+"T00:00:00"))/864e5);
+
+function compute(byId, today){
+  for(const t of Object.values(byId)){
+    t.blocking = Object.values(byId).filter(o=>o!==(t) && (o.blockedBy||[]).some(b=>b.id===t.id)).map(o=>o.id);
+  }
+  for(const t of Object.values(byId)){
+    t.isOverdue = !!(t.due && daysBetween(today,t.due)<0 && !TERMINAL.has(t.status));
+    // priority
+    let level=0; const rs=[];
+    const deps=(t.blocking||[]).map(id=>byId[id]).filter(d=>d&&!TERMINAL.has(d.status));
+    if(deps.length){level=Math.max(level,1);rs.push(deps.length+" dependent task"+(deps.length>1?"s":""));}
+    const ym=today.slice(0,7);
+    if(deps.some(d=>d.due&&d.due.slice(0,7)===ym)){level=Math.max(level,2);rs.push("dependent due this month");}
+    if(t.due){
+      const d=daysBetween(today,t.due);
+      if(d<0){level=4;rs.push("overdue");}
+      else if(d<=2){level=4;rs.push(d===0?"due today":"due tomorrow");}
+      else if(d<=7){level=Math.max(level,3);rs.push("due within 7 days");}
+      else if(d<=14){level=Math.max(level,2);rs.push("due within 14 days");}
+    }
+    if(deps.some(d=>d.due&&daysBetween(today,d.due)>=0&&daysBetween(today,d.due)<=7)){level=4;rs.push("dependent due this week");}
+    t.pri={level, reason:rs.join("; ")||"no due date or dependents"};
+    t.recentlyUpdated = daysBetween(t.updated,today)>=0 && daysBetween(t.updated,today)<=7;
+  }
+}
+function isNextDue(t, today, nDays){
+  if(TERMINAL.has(t.status)) return false;
+  if(t.due){const d=daysBetween(today,t.due);return d>=0&&d<=nDays;}
+  if(t.status==="pending_review"||t.status==="pending_review_post_discussion") return true;
+  if(t.status==="todo"&&!(t.blockedBy&&t.blockedBy.length)) return true;
+  return false;
+}
+function matches(t, today){
+  const q=state.q.trim().toLowerCase();
+  if(q && !(t.title+" "+t.detail).toLowerCase().includes(q)) return false;
+  if(state.thread && t.thread!==state.thread) return false;
+  if(state.assigned==="Unassigned" && t.assigned_to) return false;
+  else if(state.assigned && state.assigned!=="Unassigned" && t.assigned_to!==state.assigned) return false;
+  if(state.status==="overdue" && !t.isOverdue) return false;
+  else if(state.status==="next_dues" && !isNextDue(t,today,state.nDays)) return false;
+  else if(state.status && !["overdue","next_dues"].includes(state.status) && t.status!==state.status){
+    if(!(state.status==="" )) return false;
+  }
+  return true;
+}
+function sortTasks(list, today){
+  const by={};
+  const key={
+    status:t=>((t.isOverdue?0:(STATUS[t.status]||{rank:5}).rank)*100000 - t.pri.level),
+    thread:t=>(t.thread+t.title),
+    priority:t=>{const d=t.due?+t.due.replace(/-/g,""):99999999;return -t.pri.level*1e10+d;},
+    due:t=>(t.due||"9999-99-99"),
+    updated:t=>t.updated
+  }[state.sort];
+  return list.slice().sort((a,b)=>{
+    const ka=key(a),kb=key(b);
+    if(ka<kb)return state.sort==="updated"?1:-1;
+    if(ka>kb)return state.sort==="updated"?-1:1;
+    return a.title<b.title?-1:1;
+  });
+}
+function copyText(txt, noteEl){
+  const done=()=>{if(noteEl){noteEl.style.display="block";setTimeout(()=>noteEl.style.display="none",2500);}};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(done).catch(()=>fallback());}else fallback();
+  function fallback(){const ta=document.createElement("textarea");ta.value=txt;document.body.appendChild(ta);ta.select();try{document.execCommand("copy");}catch(e){}document.body.removeChild(ta);done();}
+}
+function optionButtons(t, threads){
+  if(!t.options||!t.options.length) return "";
+  const thName=((threads||{})[t.thread]||{}).name||t.thread;
+  let h='<div class="opts"><div class="h">Pick an option — copies a reply for the thread</div>';
+  t.options.forEach((o,i)=>{
+    h+='<button class="optbtn" data-task="'+esc(t.id)+'" data-kind="pick" data-i="'+i+'">'+(i+1)+'. '+esc(o)+'</button>';
+  });
+  h+='<button class="optbtn action" data-task="'+esc(t.id)+'" data-kind="more">Recommend more to me</button>';
+  h+='<button class="optbtn action" data-task="'+esc(t.id)+'" data-kind="propose" data-thread="'+esc(thName)+'">Propose &amp; recommend more to me</button>';
+  h+='<div class="composer" id="cmp-'+esc(t.id)+'" style="display:none">'
+    +'<textarea id="txt-'+esc(t.id)+'" rows="3" placeholder="Type your proposal here..."></textarea>'
+    +'<button class="optbtn action" data-task="'+esc(t.id)+'" data-kind="propose-go" data-thread="'+esc(thName)+'">Copy message for the thread</button>'
+    +'<button class="optbtn" data-task="'+esc(t.id)+'" data-kind="propose-cancel">Cancel</button>'
+    +'<div class="hint" id="hnt-'+esc(t.id)+'" style="display:none"></div>'
+    +'</div>';
+  h+='<div class="copied">Copied — paste it in the thread and Bandhu will act on it.</div></div>';
+  return h;
+}
+function depSection(t, byId){
+  let h="";
+  const bb=t.blockedBy||[];
+  if(bb.length){
+    h+='<div class="dep"><div class="h">Blocked by</div>';
+    for(const b of bb){
+      if(b.kind==="task"&&b.id&&byId[b.id]){
+        h+='<a class="tid amber" style="margin-right:8px" href="#t-'+esc(b.id)+'">'+esc(b.id)+'</a>';
+      }else{
+        h+='<span class="ext">external: '+esc(b.note||"external factor")+'</span> ';
+      }
+    }
+    h+='</div>';
+  }
+  if(t.blocking&&t.blocking.length){
+    h+='<div class="dep"><div class="h">Blocking</div>';
+    for(const id of t.blocking){h+='<a class="tid amber" style="margin-right:8px" href="#t-'+esc(id)+'">'+esc(id)+'</a>';}
+    h+='</div>';
+  }
+  return h;
+}
+function transButtons(t){
+  const trs=TRANSITIONS[t.status];
+  if(!trs||!trs.length) return "";
+  let h='<div class="trans"><div class="h">Change status — copies a message for the chat</div><div class="tbtns">';
+  trs.forEach((b,i)=>{
+    h+='<button class="tbtn" data-task="'+esc(t.id)+'" data-i="'+i+'">'+esc(b.label)+'</button>';
+  });
+  h+='</div><div class="copied">Copied — paste it in the thread and Bandhu will apply it.</div></div>';
+  return h;
+}
+function cardHTML(t, threads, today){
+  const st=STATUS[t.status]||{label:t.status||"unknown", cls:"b-todo"};
+  const th=threads[t.thread];
+  let badges='<span class="badge '+st.cls+'">'+esc(st.label)+'</span>';
+  if(t.isOverdue) badges+='<span class="badge b-overdue">OVERDUE</span>';
+  badges+='<span class="pri pri-'+t.pri.level+'" title="'+esc(t.pri.reason)+'">'+PRI_NAMES[t.pri.level]+' priority</span>';
+  badges+='<span class="threadtag">'+esc(th.name)+'</span>';
+  if(t.recentlyUpdated) badges+='<span title="Updated in the last 7 days"><span class="upddot"></span></span>';
+  const fdate=d=>d?esc(d):"unrecorded";
+  let dates='<div class="meta">Assigned to <b>'+esc(t.assigned_to||"—")+'</b></div>';
+  if(t.due) dates+='<div class="meta">Due <b>'+esc(t.due)+'</b></div>';
+  else dates+='<div class="meta no-due">No due date</div>';
+  if(state.showDates) dates+='<div class="meta">Created '+fdate(t.created)+' · Updated '+fdate(t.updated)+'</div>';
+  return '<article class="card" id="t-'+esc(t.id)+'">'
+    +'<h3>'+esc(t.title)+'<span class="taskid"><a href="#t-'+esc(t.id)+'" title="Link to this card">'+esc(t.id)+'</a></span></h3>'
+    +'<div class="badges">'+badges+'</div>'
+    +dates
+    +'<div class="detail">'+linkify(esc(t.detail))+'</div>'
+    +'<div class="where">'+esc(t.where)+' · Tracker: '+esc(th.tracker)+'</div>'
+    +depSection(t, state.byId)
+    +transButtons(t)
+    +optionButtons(t, threads)
+    +'</article>';
+}
+function renderChips(today){
+  const base=state.data.tasks.filter(t=>{
+    const q=state.q.trim().toLowerCase();
+    if(q && !(t.title+" "+t.detail).toLowerCase().includes(q)) return false;
+    if(state.thread && t.thread!==state.thread) return false;
+    if(state.assigned==="Unassigned" && t.assigned_to) return false;
+    else if(state.assigned && state.assigned!=="Unassigned" && t.assigned_to!==state.assigned) return false;
+    return true;
+  });
+  const counts={};
+  counts[""]=base.length;
+  // chips are generated from the statuses actually present in the data;
+  // the predefined STATUS list is preserved as the source of labels/colors/ranks.
+  const present=[...new Set(base.map(t=>t.status))];
+  present.sort((a,b)=>((STATUS[a]||{rank:99}).rank-(STATUS[b]||{rank:99}).rank));
+  for(const k of present) counts[k]=base.filter(t=>t.status===k).length;
+  counts["overdue"]=base.filter(t=>t.isOverdue).length;
+  counts["next_dues"]=base.filter(t=>isNextDue(t,today,state.nDays)).length;
+  let h='<button class="chip'+(state.status===""?" active":"")+'" data-s="">All statuses <span class="n">'+counts[""]+'</span></button>';
+  const chipArr=[h];
+  for(const k of present){
+    const meta=STATUS[k]||{label:String(k), cls:"b-todo"};
+    chipArr.push('<button class="chip'+(state.status===k?" active":"")+'" data-s="'+esc(k)+'">'+esc(meta.label)+' <span class="n">'+counts[k]+'</span></button>');
+  }
+  for(const s of SMART) chipArr.push('<button class="chip'+(state.status===s.key?" active":"")+'" data-s="'+s.key+'">'+s.label+' <span class="n">'+counts[s.key]+'</span></button>');
+  // max 10 visible chips; the rest hide behind More
+  const MAXC=10, extra=chipArr.length-MAXC;
+  if(extra>0&&!state.showAllChips) h=chipArr.slice(0,MAXC).join("")+'<button class="chip more" data-s="__more">More ('+extra+')</button>';
+  else if(extra>0) h=chipArr.join("")+'<button class="chip more" data-s="__less">Less</button>';
+  else h=chipArr.join("");
+  $("statusChips").innerHTML=h;
+  document.querySelectorAll("#statusChips .chip").forEach(c=>c.addEventListener("click",()=>{
+    if(c.dataset.s==="__more") state.showAllChips=true;
+    else if(c.dataset.s==="__less") state.showAllChips=false;
+    else state.status=c.dataset.s;
+    render();
+    saveFilters();
+  }));
+}
+function render(){
+  const data=state.data, today=data.meta.asOf||data.meta.lastUpdated;
+  renderChips(today);
+  $("nextDueRow").style.display = state.status==="next_dues" ? "" : "none";
+  const list=sortTasks(data.tasks.filter(t=>matches(t,today)), today);
+  $("countLine").textContent=list.length+" of "+data.tasks.length+" items";
+  const board=$("board");
+  board.className=state.view==="flat"?"flat":"";
+  // blocked-family tasks sit in a collapsed section unless explicitly filtered for
+  const COLLAPSED=new Set(["blocked","blocked_discuss"]);
+  const showBlockedInline = COLLAPSED.has(state.status);
+  const blocked = showBlockedInline ? [] : list.filter(t=>COLLAPSED.has(t.status));
+  const rest = showBlockedInline ? list : list.filter(t=>!COLLAPSED.has(t.status));
+  const blockedSec=()=> blocked.length
+    ? '<details class="blocked-sec"><summary>Blocked ('+blocked.length+') — tap to expand</summary><div class="bcards">'
+      + blocked.map(t=>cardHTML(t,data.threads,today)).join("") + "</div></details>"
+    : "";
+  if(!list.length){
+    board.innerHTML='<div class="empty">No items match the current filters.</div>';
+  }else if(state.view==="grouped"){
+    let h="";
+    for(const tk of Object.keys(data.threads)){
+      const items=rest.filter(t=>t.thread===tk);
+      if(!items.length) continue;
+      h+='<section class="thread-group"><h2>'+esc(data.threads[tk].name)+' <span class="tracker">Tracker: '+esc(data.threads[tk].tracker)+' · '+items.length+' items</span></h2><div class="cards">';
+      for(const t of items) h+=cardHTML(t,data.threads,today);
+      h+='</div></section>';
+    }
+    board.innerHTML=h+blockedSec();
+  }else{
+    board.innerHTML=rest.map(t=>cardHTML(t,data.threads,today)).join("")+blockedSec();
+  }
+  // due soon strip
+  const soon=data.tasks.filter(t=>t.due&&!TERMINAL.has(t.status)&&daysBetween(today,t.due)>=0&&daysBetween(today,t.due)<=14)
+    .sort((a,b)=>a.due<b.due?-1:1);
+  const ds=$("dueSoon");
+  if(soon.length){
+    ds.style.display="";
+    ds.innerHTML="<b>Due soon (14 days):</b>"+soon.map(t=>'<a href="#t-'+esc(t.id)+'">'+esc(t.title)+" · "+esc(t.due)+"</a>").join("");
+  }else ds.style.display="none";
+  $("lastUpdated").textContent=data.meta.lastUpdated;
+  if(state.collapsed) $("fSummary").textContent=filterSummary();
+  $("foot").innerHTML="Threads covered: "+Object.values(data.threads).map(t=>esc(t.name)).join(", ")
+    +". Other threads appear here once they have tracked items.<br>Task IDs are stable (thread.slug.created-date) and never change; priority is computed, not stored."
+    +" Priorities, overdue flags, and next-dues are computed as of "+esc(today)+"; task data last changed "+esc(data.meta.lastUpdated)+"."
+    +'<br><a href="artifacts/">Artifact index</a> — one front door to every artifact, grouped by thread.';
+  // option button wiring
+  document.querySelectorAll(".optbtn").forEach(b=>b.addEventListener("click",()=>{
+    const t=state.byId[b.dataset.task]; if(!t) return;
+    const note=b.closest(".opts").querySelector(".copied");
+    if(b.dataset.kind==="pick"){
+      const i=+b.dataset.i;
+      copyText("My pick for "+t.title+" ("+t.id+"): #"+(i+1)+" — "+t.options[i]+". Please lock it in and refresh the board.", note);
+    }else if(b.dataset.kind==="more"){
+      copyText("For task "+t.id+" ("+t.title+"): recommend more options. Keep the existing "+t.options.length+", add yours — no discards.", note);
+    }else if(b.dataset.kind==="propose"){
+      document.querySelectorAll(".composer").forEach(c=>c.style.display="none");
+      const cmp=document.getElementById("cmp-"+t.id);
+      if(cmp){cmp.style.display="block";const ta=document.getElementById("txt-"+t.id);if(ta)ta.focus();}
+    }else if(b.dataset.kind==="propose-cancel"){
+      const cmp=document.getElementById("cmp-"+t.id);if(cmp)cmp.style.display="none";
+    }else if(b.dataset.kind==="propose-go"){
+      const ta=document.getElementById("txt-"+t.id);
+      const proposal=ta?ta.value.trim():"";
+      if(!proposal){if(ta)ta.focus();return;}
+      copyText("[PROPOSE]\nTask: "+t.id+" ("+t.title+")\nMy proposal: "+proposal+"\nInstruction: add my proposal to the options, keep the existing options and your earlier suggestions, recommend more fresh options, update the task and the status board.\n[/PROPOSE]",note);
+      const hnt=document.getElementById("hnt-"+t.id);
+      if(hnt){hnt.className="hint ok";hnt.style.display="block";hnt.textContent="Copied — paste it in the "+(b.dataset.thread||"project")+" thread.";}
+    }
+  }));
+  // transition button wiring: builds the paste-message for the chat
+  document.querySelectorAll(".tbtn").forEach(b=>b.addEventListener("click",()=>{
+    const t=state.byId[b.dataset.task]; if(!t) return;
+    const tr=(TRANSITIONS[t.status]||[])[+b.dataset.i]; if(!tr) return;
+    const note=b.closest(".trans").querySelector(".copied");
+    let msg;
+    if(tr.review){
+      msg="[REVIEW]\nTask: "+t.id+" ("+t.title+")\nVerdict: "+tr.review+"\n[/REVIEW]";
+    }else{
+      const from=(STATUS[t.status]||{}).label||t.status;
+      const to=(STATUS[tr.to]||{}).label||tr.to;
+      msg="[TRANSITION]\nTask: "+t.id+" ("+t.title+")\nFrom: "+t.status+"\nTo: "+tr.to+"\n("+from+" → "+to+")\n[/TRANSITION]";
+    }
+    copyText(msg, note);
+  }));
+  // Task-id links always land on the target card: if the status filter hides
+  // it, the filter resets to All first (the thread filter is never touched —
+  // dependencies are expected to be same-thread). The reset is saved so it
+  // survives refresh. A card sitting inside the collapsed blocked section is
+  // opened so the jump can reach it. preventDefault + manual scroll keeps the
+  // jump working even when the click triggers a re-render.
+  document.querySelectorAll('a[href^="#t-"]').forEach(a=>a.addEventListener("click",(e)=>{
+    e.preventDefault();
+    const id=a.getAttribute("href").slice(1);
+    const t=state.byId[id.slice(2)];
+    if(t && state.status!=="" && !document.getElementById(id)){
+      state.status=""; render(); saveFilters();
+    }
+    const el=document.getElementById(id);
+    if(el){
+      const det=el.closest("details.blocked-sec");
+      if(det && !det.open) det.open=true;
+      el.scrollIntoView();
+      try{history.replaceState(null,"","#"+id);}catch(err){}
+      el.classList.add("flash");setTimeout(()=>el.classList.remove("flash"),1600);
+    }
+  }));
+}
+function init(){
+  const saved=loadFilters();
+  if(saved) Object.assign(state, saved);
+  $("fToggle").addEventListener("click",()=>{state.collapsed=!state.collapsed;applyCollapse();saveFilters();});
+  $("q").addEventListener("input",e=>{state.q=e.target.value;render();saveFilters();});
+  $("sortSel").addEventListener("change",e=>{state.sort=e.target.value;render();saveFilters();});
+  $("threadSel").addEventListener("change",e=>{state.thread=e.target.value;render();saveFilters();});
+  $("assignedSel").addEventListener("change",e=>{state.assigned=e.target.value;render();saveFilters();});
+  $("nDays").addEventListener("change",e=>{state.nDays=+e.target.value;render();saveFilters();});
+  $("showDates").addEventListener("change",e=>{state.showDates=e.target.checked;render();saveFilters();});
+  $("vFlat").addEventListener("click",()=>{state.view="flat";$("vFlat").classList.add("on");$("vGroup").classList.remove("on");render();saveFilters();});
+  $("vGroup").addEventListener("click",()=>{state.view="grouped";$("vGroup").classList.add("on");$("vFlat").classList.remove("on");render();saveFilters();});
+  fetch("tasks.json").then(r=>{if(!r.ok)throw new Error("HTTP "+r.status);return r.json();}).then(data=>{
+    state.data=data;
+    state.byId={}; data.tasks.forEach(t=>state.byId[t.id]=t);
+    compute(state.byId, data.meta.asOf||data.meta.lastUpdated);
+    const ts=$("threadSel");
+    for(const k of Object.keys(data.threads)){const o=document.createElement("option");o.value=k;o.textContent=data.threads[k].name;ts.appendChild(o);}
+    // restore saved filter values onto the controls (validate against live data)
+    if(saved){
+      if(!(state.status in STATUS)&&state.status!=="overdue"&&state.status!=="next_dues"&&state.status!=="") state.status="";
+      if(state.thread&&!data.threads[state.thread]) state.thread="";
+      if(!["","BalRam","Bandhu","Unassigned"].includes(state.assigned)) state.assigned="";
+      if(!["status","thread","priority","due","updated"].includes(state.sort)) state.sort="status";
+      $("q").value=state.q||"";
+      ts.value=state.thread||"";
+      $("assignedSel").value=state.assigned||"";
+      $("sortSel").value=state.sort;
+      $("nDays").value=String(state.nDays);
+      $("showDates").checked=!!state.showDates;
+      if(state.view==="grouped"){$("vGroup").classList.add("on");$("vFlat").classList.remove("on");}
+    }
+    applyCollapse();
+    render();
+  }).catch(err=>{
+    $("board").innerHTML='<div class="empty">Could not load tasks.json: '+esc(err.message)+'</div>';
+  });
+}
+document.addEventListener("DOMContentLoaded", init);
+</script>
+</body>
+</html>

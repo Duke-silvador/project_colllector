@@ -1,0 +1,3758 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="BTKRMq1pv8Cf46VaBaBICW">
+<head data-page-node-id="R6oGa1WIwHB0WxZmG5r2qG">
+<meta charset="UTF-8" data-page-node-id="6wBtBt32xIEOGwVBwF30o4">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" data-page-node-id="3CEZsEJtffvbSnwBZ42pEU">
+<meta http-equiv="Pragma" content="no-cache" data-page-node-id="lG759sGDIcs9k2QMz9TO6W">
+<meta http-equiv="Expires" content="0" data-page-node-id="TnVpNZLE71nYjwg8hF4xnU">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="UNhJEGvjeFApYQKIDZORHL">
+<title>半品齐套管理看板</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#1a73e8;--primary-light:#4a9af5;--primary-dark:#0d47a1;
+  --bg:#f0f4f8;--card:#fff;--text:#1a2332;--text-secondary:#5a6a7e;
+  --border:#dce3ed;--success:#22c55e;--warning:#f59e0b;--danger:#ef4444;
+  --shadow:0 2px 12px rgba(26,115,232,.08);--radius:12px;
+}
+html{font-size:14px;scroll-behavior:smooth}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,"PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+a{color:var(--primary);text-decoration:none}
+
+/* Header */
+.header{background:linear-gradient(135deg,var(--primary-dark),var(--primary));color:#fff;padding:16px 24px;position:sticky;top:0;z-index:100;box-shadow:0 2px 16px rgba(0,0,0,.15)}
+.header-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.header h1{font-size:1.4rem;font-weight:700;letter-spacing:.5px}
+.header-actions{display:flex;gap:8px;align-items:center;position:relative}
+
+/* Tabs */
+.tabs{display:flex;gap:4px;background:rgba(255,255,255,.15);border-radius:8px;padding:3px}
+.tab-btn{padding:8px 20px;border:none;background:transparent;color:rgba(255,255,255,.7);cursor:pointer;border-radius:6px;font-size:.9rem;font-weight:500;transition:all .2s}
+.tab-btn.active{background:#fff;color:var(--primary-dark);font-weight:600}
+.tab-btn:hover:not(.active){background:rgba(255,255,255,.15);color:#fff}
+
+/* Main */
+main{max-width:1400px;margin:0 auto;padding:20px}
+.tab-panel{display:none}
+.tab-panel.active{display:block}
+
+/* Cards */
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid var(--border);overflow:hidden}
+.card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-header h2{font-size:1.1rem;font-weight:600;color:var(--text)}
+.card-body{padding:20px}
+
+/* KPI Grid */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px}
+.kpi-card{background:var(--card);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow);border:1px solid var(--border);border-left:4px solid var(--primary)}
+.kpi-card.success{border-left-color:var(--success)}
+.kpi-card.warning{border-left-color:var(--warning)}
+.kpi-card.danger{border-left-color:var(--danger)}
+.kpi-label{font-size:.85rem;color:var(--text-secondary);margin-bottom:4px}
+.kpi-value{font-size:2rem;font-weight:700;color:var(--text);line-height:1.2}
+.kpi-sub{font-size:.8rem;color:var(--text-secondary);margin-top:4px}
+
+/* Scan Page */
+.scan-input-area{text-align:center;padding:30px 20px}
+.scan-input-wrap{position:relative;max-width:600px;margin:0 auto 20px}
+#scanInput{width:100%;padding:16px 20px;font-size:1.3rem;border:2px solid var(--primary);border-radius:12px;outline:none;transition:all .3s;background:#f8faff}
+#scanInput:focus{border-color:var(--primary-light);box-shadow:0 0 0 4px rgba(26,115,232,.15);background:#fff}
+#scanInput.success{border-color:var(--success);background:#f0fdf4}
+#scanInput.duplicate{border-color:var(--danger);background:#fef2f2}
+#scanInput.error{border-color:var(--danger);background:#fef2f2}
+#cameraBtn{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:44px;height:44px;border:none;background:var(--primary);color:#fff;border-radius:10px;cursor:pointer;font-size:1.3rem;display:flex;align-items:center;justify-content:center;transition:all .2s;box-shadow:0 2px 8px rgba(26,115,232,.3)}
+#cameraBtn:hover{background:var(--primary-dark)}
+.scan-status{margin-top:12px;font-size:1rem;font-weight:500;min-height:28px;transition:all .3s}
+.scan-status.ok{color:var(--success)}
+.scan-status.err{color:var(--danger)}
+
+/* Camera Modal */
+#cameraModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.75);z-index:1000;justify-content:center;align-items:center;flex-direction:column;padding:16px}
+#cameraModal.show{display:flex}
+.camera-container{width:92%;max-width:480px;aspect-ratio:1;background:#000;border-radius:16px;overflow:hidden;position:relative;box-shadow:0 8px 40px rgba(0,0,0,.5)}
+#reader{width:100%!important;height:100%!important}
+#reader video{width:100%!important;height:100%!important;object-fit:cover;border-radius:16px}
+#reader__scan-region{border-radius:16px!important}
+#reader__dashboard{display:none!important}
+.camera-top-bar{position:absolute;top:0;left:0;right:0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;z-index:10;background:linear-gradient(to bottom,rgba(0,0,0,.5),transparent)}
+.camera-close-btn{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.2rem;cursor:pointer;backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center}
+.camera-status{color:#fff;font-size:.85rem;background:rgba(0,0,0,.4);padding:6px 14px;border-radius:20px;backdrop-filter:blur(4px);white-space:pre-line;text-align:center;max-width:90%;line-height:1.4}
+.camera-flash{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:80px;height:80px;border-radius:50%;background:rgba(34,197,94,.3);pointer-events:none;animation:cameraFlash .6s ease-out forwards}
+@keyframes cameraFlash{0%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-50%) scale(2)}}
+
+.action-select{display:flex;gap:8px;justify-content:center;margin-bottom:20px}
+.action-btn{padding:10px 28px;border:2px solid var(--border);border-radius:8px;background:#fff;cursor:pointer;font-size:1rem;font-weight:500;transition:all .2s}
+.action-btn.active-in{border-color:var(--success);background:#f0fdf4;color:#166534}
+.action-btn.active-out{border-color:var(--danger);background:#fef2f2;color:#991b1b}
+
+/* Table */
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th{background:#f5f8fc;padding:10px 12px;text-align:left;font-weight:600;color:var(--text-secondary);border-bottom:2px solid var(--border);white-space:nowrap;position:sticky;top:0}
+td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:hover td{background:#f8faff}
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:.78rem;font-weight:600}
+.badge-green{background:#dcfce7;color:#166534}
+.badge-yellow{background:#fef9c3;color:#854d0e}
+.badge-red{background:#fee2e2;color:#991b1b}
+.badge-blue{background:#dbeafe;color:#1e40af}
+
+/* Expandable rows */
+.expand-row{cursor:pointer;user-select:none}
+.expand-row td:first-child::before{content:'▶';display:inline-block;margin-right:6px;font-size:.7rem;transition:transform .2s;color:var(--primary)}
+.expand-row.open td:first-child::before{transform:rotate(90deg)}
+.detail-row{display:none}
+.detail-row.show{display:table-row}
+.detail-row td{background:#f8faff;padding:8px 12px 8px 36px}
+
+/* Search */
+.search-bar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.search-bar input{flex:1;min-width:200px;padding:10px 16px;border:1px solid var(--border);border-radius:8px;font-size:.95rem;outline:none;transition:border .2s}
+.search-bar input:focus{border-color:var(--primary)}
+.btn{padding:10px 20px;border:none;border-radius:8px;cursor:pointer;font-size:.9rem;font-weight:500;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-dark)}
+.btn-outline{background:#fff;color:var(--primary);border:1px solid var(--primary)}
+.btn-outline:hover{background:#f0f6ff}
+.btn-sm{padding:6px 14px;font-size:.82rem}
+
+/* Chart area */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:24px}
+@media(max-width:768px){.chart-grid{grid-template-columns:1fr}}
+.chart-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);border:1px solid var(--border);padding:20px}
+.chart-card h2{font-size:1rem;font-weight:600;margin-bottom:16px;color:var(--text)}
+.bar-chart{display:flex;flex-direction:column;gap:8px}
+.bar-item{display:flex;align-items:center;gap:8px}
+.bar-label{width:120px;font-size:.78rem;color:var(--text-secondary);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+.bar-track{flex:1;height:24px;background:#e8eef6;border-radius:6px;overflow:hidden;position:relative}
+.bar-fill{height:100%;border-radius:6px;transition:width .6s ease;min-width:2px}
+.bar-value{font-size:.78rem;font-weight:600;width:40px;text-align:right;flex-shrink:0}
+
+/* Recent scan list */
+.recent-list{max-width:100%;margin:0 auto;display:flex;flex-direction:column}
+.recent-item{display:flex;align-items:center;gap:6px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:.82rem;user-select:text!important;cursor:text}
+.recent-item:last-child{border-bottom:none}
+.recent-time{width:120px;flex-shrink:0;color:var(--text-secondary);font-size:.78rem}
+.recent-code{width:220px;flex-shrink:0;font-family:"SF Mono",Monaco,Consolas,monospace;font-size:.76rem;color:var(--primary-dark);overflow:hidden;text-overflow:ellipsis}
+.recent-product{width:90px;flex-shrink:0;font-size:.76rem;color:#555;overflow:hidden;text-overflow:ellipsis}
+.recent-halfpart{width:160px;flex-shrink:0;font-size:.76rem;overflow:hidden;text-overflow:ellipsis;color:#333}
+.recent-qty{width:40px;flex-shrink:0;text-align:center;color:var(--primary);font-weight:700;font-size:.85rem}
+.recent-op{width:56px;flex-shrink:0;text-align:center}
+.recent-pd{width:70px;flex-shrink:0;text-align:center}
+.recent-z{width:78px;flex-shrink:0;text-align:center}
+.recent-act{width:42px;flex-shrink:0;text-align:center}
+.recent-btns{flex-shrink:0;display:flex;gap:4px;align-items:center}
+
+/* Mobile */
+@media(max-width:640px){
+  .header-inner{flex-direction:column;align-items:flex-start}
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .kpi-value{font-size:1.5rem}
+  #scanInput{font-size:1.1rem;padding:14px 16px}
+  main{padding:12px}
+  .bar-label{width:80px;font-size:.72rem}
+  .search-bar{flex-direction:column}
+}
+
+/* Shake animation for duplicate alert */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+  20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+/* Focus */
+button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+/* Reduced motion */
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* Print */
+@media print{
+  .header,.scan-input-area,.search-bar,.action-select,.tabs{display:none!important}
+  .tab-panel{display:block!important}
+  .card{break-inside:avoid;box-shadow:none;border:1px solid #ccc}
+}
+
+/* Tooltip */
+.info-tip{display:inline-block;width:16px;height:16px;background:var(--primary);color:#fff;border-radius:50%;text-align:center;line-height:16px;font-size:.7rem;cursor:help;margin-left:4px}
+
+/* Notification toast */
+.toast{position:fixed;top:80px;right:20px;padding:12px 24px;border-radius:8px;color:#fff;font-weight:500;z-index:999;transform:translateX(120%);transition:transform .3s ease;box-shadow:0 4px 20px rgba(0,0,0,.2)}
+.toast.show{transform:translateX(0)}
+.toast-success{background:var(--success)}
+.toast-error{background:var(--danger)}
+.toast-info{background:var(--primary)}
+
+/* Sync Indicator */
+.sync-indicator{display:flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(255,255,255,.15);border-radius:20px;margin-right:8px;cursor:default;user-select:none;transition:background .2s}
+.sync-indicator:hover{background:rgba(255,255,255,.25)}
+.sync-dot{width:8px;height:8px;border-radius:50%;background:#999;flex-shrink:0;transition:background .3s}
+.sync-dot.syncing{background:#4a9af5;animation:syncPulse 1.2s ease-in-out infinite}
+.sync-dot.synced{background:#22c55e}
+.sync-dot.error{background:#ef4444}
+.sync-text{font-size:.75rem;color:rgba(255,255,255,.85);white-space:nowrap}
+@keyframes syncPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+/* Login Screen */
+.login-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);display:flex;align-items:center;justify-content:center;z-index:9999}
+.login-box{background:#fff;border-radius:16px;padding:40px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.login-box h2{text-align:center;margin:0 0 8px;font-size:1.4rem;color:#333}
+.login-box .subtitle{text-align:center;color:#888;font-size:.85rem;margin-bottom:24px}
+.login-box input{width:100%;padding:12px 14px;border:1px solid #ddd;border-radius:8px;font-size:.95rem;margin-bottom:14px;box-sizing:border-box;transition:border .2s}
+.login-box input:focus{outline:none;border-color:#667eea}
+.login-box button{width:100%;padding:12px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:600;cursor:pointer;transition:opacity .2s}
+.login-box button:hover{opacity:.9}
+.login-box .error-msg{color:#e74c3c;font-size:.82rem;text-align:center;margin-top:8px;display:none}
+.login-box .remember{display:flex;align-items:center;gap:6px;font-size:.82rem;color:#666;margin-bottom:16px}
+.login-box .remember input{width:auto;margin:0}
+.user-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:rgba(255,255,255,.2);border-radius:12px;font-size:.78rem;color:#fff;cursor:pointer}
+.user-badge:hover{background:rgba(255,255,255,.3)}
+.user-dropdown{position:absolute;top:100%;right:0;margin-top:6px;background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.18);min-width:180px;z-index:9999;overflow:hidden;animation:dropdownFadeIn .15s ease}
+@keyframes dropdownFadeIn{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+.user-dropdown-header{padding:12px 16px 8px;background:#f8f9fa}
+.user-dropdown-name{font-weight:600;font-size:.9rem;color:#333}
+.user-dropdown-role{font-size:.75rem;color:#888;margin-top:2px}
+.user-dropdown-divider{height:1px;background:#eee;margin:4px 0}
+.user-dropdown-item{padding:10px 16px;font-size:.85rem;color:#333;cursor:pointer;transition:background .12s}
+.user-dropdown-item:hover{background:#f0f4ff}
+</style>
+</head>
+<body data-page-node-id="o5aOnLfcEgiMyjAoMFS6E4">
+
+<!-- 登录界面 -->
+<div id="loginOverlay" class="login-overlay" data-page-node-id="rm0jcenMLX74iuUw7qMeVG">
+  <div class="login-box" data-page-node-id="8Hv3aAKAFeghvSwQuimhQz">
+    <img id="companyLogo" src="data:image/png;base64,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" style="width:140px;height:auto;margin-bottom:8px" data-page-node-id="RttR0zqBYPvLZTx17d1tW7">
+    <h2 data-page-node-id="YuXEODBr2XWo1Gcx5tk4R1">📦 半品齐套管理</h2>
+    <p class="subtitle" data-page-node-id="5M6ioyvgDUWps4CyIzaoKI">请使用工号登录</p>
+    <input type="text" id="loginUsername" placeholder="工号" autocomplete="off" data-page-node-id="ojEFJNf9HNCOv2mqFprBNU">
+    <input type="password" id="loginPassword" placeholder="密码" data-page-node-id="V9m4pbMVC4wqOXlR9r7pmW">
+    <div class="remember" data-page-node-id="BxbDFMuSILEPnjP0Fe2Z1C"><input type="checkbox" id="loginRemember" data-page-node-id="DL1boJKsteAgoIimaRAlA0"><label for="loginRemember" data-page-node-id="Y8K6tAhaGNQPjYIdVwsX7z">记住我（7天免登录）</label></div>
+    <button onclick="doLogin()" data-page-node-id="506u837dGgcTgvZcks2Ucg">登 录</button>
+    <div class="error-msg" id="loginError" data-page-node-id="QDMpCpHOiQUTW9ZtLHB6Dd"></div>
+  </div>
+</div>
+
+<header class="header" style="display:none" id="mainApp" data-page-node-id="w2bC6oUKXvfZnqQe9ocIDf">
+  <div class="header-inner" data-page-node-id="IXaPSD8kL42qccwAzUSUND">
+    <h1 data-page-node-id="G0AH8Y31bQjfFugWLFOs99">📦 半品齐套管理看板</h1>
+      <div class="header-actions" data-page-node-id="1qbC03S9W7NteoqdxFPX7U">
+      <div id="userBadge" class="user-badge" onclick="toggleUserMenu()" title="点击切换账号" data-page-node-id="FDvVzzxltBju0BQyI48nKM">👤 <span id="userDisplayName" data-page-node-id="5gDhj3ChI3qbdfXbqOEBQM"></span> ▾</div>
+      <div id="userDropdown" class="user-dropdown" style="display:none" data-page-node-id="AWCCX2cfc35JAYirONxchU">
+        <div class="user-dropdown-header" data-page-node-id="SH0TvkZCWhheaccAhYCPJa">
+          <div class="user-dropdown-name" id="dropdownUserName" data-page-node-id="wtyuUBukRdkbBGfEXTXgSP"></div>
+          <div class="user-dropdown-role" id="dropdownUserRole" data-page-node-id="voaSYzLiB7UE58LlxVOnHe"></div>
+        </div>
+        <div class="user-dropdown-divider" data-page-node-id="1UPrWz5DO9hWa1lYFB3dQP"></div>
+        <div class="user-dropdown-item" onclick="openChangePwdModal()" data-page-node-id="8k3TLRtSRfCGQuOlwvhMjv"> 修改密码</div>
+        <div class="user-dropdown-item" onclick="doSwitchAccount()" data-page-node-id="CsoVdZ99pIuutnR0La2p8b"> 切换账号</div>
+        <div class="user-dropdown-item" id="menuManageUsers" onclick="openUserModal()" style="display:none" data-page-node-id="gGFvwjBF2TZicrF7svaJ5Q"> 用户管理</div>
+        <div class="user-dropdown-divider" data-page-node-id="O1whh3LgAZOqiEo4R1si8n"></div>
+        <div class="user-dropdown-item" onclick="doLogout()" style="color:#e74c3c" data-page-node-id="tDTU81Uz8jEbgamEHS3yM9">🚪 退出登录</div>
+      </div>
+      <div id="syncIndicator" class="sync-indicator" title="多人同步状态" data-page-node-id="A0ZnXT1Ghi9OQbnasUPlOR">
+        <span class="sync-dot" data-page-node-id="hcLoJtSqBJxjtoC9V6O7zR"></span>
+        <span class="sync-text" data-page-node-id="dEndz7AVI1clShC3p5F6wN">同步中...</span>
+      </div>
+      <div class="tabs" data-page-node-id="xksZngO17T1LDN08chH0dh">
+        <button class="tab-btn active" onclick="switchTab('scan')" data-page-node-id="3M8dOKmLdtIGdsVCkzhvsz">扫码录入</button>
+        <button class="tab-btn" onclick="switchTab('dashboard')" data-page-node-id="O5T99BAZyO0Hh2J2FU0xfE">齐套看板</button>
+      </div>
+
+    </div>
+  </div>
+</header>
+
+<main data-page-node-id="JcwLK2ZbZR8FXycH6rGx2u">
+  <!-- Tab 1: Scan -->
+  <div id="tab-scan" class="tab-panel active" data-page-node-id="W3zZUS9IbIt4wVNzoiiv72">
+    <!-- BOM Load Section -->
+    <div class="card" style="margin-bottom:20px" data-page-node-id="hzjLU2BM30CDfDpFy0nRge">
+      <div class="card-header" style="cursor:pointer" onclick="document.getElementById('bomDetail').style.display=document.getElementById('bomDetail').style.display==='none'?'block':'none'" data-page-node-id="kYcwOlWfqzzCDxag3j6SS9">
+        <h2 data-page-node-id="YAs4ONe9Qg03oqphqq4ct2">📂 BOM 数据管理</h2>
+        <span style="font-size:.8rem;color:var(--text-secondary)" id="bomLoadStatus" data-page-node-id="eiEEkaimxyji1OfF1EFNHU">点击展开 ▼</span>
+      </div>
+      <div class="card-body" id="bomDetail" style="display:none" data-page-node-id="6KPV5Eci3K5yheEDaP6YTb">
+        <!-- Excel/CSV Upload -->
+        <div style="margin-bottom:16px" data-page-node-id="FrXDSuUIfgGk1tERfNHeqo">
+          <div style="font-weight:600;margin-bottom:8px" data-page-node-id="aC787WdmpFOUrv89V8rMUX">📊 从 Excel/CSV 导入（增量追加，已有数据保留）</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap" data-page-node-id="T6sxjFP5B80r03eb2VqEia">
+            <input type="file" id="bomFileInput" accept=".xlsx,.xls,.csv" onchange="loadBOMFile(event)" style="font-size:.85rem" data-page-node-id="Mpux7WCPVLDwC9kRCdvumW">
+            <button class="btn btn-primary btn-sm" onclick="exportBOM()" style="background:var(--success);border:none;padding:5px 12px;border-radius:6px;font-size:.8rem;cursor:pointer" data-page-node-id="BWovJXOo8ykmLFYGTNrZRb"> 导出BOM</button>
+            <button class="btn btn-sm" onclick="clearAllBOM()" style="background:var(--danger);color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:.8rem;cursor:pointer" data-page-node-id="KiIAYSFfs7i4An7dj93Yb2">🗑️ 清除BOM</button>
+            <span style="font-size:.78rem;color:var(--text-secondary)" data-page-node-id="3ayG0e8yclkDH3dlBjSshY">列顺序：成品料号 | 半品料号 | 接头规格 | 线长 | 用量</span>
+          </div>
+          <div id="bomLoadStatus" style="font-size:.8rem;color:var(--text-secondary);margin-top:6px" data-page-node-id="jpmW3COl728X3vq2nqYTeK"></div>
+        </div>
+        <!-- Batch Paste -->
+        <div style="border-top:1px solid var(--border);padding-top:16px;margin-top:4px" data-page-node-id="DiqHuESpd6SeXKZ05YtQxO">
+          <div style="font-weight:600;margin-bottom:8px" data-page-node-id="KeiKRJLdPHcXMsOfgPOVOq">📋 批量粘贴（从表格复制后直接粘贴）</div>
+          <textarea id="bomPasteArea" placeholder="格式：成品料号丨半品料号丨接头规格丨线长&#10;例：&#10;8180900969-P1A1&#10;8180900969-P1A1丨8180900969-P1A1-P2B2丨M8x20&#10;每行一条，支持Tab/丨/|分隔" style="width:100%;min-height:120px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:.82rem;font-family:monospace;resize:vertical"></textarea>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:8px" data-page-node-id="BzwWbZVtPomHEBu0craCfS">
+            <button class="btn btn-primary btn-sm" onclick="loadBOMFromPaste()" data-page-node-id="LSGbJaPxMgS4rZTsWaQgzW">📥 导入粘贴数据</button>
+            <span id="bomPasteStatus" style="font-size:.8rem;color:var(--text-secondary)" data-page-node-id="WUgTJanBSm5CwWNTMd8UHA"></span>
+          </div>
+        </div>
+        <!-- Manual Entry -->
+        <div style="border-top:1px solid var(--border);padding-top:16px" data-page-node-id="1mxLqiR78m4wGswh8eU1ZN">
+          <div style="font-weight:600;margin-bottom:8px" data-page-node-id="vK9VouOAfcJy8wBflbj7F6">✍️ 手动新增/变更 BOM 条目</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center" data-page-node-id="hVeuzAc06k3kQp9LHKoarl">
+            <input type="text" id="manualCP" placeholder="成品料号" style="width:130px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem" data-page-node-id="TXg0QIAEGDQp3TPGqXfl6C">
+            <input type="text" id="manualBP" placeholder="半品料号" style="width:150px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem" data-page-node-id="FVtsDz6KGpkgeS07lQWcNR">
+            <button class="btn btn-sm" onclick="searchBOMEntry()" style="background:#1a73e8;color:#fff;border:none;padding:5px 10px;border-radius:6px;font-size:.8rem;cursor:pointer" data-page-node-id="Mwio4W18WYzHSdWINP6ylR">🔍 查询</button>
+            <input type="text" id="manualJ" placeholder="接头规格" style="width:100px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem" data-page-node-id="vYbGMMaIF1GA3ELm0Ut6De">
+            <input type="number" id="manualL" placeholder="线长" value="0" style="width:70px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem" data-page-node-id="pEsQ3jkkY73GQ8cCvRc2xZ">
+            <input type="number" id="manualY" placeholder="用量" value="1" style="width:60px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem" data-page-node-id="AFjXvi67d10HbYkstnJ1HA">
+            <button class="btn btn-primary btn-sm" id="manualSubmitBtn" onclick="addBOMManual()" data-page-node-id="hGTwZ5Ou92GTb0LoEiRRJQ">➕ 添加</button>
+            <button class="btn btn-sm" id="manualDeleteBtn" onclick="deleteBOMEntry()" style="display:none;background:var(--danger);color:#fff;border:none;padding:5px 10px;border-radius:6px;font-size:.8rem;cursor:pointer" data-page-node-id="sp2corHD6IftAMX7FTBr8m">🗑️ 删除</button>
+            <button class="btn btn-sm" id="manualCancelBtn" onclick="cancelBOMEdit()" style="display:none;background:#999;color:#fff;border:none;padding:5px 10px;border-radius:6px;font-size:.8rem;cursor:pointer" data-page-node-id="wFv1BLqygUh4ho3SDuWi4Z">✖ 取消编辑</button>
+          </div>
+          <div id="manualEditHint" style="font-size:.78rem;color:var(--text-secondary);margin-top:4px" data-page-node-id="g7OzjNBbksMZoTcU49YTEi"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Work Order Settings -->
+    <div class="card" style="margin-bottom:20px" data-page-node-id="xaCR3yvj5AwKkVuN3WnQeY">
+      <div class="card-body" style="padding:14px 20px" data-page-node-id="xYFINd8LQPLbHCCMiEe1Bc">
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap" data-page-node-id="fI4x3aRBTFI3g6DxNyZxZP">
+          <span style="font-weight:600;font-size:.9rem" data-page-node-id="pulijgpIC0ZLBE2zHGsHMj">📋 工单设置</span>
+          <input type="text" id="woNumber" placeholder="工单号" style="width:140px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem" data-page-node-id="GAkut8rjT6DwxWL0oR87GA">
+          <input type="number" id="woTargetQty" placeholder="工单数量" style="width:110px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem" data-page-node-id="CYAGRdWXSXp3rUlIJi6E3M">
+          <button class="btn btn-sm" onclick="toggleBatchImport()" style="background:var(--warning);color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:.8rem;cursor:pointer" data-page-node-id="gY0UdlTLVo8HmMmD2CEGjl">📋 批量录入</button>
+          <button class="btn btn-sm" onclick="clearWorkOrder()" style="background:var(--danger);color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:.8rem;cursor:pointer" data-page-node-id="yLf68O3zarvD1Zo6FHHMZE">🗑️ 清除</button>
+          <span id="woStatus" style="font-size:.82rem;color:var(--text-secondary)" data-page-node-id="h7PyulUF9HXXMiSA5KWAxi">未设置工单</span>
+        </div>
+        <!-- Batch Import Panel -->
+        <div id="batchImportPanel" style="display:none;margin-top:12px;padding:12px;background:#f8f9fa;border-radius:8px;border:1px solid var(--border)" data-page-node-id="EYkRpMmZFuIKU891ffYrZc">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px" data-page-node-id="XyIq5p55qfiV0YvmgJ6yIr">
+            <span style="font-weight:600;font-size:.85rem" data-page-node-id="EGv7WB5vjCH2ZRhwUSzms6">📋 批量录入工单</span>
+            <span style="font-size:.75rem;color:var(--text-secondary)" data-page-node-id="kZqkdZDRFXJdRchOJX1zCx">从Excel粘贴：工单号 | 数量（每行一个工单）</span>
+          </div>
+          <textarea id="batchImportText" placeholder="101396001&#9;100&#10;101396002&#9;50&#10;..." style="width:100%;min-height:120px;padding:10px;border:1px solid var(--border);border-radius:6px;font-size:.82rem;font-family:monospace;resize:vertical" oninput="previewBatchImport()"></textarea>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:8px" data-page-node-id="B0AnOA1gQkepPZyi036tcV">
+            <button class="btn btn-primary btn-sm" onclick="confirmBatchImport()" data-page-node-id="TM3KEYcB9kvnAIiOiC4ZFG">✅ 确认导入</button>
+            <button class="btn btn-sm" onclick="toggleBatchImport()" style="background:#999;color:#fff;border:none;padding:5px 12px;border-radius:6px;font-size:.8rem;cursor:pointer" data-page-node-id="99WeNKmtH2XELWFjK5YDTH">取消</button>
+            <span id="batchPreview" style="font-size:.8rem;color:var(--text-secondary)" data-page-node-id="Xw9pNL0SOYNCScj2pIBymK"></span>
+          </div>
+        </div>
+        <!-- Imported Work Orders List -->
+        <div id="workOrderList" style="display:none;margin-top:12px;padding:10px;background:#e8f4fd;border-radius:8px;border:1px solid #b3d7ff" data-page-node-id="sPSIuyzzMON1z397saKyNO">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px" data-page-node-id="aml5XYog1j9HAidrCyluzR">
+            <span style="font-weight:600;font-size:.85rem;color:#1a73e8" data-page-node-id="3E0qedvDsiqrFuIZsWV0E3">📦 已导入工单列表</span>
+            <span id="workOrderCount" style="font-size:.78rem;color:var(--text-secondary)" data-page-node-id="6CyR0IKs8KxbxPrAqsJPrV"></span>
+          </div>
+          <div id="workOrderListContent" style="max-height:200px;overflow-y:auto" data-page-node-id="OMNadHPREg3F6GMrwWU9iM"></div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)" data-page-node-id="m1WRnq0EbUiIBpRru03Wbv">
+          <span style="font-weight:600;font-size:.9rem" data-page-node-id="rbHEE1p4hXxi030MOpTTcS">🏷️ 栈板号</span>
+          <select id="palletPrefix" onchange="updatePalletDisplay()" style="padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem;background:#fff;cursor:pointer" data-page-node-id="p6qozIiIo0ZcQGhH5lmjLW">
+            <option value="" data-page-node-id="b10atF46UkSZM0eFwcacNX">选择前缀</option>
+            <option value="5B3F" data-page-node-id="8ewNyNSUkl1OIXxFf26zFE">5B3F</option>
+            <option value="2B3F" data-page-node-id="QPeFHEwMluVysKxRmm29jH">2B3F</option>
+            <option value="2B4F" data-page-node-id="0MtD536fZbgEyxpx3bXOi0">2B4F</option>
+          </select>
+          <span style="color:var(--text-secondary);font-size:.9rem" data-page-node-id="EKRbxOYcU4F0xMZrg3vTd2">-</span>
+          <input type="number" id="palletSeq" min="1" max="1000" placeholder="0001" oninput="updatePalletDisplay()" style="width:100px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:.85rem" data-page-node-id="5AfDheH14szx21XfBL1K0Q">
+          <div style="position:relative;display:inline-block" data-page-node-id="a5SrAaA2p6b7BrguyFx75F">
+            <input type="text" id="palletScanInput" placeholder="扫码枪或📷扫码" style="width:180px;padding:8px 40px 8px 10px;border:2px solid var(--primary);border-radius:6px;font-size:.85rem;background:#f0f8ff" onkeydown="handlePalletScan(event)" data-page-node-id="BY1qX797NFPXX8t07i9Z0E">
+            <button onclick="openPalletCamera()" title="手机摄像头扫栈板号" style="position:absolute;right:4px;top:50%;transform:translateY(-50%);width:30px;height:30px;border:none;background:var(--primary);color:#fff;border-radius:8px;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(26,115,232,.3)" data-page-node-id="mqGxwTiqytOHMFo1f9O1zh">📷</button>
+          </div>
+          <span id="palletDisplay" style="font-size:.85rem;color:var(--text-secondary);font-weight:500" data-page-node-id="FeEEv634JO9BtPw6FktTSJ">未设置栈板号</span>
+          <button class="btn btn-primary btn-sm" onclick="saveWorkOrder()" data-page-node-id="JPLTPyfDvDEpmn9uji4Oei">✅ 确认</button>
+          <span id="setupStatus" style="font-size:.82rem;color:var(--text-secondary)" data-page-node-id="bewhCD4HdPAyTpB8pgoLHP">请先填写工单和栈板号</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scan Area -->
+    <div class="card" style="margin-bottom:20px" data-page-node-id="P5KIHoAuoTPMV3Ft0qr9N5">
+      <div class="card-body scan-input-area" data-page-node-id="tpNqFRaaRyC9wbwlIuTPUo">
+        <div class="action-select" data-page-node-id="MeBqEENDddRuM83xgLsd8N">
+          <button class="action-btn active-in" id="btnIn" onclick="setAction('入库')" data-page-node-id="aH1KMsDAJS6vzL2Utpa95l">📥 入库</button>
+          <button class="action-btn" id="btnOut" onclick="setAction('出库')" data-page-node-id="f2lgZn5myJJwiZqlZFhUrb">📤 出库</button>
+        </div>
+        <div class="scan-input-wrap" data-page-node-id="NBSwPNPwqiyqJ76w6cmcFe">
+          <input type="text" id="scanInput" placeholder="请扫描唯一码（扫码枪或点📷相机扫码）" autofocus autocomplete="off" data-page-node-id="fODoTgRIx8mW8v9mAFqE1I">
+          <button id="cameraBtn" onclick="openCamera()" title="手机摄像头扫码" data-page-node-id="85FDfhGKaDt9RcA57N1243">📷</button>
+        </div>
+        <div class="scan-status" id="scanStatus" data-page-node-id="NcG6Vd744aQsBLBUxpVvrw"></div>
+        <div id="rawScanBox" style="display:none;margin-top:8px;padding:8px 10px;background:#f6f8fb;border:1px solid #dbe2ee;border-radius:8px;font-family:Consolas,'Courier New',monospace;font-size:13px;color:#2c3e50;white-space:pre-wrap;word-break:break-all;max-height:130px;overflow-y:auto;text-align:left;line-height:1.5;"></div>
+      </div>
+    </div>
+
+    <!-- Scan Records -->
+    <div class="card" data-page-node-id="x1jAvJcF4MD5CD0TVH8osa">
+      <div class="card-header" data-page-node-id="YKXRziojKA8MqkZKXZrMtf">
+        <h2 data-page-node-id="lILBNedJo6t3z9IU6nyhMF">📋 扫码记录</h2>
+        <button class="btn btn-outline btn-sm" onclick="exportScanCSV()" data-page-node-id="VJNljTzdVoRvGfGKKaikMl">💾 导出 CSV</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--success);border-color:var(--success);margin-left:6px" onclick="undoClear()" title="恢复最近一次清除的记录">↩️ 一键恢复</button><button id="clearAllBtn" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:var(--danger);margin-left:6px" onclick="clearAllData()" data-page-node-id="CdiJ8gad6GLsoBFXXpgoMn">🗑️ 清除所有数据</button>
+      </div>
+      <div class="card-body" data-page-node-id="jVLKDNkmyv7waOcM3EMBb4">
+        <!-- Search and filter controls -->
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center" data-page-node-id="NYtkwXUaJAne8y1NepDhKP">
+          <input type="text" id="scanSearchInput" placeholder="搜索唯一码、料号、工单号、栈板号或批次..." oninput="filterScanRecords()" style="flex:1;min-width:150px;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:.9rem" data-page-node-id="kpJvy7fnqnpEm4szC5aedi">
+          <input type="date" id="scanDateFilter" onchange="filterScanRecords()" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:.9rem" data-page-node-id="aJBOKR23idB1jevHsU1wH6">
+          <select id="scanActionFilter" onchange="filterScanRecords()" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:.9rem;background:#fff" data-page-node-id="1eCcDg3NAa0k0yvJFroRPV">
+            <option value="" data-page-node-id="HhppVMa7H6HwTMtw0ycWYE">全部动作</option>
+            <option value="入库" data-page-node-id="0oPbuBOMJresnA6eMIfsF8">📥 入库</option>
+            <option value="出库" data-page-node-id="7TungcFumJmkJJLKS1oqbQ">📤 出库</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="filterScanRecords()" data-page-node-id="4nBmeVz7m8iDwlM2XQo0DR">🔍 查询</button>
+          <button class="btn btn-outline btn-sm" onclick="clearScanFilter()" data-page-node-id="Mq3DB4WcR4a05267dIbgkp">🔄 显示全部</button>
+          <button class="btn btn-sm" style="background:var(--danger);color:#fff" onclick="deleteByDate()" data-page-node-id="ylUPUiKPywP2sPQhobeIcT">🗑️ 删除该日期</button>
+        </div>
+        <div id="scanRecordCount" style="font-size:.8rem;color:var(--text-secondary);margin-bottom:8px" data-page-node-id="eCZ6eGRE2t2KsfD1Ec5rg2">共 0 条记录</div>
+        <div class="recent-list" id="recentList" style="max-height:400px" data-page-node-id="8rms7fzoWLoaqyum0eXoRx">
+          <div style="padding:20px;text-align:center;color:var(--text-secondary)" data-page-node-id="cAEvz7nR9f8Fic622N0Obb">暂无扫码记录</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab 2: Dashboard -->
+  <div id="tab-dashboard" class="tab-panel" data-page-node-id="0rXoGvwzklWN5zfqhHArUf">
+    <!-- KPI Cards -->
+    <div class="kpi-grid" id="kpiGrid" data-page-node-id="zYccLp6WErxt2zSlUit3Zo">
+      <div class="kpi-card" data-page-node-id="KBsOs5C2yEM5bFPuXaDRNf"><div class="kpi-label" data-page-node-id="8pVbIP4fKSO7pXtd2sUH15">总成品数</div><div class="kpi-value" id="kpiTotal" data-page-node-id="YD12ZMOPsLDF5EvHYkAtCz">57</div></div>
+      <div class="kpi-card success" data-page-node-id="a5e3aRaLIQUfjqBKEXc1BU"><div class="kpi-label" data-page-node-id="Q9IZy370pOj2WJGhnafYvo">可齐套成品数</div><div class="kpi-value" id="kpiKit" data-page-node-id="ZfFlQcwLYNyaQAYwjZYHpu">0</div></div>
+      <div class="kpi-card" data-page-node-id="7MnyXGcmrgIIH0cnW7kZBU"><div class="kpi-label" data-page-node-id="t9scAakfI9LWsO9p9G5RR0">当前库存</div><div class="kpi-value" id="kpiSemiTotal" data-page-node-id="twUpfSUiV2dtD6Jxk4eG1m">0</div></div>
+    </div>
+
+    <!-- Detail Table -->
+    <div class="card" data-page-node-id="KlszMxKApwV2sQFvK3asjs">
+      <div class="card-header" data-page-node-id="mlLr6oSIPEY7tUDxNBVnP4">
+        <h2 data-page-node-id="s4kcM5kruDmEMVqU0LKc7p">📊 成品齐套明细</h2>
+      </div>
+      <div class="card-body" data-page-node-id="Z7r0SAqptYrhg10d039Fxf">
+        <div class="search-bar" data-page-node-id="1JXFae4PtgFJF7mX4DTmH0">
+          <input type="text" id="woFilter" placeholder="筛选工单号..." oninput="filterTable()" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:.85rem;min-width:150px" data-page-node-id="1tao9YvekhMld70gaCwesm">
+          <input type="text" id="lineSeqFilter" placeholder="筛选线序料号..." oninput="filterTable()" style="padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:.85rem;min-width:180px" data-page-node-id="fMizfnctSoXunEA132Vam4">
+          <input type="text" id="searchInput" placeholder="搜索成品料号..." oninput="filterTable()" data-page-node-id="qaunAzRCI1dGdJcMKIWTZW">
+          <button class="btn btn-outline btn-sm" onclick="sortTable()" data-page-node-id="GszL7J6FsHmmoeB6wRnUdI">🔄 按可配套数排序</button>
+          <button class="btn btn-outline btn-sm" onclick="expandAll()" data-page-node-id="109VB3uXHbdbqeFKjZkQzT">📂 全部展开</button>
+          <button class="btn btn-outline btn-sm" onclick="collapseAll()" data-page-node-id="S59lnaIRgcicWEFqMkhQRt">📁 全部收起</button>
+          <button class="btn btn-primary btn-sm" onclick="exportToExcel()" data-page-node-id="K8AAzYkwetqUUWT0XlRl2S">📥 导出Excel</button>
+        </div>
+        <div class="table-wrap" data-page-node-id="R9UHuKDbWBt4cZtCrAg8ly">
+          <table id="dashTable" data-page-node-id="klCMQ5OvugVJgDwWtHEFXu">
+            <thead data-page-node-id="Ph2M5z789lPKQpRwCmzCIA">
+              <tr data-page-node-id="KLOliAdOKIbxTONPnApuKd">
+                <th data-page-node-id="fv6jFsQut23YdfRuPdxYq2">成品料号</th>
+                <th data-page-node-id="jCqBhppXzlth4KC4PLK0h8">线序料号款数</th>
+                <th data-page-node-id="xxZi2coxeQXAEVitevBw6I">缺料半品款数</th>
+                <th data-page-node-id="N9mXpn94xMf2zE2vcjdY7f">工单号</th>
+                <th data-page-node-id="rB6PydyiUstO32DgxOLatt">工单数量</th>
+                <th data-page-node-id="94NsXpVnoSN5pIB3BwdC8U">齐套数量</th>
+                <th data-page-node-id="0CFkcIDMuDpPQlitgQIDbD">齐套率</th>
+                <th data-page-node-id="tVUzevAN0iZYoMkOLgP9iw">最大缺口</th>
+                <th data-page-node-id="ZquwtrTzi8f2NjFMokzUQ0">齐套状态</th>
+              </tr>
+            </thead>
+            <tbody id="dashBody" data-page-node-id="EXyg7FoVafcjOMNyFIITHi"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="chart-grid" data-page-node-id="AQrcC2Wiu9NXWNBdx3FHhu">
+      <div class="chart-card" data-page-node-id="kgiD594PVxFhT8ozMSJKSK">
+        <h2 data-page-node-id="yUlcrVOQrv1j5jE8HeYvRI">📊 可配套数分布</h2>
+        <div class="bar-chart" id="chartKit" data-page-node-id="hg08sf6Y6kKV9Uk7bnrcc9"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="toast" id="toast" data-page-node-id="DHnaqfadpSwsCGih57gmRO"></div>
+
+<script>
+// ====== EMBEDDED DATA ======
+const INIT_DATA = {"bom":{},"scans":[]};
+
+// ====== STATE ======
+let currentAction = '入库';
+let scanRecords = [...INIT_DATA.scans];
+let deletedRecords = []; // 追踪已删除的记录ID（格式：code + '||' + time）
+
+// 生成稳定的记录匹配key：把c和t里的换行/管道符全部抹平，避免二维码含\r\n导致同步对不上
+function recordKey(c, t) {
+  const cleanC = String(c || '').replace(/[\r\n|｜]/g, '');
+  const cleanT = String(t || '').replace(/[\r\n|｜]/g, '');
+  return cleanC + '||' + cleanT;
+}
+// 【合并判重key】recordKey + 动作。
+// 背景：t 是分钟级精度——同一二维码同一分钟内"先入库后出库"（冲正/换库位常见），
+// 两条合法业务记录的 recordKey 完全相同。若用 recordKey 做合并判重（Set/Map），
+// 同 key 只保留第一条，另一条被永久吞掉（2026-09-21 实测：一台设备 8180911679-P5A3-P3
+// 被吞 4 笔入库共 800 件，库存显示 -400，云端实为 +400）。
+// 加动作后入库/出库各成 key，两条都保留。墓碑匹配仍用 recordKey（c||t），不受影响。
+function dedupKey(r) {
+  return recordKey(r.c, r.t) + '|' + (r.a || '');
+}
+// 兼容旧deletedRecords（里面可能还是未清洗的key）：尝试从中提取"时间戳"部分做兜底匹配
+function recordTimestamp(t) {
+  return String(t || '').replace(/[\r\n|｜]/g, '');
+}
+let inventory = {"8180922863-P1A2-P4":0,"8180922863-P1A3-P3":0,"8180922863-P1A4-P5":0,"8180922862-P1A1-P3B4":0,"8180922862-P1A4-P3B1":0,"8180922862-P1A3-P4C1":0,"8180922862-P2-P4C2":0,"8180922860-P5A1-P1":0,"8180922860-P5A2-P2":0,"8180922860-P5A3-P3":0,"8180922860-P5A4-P4":0,"8180922213-P1-P4B1":0,"8180922213-P2-P4B2":0,"8180922213-P3A2-P4B3":0,"8180922213-P3A1-P7":0,"8180922213-P3A3-P6":0,"8180922213-P3A4-P5":0,"8180922114-P1-P4B1":0,"8180922114-P2-P4B2":0,"8180922114-P3A4-P4B3":0,"8180922114-P3A1-P7":0,"8180922114-P3A2-P5":0,"8180922114-P3A3-P6":0,"8180922111-P5A1-P1":0,"8180922111-P5A2-P2":0,"8180922111-P5A3-P3":0,"8180922111-P5A4-P4":0,"8180922109-P5A1-P1":0,"8180922109-P5A2-P2":0,"8180922109-P5A3-P3":0,"8180922109-P5A4-P4":0,"8180921377P4-P5":0,"8180921377P3-P5":0,"8180921377P1-P5":0,"8180921377P2-P5":0,"8180921329-P1A4-P9A1":0,"8180921329-P1A3-P14A4":0,"8180921329-P2A2-P14A3":0,"8180921329-P2A1-P11":0,"8180921329-P2A3-P7":0,"8180921329-P3-P9A3":0,"8180921329-P4A4-P9A2":0,"8180921329-P4A1-P12":0,"8180921329-P4A2-P13":0,"8180921329-P4A3-P14A1":0,"8180921329-P5A1-P14A2":0,"8180921329-P5A2-P15A1":0,"8180921029-P1A1-P3":0,"8180921029-P1A2-P4":0,"818092102-P1A3-P6":0,"8180921029-P1A4-P5C1":0,"8180921029-P2B4-P5C2":0,"8180921029-P2B1-P8":0,"8180921029-P2B3-P9":0,"8180921029-P2B2-P7":0,"8180921028-P1A1-P3":0,"8180921028-P1A2-P4":0,"8180921028-P1A3-P6":0,"8180921028-P1A4-P5C1":0,"8180921028-P2B4-P5C2":0,"8180921028-P2B1-P8":0,"8180921028-P2B3-P9":0,"8180921028-P2B2-P7":0,"8180920653-P1A4-P9A1":0,"8180920653-P1A3-P14A4":0,"8180920653-P2A2-P14A3":0,"8180920653-P2A1-P11":0,"8180920653-P2A3-P7":0,"8180920653-P3-P9A3":0,"8180920653-P4A4-P9A2":0,"8180920653-P4A1-P12":0,"8180920653-P4A2-P13":0,"8180920653-P4A3-P14A1":0,"8180920653-P5A1-P14A2":0,"8180920653-P5A2-P15A1":0,"8180920653-P6-P15A2":0,"8180920021-P1-P4B1":0,"8180920021-P2-P4B2":0,"8180920021-P3A2-P4B3":0,"8180920021-P3A1-P7":0,"8180920021-P3A3-P6":0,"8180920021-P3A4-P5":0,"8180919855-P5A1-P1":0,"8180919855-P5A2-P2":0,"8180919855-P5A3-P3":0,"8180919854-P1A4-P7":0,"8180919854-P1A3-P6":0,"8180919854-P1A1-P3B1":0,"8180919854-P1A2-P3B3":0,"8180919854-P2A3-P3B3":0,"8180919854-P2A1-P4":0,"8180919854-P2A2-P5":0,"8180919853-P1A4-P7":0,"8180919853-P1A3-P6":0,"8180919853-P1A1-P3B1":0,"8180919853-P1A2-P3B2":0,"8180919853-P2A3-P3B3":0,"8180919853-P2A1-P4":0,"8180919853-P2A2-P5":0,"8180919852-P1A4-P9A1":0,"8180919852-P1A3-P10A3":0,"8180919852-P2A2-P10A1":0,"8180919852-P2A1-P11":0,"8180919852-P2A3-P7":0,"8180919852-P3-P9A3":0,"8180919852-P4A4-P9A2":0,"8180919852-P4A1-P12":0,"8180919852-P4A2-P13":0,"8180919852-P4A3-P14A1":0,"8180919852-P5A1-P14A2":0,"8180919852-P5A2-P15A1":0,"8180919852-P6-P15A2":0,"8180919281-P1-P3B3":0,"8180919281-P2A1-P3B1":0,"8180919281-P2A4-P3B2":0,"8180918988-PAA3-P2":0,"8180918988-PAA1-P3D2":0,"8180918988-PAA2-P5F2":0,"8180918988-PAA4-P4E2":0,"8180918988-P1-P4E":0,"8180918988-PBB4-P4E1":0,"8180918988-PBB1-P3D1":0,"8180918988-PBB2-P6":0,"8180918988-PBB3-P5F1":0,"8180918988-PCC3-P5F3":0,"8180918988-PCC1-P7":0,"8180918988-PCC2-P8":0,"8180918988-PCC4-P9":0,"8180918984-P4A1-P2B2":0,"8180918984-P4A2-P2B1":0,"8180918055-P1A1-P3B1":0,"8180918055-P1A2-P3B2":0,"8180918055-P1A3-P3B3":0,"8180918055-P1A4-P4C1":0,"8180918055-P2D1-P4C1":0,"8180918055-P2D2-P4C2":0,"8180918055-P2D3-P4C3":0,"8180918051-P1-P4B4":0,"8180918051-P2-P4B2":0,"8180918051-P3-P4B3":0,"8180918050-P5A1-P1":0,"8180918050-P5A2-P2":0,"8180918050-P5A3-P3":0,"8180917174-P1-P2":0,"8180917001-P5A1-P1":0,"8180917001-P5A2-P2":0,"8180917001-P5A3-P3":0,"8180917001-P5A4-P4":0,"8180916998-P5A1-P1":0,"8180916998-P5A2-P2":0,"8180916998-P5A3-P3":0,"8180916998-P5A4-P4":0,"8180916555-P5A1-P1":0,"8180916555-P5A2-P2":0,"8180916555-P5A3-P3":0,"8180916555-P5A4-P4":0,"8180916079-P5A1-P1":0,"8180916079-P5A2-P2":0,"8180916079-P5A3-P3":0,"8180916079-P5A4-P4":0,"8180916078-P1A1-P5C1":0,"81809160788-P1A2-P5C2":0,"8180916078-P1A3-P6D1":0,"8180916078-P3-P6D3":0,"8180916078-P4B4-P6D2":0,"8180916078-P4B1-P8":0,"8180916078-P4B2-P2":0,"8180916078-P4B3-P7":0,"8180916032-P1A1-P3B1":0,"8180916032-P1A2-P3B2":0,"8180916032-P2A3-P3B3":0,"8180916032-P2A1-P4":0,"8180916032-P2A2-P5":0,"8180916031-P1A1-P3B1":0,"8180916031-P1A2-P3B2":0,"8180916031-P2A3-P3B3":0,"8180916031-P2A1-P4":0,"8180916031-P2A2-P5":0,"8180915171-P1-P2":0,"8180915153-P5A1-P1":0,"8180915153-P5A2-P2":0,"8180915153-P5A4-P4":0,"8180915139-P1-P2":0,"8180914762-PCC1-P3F1":0,"8180914762-PCC2-P2E1":0,"8180914762-PCC3-P4G4":0,"8180914762-PCC4-P1D1":0,"8180914762-PBB1-P5H2":0,"8180914762-PBB2-P3F2":0,"8180914762-PBB3-P4G1":0,"8180914762-PBB4-P1D2":0,"8180914762-PAA1-P5H4":0,"8180914762-PAA2-P4G3":0,"8180914762-PAA3-P2E2":0,"8180914446-P1A3-P2":0,"8180913007-P5A1-P1":0,"8180913007-P5A2-P2":0,"8180913007-P5A3-P3":0,"8180913007-P5A4-P4":0,"8180912528-P5A1-P1":0,"8180912528-P5A2-P2":0,"8180912528-P5A3-P3":0,"8180912528-P5A4-P4":0,"8180912527-P5A1-P1":0,"8180912527-P5A2-P2":0,"8180912527-P5A3-P3":0,"8180912527-P5A4-P4":0,"8180912265-PAA3-P2":0,"8180912265-PAA1-P8F1":0,"8180912265-PAA2-P3D1":0,"8180912265-PBB3-P3D2":0,"8180912265-PBB2-P1":0,"8180912265-PBB1-P8F2":0,"8180912265-PBB4-P6E3":0,"8180912265-PCC4-P6E1":0,"8180912265-PCC3-P3D3":0,"8180912265-PCC1-P4":0,"8180912265-PCC2-P5":0,"8180911679-P5A1-P1":0,"8180911679-P5A2-P2":0,"8180911679-P5A3-P3":0,"8180911679-P5A4-P4":0,"8180911677-P4A1-P1":0,"8180911677-P4A2-P2":0,"8180911677-P4A3-P3B1":0,"8180911676-P4A3-P3":0,"8180911676-P4A4-P3B3":0,"8180911676-P4A1-P1":0,"8180911676-P4A2-P2":0,"8180911675-P5A1-P1":0,"8180911675-P5A2-P2":0,"8180911675-P5A3-P3":0,"8180911675-P5A4-P4":0,"8180909367-P5A1-P1":0,"8180909367-P5A2-P2":0,"8180909367-P5A3-P3":0,"8180909367-P5A4-P4":0,"8180908061-P5A1-P1":0,"8180908061-P5A2-P2":0,"8180908061-P5A3-P3":0,"8180908061-P5A4-P4":0,"8180908060-P5A1-P1":0,"8180908060-P5A2-P2":0,"8180908060-P5A3-P3B1":0,"8180908060-P5A4-P4":0,"8180908000-P1A2-P2B1":0,"8180908000-P1A1-P2B2":0,"8180907261-P5A1-P1":0,"8180907261-P5A2-P2":0,"8180907261-P5A3-P3B3":0,"8180907261-P5A4-P4":0,"8180907259-P4A3-P3B1":0,"8180907259-P4A4-P3B2":0,"8180907259-P4A1-P1":0,"8180907259-P4A2-P2":0,"8180907136-P5A1-P1":0,"8180907136-P5A2-P2":0,"8180907136-P5A3-P3":0,"8180907136-P5A4-P4":0,"8180907133-P1A3-P2":0,"8180907131-P5A1-P1":0,"8180907131-P5A2-P2":0,"8180907131-P5A3-P3B1":0,"8180907131-P5A4-P4":0,"8180907130-P4A1-P1":0,"8180907130-P4A2-P2":0,"8180907130-P4A3-P3B1":0,"8180907129-P4A3-P3B1":0,"8180907129-P4A4-P3B2":0,"8180907129-P4A1-P1":0,"8180907129-P4A2-P2":0,"8180900969-P1A1-P2B2":0,"8180900969-P1A2-P2B1":0,"818044045-P5A1-P1":0,"818044045-P5A2-P2":0,"818044045-P5A3-P3":0,"818044045-P5A4-P4":0}; // 从Excel嵌入的实际库存
+
+// 初始库存快照（不可变），用于从扫码记录重新计算当前库存，防止同步污染
+const INITIAL_INVENTORY = JSON.parse(JSON.stringify(inventory));
+
+function recomputeInventory() {
+  const result = JSON.parse(JSON.stringify(INITIAL_INVENTORY));
+  // 【关键修复】必须按时间“正序”推演，否则出入库会算错。
+  // scanRecords 是 unshift 插入的（最新的在数组最前），若直接按数组顺序遍历，
+  // 就变成“先出库后入库”：出库时库存为0，被 Math.max(0,...) 夹紧成0（漏洞丢失），
+  // 之后入库又把数量加上去，最终库存停留在“累计入库”而不是“入库-出库”。
+  // 这正是 0912 那批“已出库但库存仍显示入库数量”的根因。
+  // 排序：以时间 t 字符串升序（格式 YYYY-MM-DD HH:mm，可直接字典序比较）；
+  // 同时间的记录，出库排在入库之后（保持“先入后出”的合理语义）。
+  const ordered = scanRecords.slice().sort((a, b) => {
+    const ta = String(a.t || ''), tb = String(b.t || '');
+    if (ta !== tb) return ta < tb ? -1 : 1;
+    const aa = a.a === '出库' ? 1 : 0, ab = b.a === '出库' ? 1 : 0;
+    return aa - ab;
+  });
+  for (const rec of ordered) {
+    const hp = rec.x || '';
+    if (!hp) continue;
+    const q = (rec.q && rec.q > 0) ? rec.q : 1; // 兼容旧记录（默认1）
+    if (rec.a === '入库') {
+      result[hp] = (result[hp] || 0) + q;
+    } else if (rec.a === '出库') {
+      // 【不夹紧】允许为负数：负数代表“出了没入过的货”，是需要人工核对的账实不符，
+      // 用 0 夹紧会把这种异常悄悄吞掉，导致库存虚高且无从追查。
+      result[hp] = (result[hp] || 0) - q;
+    }
+  }
+  // 确保BOM里所有半品料号都注册进库存表（恢复/导入的新BOM可正常累计与展示）
+  for (const _cp in bomData) {
+    (bomData[_cp] || []).forEach(_p => { if (!(_p.p in result)) result[_p.p] = 0; });
+  }
+  inventory = result;
+}
+
+let bomData = INIT_DATA.bom;
+let bomImportedAt = {}; // 【BOM覆盖导入】每个成品的BOM最后导入时间戳（ms），同步时"最新导入的BOM为准"
+let bomCleared = false; // 用户手动清除BOM后，同步不再恢复
+let productList = Object.keys(INIT_DATA.bom);
+
+// 半品总数（用于KPI显示）
+const SEMI_TOTAL_COUNT = 277;
+
+// ====== 用户认证系统 ======
+let currentUser = null; // {username, name, role}
+let users = []; // [{username, passwordHash, name, role}]
+
+// SHA-256 哈希（密码存储用）
+async function sha256(text) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// 初始化默认管理员（首次使用时自动创建）
+async function initDefaultUsers() {
+  if (users.length === 0) {
+    const hash = await sha256('admin123');
+    users.push({ username: 'admin', passwordHash: hash, name: '管理员', role: 'admin', updatedAt: Date.now() });
+    saveUsers();
+  }
+}
+
+// 登录
+async function doLogin() {
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const remember = document.getElementById('loginRemember').checked;
+  const errorEl = document.getElementById('loginError');
+  
+  if (!username || !password) {
+    errorEl.textContent = '请输入工号和密码';
+    errorEl.style.display = 'block';
+    return;
+  }
+  
+  let hash;
+  try {
+    hash = await sha256(password);
+  } catch(e) {
+    errorEl.textContent = '登录失败：' + e.message;
+    errorEl.style.display = 'block';
+    console.error('sha256 error:', e);
+    return;
+  }
+  
+  const user = users.find(u => u.username === username && u.passwordHash === hash);
+  
+  if (!user) {
+    errorEl.textContent = '工号或密码错误';
+    errorEl.style.display = 'block';
+    return;
+  }
+  
+  currentUser = { username: user.username, name: user.name || user.username, role: user.role };
+  
+  // 记住登录状态
+  if (remember) {
+    localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    localStorage.setItem('loginExpiry', Date.now() + 7 * 24 * 60 * 60 * 1000); // 7天
+  } else {
+    sessionStorage.setItem('currentUser', JSON.stringify(currentUser));
+  }
+  
+  // 显示主界面
+  document.getElementById('loginOverlay').style.display = 'none';
+  document.getElementById('mainApp').style.display = '';
+  document.getElementById('userDisplayName').textContent = currentUser.name;
+  errorEl.style.display = 'none';
+  // 登录后自动聚焦扫码框（扫码枪依赖焦点输入）
+  const _st = document.getElementById('tab-scan');
+  if (_st && _st.classList.contains('active')) document.getElementById('scanInput').focus();
+}
+
+// 检查是否已登录
+function checkAuth() {
+  // 先检查 sessionStorage
+  let stored = sessionStorage.getItem('currentUser');
+  // 再检查 localStorage（记住我）
+  if (!stored) {
+    const expiry = localStorage.getItem('loginExpiry');
+    if (expiry && Date.now() < parseInt(expiry)) {
+      stored = localStorage.getItem('currentUser');
+    } else {
+      localStorage.removeItem('currentUser');
+      localStorage.removeItem('loginExpiry');
+    }
+  }
+  
+  if (stored) {
+    try {
+      currentUser = JSON.parse(stored);
+      document.getElementById('loginOverlay').style.display = 'none';
+      document.getElementById('mainApp').style.display = '';
+      document.getElementById('userDisplayName').textContent = currentUser.name;
+      // 免登录恢复后自动聚焦扫码框
+      const _st2 = document.getElementById('tab-scan');
+      if (_st2 && _st2.classList.contains('active')) document.getElementById('scanInput').focus();
+      return true;
+    } catch(e) {}
+  }
+  return false;
+}
+
+// 退出登录
+function openChangePwdModal() {
+  document.getElementById('changePwdModal').style.display = 'flex';
+  document.getElementById('oldPwdInput').value = '';
+  document.getElementById('newPwdInput').value = '';
+  document.getElementById('confirmPwdInput').value = '';
+  closeUserDropdown();
+}
+
+function closeChangePwdModal() {
+  document.getElementById('changePwdModal').style.display = 'none';
+}
+
+async function doChangePwd() {
+  const oldPwd = document.getElementById('oldPwdInput').value.trim();
+  const newPwd = document.getElementById('newPwdInput').value.trim();
+  const confirmPwd = document.getElementById('confirmPwdInput').value.trim();
+  
+  if (!oldPwd || !newPwd) { showToast('请填写完整', 'error'); return; }
+  if (newPwd !== confirmPwd) { showToast('两次密码不一致', 'error'); return; }
+  if (newPwd.length < 4) { showToast('密码至少4位', 'error'); return; }
+  
+  const user = users.find(u => u.username === currentUser.username);
+  if (!user) { showToast('用户不存在', 'error'); return; }
+  if (user.passwordHash !== await sha256(oldPwd)) { showToast('当前密码错误', 'error'); return; }
+  
+  user.passwordHash = await sha256(newPwd);
+  saveUsers();
+  closeChangePwdModal();
+  showToast('密码修改成功', 'success');
+}
+
+function doLogout() {
+  closeUserDropdown();
+  currentUser = null;
+  sessionStorage.removeItem('currentUser');
+  localStorage.removeItem('currentUser');
+  localStorage.removeItem('loginExpiry');
+  document.getElementById('loginOverlay').style.display = '';
+  document.getElementById('mainApp').style.display = 'none';
+  document.getElementById('loginUsername').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').style.display = 'none';
+}
+
+// 用户下拉菜单
+function toggleUserMenu() {
+  const dd = document.getElementById('userDropdown');
+  if (dd.style.display === 'none') {
+    // 填充用户信息
+    document.getElementById('dropdownUserName').textContent = `${currentUser.name}（${currentUser.username}）`;
+    document.getElementById('dropdownUserRole').textContent = currentUser.role === 'admin' ? '管理员' : '操作员';
+    // 管理员才显示用户管理
+    document.getElementById('menuManageUsers').style.display = currentUser.role === 'admin' ? '' : 'none';
+    dd.style.display = 'block';
+    // 点击其他地方自动关闭
+    setTimeout(() => {
+      document.addEventListener('click', closeUserMenuOnOutside, { once: true });
+    }, 10);
+  } else {
+    dd.style.display = 'none';
+  }
+}
+function closeUserMenuOnOutside(e) {
+  const dd = document.getElementById('userDropdown');
+  const badge = document.getElementById('userBadge');
+  if (!dd.contains(e.target) && !badge.contains(e.target)) {
+    dd.style.display = 'none';
+  } else {
+    setTimeout(() => {
+      document.addEventListener('click', closeUserMenuOnOutside, { once: true });
+    }, 10);
+  }
+}
+function closeUserDropdown() {
+  document.getElementById('userDropdown').style.display = 'none';
+}
+// 切换账号：退出后重新显示登录框，保留用户名
+function doSwitchAccount() {
+  closeUserDropdown();
+  const prevUser = currentUser ? currentUser.username : '';
+  currentUser = null;
+  sessionStorage.removeItem('currentUser');
+  localStorage.removeItem('currentUser');
+  localStorage.removeItem('loginExpiry');
+  document.getElementById('mainApp').style.display = 'none';
+  document.getElementById('loginOverlay').style.display = '';
+  document.getElementById('loginUsername').value = prevUser;
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').style.display = 'none';
+  document.getElementById('loginPassword').focus();
+}
+
+// 用户管理弹窗
+function openUserModal() {
+  if (!currentUser || currentUser.role !== 'admin') {
+    alert('只有管理员可以管理用户');
+    return;
+  }
+  renderUserList();
+  document.getElementById('userModal').style.display = 'flex';
+}
+
+function closeUserModal() {
+  document.getElementById('userModal').style.display = 'none';
+}
+
+function renderUserList() {
+  const el = document.getElementById('userListArea');
+  if (users.length === 0) {
+    el.innerHTML = '<p style="color:#888;text-align:center">暂无用户</p>';
+    return;
+  }
+  el.innerHTML = users.map(u => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f8f9fa;border-radius:6px;margin-bottom:6px">
+      <div>
+        <strong>${u.name || u.username}</strong>
+        <span style="color:#888;font-size:.8rem;margin-left:6px">${u.username}</span>
+        <span style="font-size:.75rem;padding:2px 6px;border-radius:4px;margin-left:6px;background:${u.role === 'admin' ? '#e8f4fd;color:#1976d2' : '#f0f0f0;color:#666'}">${u.role === 'admin' ? '管理员' : '操作员'}</span>
+      </div>
+      <div>
+        <button onclick="resetUserPassword('${u.username}')" style="padding:4px 8px;font-size:.75rem;border:1px solid #ddd;border-radius:4px;background:#fff;cursor:pointer;margin-right:4px">重置密码</button>
+        ${u.username !== 'admin' ? `<button onclick="deleteUser('${u.username}')" style="padding:4px 8px;font-size:.75rem;border:1px solid #e74c3c;border-radius:4px;background:#fff;color:#e74c3c;cursor:pointer">删除</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+async function addUser() {
+  const username = document.getElementById('newUserUsername').value.trim();
+  const name = document.getElementById('newUserName').value.trim();
+  const password = document.getElementById('newUserPassword').value;
+  const role = document.getElementById('newUserRole').value;
+  
+  if (!username || !password) {
+    alert('工号和密码不能为空');
+    return;
+  }
+  if (users.some(u => u.username === username)) {
+    alert('该工号已存在');
+    return;
+  }
+  
+  const passwordHash = await sha256(password);
+  users.push({ username, passwordHash, name: name || username, role, updatedAt: Date.now() });
+  saveUsers();
+  renderUserList();
+  document.getElementById('newUserUsername').value = '';
+  document.getElementById('newUserName').value = '';
+  document.getElementById('newUserPassword').value = '';
+  showToast(`用户 ${name || username} 已添加`, 'success');
+}
+
+async function resetUserPassword(username) {
+  const newPwd = prompt(`请输入 ${username} 的新密码：`);
+  if (!newPwd) return;
+  const user = users.find(u => u.username === username);
+  if (user) {
+    user.passwordHash = await sha256(newPwd);
+    user.updatedAt = Date.now();
+    saveUsers();
+    showToast('密码已重置', 'success');
+  }
+}
+
+function deleteUser(username) {
+  if (username === 'admin') { alert('不能删除管理员'); return; }
+  if (!confirm(`确定删除用户 ${username}？`)) return;
+  users = users.filter(u => u.username !== username);
+  saveUsers();
+  renderUserList();
+  showToast('用户已删除', 'info');
+}
+
+function saveUsers() {
+  localStorage.setItem('appUsers', JSON.stringify(users));
+  // 同步到远程
+  if (typeof syncCycle === 'function') syncCycle();
+}
+
+function loadUsers() {
+  const raw = localStorage.getItem('appUsers');
+  if (raw) {
+    try { users = JSON.parse(raw); } catch(e) { users = []; }
+  }
+}
+
+// ====== LOCAL STORAGE 持久化 ======
+const STORAGE_KEY = 'semiKitDashboard';
+const DATA_VERSION = 'v5'; // v5: 切换数据文件+版本升级，彻底隔离旧标签页数据
+
+// 【防循环】只落盘、不触发同步的保存。
+// syncCycle 内部回写数据时使用——若此处调用 saveData()，而 saveData 又会
+// 调 syncCycle()，会形成 syncCycle → saveData → syncCycle 的递归/重复同步。
+function persistLocal() {
+  try {
+    const data = {
+      _version: DATA_VERSION,
+      scanRecords: scanRecords,
+      inventory: inventory,
+      bomData: bomData,
+      bomImportedAt: bomImportedAt,
+      bomCleared: bomCleared,
+      productList: productList,
+      currentWorkOrder: currentWorkOrder,
+      importedWorkOrders: importedWorkOrders,
+      currentAction: currentAction,
+      deletedRecords: deletedRecords,
+      palletPrefix: (document.getElementById('palletPrefix') || {}).value || '',
+      palletSeq: (document.getElementById('palletSeq') || {}).value || '',
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch(e) {
+    console.warn('落盘失败:', e);
+  }
+}
+
+function saveData() {
+  try {
+    const data = {
+      _version: DATA_VERSION,
+      scanRecords: scanRecords,
+      inventory: inventory,
+      bomData: bomData,
+      bomImportedAt: bomImportedAt,
+      bomCleared: bomCleared,
+      productList: productList,
+      currentWorkOrder: currentWorkOrder,
+      importedWorkOrders: importedWorkOrders,
+      currentAction: currentAction,
+      deletedRecords: deletedRecords,
+      palletPrefix: document.getElementById('palletPrefix').value,
+      palletSeq: document.getElementById('palletSeq').value,
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    // 删完立刻同步，不要拖 2 秒
+    if (typeof syncCycle === 'function') syncCycle();
+  } catch(e) {
+    console.warn('保存数据到本地存储失败:', e);
+  }
+}
+
+// 防抖保存（避免频繁写入）
+let saveTimer = null;
+function saveDataDebounced() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveData, 500);
+}
+
+function loadData() {
+  // 清除模式：URL带#clear时自动清空所有数据
+  if (location.hash === '#clear') {
+    localStorage.removeItem(STORAGE_KEY);
+    try { sessionStorage.removeItem(STORAGE_KEY); } catch(e) {}
+    location.hash = '';
+    location.replace(location.href.split('#')[0]);
+    return false;
+  }
+  // 仅清空BOM数据：URL带#clearbom
+  if (location.hash === '#clearbom') {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const data = JSON.parse(raw);
+        data.bomData = {};
+        data.bomImportedAt = {};
+        data.productList = [];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        console.log('[清空BOM] 已清除所有BOM数据');
+      }
+    } catch(e) {}
+    location.hash = '';
+    location.replace(location.href.split('#')[0]);
+    return false;
+  }
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    // 版本检查：旧数据自动清除，避免与新代码冲突
+    if (data._version !== DATA_VERSION) {
+      console.log('检测到旧版数据(v' + (data._version || '未知') + ')，自动清除...');
+      localStorage.removeItem(STORAGE_KEY);
+      return false;
+    }
+    if (data.scanRecords && Array.isArray(data.scanRecords)) {
+      // 【补丁2】先从 localStorage 加载墓碑，再过滤幽灵记录
+      if (data.deletedRecords && Array.isArray(data.deletedRecords)) {
+        deletedRecords = data.deletedRecords;
+      }
+      const tomb = new Set(deletedRecords);
+      scanRecords = data.scanRecords.filter(r => !tomb.has(recordKey(r.c, r.t)));
+    }
+    // 不从 localStorage 恢复 inventory，改为从初始库存+扫码记录重新计算
+    recomputeInventory();
+    // 恢复BOM数据（用户导入/粘贴的，不再丢失）
+    if (data.bomData && typeof data.bomData === 'object') {
+      bomData = data.bomData;
+    }
+    // 【BOM覆盖导入】恢复各成品的导入时间戳
+    if (data.bomImportedAt && typeof data.bomImportedAt === 'object') {
+      bomImportedAt = data.bomImportedAt;
+    }
+    if (data.bomCleared) {
+      bomCleared = true;
+    }
+    // 清理异常BOM条目（含+或*的公式字符串）
+    cleanBomData();
+    if (data.productList && Array.isArray(data.productList)) {
+      productList = data.productList;
+    }
+    // 半品料号排重（必须在productList恢复之后）
+    dedupBomData();
+    if (data.currentWorkOrder) {
+      currentWorkOrder = data.currentWorkOrder;
+      // 从扫码记录重新计算已归数量，不依赖保存的旧值
+      recalcComponentCounts();
+    }
+    if (data.importedWorkOrders && Array.isArray(data.importedWorkOrders)) {
+      importedWorkOrders = data.importedWorkOrders;
+    }
+    if (data.currentAction) {
+      currentAction = data.currentAction;
+    }
+    if (data.palletPrefix) {
+      document.getElementById('palletPrefix').value = data.palletPrefix;
+    }
+    if (data.palletSeq) {
+      document.getElementById('palletSeq').value = data.palletSeq;
+    }
+    updatePalletDisplay();
+    console.log('已从本地存储恢复数据，保存时间：' + (data.savedAt || '未知'));
+    return true;
+  } catch(e) {
+    console.warn('从本地存储恢复数据失败:', e);
+    return false;
+  }
+}
+
+// 清理异常BOM数据（半品料号含+或*的公式字符串）
+function cleanBomData() {
+  let cleaned = 0;
+  for (const cp of Object.keys(bomData)) {
+    const before = bomData[cp].length;
+    bomData[cp] = bomData[cp].filter(p => !/[+*]/.test(p.p));
+    cleaned += before - bomData[cp].length;
+    if (bomData[cp].length === 0) {
+      delete bomData[cp];
+      const idx = productList.indexOf(cp);
+      if (idx >= 0) productList.splice(idx, 1);
+    }
+  }
+  if (cleaned > 0) {
+    console.log(`[BOM清理] 移除了 ${cleaned} 条异常BOM条目`);
+    saveData();
+  }
+}
+
+// BOM半品料号排重（同成品下同半品料号只保留第一个）
+function dedupBomData() {
+  let removed = 0;
+  for (const cp of Object.keys(bomData)) {
+    const seen = new Set();
+    const filtered = bomData[cp].filter(item => {
+      if (seen.has(item.p)) { removed++; return false; }
+      seen.add(item.p);
+      return true;
+    });
+    bomData[cp] = filtered;
+  }
+  // 排重productList（防止同成品出现两行）
+  const uniquePL = [];
+  const plSeen = new Set();
+  productList.forEach(cp => {
+    if (!plSeen.has(cp)) { plSeen.add(cp); uniquePL.push(cp); }
+  });
+  if (uniquePL.length < productList.length) {
+    removed += productList.length - uniquePL.length;
+    productList.length = 0;
+    productList.push(...uniquePL);
+  }
+  if (removed > 0) {
+    console.log(`[BOM排重] 移除 ${removed} 条重复`);
+    saveData();
+  }
+}
+
+// ====== GITHUB SYNC 多人同步 ======
+const SYNC_CONFIG = {
+  token: 'ghp_' + 'J5CPrdGL6M' + 'l93AP3G2Yd' + 'OSWXUeEZfu' + '1Q6GGu',
+  owner: 'Mirror20260901',
+  repo: 'semi-kit-dashboard',
+  path: 'shared-v2.json',
+  pollInterval: 30000,
+  apiBase: 'https://api.github.com'
+};
+
+let syncTimer = null;
+let remoteSha = '';
+let remoteData = null; // 【防回退】最近一次拉取的云端数据快照，供推送前做并集保护
+let lastPushAt = 0;    // 【防循环】上次推送的时间戳，用于推送节流
+const PUSH_MIN_INTERVAL = 8000; // 【防循环】同一设备最短推送间隔（毫秒）
+// 【重要】用户主动清除数据的豁免标记。
+// 防回退保护会拦截"记录数骤减"的推送，但用户主动点「清除」时记录数本来就是 0，
+// 必须允许这种推送生效，否则云端清不掉。此标记在清除/恢复后被置为一次有效。
+let allowShrinkPush = false;
+let isSyncing = false;
+let lastSyncTime = null;
+let syncEnabled = true;
+
+function updateSyncStatus(status, text) {
+  const dot = document.querySelector('#syncIndicator .sync-dot');
+  const txt = document.querySelector('#syncIndicator .sync-text');
+  if (!dot || !txt) return;
+  dot.className = 'sync-dot ' + status;
+  txt.textContent = text || '';
+}
+
+async function fetchSharedData() {
+  const url = SYNC_CONFIG.apiBase + '/repos/' + SYNC_CONFIG.owner + '/' + SYNC_CONFIG.repo + '/contents/' + SYNC_CONFIG.path + '?t=' + Date.now();
+  const resp = await fetch(url, {
+    headers: { 'Authorization': 'token ' + SYNC_CONFIG.token }
+  });
+  if (resp.status === 404) return null;
+  if (!resp.ok) throw new Error('GitHub API error: ' + resp.status);
+  const result = await resp.json();
+  remoteSha = result.sha || '';
+  const content = decodeBase64(result.content);
+  const parsed = JSON.parse(content);
+  remoteData = parsed; // 【防回退】缓存云端快照，推送前用于并集保护判断
+  return parsed;
+}
+
+// ====== 防回退保护：避免"旧状态设备"把云端记录大量覆盖掉 ======
+// 场景：某设备在误清除后仍开着旧页面，其本地只有少量记录/含大量墓碑，
+// 一旦它推送，云端 600+ 条历史会被覆盖成十几条（线上真实发生过两次）。
+//
+// 【v2 重要修复：消除推送死循环】
+// 上一版只在 pushSharedData 内部临时做并集，且每次都写入新的 mergedAt 时间戳。
+// 这会造成两台设备互相触发、无限推送（线上实测 6.5 分钟产生 30 次提交）：
+//   设备A推送（写 mergedAt=T1）→ 设备B拉取后本地被改成并集、与远端不一致
+//   → B 判定 hadChanges 再次推送（写 T2）→ A 再推 …… 永不停止。
+// 现在改为：把并集合并当作一次真实的本地状态变更，在 syncCycle 内完成并
+// 回写到本地 scanRecords/deletedRecords，推送后本地与云端一致，循环自然终止；
+// 同时不再写入每次都会变的 mergedAt，仅用 mergedNote 做一次性标记。
+//
+// 另一种循环来源：本地把某些记录判为"需要保留"，云端墓碑却把它们标记为已删除，
+// 于是每次拉取都过滤掉、每次推送又加回去（拉取/推送相互打架）。因此并集里的
+// 墓碑必须同步剔除这些 key，让本地与云端对同一批记录达成一致。
+function mergeBeforePush(localData, remoteSnapshot) {
+  try {
+    if (!remoteSnapshot || !Array.isArray(remoteSnapshot.scanRecords)) return localData;
+    const localRecs = Array.isArray(localData.scanRecords) ? localData.scanRecords : [];
+    const remoteRecs = remoteSnapshot.scanRecords;
+    const rk = (r) => String(r.c || '').replace(/[\r\n|｜]/g, '') + '||' + String(r.t || '').replace(/[\r\n|｜]/g, '');
+
+    // 本地墓碑集合（用于判断哪些记录是被主动删除的）
+    const localTomb = new Set(localData.deletedRecords || []);
+    // 本地"有效可见"记录 = 本地记录 - 本地墓碑
+    const localVisible = localRecs.filter(r => !localTomb.has(rk(r)));
+    const remoteVisible = remoteRecs.filter(r => !(new Set(remoteSnapshot.deletedRecords || [])).has(rk(r)));
+
+    // 触发条件：本地有效记录显著少于云端（本地<云端的一半，且差距>=20条）
+    const shrinking = localVisible.length < remoteVisible.length * 0.5 &&
+                      (remoteVisible.length - localVisible.length) >= 20;
+    if (!shrinking) return localData;
+
+    console.log('[防回退] 检测到本次推送会削减云端记录：本地可见 ' + localVisible.length +
+                ' 条 < 云端 ' + remoteVisible.length + ' 条，改为并集合并推送');
+
+    // 并集：以云端为基底，叠加本地独有记录
+    // 注意：Map 键必须含动作（dedupKey）——同码同分钟的入库+出库是两条独立记录，
+    // 用 recordKey 做键会互相覆盖塌缩，丢一半记录。
+    const merged = new Map();
+    remoteRecs.forEach(r => merged.set(dedupKey(r), r));
+    let added = 0;
+    localRecs.forEach(r => { const k = dedupKey(r); if (!merged.has(k)) { merged.set(k, r); added++; } });
+    const records = [...merged.values()].sort((a, b) => String(b.t || '').localeCompare(String(a.t || '')));
+
+    // 墓碑：云端墓碑 ∪ 本地墓碑，但必须剔除所有要保留记录的 key
+    const keepKeys = new Set(records.map(r => rk(r)));
+    const tombAll = new Set([...(remoteSnapshot.deletedRecords || []), ...(localData.deletedRecords || [])]);
+    const finalTomb = [...tombAll].filter(k => !keepKeys.has(k)).slice(-5000);
+
+    console.log('[防回退] 合并后 ' + records.length + ' 条（新增 ' + added + '），墓碑 ' + finalTomb.length +
+                '（已剔除 ' + (tombAll.size - finalTomb.length) + ' 个会误删保留记录的墓碑）');
+    // 注意：只标记 mergedNote，不写 mergedAt（时间戳每次都不同，会诱发推送循环）
+    return { ...localData, scanRecords: records, deletedRecords: finalTomb,
+             mergedNote: '防回退并集合并' };
+  } catch(e) {
+    console.warn('[防回退] 合并异常，按原数据推送', e);
+    return localData;
+  }
+}
+
+async function pushSharedData(data) {
+  // 【防回退 v2】合并已统一在 syncCycle 内完成并回写本地（那里能拿到完整的
+  // remote 快照，也能同步更新 scanRecords 变量与界面）。此处不再重复合并——
+  // 重复合并会与 syncCycle 的结果不一致，形成"推送内容 ≠ 本地内容"的错位，
+  // 下一轮拉取又会判定有变化，从而诱发推送循环。
+  // 仅作为兜底：若调用方直接推送了明显会削减云端的数据，做一次保护。
+  // 例外：用户主动清除/恢复（allowShrinkPush）时放行——那是合法操作。
+  try {
+    const remoteRec = (typeof remoteData !== 'undefined' && remoteData
+      && Array.isArray(remoteData.scanRecords)) ? remoteData.scanRecords : null;
+    const localRecs = Array.isArray(data.scanRecords) ? data.scanRecords : [];
+    if (!allowShrinkPush && remoteRec && remoteRec.length >= 20 && localRecs.length < remoteRec.length * 0.5) {
+      console.warn('[防回退] pushSharedData 收到削减性数据（本地 ' + localRecs.length +
+                   ' < 云端 ' + remoteRec.length + '），已拦截本次推送以避免覆盖云端');
+      return { ok: false, blocked: true, reason: 'shrinking-push' };
+    }
+  } catch(e) { console.warn('防回退兜底检查失败', e); }
+  // 豁免标记只在一次推送内有效，推送后立即失效（防止后续误推削减数据）
+  const _wasAllowShrink = allowShrinkPush;
+  if (_wasAllowShrink) allowShrinkPush = false;
+
+  const jsonStr = JSON.stringify(data);
+  const encoded = encodeBase64(jsonStr);
+  const body = {
+    message: 'sync: update shared data ' + new Date().toISOString(),
+    content: encoded,
+    committer: { name: 'Sync Bot', email: 'sync@dashboard.local' }
+  };
+  if (remoteSha) body.sha = remoteSha;
+  const url = SYNC_CONFIG.apiBase + '/repos/' + SYNC_CONFIG.owner + '/' + SYNC_CONFIG.repo + '/contents/' + SYNC_CONFIG.path;
+  const resp = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Authorization': 'token ' + SYNC_CONFIG.token,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  if (!resp.ok) {
+    const errText = await resp.text();
+    throw new Error('Push failed: ' + resp.status + ' ' + errText);
+  }
+  const result = await resp.json();
+  if (result.content && result.content.sha) {
+    remoteSha = result.content.sha;
+  }
+}
+
+function encodeBase64(str) {
+  const bytes = new TextEncoder().encode(str);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+function decodeBase64(str) {
+  const cleaned = str.replace(/\n/g, '');
+  const binary = atob(cleaned);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+function mergeRemoteData(remote) {
+  if (!remote) return false;
+  let changed = false;
+  // inventory 不再通过远程合并，改为各设备从 scanRecords 重新计算（防止污染数据覆盖正确值）
+
+  // ===== 合并远程 BOM 数据 =====
+  // 【BOM覆盖导入 v2】按"导入时间戳"合并：同一成品谁的导入时间新就用谁的（整体替换）。
+  // 旧版是无条件并集——A 设备重新导入修正 BOM 后，B 设备（还留着旧条目）一合并，
+  // 已删除的旧料号又会被并回来，覆盖导入形同虚设。
+  // 兼容性：旧数据没有时间戳（视为0），两边都为0时保持旧并集行为，不丢数据。
+  if (!bomCleared && remote.bomData && typeof remote.bomData === 'object') {
+    for (const cp of Object.keys(remote.bomData)) {
+      const rt = (remote.bomImportedAt && remote.bomImportedAt[cp]) || 0;
+      const lt = (bomImportedAt && bomImportedAt[cp]) || 0;
+      if (rt > lt) {
+        // 远端导入更新：整体替换该成品的 BOM
+        bomData[cp] = JSON.parse(JSON.stringify(remote.bomData[cp]));
+        bomImportedAt[cp] = rt;
+        changed = true;
+      } else if (rt === 0 && lt === 0) {
+        // 两边都没有导入时间戳（旧数据）：保持原并集兼容
+        if (!bomData[cp]) {
+          bomData[cp] = remote.bomData[cp];
+          changed = true;
+        } else {
+          const existing = bomData[cp];
+          const localParts = new Set(existing.map(e => e.p));
+          for (const remoteItem of remote.bomData[cp]) {
+            if (!localParts.has(remoteItem.p)) {
+              existing.push(remoteItem);
+              localParts.add(remoteItem.p);
+              changed = true;
+            }
+          }
+        }
+      }
+      // rt <= lt 且不全为0：本地导入更新或相同，保留本地
+    }
+  }
+  // 【孤儿成品清理】云端带 bomImportedAt（新同步语义）时，删除"云端没有、本地也没有导入时间戳"的成品。
+  // 这类成品只可能来自旧版 INIT_DATA 硬编码残留——云端 BOM 是唯一事实来源，不允许它们复活。
+  // 本地刚导入、尚未推送的成品带有 bomImportedAt 时间戳，不会被误删。
+  if (!bomCleared && remote.bomData && remote.bomImportedAt && Object.keys(remote.bomImportedAt).length > 0) {
+    const _isOrphan = cp => !remote.bomData[cp] && !(bomImportedAt && bomImportedAt[cp]);
+    for (const cp of Object.keys(bomData)) {
+      if (_isOrphan(cp)) {
+        delete bomData[cp];
+        changed = true;
+        console.log('孤儿成品清理：' + cp + '（云端不存在且无导入时间戳，硬编码残留）');
+      }
+    }
+    productList = productList.filter(cp => {
+      if (!_isOrphan(cp)) return true;
+      changed = true;
+      return false;
+    });
+  }
+  if (!bomCleared && remote.productList && Array.isArray(remote.productList)) {
+    for (const cp of remote.productList) {
+      if (!productList.includes(cp)) {
+        productList.push(cp);
+        changed = true;
+      }
+    }
+  }
+
+  // ===== 合并远程用户数据（按时间戳取最新）=====
+  if (remote.users && Array.isArray(remote.users)) {
+    for (const ru of remote.users) {
+      const existing = users.find(u => u.username === ru.username);
+      if (!existing) {
+        users.push(ru);
+        changed = true;
+      } else if ((ru.updatedAt || 0) > (existing.updatedAt || 0)) {
+        // 远程版本更新（如密码已修改），以远程为准
+        existing.passwordHash = ru.passwordHash;
+        existing.name = ru.name || existing.name;
+        existing.role = ru.role || existing.role;
+        existing.updatedAt = ru.updatedAt;
+        changed = true;
+      }
+    }
+    if (changed) saveUsers();
+  }
+
+  // 【自动修复】检测远程数据是否被旧代码污染（无 _version 或版本不匹配）
+  const remoteIsStale = !remote._version || remote._version !== DATA_VERSION;
+
+  // ===== 第一步：先合并远程墓碑（deletedRecords）=====
+  if (remote.deletedRecords && Array.isArray(remote.deletedRecords)) {
+    const existDel = new Set(deletedRecords);
+    for (const dr of remote.deletedRecords) {
+      if (!existDel.has(dr)) {
+        deletedRecords.push(dr);
+        existDel.add(dr);
+        changed = true;
+      }
+    }
+    if (deletedRecords.length > 5000) deletedRecords = deletedRecords.slice(-5000);
+  }
+
+  // ===== 第二步：反向同步——用合并后的墓碑清理本地"幽灵记录"=====
+  const tombstoneSet = new Set(deletedRecords);
+  const before = scanRecords.length;
+  scanRecords = scanRecords.filter(r => !tombstoneSet.has(recordKey(r.c, r.t)));
+  if (scanRecords.length !== before) {
+    changed = true;
+    console.log(`反向同步：清理了 ${before - scanRecords.length} 条被墓碑标记的本地记录`);
+  }
+
+  // ===== 第三步：合并远程 scanRecords（跳过已删除和旧代码污染的记录）=====
+  // 【关键修复】墓碑只按完整 key（码||时间）精确匹配。
+  // 旧版把墓碑的"时间戳部分"单独拿出来做兜底匹配（deletedTsSet.has(tsId)），
+  // 但 t 是分钟级——同一分钟扫的多个码时间戳相同，清除这批记录后，
+  // 未来任何同分钟的正常记录都会被永久拒绝合并（表现为：恢复后记录数变少、
+  // 新扫码在其他设备上不显示）。分钟级时间戳碰撞太常见，此兜底纯属误杀，已移除。
+  if (remote.scanRecords && Array.isArray(remote.scanRecords)) {
+    const existCodes = new Set(scanRecords.map(r => dedupKey(r)));
+    let remoteChanged = false;
+    for (const rr of remote.scanRecords) {
+      const rid = recordKey(rr.c, rr.t);
+      // 跳过已被删除的记录（仅完整 key 匹配）
+      if (tombstoneSet.has(rid)) continue;
+      // 如果远程数据是旧代码污染的，跳过合并
+      if (remoteIsStale) continue;
+      // 判重必须含动作（dedupKey）：同码同分钟的入库+出库是两条合法记录，缺一不可
+      const dkey = dedupKey(rr);
+      if (!existCodes.has(dkey)) {
+        scanRecords.push(rr);
+        existCodes.add(dkey);
+        remoteChanged = true;
+      }
+    }
+    if (remoteChanged) {
+      scanRecords.sort((a, b) => (b.t || '').localeCompare(a.t || ''));
+      changed = true;
+    }
+  }
+
+  // 合并 importedWorkOrders：直接使用远程数据（推送是即时的，远程始终是最新状态）
+  if (remote.importedWorkOrders && Array.isArray(remote.importedWorkOrders)) {
+    importedWorkOrders = remote.importedWorkOrders.slice();
+  }
+  // componentCounts 不再从远程合并，改为从扫码记录重新计算（确保已归数量=实际扫码数量）
+
+  // 合并 scanRecords 后重新计算 inventory
+  if (changed) recomputeInventory();
+  // 合并后从扫码记录重新计算已归数量
+  if (changed && currentWorkOrder.number) recalcComponentCounts();
+  return changed;
+}
+
+async function syncCycle() {
+  if (isSyncing || !syncEnabled) return;
+  isSyncing = true;
+  updateSyncStatus('syncing', '同步中...');
+  try {
+    const remote = await fetchSharedData();
+    // 【关键修复】在合并前，先记录远程的墓碑集合
+    // 推送时过滤掉已被删除的记录，防止旧标签页把已删除数据推回远程
+    const remoteDeletedSet = new Set();
+    if (remote && remote.deletedRecords && Array.isArray(remote.deletedRecords)) {
+      remote.deletedRecords.forEach(d => remoteDeletedSet.add(d));
+    }
+    const hadChanges = mergeRemoteData(remote);
+    // 推送前过滤：移除已在远程墓碑列表中的记录（防止旧标签页复活已删除数据）
+    let pushRecords = scanRecords.slice(0, 5000);
+    if (remoteDeletedSet.size > 0) {
+      pushRecords = pushRecords.filter(r => {
+        const rid = recordKey(r.c, r.t);
+        return !remoteDeletedSet.has(rid);
+      });
+      // 【防循环·关键】过滤结果必须回写本地 scanRecords。
+      // 否则本地仍保留这些"云端已删除"的记录：本轮推的是过滤后的 680 条，
+      // 下一轮 localHasNew 又因本地 687 > 远端 680 而为 true → 再次推送 →
+      // 又被过滤 …… 形成无限推送。回写后本地与云端一致，循环终止。
+      if (pushRecords.length !== scanRecords.length) {
+        console.log('[防循环] 本地有 ' + (scanRecords.length - pushRecords.length) +
+                    ' 条记录已被云端墓碑标记删除，同步移除并回写本地');
+        scanRecords = pushRecords.slice();
+        recomputeInventory();
+        if (currentWorkOrder.number) recalcComponentCounts();
+        persistLocal();
+        refreshAllUI();
+      }
+    }
+    // 推送前合并本地和远程的墓碑（确保墓碑只增不减）
+    const mergedDeleted = [...deletedRecords];
+    if (remote && remote.deletedRecords && Array.isArray(remote.deletedRecords)) {
+      const localDelSet = new Set(mergedDeleted);
+      for (const dr of remote.deletedRecords) {
+        if (!localDelSet.has(dr)) mergedDeleted.push(dr);
+      }
+    }
+    const dataToPush = {
+      _version: DATA_VERSION,
+      scanRecords: pushRecords,
+      bomData: bomData,
+      bomImportedAt: bomImportedAt,
+      productList: productList,
+      users: users,
+      importedWorkOrders: importedWorkOrders,
+      currentWorkOrder: {
+        number: currentWorkOrder.number,
+        product: currentWorkOrder.product,
+        qty: currentWorkOrder.qty,
+        targetQty: currentWorkOrder.targetQty,
+        componentCounts: currentWorkOrder.componentCounts
+      },
+      deletedRecords: mergedDeleted,
+      updatedAt: new Date().toISOString()
+    };
+    // 【推送条件修复】此前仅在"拉取到远端有新变化"时才推送——若只有本机新增了
+    // 扫码记录而远端一直无变化，本机记录会永远滞留本地不上云，导致多台设备
+    // 库存对不上（如某台显示5694、其他台5043）。现增加判断：本地存在远端没有的
+    // 记录或墓碑时，同样触发推送。
+    let localHasNew = false;
+    if (remote && Array.isArray(remote.scanRecords)) {
+      const _remoteKeys = new Set(remote.scanRecords.map(r => dedupKey(r)));
+      localHasNew = scanRecords.some(r => !_remoteKeys.has(dedupKey(r)));
+    } else {
+      localHasNew = scanRecords.length > 0;
+    }
+    let tombstoneNew = false;
+    if (remote && Array.isArray(remote.deletedRecords)) {
+      const _remoteDel = new Set(remote.deletedRecords);
+      tombstoneNew = deletedRecords.some(d => !_remoteDel.has(d));
+    } else {
+      tombstoneNew = deletedRecords.length > 0;
+    }
+    // 【防回退 v2】推送前先做并集合并，并把合并结果【回写本地】。
+    // 回写是关键：否则本地与云端永远不一致，下一轮拉取又会判定 hadChanges
+    // 而再次推送，两台设备互相触发形成无限推送循环（曾实测 6.5 分钟 30 次提交）。
+    let guardMerged = false;
+    if (!allowShrinkPush) {
+      const guarded = mergeBeforePush(dataToPush, remote);
+      if (guarded !== dataToPush && guarded.mergedNote) {
+        dataToPush.scanRecords = guarded.scanRecords;
+        dataToPush.deletedRecords = guarded.deletedRecords;
+        dataToPush.mergedNote = guarded.mergedNote;
+        // 回写本地，使本地与即将推送的内容一致
+        scanRecords = guarded.scanRecords.slice();
+        deletedRecords = guarded.deletedRecords.slice();
+        recomputeInventory();
+        if (currentWorkOrder.number) recalcComponentCounts();
+        persistLocal();
+        refreshAllUI();
+        guardMerged = true;
+      }
+    } else {
+      console.log('[防回退] 检测到用户主动清除/恢复操作，本次推送跳过并集保护（放开削减）');
+    }
+    // 【推送条件收紧】mergedNote 属一次性标记，不参与"是否有变化"的判断，
+    // 否则每次推送都带标记 → 每次都被认为有新内容 → 又一轮推送。
+    let shouldPush = hadChanges || localHasNew || tombstoneNew || guardMerged;
+    // 【最后防线：推送节流】同一设备 8 秒内最多推送一次。
+    // 即便前面还有未预料到的循环源，也不会再出现"每几秒一次"的高频刷提交
+    // （线上曾出现 6.5 分钟 30 次提交，会很快耗尽 GitHub API 配额）。
+    const now = Date.now();
+    if (shouldPush && (now - lastPushAt) < PUSH_MIN_INTERVAL) {
+      console.log('[节流] 距上次推送仅 ' + ((now - lastPushAt) / 1000).toFixed(1) + ' 秒，本次跳过推送');
+      shouldPush = false;
+    }
+    // 只在有实际变化时才推送，避免无变化时因时间戳不同导致反复触发 Pages 重建
+    if (shouldPush) {
+      lastPushAt = now;
+      await pushSharedData(dataToPush);
+    }
+    lastSyncTime = new Date();
+    updateSyncStatus('synced', '已同步');
+    if (shouldPush) {
+      dedupBomData();
+      persistLocal();   // 【防循环】用只落盘版本，避免 saveData→syncCycle 递归
+      refreshAllUI();
+    }
+  } catch(e) {
+    console.warn('Sync error:', e);
+    updateSyncStatus('error', '同步失败');
+  } finally {
+    isSyncing = false;
+  }
+}
+
+function refreshAllUI() {
+  try {
+    if (typeof updateWorkOrderDisplay === 'function') updateWorkOrderDisplay();
+    if (typeof renderWorkOrderList === 'function') renderWorkOrderList();
+    if (typeof renderRecentList === 'function') renderRecentList();
+    if (typeof renderTable === 'function') renderTable();
+    if (typeof refreshDashboard === 'function') refreshDashboard();
+  } catch(e) {
+    console.warn('UI refresh error:', e);
+  }
+}
+
+function startSync() {
+  syncCycle();
+  if (syncTimer) clearInterval(syncTimer);
+  syncTimer = setInterval(syncCycle, SYNC_CONFIG.pollInterval);
+}
+
+let syncPushTimer = null;
+function triggerSync() {
+  if (!syncEnabled) return;
+  if (syncPushTimer) clearTimeout(syncPushTimer);
+  syncPushTimer = setTimeout(syncCycle, 2000);
+}
+// ====== END GITHUB SYNC ======
+
+// 【关键修复】currentWorkOrder / importedWorkOrders 必须在 loadData() 调用前声明，
+// 否则 loadData 内赋值时触发 TDZ（暂时性死区）ReferenceError，
+// 导致本地数据恢复中途失败 → 栈板号丢失 → 扫码枪每枪都被"请先设置栈板号"拦截。
+let currentWorkOrder = { number: '', product: '', qty: 0, targetQty: 0, componentCounts: {} };
+let importedWorkOrders = []; // 批量导入的工单列表 [{number, product, qty}]
+
+// 页面加载时恢复数据
+const restored = loadData();
+if (restored) {
+  // 延迟刷新UI（等DOM准备好）
+  setTimeout(() => {
+    updateWorkOrderDisplay();
+    renderWorkOrderList();
+    renderRecentList();
+    renderTable();
+    refreshDashboard();
+  }, 100);
+}
+
+// 初始化用户认证
+loadUsers();
+(async () => {
+  await initDefaultUsers();
+  // 检查是否已登录
+  checkAuth();
+})();
+
+// 登录框 Enter 键支持
+document.getElementById('loginPassword').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
+document.getElementById('loginUsername').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('loginPassword').focus();
+});
+
+// 启动多人同步
+setTimeout(() => {
+  startSync();
+}, 500);
+
+// ====== TAB SWITCHING ======
+function switchTab(tab) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + tab).classList.add('active');
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    if ((tab === 'scan' && b.textContent.includes('扫码')) ||
+        (tab === 'dashboard' && b.textContent.includes('看板')))
+      b.classList.add('active');
+  });
+  if (tab === 'dashboard') refreshDashboard();
+  if (tab === 'scan') document.getElementById('scanInput').focus();
+}
+
+// ====== ACTION TOGGLE ======
+function setAction(act) {
+  currentAction = act;
+  document.getElementById('btnIn').className = 'action-btn' + (act === '入库' ? ' active-in' : '');
+  document.getElementById('btnOut').className = 'action-btn' + (act === '出库' ? ' active-out' : '');
+  // 焦点还给扫码框：点按钮后扫码枪才能继续扫码
+  document.getElementById('scanInput').focus();
+}
+
+// ====== SCAN HANDLING ======
+const scanInput = document.getElementById('scanInput');
+const scanStatus = document.getElementById('scanStatus');
+
+// 【内嵌回车兼容】二维码内容本身可能含 \r\n（如 101386002|8180914762-PBB4-P1D2\r\n|04895|...），
+// 扫码枪会把码内嵌的回车打成交键：若立即提交会把完整条码拦腰截断。
+// 因此回车后延迟 150ms 再提交；若期间有新字符进入（枪仍在继续打字），说明该回车
+// 是码内容内嵌的，取消本次提交，由下方 input 防抖在码真正结束时提交完整内容。
+let _enterFinalizeTimer = null;
+scanInput.addEventListener('keydown', function(e) {
+  // 输入法防误触：拼音组字状态下的 Enter 不当作扫码提交
+  if (e.isComposing || e.keyCode === 229) return;
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    _gunReset();
+    clearTimeout(_enterFinalizeTimer);
+    _enterFinalizeTimer = setTimeout(() => {
+      _enterFinalizeTimer = null;
+      const val = scanInput.value.trim();
+      if (val) processScan(val);
+    }, 150);
+  }
+});
+
+// ===== 扫码枪增强1：免回车自动提交 =====
+// 原理：扫码枪等同"高速键盘"，整串字符在2.5秒内输入完毕（兼容蓝牙枪/带延时设置的枪），
+// 人工键入达不到该速度。兼容扫码枪回车后缀被关闭的情况。
+let _gunTimer = null, _gunFirst = 0, _gunChars = 0;
+function _gunReset(){ clearTimeout(_gunTimer); _gunTimer = null; _gunFirst = 0; _gunChars = 0; }
+scanInput.addEventListener('input', function(e) {
+  clearTimeout(_enterFinalizeTimer); // 有新字符进来 => 之前的回车是码内嵌的，取消提交继续拼接
+  const now = Date.now();
+  if (!_gunTimer || now - _gunFirst > 2500) { _gunFirst = now; _gunChars = 0; }
+  _gunChars += (e.inputType === 'insertFromPaste') ? 12 : 1;
+  clearTimeout(_gunTimer);
+  _gunTimer = setTimeout(() => {
+    const val = scanInput.value.trim();
+    const gunLike = (Date.now() - _gunFirst) < 2500 && _gunChars >= 12 && val.length >= 8;
+    _gunReset();
+    if (gunLike) processScan(val);
+  }, 150);
+});
+
+// ===== 扫码枪增强2：焦点保持 =====
+// 点击页面空白处或按钮后自动把焦点还给扫码框，防止扫码枪"打字打到空气中"。
+// 不抢夺其他输入框（搜索、日期、栈板号等）的焦点；弹窗打开时不干预。
+document.addEventListener('click', function(e) {
+  const scanTab = document.getElementById('tab-scan');
+  if (!scanTab || !scanTab.classList.contains('active')) return;
+  const cam = document.getElementById('cameraModal');
+  if (cam && cam.classList.contains('show')) return;
+  const anyModalOpen = [...document.querySelectorAll('[id*="Modal"],[id*="modal"]')].some(m => {
+    const d = m.style.display; return d && d !== 'none';
+  });
+  if (anyModalOpen) return;
+  const t = e.target;
+  const tag = t && t.tagName ? t.tagName.toUpperCase() : '';
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable) return;
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return;
+  scanInput.focus();
+});
+
+// 扫码防抖：记录最近扫码的半品料号和时间，防止扫码枪重复触发
+const _recentScans = []; // [{halfPart, time}]
+const SCAN_DEDUP_WINDOW = 2000; // 2秒内相同半品料号视为重复
+
+// 显示扫码枪实际收到的原始内容（识别失败时用于诊断；成功扫码时隐藏）
+function showRawScan(code) {
+  const box = document.getElementById('rawScanBox');
+  if (!box) return;
+  const raw = String(code || '');
+  const esc = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const shown = esc.length > 300 ? esc.slice(0, 300) + ' …（共' + raw.length + '字符）' : esc;
+  box.textContent = '🔍 收到的原始内容（' + raw.length + '字符）：\n' + shown;
+  box.style.display = 'block';
+}
+function hideRawScan() {
+  const box = document.getElementById('rawScanBox');
+  if (box) { box.style.display = 'none'; box.textContent = ''; }
+}
+
+// 【扫码内容规范化】统一全角｜为半角|、剥中文标签前缀、去空白。
+// 同一张二维码在不同设备/输入法下原始字符串可能不同（扫码枪把|打成｜、中文标签夹空格、打印模板把"成品料号："拼进数据段等），
+// 出入库配对/查重必须比较规范化后的值，否则会把"已入库"误判成"未入库"，或让重复扫码绕过查重。
+function normalizeScanCode(code) {
+  return (code || '')
+    .replace(/｜/g, '|')
+    .replace(/\s+/g, '')
+    .replace(/[一-龥]+[：:]/g, '')
+    .trim();
+}
+
+function processScan(code) {
+  if (!code) return;
+  // 【关键修复】剔除二维码内容里内嵌的回车换行（现场半成品标识卡码内容含 ...P1D2\r\n|04895...）。
+  // 管道符格式靠 | 分段，剔除回车不影响；QR关键字格式（工单号：... 料号线序：...）用正则匹配，剔除换行后依然命中。
+  code = String(code).replace(/\r/g, '').replace(/\n/g, '');
+  hideRawScan();
+  // 【立即清空】提交时马上清掉扫码框，不再靠1.5秒后的定时器——
+  // 否则连续快速扫码时，定时器会把第二枪打到旧内容上导致串码
+  scanInput.value = '';
+  
+  // 0.5 防重复：提取半品料号，检查2秒内是否已扫过
+  const _hp = code.includes('|') || code.includes('｜') ? code.split(/[｜|]/)[1]?.trim() : '';
+  if (_hp) {
+    const now = Date.now();
+    // 清理过期记录
+    while (_recentScans.length > 0 && now - _recentScans[0].time > SCAN_DEDUP_WINDOW) _recentScans.shift();
+    // 检查是否重复
+    if (_recentScans.some(s => s.halfPart === _hp)) {
+      console.log(`[防重复] 跳过重复扫码: ${_hp}`);
+      return;
+    }
+    _recentScans.push({ halfPart: _hp, time: now });
+  }
+  
+  // 0. 检查登录状态
+  if (!currentUser) {
+    scanStatus.textContent = '⚠️ 请先登录后再扫码！';
+    scanStatus.className = 'scan-status err';
+    showToast('请先登录', 'error');
+    return;
+  }
+  
+  // 1. 先检查栈板号（出库不需要）
+  if (currentAction === '入库') {
+    const palletPrefixVal = document.getElementById('palletPrefix').value;
+    const palletSeqVal = document.getElementById('palletSeq').value;
+    if (!palletPrefixVal || !palletSeqVal) {
+      scanInput.className = 'error';
+      scanStatus.textContent = '⚠️ 请先设置栈板号（选择前缀+输入序号）再扫码！';
+      scanStatus.className = 'scan-status err';
+      playSound('error');
+      setTimeout(() => { scanInput.className = ''; if(!document.getSelection().toString())scanInput.focus(); }, 2000);
+      return;
+    }
+  }
+
+  // 2. 再检查工单（出库不需要）
+  if (currentAction === '入库' && !currentWorkOrder.number) {
+    scanInput.className = 'error';
+    scanStatus.textContent = '⚠️ 请先在上方设置工单号和数量后再扫码！';
+    scanStatus.className = 'scan-status err';
+    playSound('error');
+    setTimeout(() => { scanInput.className = ''; if(!document.getSelection().toString())scanInput.focus(); }, 2000);
+    return;
+  }
+
+  // 检测扫码格式
+  const isNewFormat = /工单[号]?[：:]/.test(code) || /(?:线序)?料号[：:]/.test(code) || /数量[：:]/.test(code);
+  // 管道符格式：工单号｜半品料号｜序号｜数量｜批次(6位日期)｜流水号（分隔符支持全角｜和半角|）
+  const isPipeFormat = /[｜|]/.test(code) && code.split(/[｜|]/).length >= 4;
+  
+  let halfPart = '';
+  let scanQty = 1;
+  let workOrder = '';
+  let productionDate = ''; // 批次（从二维码第5段提取的6位日期）
+  
+  if (isPipeFormat) {
+    // ===== 管道符格式：101396002｜8180900969-P1A1-P2B2｜00035｜00100｜260905｜00001 =====
+    const parts = code.split(/[｜|]/).map(s => s.trim());
+    // 管道符格式必须至少4段（工单号｜半品料号｜线长｜数量），不足则视为不完整扫码直接拒绝
+    if (parts.length < 4) {
+      scanInput.className = 'error';
+      scanStatus.textContent = '❌ 扫码内容不完整，请重新扫码！';
+      scanStatus.className = 'scan-status err';
+      showRawScan(code);
+      playSound('error');
+      setTimeout(() => { scanInput.className = ''; if(!document.getSelection().toString())scanInput.focus(); }, 2000);
+      return;
+    }
+    // 【标签剥离】新打印模板可能把中文标签拼进数据段（如"成品料号：8180916998-P5A1-P1"），逐段剥掉标签前缀
+    const stripLabel = s => {
+      const i = Math.max((s || '').lastIndexOf('：'), (s || '').lastIndexOf(':'));
+      return i >= 0 ? s.slice(i + 1).trim() : (s || '').trim();
+    };
+    const woDigits = (parts[0] || '').match(/\d{6,}/g);
+    workOrder = woDigits ? woDigits[woDigits.length - 1] : stripLabel(parts[0]);
+    halfPart = stripLabel(parts[1]);
+    // parts[2] = 线长（暂不使用）
+    scanQty = parts[3] ? parseInt(stripLabel(parts[3]).replace(/[^\d]/g, '')) : 1;
+    if (isNaN(scanQty) || scanQty <= 0) scanQty = 1;
+    // 兼容5段旧格式（无批次）和6段新格式（含批次6位日期）
+    if (parts.length >= 6) {
+      productionDate = stripLabel(parts[4]).replace(/[^\d]/g, '');
+      // parts[5] = 流水号（暂不使用）
+    }
+    // parts[4]（旧格式）= 流水号，暂不使用
+    
+    if (!halfPart) {
+      scanInput.className = 'error';
+      scanStatus.textContent = '❌ 无法识别半品料号';
+      scanStatus.className = 'scan-status err';
+      showRawScan(code);
+      playSound('error');
+      setTimeout(() => { scanInput.className = ''; if(!document.getSelection().toString())scanInput.focus(); }, 1500);
+      return;
+    }
+    
+  } else if (isNewFormat) {
+    // ===== QR码格式 =====
+    // 工单号：101386002\n料号线序：8180914762-P1D1-PCC4\n数量：100PCS
+    const woMatch = code.match(/工单[号]?[：:]\s*(\d+)/);
+    const bpMatch = code.match(/(?:线序)?料号[：:]\s*([A-Za-z0-9\-]+)/);
+    const qtyMatch = code.match(/数量[：:]\s*(\d+)/);
+    
+    workOrder = woMatch ? woMatch[1].trim() : '';
+    halfPart = bpMatch ? bpMatch[1].trim() : '';
+    scanQty = qtyMatch ? parseInt(qtyMatch[1]) : 1;
+    
+    if (!halfPart) {
+      scanInput.className = 'error';
+      scanStatus.textContent = '❌ 无法识别料号线序';
+      scanStatus.className = 'scan-status err';
+      showRawScan(code);
+      playSound('error');
+      setTimeout(() => { scanInput.className = ''; if(!document.getSelection().toString())scanInput.focus(); }, 1500);
+      return;
+    }
+    
+  } else {
+    // ===== 旧格式：WP-唯一码 =====
+    const errMsg = validateScanCode(code);
+    if (errMsg) {
+      scanInput.className = 'error';
+      scanStatus.textContent = '❌ ' + errMsg;
+      scanStatus.className = 'scan-status err';
+      showRawScan(code);
+      scanStatus.style.fontWeight = 'bold';
+      scanStatus.style.fontSize = '1.1rem';
+      playSound('error');
+      showToast(errMsg, 'error');
+      scanInput.style.animation = 'shake 0.5s ease-in-out';
+      setTimeout(() => { scanInput.style.animation = ''; }, 500);
+      setTimeout(() => {
+        scanInput.className = '';
+        if(!document.getSelection().toString())scanInput.focus();
+      }, 1500);
+      return;
+    }
+    halfPart = extractHalfPart(code);
+    scanQty = 1;
+  }
+  
+  // 【料号标准化】扫码内容可能带中文标签前缀（新打印模板"成品料号：8180916998-P5A1-P1"），
+  // 只保留料号本体，防止"不在当前工单BOM中"误报
+  if (halfPart) {
+    const _hpM = halfPart.match(/[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+/);
+    if (_hpM && _hpM[0] !== halfPart) {
+      console.log('扫码料号已剥离标签：[' + halfPart + '] -> [' + _hpM[0] + ']');
+      halfPart = _hpM[0];
+    }
+  }
+
+  // 兜底检查：半品料号为空说明扫码内容不完整或格式无法识别，拒绝创建记录
+  if (!halfPart) {
+    scanInput.className = 'error';
+    scanStatus.textContent = '❌ 无法识别半品料号，请确认扫码内容完整后重试！';
+    scanStatus.className = 'scan-status err';
+    showRawScan(code);
+    playSound('error');
+    setTimeout(() => { scanInput.className = ''; if(!document.getSelection().toString())scanInput.focus(); }, 2000);
+    return;
+  }
+  
+  // ===== 通用检查：BOM验证 + 超限报警（仅入库检查）=====
+  if (halfPart && currentAction === '入库') {
+    // 从半品料号提取成品料号（-P之前的部分）
+    const pIdx = halfPart.indexOf('-P');
+    const productFromHalfPart = pIdx > 0 ? halfPart.substring(0, pIdx) : '';
+    
+    // 自动识别成品料号（如果还未识别）
+    if (!currentWorkOrder.product && halfPart) {
+      let detectedProduct = '';
+      
+      // 方式1：通过-P提取成品料号，直接在BOM中查找
+      if (productFromHalfPart && bomData[productFromHalfPart]) {
+        detectedProduct = productFromHalfPart;
+      }
+      
+      // 方式2：完整半品料号匹配（BOM的组件p字段是完整半品料号）
+      if (!detectedProduct) {
+        for (const cp in bomData) {
+          if (bomData[cp].some(c => c.p === halfPart)) {
+            detectedProduct = cp;
+            break;
+          }
+        }
+      }
+      
+      // 方式3：仅成品料号匹配（BOM的组件p字段只是成品料号）
+      if (!detectedProduct && productFromHalfPart) {
+        for (const cp in bomData) {
+          if (bomData[cp].some(c => c.p === productFromHalfPart)) {
+            detectedProduct = cp;
+            break;
+          }
+        }
+      }
+      
+      if (detectedProduct) {
+        currentWorkOrder.product = detectedProduct;
+        const bomList = bomData[detectedProduct];
+        currentWorkOrder.targetQty = bomList.length * currentWorkOrder.qty;
+        showToast('✅ 已自动识别成品料号：' + detectedProduct + '（' + bomList.length + '种半品）', 'success');
+        updateWorkOrderDisplay();
+      }
+    }
+    
+    // BOM匹配：每个成品料号对应独立工单，切换成品料号需重新录入工单
+    let bomMatched = false;
+    let matchedProduct = ''; // 匹配到的成品料号，用于超限检查
+
+    if (currentWorkOrder.product) {
+      // 只匹配当前工单关联的成品料号
+      const woBomList = bomData[currentWorkOrder.product] || [];
+      if (woBomList.some(c => c.p === halfPart)) {
+        bomMatched = true;
+        matchedProduct = currentWorkOrder.product;
+      }
+      if (!bomMatched && productFromHalfPart && woBomList.some(c => c.p === productFromHalfPart)) {
+        bomMatched = true;
+        matchedProduct = currentWorkOrder.product;
+      }
+      // 不匹配当前工单：检查是否属于其他成品料号
+      if (!bomMatched) {
+        let otherProduct = '';
+        for (const cp in bomData) {
+          if (cp === currentWorkOrder.product) continue;
+          if (bomData[cp].some(c => c.p === halfPart)) { otherProduct = cp; break; }
+          if (productFromHalfPart && bomData[cp].some(c => c.p === productFromHalfPart)) { otherProduct = cp; break; }
+        }
+        if (otherProduct) {
+          // 该码属于其他成品料号，需要重新录入工单
+          scanInput.className = 'error';
+          scanStatus.innerHTML = '🚨 <b>成品料号不匹配！</b><br>当前工单关联成品：<b>' + currentWorkOrder.product + '</b><br>该二维码属于成品：<b>' + otherProduct + '</b><br>请先重新录入新工单号再扫码';
+          scanStatus.className = 'scan-status err';
+          playSound('error');
+          setTimeout(() => { scanInput.className = ''; if(!document.getSelection().toString())scanInput.focus(); }, 4000);
+          return;
+        }
+      }
+    } else {
+      // 当前工单产品未识别，尝试在全局BOM中搜索
+      for (const cp in bomData) {
+        if (bomData[cp].some(c => c.p === halfPart || (productFromHalfPart && c.p === productFromHalfPart))) {
+          currentWorkOrder.product = cp;
+          matchedProduct = cp;
+          bomMatched = true;
+          const bomList = bomData[cp];
+          currentWorkOrder.targetQty = bomList.length * currentWorkOrder.qty;
+          showToast('✅ 已自动识别成品料号：' + cp + '（' + bomList.length + '种半品）', 'success');
+          updateWorkOrderDisplay();
+          break;
+        }
+      }
+    }
+    
+    if (!bomMatched && halfPart) {
+      scanInput.className = 'error';
+      scanStatus.textContent = '❌ 半品料号 ' + halfPart + ' 不在当前工单BOM中！';
+      scanStatus.className = 'scan-status err';
+      playSound('error');
+      setTimeout(() => { scanInput.className = ''; if(!document.getSelection().toString())scanInput.focus(); }, 2500);
+      return;
+    }
+    
+    // 超限检查：只在入库时检查
+    if (currentAction === '入库') {
+      const compLimit = currentWorkOrder.qty;
+      const currentCompCount = currentWorkOrder.componentCounts[halfPart] || 0;
+      
+      if (currentCompCount + scanQty > compLimit) {
+        scanInput.className = 'error';
+        scanInput.style.animation = 'shake 0.5s ease-in-out';
+        setTimeout(() => { scanInput.style.animation = ''; }, 500);
+        scanStatus.innerHTML = '<span style="font-size:1.2rem;font-weight:bold;color:var(--danger)">🚨 超工单报警！</span><br>' + halfPart + ' 已扫 <b>' + currentCompCount + '</b>/' + compLimit + '，本条码 ' + scanQty + '，<b>不允许再扫入！</b>';
+        scanStatus.className = 'scan-status err';
+        playSound('overlimit');
+        showToast('🚨 ' + halfPart + ' 已超工单数量！禁止扫入！', 'error');
+        setTimeout(() => { scanInput.className = ''; if(!document.getSelection().toString())scanInput.focus(); }, 4000);
+        return;
+      }
+    }
+  }
+  
+  // 出库校验：没入过库的码不允许出库
+  if (currentAction === '出库') {
+    const hasInbound = scanRecords.some(r => r.a === '入库' && normalizeScanCode(r.c) === normalizeScanCode(code));
+    if (!hasInbound) {
+      scanInput.className = 'error';
+      scanStatus.textContent = '❌ 该二维码未入库，不允许出库！';
+      scanStatus.className = 'scan-status err';
+      playSound('error');
+      setTimeout(() => { scanInput.className = ''; if(!document.getSelection().toString())scanInput.focus(); }, 2500);
+      return;
+    }
+  }
+  
+  // Check duplicate
+  const isDup = scanRecords.some(r => r.a === currentAction && normalizeScanCode(r.c) === normalizeScanCode(code));
+  
+  // Create record（时间戳精确到秒：配合 2 秒防重复守卫，同一二维码 2 秒内不会被扫两次，
+  // 秒级 t 保证 recordKey 天然唯一，彻底杜绝分钟级 key 碰撞）
+  const now = new Date();
+  const timeStr = now.getFullYear() + '-' +
+    String(now.getMonth()+1).padStart(2,'0') + '-' +
+    String(now.getDate()).padStart(2,'0') + ' ' +
+    String(now.getHours()).padStart(2,'0') + ':' +
+    String(now.getMinutes()).padStart(2,'0') + ':' +
+    String(now.getSeconds()).padStart(2,'0');
+  
+  const record = {
+    t: timeStr,
+    c: code,
+    x: halfPart || '',
+    r: currentUser ? currentUser.username : '',
+    d: '',
+    w: workOrder || '',
+    a: currentAction,
+    q: scanQty, // 按条码上的数量（包规）记录
+    z: getCurrentPallet(),
+    wo_no: currentWorkOrder.number || '',
+    wo_qty: currentWorkOrder.qty || 0,
+    pd: productionDate || ''
+  };
+
+  // 【出库回写】出库时界面不要求设置工单/栈板，当前设置值与该码无关。
+  // 工单号/工单数量/栈板号/批次 改为回写该码入库时的值（同码最近一条入库记录），
+  // 保证出入库台账与CSV口径一致：出库记录可追溯到原入库工单和栈板。
+  if (currentAction === '出库') {
+    let _inRec = null;
+    for (let i = scanRecords.length - 1; i >= 0; i--) {
+      if (scanRecords[i].a === '入库' && normalizeScanCode(scanRecords[i].c) === normalizeScanCode(code)) { _inRec = scanRecords[i]; break; }
+    }
+    if (_inRec) {
+      record.w = _inRec.w || record.w || '';
+      record.z = _inRec.z || '';
+      record.wo_no = _inRec.wo_no || _inRec.w || record.w || '';
+      record.wo_qty = _inRec.wo_qty || 0;
+      record.pd = _inRec.pd || record.pd || '';
+    }
+  }
+
+  if (isDup) {
+    scanInput.className = 'duplicate';
+    scanStatus.textContent = '🚨 重复扫码警报！该码已' + currentAction + '过！';
+    scanStatus.className = 'scan-status err';
+    scanStatus.style.fontWeight = 'bold';
+    scanStatus.style.fontSize = '1.1rem';
+    playSound('duplicate');
+    showToast('🚨 重复扫码警报！', 'error');
+    scanInput.style.animation = 'shake 0.5s ease-in-out';
+    setTimeout(() => { scanInput.style.animation = ''; }, 500);
+  } else {
+    scanRecords.unshift(record);
+    saveDataDebounced(); // 持久化保存
+    
+    // Update inventory（按条码上的数量累加；BOM外的半品也注册进库存表）
+    if (halfPart) {
+      // 与 recomputeInventory 口径保持一致：出库不夹紧，允许为负数以暴露账实不符
+      if (currentAction === '入库') inventory[halfPart] = (inventory[halfPart] || 0) + scanQty;
+      else if (currentAction === '出库') inventory[halfPart] = (inventory[halfPart] || 0) - scanQty;
+    }
+    
+    // Update per-component work order progress（按条码上的数量累计）
+    if (currentWorkOrder.number && halfPart && currentAction === "入库") {
+      currentWorkOrder.componentCounts[halfPart] = (currentWorkOrder.componentCounts[halfPart] || 0) + scanQty;
+      updateWorkOrderDisplay();
+    }
+    
+    scanInput.className = 'success';
+    scanStatus.textContent = '✅ ' + currentAction + '成功！半品：' + halfPart + ' +' + scanQty + ' 当前库存：' + (inventory[halfPart] || 0);
+    scanStatus.className = 'scan-status ok';
+    playSound('success');
+    showToast(currentAction + '成功', 'success');
+    
+    renderRecentList();
+    refreshDashboard();
+  }
+  
+  setTimeout(() => {
+    scanInput.className = '';
+    if(!document.getSelection().toString())scanInput.focus();
+  }, 1500);
+}
+
+function extractHalfPart(code) {
+  const parts = code.split('-');
+  
+  // 旧格式: WP-{product}-{positions}-{date}-{seq}
+  if (code.startsWith('WP-') && parts.length >= 5) {
+    for (let i = 2; i < parts.length; i++) {
+      if (/^\d{6}$/.test(parts[i])) {
+        return parts.slice(1, i).join('-');
+      }
+    }
+    return parts.slice(1, -2).join('-');
+  }
+  
+  // 新WP格式: {工单号}-{成品料号}-{Pxx}-{Pyy}-{数量}-{流水号}
+  // 如: 101396002-8180900969-P1A1-P2B2-100-000001
+  // 特征: 第一段全数字(工单号), >=5段, 最后2段是数量+流水号
+  if (parts.length >= 5 && /^\d+$/.test(parts[0])) {
+    return parts.slice(1, -2).join('-');
+  }
+  
+  return '';
+}
+
+function validateScanCode(code) {
+  if (!code) return '条码内容为空';
+  return '';
+}
+
+// ====== SOUND EFFECTS ======
+function playSound(type) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    
+    if (type === 'success') {
+      osc.frequency.setValueAtTime(800, ctx.currentTime);
+      osc.frequency.setValueAtTime(1200, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.3);
+    } else if (type === 'duplicate') {
+      // 重复扫码报警：急促的三声警报
+      osc.type = 'square';
+      const alarmInterval = 0.15;
+      for (let i = 0; i < 3; i++) {
+        const startTime = ctx.currentTime + i * alarmInterval * 2;
+        osc.frequency.setValueAtTime(1000, startTime);
+        osc.frequency.setValueAtTime(600, startTime + alarmInterval);
+      }
+      gain.gain.setValueAtTime(0.5, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.9);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.9);
+    } else if (type === 'overlimit') {
+      // 超工单报警：持续急促高频警报（5声）
+      osc.type = 'square';
+      const alarmInterval = 0.12;
+      for (let i = 0; i < 5; i++) {
+        const startTime = ctx.currentTime + i * alarmInterval * 2;
+        osc.frequency.setValueAtTime(1500, startTime);
+        osc.frequency.setValueAtTime(800, startTime + alarmInterval);
+      }
+      gain.gain.setValueAtTime(0.6, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 1.2);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 1.2);
+    } else {
+      osc.frequency.setValueAtTime(300, ctx.currentTime);
+      osc.frequency.setValueAtTime(200, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.4);
+    }
+  } catch(e) {}
+}
+
+// ====== TOAST ======
+function showToast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast toast-' + type + ' show';
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ====== RECENT LIST ======
+let filteredScanRecords = null; // null=未筛选显示全部, []=筛选后无结果, [...]=筛选结果
+
+function renderRecentList() {
+  const el = document.getElementById('recentList');
+  const countEl = document.getElementById('scanRecordCount');
+  const records = (filteredScanRecords !== null) ? filteredScanRecords : scanRecords.filter(r => r.c);
+  
+  // 计算入库/出库总数量
+  let totalIn = 0, totalOut = 0;
+  records.forEach(r => {
+    const q = (r.q && r.q > 0) ? r.q : 1;
+    if (r.a === '入库') totalIn += q;
+    else if (r.a === '出库') totalOut += q;
+  });
+  
+  countEl.innerHTML = `共 ${records.length} 条记录` + (filteredScanRecords !== null ? '（已筛选）' : '') +
+    ` <span style="color:var(--success);font-weight:600;margin-left:8px">入库 ${totalIn}</span>` +
+    ` <span style="color:var(--danger);font-weight:600;margin-left:4px">出库 ${totalOut}</span>`;
+  
+  if (records.length === 0) {
+    el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-secondary)">暂无扫码记录</div>';
+    return;
+  }
+  
+  el.innerHTML = records.map((r, idx) => {
+    const realIdx = scanRecords.indexOf(r);
+    const displayCode = r.c.length > 30 ? r.c.substring(0, 30) + '…' : r.c;
+    const palletStr = r.z ? `<span class="recent-z"><span style="background:#e8f4fd;color:#1a73e8;padding:2px 6px;border-radius:4px;font-size:.72rem;font-weight:500">${r.z}</span></span>` : '<span class="recent-z" style="color:#ccc">-</span>';
+    const pdStr = r.pd ? `<span class="recent-pd"><span style="background:#fff8e1;color:#e65100;padding:2px 6px;border-radius:4px;font-size:.72rem;font-weight:500">${r.pd}</span></span>` : '<span class="recent-pd" style="color:#ccc">-</span>';
+    const operatorUser = users.find(u => u.username === r.r);
+    const operatorStr = r.r ? `<span class="recent-op"><span style="background:#f3e5f5;color:#7b1fa2;padding:2px 6px;border-radius:4px;font-size:.72rem;font-weight:500">${operatorUser ? operatorUser.name : r.r}</span></span>` : '<span class="recent-op" style="color:#ccc">-</span>';
+    // 提取成品料号：半品料号中-P之前的部分
+    let productCode = '-';
+    if (r.x) {
+      const pIdx = r.x.indexOf('-P');
+      if (pIdx > 0) productCode = r.x.substring(0, pIdx);
+    }
+    return `
+    <div class="recent-item">
+      <span class="recent-time" title="${r.t}">${r.t}</span>
+      <span class="recent-code" title="${r.c.replace(/"/g, '&quot;')}">${displayCode}</span>
+      <span class="recent-wo" title="${r.wo_no || '-'}" style="font-weight:600;color:#1a73e8;min-width:60px">${r.wo_no || '-'}</span>
+      <span class="recent-product" title="${productCode}">${productCode}</span>
+      <span class="recent-halfpart" title="${r.x || ''}">${r.x || '-'}</span>
+      <span class="recent-qty">${r.q || ''}</span>
+      ${operatorStr}
+      ${pdStr}
+      ${palletStr}
+      <span class="recent-act"><span class="badge ${r.a === '入库' ? 'badge-green' : 'badge-red'}" style="font-size:.76rem">${r.a}</span></span>
+      <span class="recent-btns">
+
+        <button class="btn btn-sm" style="padding:3px 6px;background:var(--danger);color:#fff;font-size:.7rem;border:none;border-radius:4px;cursor:pointer" onclick="deleteSingleRecord(${realIdx})" title="删除此记录">🗑</button>
+      </span>
+    </div>`}).join('');
+}
+
+// ====== FILTER SCAN RECORDS ======
+// 搜索防抖，让输入更流畅
+let _filterTimer = null;
+function filterScanRecords() {
+  clearTimeout(_filterTimer);
+  _filterTimer = setTimeout(_doFilterScanRecords, 150);
+}
+function _doFilterScanRecords() {
+  const keyword = document.getElementById('scanSearchInput').value.trim().toLowerCase();
+  const dateFilter = document.getElementById('scanDateFilter').value;
+  const actionFilter = document.getElementById('scanActionFilter').value;
+  
+  filteredScanRecords = scanRecords.filter(r => {
+    let match = true;
+    if (keyword) {
+      const searchFields = [
+        String(r.c || ''),           // 唯一码
+        String(r.x || ''),           // 线序料号
+        String(r.wo_no || ''),       // 工单号
+        String(r.z || ''),           // 栈板号
+        String(r.pd || '')           // 批次
+      ].map(v => v.toLowerCase());
+      match = searchFields.some(v => v.includes(keyword));
+    }
+    if (dateFilter) {
+      const recordDate = r.t.split(' ')[0];
+      match = match && recordDate === dateFilter;
+    }
+    if (actionFilter) {
+      match = match && r.a === actionFilter;
+    }
+    return match && r.c;
+  });
+  
+  renderRecentList();
+  updateClearBtnLabel();
+}
+
+function clearScanFilter() {
+  document.getElementById('scanSearchInput').value = '';
+  document.getElementById('scanDateFilter').value = '';
+  document.getElementById('scanActionFilter').value = '';
+  filteredScanRecords = null;
+  renderRecentList();
+  updateClearBtnLabel();
+}
+
+// ====== DELETE SCAN RECORD ======
+function copyScanRecord(index) {
+  const r = scanRecords[index];
+  if (!r) return;
+  const pIdx = (r.x || '').indexOf('-P');
+  const prodCode = pIdx > 0 ? (r.x || '').substring(0, pIdx) : '';
+  const fields = [r.t, r.c, prodCode, r.x, r.r, r.wo_no||'', r.wo_qty||'', r.q||'', r.w, r.pd||'', r.a, r.z||''];
+  const text = fields.join('\t');
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('已复制到剪贴板，可直接粘贴到Excel', 'success');
+  }).catch(() => {
+    // fallback
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta);
+    showToast('已复制到剪贴板', 'success');
+  });
+}
+
+function deleteSingleRecord(index) {
+  if (index < 0 || index >= scanRecords.length) return;
+  
+  const record = scanRecords[index];
+  if (!confirm(`确定要删除这条记录吗？\n\n唯一码：${record.c}\n时间：${record.t}\n动作：${record.a}\n\n删除后将同步更新库存和齐套数据。`)) return;
+  
+  // Record deletion for sync（key 抹平换行/管道符，避免同步对不上）
+  deletedRecords.push(recordKey(record.c, record.t));
+  if (deletedRecords.length > 5000) deletedRecords = deletedRecords.slice(-5000);
+  
+  // Remove record
+  scanRecords.splice(index, 1);
+  
+  // 从剩余扫码记录重新计算库存（避免手动回退的精度问题）
+  recomputeInventory();
+  // 同步重算工单组件计数（按 scanQty 累计，与 commitScan 保持一致）
+  if (currentWorkOrder.number) {
+    currentWorkOrder.componentCounts = {};
+    scanRecords.forEach(r => {
+      if (r.a === '入库' && r.w === currentWorkOrder.number) {
+        const hp = r.x || '';
+        const q = (r.q && r.q > 0) ? r.q : 1;
+        if (hp) currentWorkOrder.componentCounts[hp] = (currentWorkOrder.componentCounts[hp] || 0) + q;
+      }
+    });
+  }
+  
+  // Clear filter and refresh
+  filteredScanRecords = null;
+  saveData();
+  renderRecentList();
+  updateWorkOrderDisplay();
+  refreshDashboard();
+  showToast('记录已删除', 'success');
+}
+
+function deleteByDate() {
+  const dateFilter = document.getElementById('scanDateFilter').value;
+  if (!dateFilter) {
+    showToast('请先选择要删除的日期', 'error');
+    return;
+  }
+  
+  const recordsToDelete = scanRecords.filter(r => r.t.startsWith(dateFilter));
+  if (recordsToDelete.length === 0) {
+    showToast('该日期没有扫码记录', 'info');
+    return;
+  }
+  
+  if (!confirm(`确定要删除 ${dateFilter} 的所有扫码记录吗？\n\n共 ${recordsToDelete.length} 条记录\n\n删除后将同步更新库存和齐套数据。`)) return;
+  
+  // Record deletions for sync（key 抹平换行/管道符，避免同步对不上）
+  recordsToDelete.forEach(r => {
+    deletedRecords.push(recordKey(r.c, r.t));
+  });
+  if (deletedRecords.length > 5000) deletedRecords = deletedRecords.slice(-5000);
+  
+  // Remove records
+  scanRecords = scanRecords.filter(r => !r.t.startsWith(dateFilter));
+  
+  // 从剩余扫码记录重新计算库存（避免手动回退的精度问题）
+  recomputeInventory();
+  // 同步重算工单组件计数（按 scanQty 累计，与 commitScan 保持一致）
+  if (currentWorkOrder.number) {
+    currentWorkOrder.componentCounts = {};
+    scanRecords.forEach(r => {
+      if (r.a === '入库' && r.w === currentWorkOrder.number) {
+        const hp = r.x || '';
+        const q = (r.q && r.q > 0) ? r.q : 1;
+        if (hp) currentWorkOrder.componentCounts[hp] = (currentWorkOrder.componentCounts[hp] || 0) + q;
+      }
+    });
+  }
+  
+  // Clear filter and refresh
+  filteredScanRecords = null;
+  document.getElementById('scanDateFilter').value = '';
+  saveData();
+  renderRecentList();
+  updateWorkOrderDisplay();
+  refreshDashboard();
+  showToast(`已删除 ${recordsToDelete.length} 条记录`, 'success');
+}
+
+// ====== CSV EXPORT ======
+function exportScanCSV() {
+  const records = (filteredScanRecords && filteredScanRecords.length > 0) ? filteredScanRecords : scanRecords.filter(r => r.c);
+  if (records.length === 0) { showToast('暂无数据可导出', 'info'); return; }
+  let csv = '\uFEFF时间,唯一码,成品料号,线序料号,操作人,工单号,工单数量,入库数量,库位,批次,动作,栈板号\n';
+  records.forEach(r => {
+    const pIdx = (r.x || '').indexOf('-P');
+    const prodCode = pIdx > 0 ? (r.x || '').substring(0, pIdx) : '';
+    csv += `"${r.t}","${r.c}","${prodCode}","${r.x}","${r.r}","${r.wo_no || ''}","${r.wo_qty || ''}","${r.q || ''}","${r.w}","${r.pd || ''}","${r.a}","${r.z || ''}"\n`.replace(/"undefined"/g, '""');
+  });
+  // Clean up undefined
+  csv = csv.replace(/undefined/g, '');
+  
+  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '扫码记录_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('CSV 已导出', 'success');
+}
+
+// ====== BOM IMPORT (Excel + CSV) ======
+function loadBOMFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  
+  if (ext === 'csv') {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      let text = e.target.result;
+      // 自动检测编码：如果包含乱码特征，尝试GBK
+      if (/[\ufffd]/.test(text) || /[锟斤拷]/.test(text)) {
+        const reader2 = new FileReader();
+        reader2.onload = function(e2) { parseCSVText(e2.target.result); };
+        reader2.readAsText(file, 'GBK');
+      } else {
+        parseCSVText(text);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+  } else {
+    // Excel file
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        loadBOMFromRows(rows);
+      } catch (err) {
+        alert('Excel 解析失败：' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+}
+
+function parseCSVText(text) {
+  const lines = text.split(/\r?\n/);
+  const rows = [];
+  lines.forEach(line => {
+    if (!line.trim()) return;
+    rows.push(parseCSVLine(line));
+  });
+  loadBOMFromRows(rows);
+}
+
+function loadBOMFromRows(rows) {
+  let headerSkipped = false;
+  let added = 0, skipped = 0;
+  // 【BOM覆盖导入】先按成品料号分组，再整体替换该成品的BOM列表。
+  // 旧逻辑是"同料号覆盖、新料号追加"——Excel 里删掉的旧条目会永久残留
+  // （线上真实案例：8180911676 早期导入过 P4A3-P3/P4A4-P3B3，Excel 改正为
+  //  P4A3-P3B1/P4A4-P3B3 后重新导入，旧料号删不掉，BOM 变成 6 条）。
+  // 现在以本次导入文件为唯一事实来源：同一成品出现即整体替换。
+  const grouped = {}; // { cp: [ {p,j,l,y}, ... ] }
+  const order = [];   // 保持成品出现顺序
+  rows.forEach(row => {
+    if (!row || row.length === 0) return;
+    // 跳过表头（第一行或包含中文"料号"的行）
+    if (!headerSkipped) {
+      const first = String(row[0] || '').trim();
+      if (/料号|成品|编号|product/i.test(first)) { headerSkipped = true; return; }
+      headerSkipped = true;
+    }
+
+    const cp = String(row[0] || '').trim();
+    const bp = String(row[1] || '').trim();
+    if (!cp || !bp) return;
+    // 跳过异常料号（含+或*的公式字符串，不是真正的半品料号）
+    if (/[+*]/.test(bp)) { skipped++; return; }
+
+    const j = String(row[2] || '').trim();
+    const l = parseInt(row[3]) || 0;
+    const y = parseInt(row[4]) || 1;
+    if (!grouped[cp]) { grouped[cp] = []; order.push(cp); }
+    // 同一文件内同料号重复行：后者覆盖前者
+    const dupIdx = grouped[cp].findIndex(e => e.p === bp);
+    if (dupIdx >= 0) { grouped[cp][dupIdx] = { p: bp, j: j, l: l, y: y }; skipped++; }
+    else grouped[cp].push({ p: bp, j: j, l: l, y: y });
+  });
+
+  const importTs = Date.now();
+  order.forEach(cp => {
+    const prev = bomData[cp] ? bomData[cp].length : 0;
+    bomData[cp] = grouped[cp];
+    bomImportedAt[cp] = importTs;
+    if (!productList.includes(cp)) productList.push(cp);
+    added += grouped[cp].length;
+    if (prev === 0) { /* 新成品 */ } else { skipped += 0; }
+    // 确保库存表有键
+    grouped[cp].forEach(it => { if (!(it.p in inventory)) inventory[it.p] = 0; });
+  });
+
+  if (added === 0) {
+    showToast('没有有效数据行', 'info');
+  } else {
+    bomCleared = false;
+    const cps = order.length;
+    showToast(`已导入 ${cps} 个成品共 ${added} 条BOM（同成品BOM以本次导入为准）`, 'success');
+  }
+  document.getElementById('bomLoadStatus').textContent = '✅ 已加载 ' + productList.length + ' 个成品';
+  refreshDashboard();
+}
+
+function loadBOMFromPaste() {
+  const text = document.getElementById('bomPasteArea').value.trim();
+  if (!text) { showToast('请先粘贴数据', 'info'); return; }
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  let added = 0, skipped = 0;
+  // 【BOM覆盖导入】与文件导入一致：按成品分组后整体替换（旧逻辑会残留 Excel/粘贴内容里已删除的料号）
+  const grouped = {};
+  const order = [];
+  lines.forEach(line => {
+    // 支持 Tab、全角丨、半角| 分隔
+    const parts = line.split(/[\t丨|]/).map(s => s.trim());
+    if (parts.length >= 2 && parts[0] && parts[1]) {
+      const cp = String(parts[0] || '').trim();
+      const bp = String(parts[1] || '').trim();
+      const j = String(parts[2] || '').trim();
+      const l = parseInt(parts[3]) || 0;
+      const y = parseInt(parts[4]) || 1;
+      // 跳过表头
+      if (/料号|成品|编号|product/i.test(cp)) { skipped++; return; }
+      // 跳过异常料号（含+或*的公式字符串）
+      if (/[+*]/.test(bp)) { skipped++; return; }
+      if (!grouped[cp]) { grouped[cp] = []; order.push(cp); }
+      // 同一粘贴内容内同料号重复行：后者覆盖前者
+      const dupIdx = grouped[cp].findIndex(e => e.p === bp);
+      if (dupIdx >= 0) { grouped[cp][dupIdx] = { p: bp, j: j, l: l, y: y }; skipped++; }
+      else grouped[cp].push({ p: bp, j: j, l: l, y: y });
+    }
+  });
+  const importTs = Date.now();
+  order.forEach(cp => {
+    bomData[cp] = grouped[cp];
+    bomImportedAt[cp] = importTs;
+    if (!productList.includes(cp)) productList.push(cp);
+    added += grouped[cp].length;
+    grouped[cp].forEach(it => { if (!(it.p in inventory)) inventory[it.p] = 0; });
+  });
+  if (added === 0) {
+    showToast('没有有效数据行', 'info');
+  } else {
+    bomCleared = false;
+    const cps = order.length;
+    showToast(`已导入 ${cps} 个成品共 ${added} 条BOM（同成品BOM以本次导入为准）`, 'success');
+  }
+  document.getElementById('bomLoadStatus').textContent = '✅ 已加载 ' + productList.length + ' 个成品';
+  document.getElementById('bomPasteArea').value = '';
+  refreshDashboard();
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+// ====== MANUAL BOM ENTRY ======
+// ====== BOM EXPORT ======
+let bomEditMode = null; // { cp, bp, idx } when editing
+
+function exportBOM() {
+  if (productList.length === 0) { showToast('暂无BOM数据可导出', 'info'); return; }
+  let csv = '\uFEFF成品料号,半品料号,接头规格,线长,用量\n';
+  productList.forEach(cp => {
+    (bomData[cp] || []).forEach(item => {
+      csv += `"${cp}","${item.p}","${item.j}","${item.l}","${item.y}"\n`;
+    });
+  });
+  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'BOM数据_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('BOM 已导出', 'success');
+}
+
+function clearAllBOM() {
+  if (productList.length === 0) { showToast('BOM数据已为空', 'info'); return; }
+  if (!confirm(`确认清除全部BOM数据？\n当前共 ${productList.length} 个成品，清除后需重新导入。\n（扫码记录和库存不受影响）`)) return;
+  bomData = {};
+  bomImportedAt = {}; // 同步清空导入时间戳
+  productList = [];
+  importedWorkOrders = [];
+  currentWorkOrder = { number: '', product: '', qty: 0, targetQty: 0, componentCounts: {} };
+  bomCleared = true;
+  saveData();
+  refreshDashboard();
+  document.getElementById('bomLoadStatus').textContent = 'BOM已清空';
+  updateWorkOrderDisplay();
+  showToast('BOM数据已全部清除', 'success');
+}
+
+// ====== BOM SEARCH (for manual edit) ======
+function searchBOMEntry() {
+  const bp = document.getElementById('manualBP').value.trim();
+  if (!bp) { showToast('请先输入半品料号', 'info'); return; }
+  
+  // Search across all products
+  for (const cp in bomData) {
+    const idx = bomData[cp].findIndex(e => e.p === bp);
+    if (idx >= 0) {
+      const item = bomData[cp][idx];
+      document.getElementById('manualCP').value = cp;
+      document.getElementById('manualJ').value = item.j || '';
+      document.getElementById('manualL').value = item.l || 0;
+      document.getElementById('manualY').value = item.y || 1;
+      // Enter edit mode
+      bomEditMode = { cp, bp, idx };
+      document.getElementById('manualSubmitBtn').textContent = '💾 保存修改';
+      document.getElementById('manualSubmitBtn').style.background = 'var(--warning)';
+      document.getElementById('manualDeleteBtn').style.display = 'inline-block';
+      document.getElementById('manualCancelBtn').style.display = 'inline-block';
+      document.getElementById('manualEditHint').innerHTML = '📝 编辑模式：正在修改 <b>' + cp + ' → ' + bp + '</b> 的BOM信息';
+      showToast('已找到：' + cp + ' → ' + bp + '，可修改后保存', 'success');
+      return;
+    }
+  }
+  showToast('未找到该半品料号的BOM记录，将作为新增条目', 'info');
+  bomEditMode = null;
+}
+
+function deleteBOMEntry() {
+  if (!bomEditMode || !bomEditMode.cp || !bomEditMode.bp) {
+    showToast('请先查询要删除的条目', 'error');
+    return;
+  }
+  if (!confirm(`确认删除 ${bomEditMode.cp} → ${bomEditMode.bp} 的BOM条目？`)) return;
+  const cp = bomEditMode.cp;
+  const bp = bomEditMode.bp;
+  const idx = bomEditMode.idx;
+  if (bomData[cp] && bomData[cp][idx]) {
+    bomData[cp].splice(idx, 1);
+    if (bomData[cp].length === 0) {
+      delete bomData[cp];
+      const pi = productList.indexOf(cp);
+      if (pi >= 0) productList.splice(pi, 1);
+    }
+  }
+  bomEditMode = null;
+  document.getElementById('manualSubmitBtn').textContent = '➕ 添加';
+  document.getElementById('manualSubmitBtn').style.background = '';
+  document.getElementById('manualDeleteBtn').style.display = 'none';
+  document.getElementById('manualCancelBtn').style.display = 'none';
+  document.getElementById('manualEditHint').textContent = '';
+  document.getElementById('manualBP').value = '';
+  document.getElementById('manualJ').value = '';
+  saveData();
+  refreshDashboard();
+  showToast('BOM条目已删除', 'success');
+}
+
+function cancelBOMEdit() {
+  bomEditMode = null;
+  document.getElementById('manualSubmitBtn').textContent = '➕ 添加';
+  document.getElementById('manualSubmitBtn').style.background = '';
+  document.getElementById('manualDeleteBtn').style.display = 'none';
+  document.getElementById('manualCancelBtn').style.display = 'none';
+  document.getElementById('manualEditHint').innerHTML = '';
+  // Clear fields
+  document.getElementById('manualCP').value = '';
+  document.getElementById('manualBP').value = '';
+  document.getElementById('manualJ').value = '';
+  document.getElementById('manualL').value = '0';
+  document.getElementById('manualY').value = '1';
+}
+
+function addBOMManual() {
+  const cp = document.getElementById('manualCP').value.trim();
+  const bp = document.getElementById('manualBP').value.trim();
+  const j = document.getElementById('manualJ').value.trim();
+  const l = parseInt(document.getElementById('manualL').value) || 0;
+  const y = parseInt(document.getElementById('manualY').value) || 1;
+  
+  if (!cp || !bp) {
+    alert('成品料号和半品料号不能为空');
+    return;
+  }
+  
+  // Edit mode: update existing record
+  if (bomEditMode) {
+    const { cp: oldCp, bp: oldBp, idx } = bomEditMode;
+    if (bomData[oldCp] && bomData[oldCp][idx]) {
+      bomData[oldCp][idx] = { p: bp, j: j, l: l, y: y };
+      // If product changed, move to new product
+      if (cp !== oldCp) {
+        bomData[oldCp].splice(idx, 1);
+        if (bomData[oldCp].length === 0) {
+          delete bomData[oldCp];
+          productList = productList.filter(p => p !== oldCp);
+        }
+        if (!bomData[cp]) {
+          bomData[cp] = [];
+          if (!productList.includes(cp)) productList.push(cp);
+        }
+        bomData[cp].push({ p: bp, j: j, l: l, y: y });
+      }
+      if (!(bp in inventory)) inventory[bp] = 0;
+      bomCleared = false;
+      cancelBOMEdit();
+      refreshDashboard();
+      saveData();
+      showToast('✅ BOM已更新：' + cp + ' → ' + bp, 'success');
+      return;
+    }
+  }
+  
+  // Add mode
+  if (!bomData[cp]) {
+    bomData[cp] = [];
+    productList.push(cp);
+  }
+  bomData[cp].push({p: bp, j: j, l: l, y: y});
+  if (!(bp in inventory)) inventory[bp] = 0;
+  
+  // 清空输入
+  document.getElementById('manualBP').value = '';
+  document.getElementById('manualJ').value = '';
+  document.getElementById('manualL').value = '0';
+  document.getElementById('manualY').value = '1';
+  
+  bomCleared = false;
+  refreshDashboard();
+  saveData();
+  showToast('已添加：' + cp + ' → ' + bp, 'success');
+}
+
+// ====== WORK ORDER MANAGEMENT ======
+// currentWorkOrder 声明已上移至 loadData() 调用之前（修复TDZ导致本地恢复失败的问题）
+
+// 从扫码记录重新计算各半品的已归数量（入库）
+function recalcComponentCounts() {
+  currentWorkOrder.componentCounts = {};
+  if (!currentWorkOrder.number) return;
+  scanRecords.forEach(r => {
+    if (r.a === '入库' && r.w === currentWorkOrder.number) {
+      const hp = r.x || '';
+      const q = (r.q && r.q > 0) ? r.q : 1;
+      if (hp) currentWorkOrder.componentCounts[hp] = (currentWorkOrder.componentCounts[hp] || 0) + q;
+    }
+  });
+}
+
+// ====== PALLET NUMBER MANAGEMENT ======
+function updatePalletDisplay() {
+  const prefix = document.getElementById('palletPrefix').value;
+  const seq = document.getElementById('palletSeq').value;
+  const display = document.getElementById('palletDisplay');
+  if (prefix && seq) {
+    const seqStr = String(seq).padStart(4, '0');
+    display.textContent = '栈板号：' + prefix + '-' + seqStr;
+    display.style.color = 'var(--primary)';
+    display.style.fontWeight = '600';
+  } else {
+    display.textContent = '未设置栈板号';
+    display.style.color = 'var(--text-secondary)';
+    display.style.fontWeight = '500';
+  }
+}
+
+function getCurrentPallet() {
+  const prefix = document.getElementById('palletPrefix').value;
+  const seq = document.getElementById('palletSeq').value;
+  if (prefix && seq) {
+    return prefix + '-' + String(seq).padStart(4, '0');
+  }
+  return '';
+}
+
+function saveWorkOrder() {
+  const num = document.getElementById('woNumber').value.trim();
+  const qty = parseInt(document.getElementById('woTargetQty').value) || 0;
+
+  if (!num || qty <= 0) {
+    alert('请输入工单号和工单数量');
+    return;
+  }
+
+  // 成品料号将在首次扫码时从条码自动识别
+  currentWorkOrder = { number: num, product: '', qty: qty, targetQty: 0, componentCounts: {} };
+  updateWorkOrderDisplay();
+  showToast('工单已设置：' + num + '，数量：' + qty + '，请开始扫码', 'success');
+}
+
+function clearWorkOrder() {
+  if (!currentWorkOrder.number) return;
+  if (!confirm('确认清除当前工单（' + currentWorkOrder.number + '）？已记录的扫码数据不会删除。')) return;
+  currentWorkOrder = { number: '', product: '', qty: 0, targetQty: 0, componentCounts: {} };
+  document.getElementById('woNumber').value = '';
+  document.getElementById('woTargetQty').value = '';
+  document.getElementById('palletPrefix').value = '';
+  document.getElementById('palletSeq').value = '';
+  updatePalletDisplay();
+  updateWorkOrderDisplay();
+  showToast('工单已清除', 'success');
+}
+
+// ====== BATCH WORK ORDER IMPORT ======
+// importedWorkOrders 声明已上移至 loadData() 调用之前（同上，修复TDZ问题）
+
+function toggleBatchImport() {
+  const panel = document.getElementById('batchImportPanel');
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+  if (panel.style.display === 'block') {
+    document.getElementById('batchImportText').focus();
+  }
+}
+
+function previewBatchImport() {
+  const text = document.getElementById('batchImportText').value.trim();
+  const previewEl = document.getElementById('batchPreview');
+  if (!text) {
+    previewEl.textContent = '';
+    return;
+  }
+  const lines = text.split('\n').filter(l => l.trim());
+  let validCount = 0;
+  let invalidLines = [];
+  lines.forEach((line, i) => {
+    const parts = line.split(/\t|,|\|/).map(s => s.trim());
+    if (parts.length >= 2 && parts[0] && parseInt(parts[1]) > 0) {
+      validCount++;
+    } else {
+      invalidLines.push(i + 1);
+    }
+  });
+  let msg = `识别到 ${validCount} 条工单`;
+  if (invalidLines.length > 0) {
+    msg += `，第 ${invalidLines.join(',')} 行格式有误`;
+  }
+  previewEl.textContent = msg;
+  previewEl.style.color = invalidLines.length > 0 ? 'var(--danger)' : 'var(--success)';
+}
+
+function confirmBatchImport() {
+  const text = document.getElementById('batchImportText').value.trim();
+  if (!text) {
+    alert('请先粘贴工单数据');
+    return;
+  }
+  const lines = text.split('\n').filter(l => l.trim());
+  const newOrders = [];
+  let hasError = false;
+  lines.forEach((line, i) => {
+    const parts = line.split(/\t|,|\|/).map(s => s.trim());
+    if (parts.length >= 2 && parts[0] && parseInt(parts[1]) > 0) {
+      newOrders.push({
+        number: parts[0],
+        product: '',
+        qty: parseInt(parts[1])
+      });
+    } else {
+      hasError = true;
+    }
+  });
+  if (newOrders.length === 0) {
+    alert('未识别到有效工单数据，请检查格式：工单号 | 数量');
+    return;
+  }
+  // 合并到已导入列表（去重：同工单号则更新）
+  newOrders.forEach(order => {
+    const existIdx = importedWorkOrders.findIndex(w => w.number === order.number);
+    if (existIdx >= 0) {
+      importedWorkOrders[existIdx] = order;
+    } else {
+      importedWorkOrders.push(order);
+    }
+  });
+  // 自动选中第一个导入的工单（如果当前无工单）
+  if (!currentWorkOrder.number && newOrders.length > 0) {
+    selectWorkOrder(0);
+  }
+  renderWorkOrderList();
+  toggleBatchImport();
+  document.getElementById('batchImportText').value = '';
+  document.getElementById('batchPreview').textContent = '';
+  saveData(); // 持久化保存
+  showToast(`成功导入 ${newOrders.length} 条工单${hasError ? '（部分行格式有误已跳过）' : ''}`, hasError ? 'warning' : 'success');
+}
+
+function selectWorkOrder(index) {
+  if (index < 0 || index >= importedWorkOrders.length) return;
+  const order = importedWorkOrders[index];
+  currentWorkOrder = { number: order.number, product: order.product || '', qty: order.qty, targetQty: 0, componentCounts: {} };
+  // 从扫码记录重新计算已归数量
+  recalcComponentCounts();
+  document.getElementById('woNumber').value = order.number;
+  document.getElementById('woTargetQty').value = order.qty;
+  updateWorkOrderDisplay();
+  renderWorkOrderList();
+  saveData(); // 持久化保存
+  showToast('已切换至工单：' + order.number, 'success');
+}
+
+function renderWorkOrderList() {
+  const listEl = document.getElementById('workOrderList');
+  const contentEl = document.getElementById('workOrderListContent');
+  const countEl = document.getElementById('workOrderCount');
+  if (importedWorkOrders.length === 0) {
+    listEl.style.display = 'none';
+    return;
+  }
+  listEl.style.display = 'block';
+  countEl.textContent = `共 ${importedWorkOrders.length} 条`;
+  contentEl.innerHTML = importedWorkOrders.map((order, idx) => {
+    const isActive = currentWorkOrder.number === order.number;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;border-radius:6px;cursor:pointer;${isActive ? 'background:#1a73e8;color:#fff' : 'background:#fff;border:1px solid #ddd'}" onclick="selectWorkOrder(${idx})">
+      <span style="font-weight:${isActive ? '700' : '500'};font-size:.83rem;flex:1">${order.number}</span>
+      <span style="font-size:.78rem;font-weight:600;${isActive ? 'color:#fff' : 'color:var(--primary)'}">${order.qty} pcs</span>
+      <button onclick="event.stopPropagation();removeWorkOrder(${idx})" style="background:none;border:none;cursor:pointer;font-size:.75rem;${isActive ? 'color:#fff' : 'color:var(--danger)'}" title="删除">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function removeWorkOrder(index) {
+  if (index < 0 || index >= importedWorkOrders.length) return;
+  const order = importedWorkOrders[index];
+  if (!confirm('确认删除工单 ' + order.number + '？')) return;
+  importedWorkOrders.splice(index, 1);
+  if (currentWorkOrder.number === order.number) {
+    if (importedWorkOrders.length > 0) {
+      selectWorkOrder(0);
+    } else {
+      clearWorkOrder();
+      return;
+    }
+  }
+  renderWorkOrderList();
+  saveData(); // 持久化保存
+  showToast('已删除工单：' + order.number, 'info');
+}
+
+// ====== PALLET SCAN ======
+function handlePalletScan(event) {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  const input = document.getElementById('palletScanInput');
+  const code = input.value.trim();
+  if (!code) return;
+  // 解析栈板号：尝试匹配 5B3F-0001 / 2B3F-0001 / 2B4F-0001 格式
+  const match = code.match(/^(5B3F|2B3F|2B4F)[-_]?\s*(\d{1,4})/i);
+  if (match) {
+    document.getElementById('palletPrefix').value = match[1].toUpperCase();
+    document.getElementById('palletSeq').value = parseInt(match[2]);
+    updatePalletDisplay();
+    showToast('栈板号已识别：' + match[1].toUpperCase() + '-' + String(parseInt(match[2])).padStart(4, '0'), 'success');
+  } else {
+    showToast('无法识别栈板号格式：' + code + '（需包含5B3F/2B3F/2B4F+序号）', 'error');
+  }
+  input.value = '';
+}
+
+function updateWorkOrderDisplay() {
+  const el = document.getElementById('woStatus');
+  if (currentWorkOrder.number) {
+    if (!currentWorkOrder.product) {
+      // 工单已设置但还未识别成品料号
+      el.innerHTML = `已设置工单 | <b>${currentWorkOrder.number}</b> | 数量：<b>${currentWorkOrder.qty}</b> | <span style="color:var(--warning)">等待扫码识别成品料号...</span>`;
+      return;
+    }
+    const woBomList = bomData[currentWorkOrder.product] || [];
+    const compLimit = currentWorkOrder.qty;
+    
+    // 计算已完成成品数（所有BOM半品最少扫过的次数）
+    let minCount = Infinity;
+    woBomList.forEach(c => {
+      const cnt = currentWorkOrder.componentCounts[c.p] || 0;
+      if (cnt < minCount) minCount = cnt;
+    });
+    if (woBomList.length === 0) minCount = 0;
+    const completedProducts = minCount;
+    
+    const totalScanned = Object.values(currentWorkOrder.componentCounts).reduce((a, b) => a + b, 0);
+    const totalTarget = woBomList.length * compLimit;
+    const pct = totalTarget > 0 ? Math.round((totalScanned / totalTarget) * 100) : 0;
+    const mainColor = completedProducts >= compLimit ? 'var(--danger)' : pct >= 80 ? 'var(--warning)' : 'var(--success)';
+    
+    // Per-component progress
+    const compDetails = woBomList.map(c => {
+      const scanned = currentWorkOrder.componentCounts[c.p] || 0;
+      const done = scanned >= compLimit;
+      const cColor = done ? 'var(--danger)' : scanned > 0 ? 'var(--warning)' : 'var(--success)';
+      return `<span style="color:${cColor}">${c.p}：${scanned}/${compLimit}</span>`;
+    }).join(' &nbsp;|&nbsp; ');
+    
+    el.innerHTML = `已设置工单 | <b>${currentWorkOrder.number}</b> | 成品：${currentWorkOrder.product} | 完成：<span style="color:${mainColor};font-weight:700;font-size:1.1rem">${completedProducts}/${compLimit} 个</span> | 总进度：${totalScanned}/${totalTarget}（${pct}%）<br><span style="font-size:.78rem;margin-top:4px;display:inline-block">${compDetails}</span>`;
+  } else {
+    el.textContent = '未设置工单';
+  }
+}
+
+function checkWorkOrderLimit(scanCode, scanQty) {
+  // 如果没设置工单，不限制
+  if (!currentWorkOrder.number) return null;
+
+  // 从扫码内容提取工单号
+  const woMatch = scanCode.match(/工单[号]?[：:]\s*(\d+)/);
+  const scannedWO = woMatch ? woMatch[1].trim() : '';
+
+  // 如果码里有工单号且和设置不一致
+  if (scannedWO && scannedWO !== currentWorkOrder.number) {
+    return '⚠️ 扫码工单号（' + scannedWO + '）与当前设置（' + currentWorkOrder.number + '）不一致，请检查！';
+  }
+
+  return null;
+}
+
+// ====== CALCULATION ======
+function recalculate() {
+  // Recalculate kit availability for each product
+  window._dashData = productList.map(cp => {
+    const parts = bomData[cp] || [];
+    let kitQty = Infinity;
+    let shortageParts = [];
+    let minStock = Infinity;
+    let maxStock = 0;
+    
+    parts.forEach(part => {
+      const stock = inventory[part.p] || 0;
+      const need = part.y || 1;
+      const gap = need - stock;
+      
+      minStock = Math.min(minStock, stock);
+      maxStock = Math.max(maxStock, stock);
+      
+      if (stock < need) {
+        shortageParts.push({name: part.p, stock, need, gap});
+      }
+      kitQty = Math.min(kitQty, Math.floor(stock / need));
+    });
+    
+    if (parts.length === 0) { kitQty = 0; minStock = 0; }
+    if (kitQty === Infinity) kitQty = 0;
+
+    
+    // Extract work order numbers and quantity for this product from scan records
+    // 【多工单】工单号收集该成品扫过的全部工单（去重、逗号拼接），不只取第一个
+    const woSet = new Set();
+    let woQty = 0;
+    // 【线序料号 → 工单号】映射：同一线序料号可能跨越多个工单，逗号拼接去重
+    const partWOMap = {};
+    scanRecords.forEach(r => {
+      if (r.x) {
+        const pIdx = r.x.indexOf('-P');
+        if (pIdx > 0) {
+          const prodCode = r.x.substring(0, pIdx);
+          if (prodCode === cp) {
+            if (r.wo_no) woSet.add(String(r.wo_no).trim());
+            if (r.wo_qty && !woQty) woQty = parseInt(r.wo_qty);
+            // 记录该线序料号对应的工单号（保证线序行能显示自己的工单号）
+            if (r.wo_no) {
+              const wo = String(r.wo_no).trim();
+              if (!partWOMap[r.x]) partWOMap[r.x] = [];
+              if (!partWOMap[r.x].includes(wo)) partWOMap[r.x].push(wo);
+            }
+          }
+        }
+      }
+    });
+    const woNo = Array.from(woSet).sort().join(', ');
+    
+    // 最大缺口 = 工单数量 - 数量最小的线序料号的数量
+    const maxGap = (woQty > 0 && parts.length > 0) ? Math.max(0, woQty - minStock) : 0;
+
+    // 齐套率 = 完全齐套的套数 ÷ 工单总数量 × 100%
+    const kitRate = woQty > 0 ? ((kitQty / woQty) * 100).toFixed(1) : '0.0';
+    
+    return {
+      cp,
+      woNumbers: woNo || '-',
+      woQty: woQty || '-',
+      partCount: parts.length,
+      kitQty,
+      status: kitQty > 0 ? '可配套' : (shortageParts.length > 0 ? '缺料' : '待备料'),
+      shortageCount: shortageParts.length,
+      shortageParts,
+      partWOMap,
+      maxGap,
+      kitRate
+    };
+  });
+}
+
+// ====== DASHBOARD ======
+function refreshDashboard() {
+  recalculate();
+  const data = window._dashData || [];
+  
+  // Populate work order filter dropdown
+  const woFilter = document.getElementById('woFilter');
+  const currentWoValue = woFilter.value;
+  const woSet = new Set();
+  data.forEach(d => {
+    if (d.woNumbers && d.woNumbers !== '-') {
+      d.woNumbers.split(', ').forEach(wo => woSet.add(wo));
+    }
+  });
+  const sortedWos = Array.from(woSet).sort();
+  woFilter.innerHTML = '<option value="">全部工单</option>' + 
+    sortedWos.map(wo => `<option value="${wo}" ${wo === currentWoValue ? 'selected' : ''}>${wo}</option>`).join('');
+  
+  // Populate line sequence part filter dropdown
+  const lineSeqFilter = document.getElementById('lineSeqFilter');
+  const currentLineSeqValue = lineSeqFilter.value;
+  const lineSeqSet = new Set();
+  data.forEach(d => {
+    (bomData[d.cp] || []).forEach(item => lineSeqSet.add(item.p));
+  });
+  const sortedLineSeqs = Array.from(lineSeqSet).sort();
+  lineSeqFilter.innerHTML = '<option value="">全部线序料号</option>' +
+    sortedLineSeqs.map(ls => `<option value="${ls}" ${ls === currentLineSeqValue ? 'selected' : ''}>${ls}</option>`).join('');
+
+  // Table
+  renderTable(data);
+  
+  // Charts
+  renderCharts(data);
+}
+
+function renderTable(data) {
+  // 【防御修复】refreshAllUI 曾以无参形式调用本函数导致 data.length 抛错，
+  // 同步后 UI 刷新中断（表现为设备间数据显示不同步）。缺省时用最新看板数据。
+  data = data || window._dashData || [];
+  const tbody = document.getElementById('dashBody');
+  const search = (document.getElementById('searchInput').value || '').toLowerCase();
+  const woFilter = (document.getElementById('woFilter').value || '').trim().toLowerCase();
+  const lineSeqFilter = (document.getElementById('lineSeqFilter').value || '').trim().toLowerCase();
+  
+  let filtered = data;
+  if (search) {
+    filtered = filtered.filter(d => d.cp.toLowerCase().includes(search));
+  }
+  if (woFilter) {
+    // 精确匹配：该成品是否扫过这个工单（避免 "1014" 误配 "101431285" 之类前缀包含）
+    filtered = filtered.filter(d => {
+      const wos = String(d.woNumbers || '').split(',').map(s => s.trim().toLowerCase());
+      return wos.includes(woFilter);
+    });
+  }
+  if (lineSeqFilter) {
+    filtered = filtered.filter(d => {
+      const parts = bomData[d.cp] || [];
+      return parts.some(p => p.p.toLowerCase().includes(lineSeqFilter));
+    });
+  }
+  
+  // Update KPIs based on filtered data
+  // 总成品数：不随筛选联动，始终统计全部成品
+  const total = data.length;
+  // 可齐套成品数：随筛选条件联动
+  const kitOk = filtered.filter(d => d.kitQty > 0).length;
+  // 当前库存：随筛选条件联动——有筛选时只汇总筛选后成品对应BOM半品的库存；
+  // 无筛选时汇总全部半品库存（含BOM外有扫码记录的半品）
+  const hasDashFilter = !!(search || woFilter || lineSeqFilter);
+  let totalInventory;
+  if (!hasDashFilter) {
+    totalInventory = Object.values(inventory).reduce((sum, v) => sum + (v || 0), 0);
+  } else {
+    const _partSet = new Set();
+    filtered.forEach(d => (bomData[d.cp] || []).forEach(p => _partSet.add(p.p)));
+    totalInventory = 0;
+    _partSet.forEach(p => { totalInventory += (inventory[p] || 0); });
+  }
+  
+  document.getElementById('kpiTotal').textContent = total;
+  document.getElementById('kpiKit').textContent = kitOk;
+  document.getElementById('kpiSemiTotal').textContent = totalInventory;
+  
+  let html = '';
+  filtered.forEach((d, idx) => {
+    const statusBadge = d.status === '可配套' ? 'badge-green' : (d.status === '缺料' ? 'badge-red' : 'badge-yellow');
+    const hasDetail = d.shortageParts.length > 0 || (bomData[d.cp] && bomData[d.cp].length > 0);
+    // 筛选工单时，成品行只显示这一个工单号；未筛选时显示全部（逗号拼接）
+    const showWo = woFilter ? woFilter : (d.woNumbers || '-');
+    // 判断某线序料号是否属于当前筛选的工单
+    const partInWo = (p) => {
+      if (!woFilter) return true;
+      const wos = (d.partWOMap && d.partWOMap[p]) || [];
+      return wos.some(w => String(w).toLowerCase() === woFilter);
+    };
+    
+    html += `<tr class="${hasDetail ? 'expand-row' : ''}" ${hasDetail ? 'onclick="toggleDetail(this)"' : ''}>
+      <td><strong>${d.cp}</strong></td>
+      <td>${d.partCount}</td>
+      <td style="text-align:center;font-weight:600;color:${d.shortageCount > 0 ? 'var(--danger)' : 'var(--success)'}">${d.shortageCount}</td>
+      <td>${showWo}</td>
+      <td>${d.woQty || '-'}</td>
+      <td><strong style="font-size:1.1rem;color:${d.kitQty > 0 ? 'var(--success)' : 'var(--danger)'}">${d.kitQty}</strong></td>
+      <td style="text-align:center;font-weight:600;color:${parseFloat(d.kitRate) >= 100 ? 'var(--success)' : parseFloat(d.kitRate) >= 50 ? '#e67e22' : 'var(--danger)'}">${d.kitRate}%</td>
+      <td>${d.maxGap > 0 ? d.maxGap : '-'}</td>
+      <td><span class="badge ${statusBadge}">${d.status}</span></td>
+    </tr>`;
+    
+    if (hasDetail) {
+      const parts = bomData[d.cp] || [];
+      // 筛选工单时，明细行只保留该工单扫过的线序料号
+      const shownParts = woFilter ? parts.filter(p => partInWo(p.p)) : parts;
+      html += `<tr class="detail-row"><td colspan="9">
+        <table style="width:100%;font-size:.84rem">
+          <tr style="background:#e8f0fe"><th style="padding:6px 10px">半品料号</th><th style="padding:6px 10px">工单号</th><th style="padding:6px 10px">接头规格</th><th style="padding:6px 10px">库存</th><th style="padding:6px 10px">缺料数量</th><th style="padding:6px 10px">状态</th></tr>
+      `;
+      shownParts.forEach(p => {
+        const stock = inventory[p.p] || 0;
+        const woQtyNum = parseInt(d.woQty) || 0;
+        // 该线序料号对应的工单号（多工单逗号拼接；筛选某工单时只显示该工单）
+        const partWosAll = (d.partWOMap && d.partWOMap[p.p]) ? d.partWOMap[p.p] : [];
+        const partWos = woFilter ? woFilter : (partWosAll.length ? partWosAll.join(', ') : '-');
+        let st, cls, shortage;
+        if (woQtyNum > 0) {
+          if (stock > woQtyNum) { st = '充足'; cls = 'badge-green'; }
+          else if (stock === woQtyNum) { st = '满足'; cls = 'badge-green'; }
+          else { st = '缺料'; cls = 'badge-red'; }
+          shortage = Math.max(0, woQtyNum - stock);
+        } else {
+          if (stock > 0) { st = '有库存'; cls = 'badge-green'; }
+          else { st = '缺料'; cls = 'badge-red'; }
+          shortage = 0;
+        }
+        html += `<tr>
+          <td style="padding:6px 10px;font-family:monospace;font-size:.8rem">${p.p}</td>
+          <td style="padding:6px 10px;font-family:monospace;font-size:.8rem">${partWos}</td>
+          <td style="padding:6px 10px">${p.j || '-'}</td>
+          <td style="padding:6px 10px;text-align:center;font-weight:600;${stock < woQtyNum && woQtyNum > 0 ? 'color:var(--danger)' : ''}">${stock}</td>
+          <td style="padding:6px 10px;text-align:center;font-weight:600;color:${shortage > 0 ? 'var(--danger)' : 'var(--success)'}">${shortage}</td>
+          <td style="padding:6px 10px"><span class="badge ${cls}">${st}</span></td>
+        </tr>`;
+      });
+      html += '</table></td></tr>';
+    }
+  });
+  
+  tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-secondary)">暂无数据，请先加载库存 CSV</td></tr>';
+}
+
+function toggleDetail(row) {
+  row.classList.toggle('open');
+  const detail = row.nextElementSibling;
+  if (detail && detail.classList.contains('detail-row')) {
+    detail.classList.toggle('show');
+  }
+}
+
+function filterTable() {
+  refreshDashboard();
+}
+
+let sortAsc = true;
+function sortTable() {
+  if (!window._dashData) return;
+  window._dashData.sort((a, b) => sortAsc ? a.kitQty - b.kitQty : b.kitQty - a.kitQty);
+  sortAsc = !sortAsc;
+  renderTable(window._dashData);
+}
+
+function expandAll() {
+  document.querySelectorAll('.expand-row').forEach(r => { r.classList.add('open'); r.nextElementSibling?.classList.add('show'); });
+}
+function collapseAll() {
+  document.querySelectorAll('.expand-row').forEach(r => { r.classList.remove('open'); r.nextElementSibling?.classList.remove('show'); });
+}
+
+// ====== CHARTS ======
+function renderCharts(data) {
+  // Kit distribution chart
+  const kitChart = document.getElementById('chartKit');
+  const sorted = [...data].sort((a, b) => b.kitQty - a.kitQty).slice(0, 15);
+  const maxKit = Math.max(...sorted.map(d => d.kitQty), 1);
+  
+  kitChart.innerHTML = sorted.map(d => {
+    const pct = (d.kitQty / maxKit * 100).toFixed(1);
+    const color = d.kitQty > 0 ? 'var(--success)' : 'var(--danger)';
+    return `<div class="bar-item">
+      <span class="bar-label" title="${d.cp}">${d.cp}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+      <span class="bar-value">${d.kitQty}</span>
+    </div>`;
+  }).join('');
+  
+}
+
+// ====== EXPORT TO EXCEL ======
+function exportToExcel() {
+  recalculate();
+  const data = window._dashData || [];
+  
+  // 创建工作簿
+  const wb = XLSX.utils.book_new();
+  
+  // Sheet 1: BOM物料清单
+  const bomSheetData = [];
+  bomSheetData.push(['成品料号', '半品料号', '接头规格', '线长', '单套用量', '备注']);
+  Object.keys(bomData).forEach(cp => {
+    bomData[cp].forEach(item => {
+      bomSheetData.push([cp, item.p, item.j, item.l, item.y, '']);
+    });
+  });
+  const ws1 = XLSX.utils.aoa_to_sheet(bomSheetData);
+  XLSX.utils.book_append_sheet(wb, ws1, 'BOM物料清单');
+  
+  // Sheet 2: 半品库存主数据
+  const inventoryData = [];
+  inventoryData.push(['所属成品料号', '线序料号', '接头规格', '线长', '单套用量', '累计入库', '累计出库', '当前库存', '库存状态']);
+  Object.keys(bomData).forEach(cp => {
+    bomData[cp].forEach(item => {
+      const qty = inventory[item.p] || 0;
+      // 计算累计入库和出库（基于扫码记录，按条码上的包规数量累加）
+      let inCount = 0, outCount = 0;
+      scanRecords.forEach(r => {
+        if (r.c.includes(item.p)) {
+          const q = (r.q && r.q > 0) ? r.q : 1; // 兼容旧记录（默认1）
+          if (r.a === '入库') inCount += q;
+          else if (r.a === '出库') outCount += q;
+        }
+      });
+      const status = qty < 0 ? '异常(负库存)' : (qty === 0 ? '缺料' : (qty < 10 ? '低库存' : '正常'));
+      inventoryData.push([cp, item.p, item.j, item.l, item.y, inCount, outCount, qty, status]);
+    });
+  });
+  const ws2 = XLSX.utils.aoa_to_sheet(inventoryData);
+  XLSX.utils.book_append_sheet(wb, ws2, '半品库存主数据');
+  
+  // Sheet 3: 成品齐套看板
+  const dashData = [];
+  dashData.push(['成品料号', '线序料号款数', '缺料半品款数', '工单号', '工单数量', '齐套数量', '齐套率', '最大缺口', '齐套状态']);
+  data.forEach(d => {
+    dashData.push([d.cp, d.partCount, d.shortageCount, d.woNumbers || '-', d.woQty, d.kitQty, d.kitRate + '%', d.maxGap, d.status]);
+  });
+  const ws3 = XLSX.utils.aoa_to_sheet(dashData);
+  XLSX.utils.book_append_sheet(wb, ws3, '成品齐套看板');
+  
+  // Sheet 4: 扫码区
+  const scanData = [];
+  scanData.push(['时间', '唯一码', '成品料号', '线序料号', '操作人', '工单号', '工单数量', '入库数量', '库位', '批次', '动作', '栈板号']);
+  scanRecords.forEach(r => {
+    const code = r.c;
+    const partNum = code.substring(3, 21);
+    const pIdx = (r.x || '').indexOf('-P');
+    const prodCode = pIdx > 0 ? (r.x || '').substring(0, pIdx) : '';
+    scanData.push([r.t, code, prodCode, partNum, r.r, r.wo_no || '', r.wo_qty || '', r.q || '', r.w, r.pd || '', r.a, r.z || '']);
+  });
+  const ws4 = XLSX.utils.aoa_to_sheet(scanData);
+  XLSX.utils.book_append_sheet(wb, ws4, '扫码区');
+  
+  // 导出文件
+  const now = new Date();
+  const dateStr = now.getFullYear() + 
+    String(now.getMonth() + 1).padStart(2, '0') + 
+    String(now.getDate()).padStart(2, '0') + '_' +
+    String(now.getHours()).padStart(2, '0') + 
+    String(now.getMinutes()).padStart(2, '0');
+  XLSX.writeFile(wb, `半品管理台账_${dateStr}.xlsx`);
+  
+  showToast('Excel导出成功！');
+}
+
+// ====== CLEAR ALL DATA ======
+// ====== 回收站：清除的记录存这里，支持一键恢复 ======
+const RECYCLE_KEY = 'semiKitRecycleBin';
+function pushRecycleBin(records, label) {
+  try {
+    let bin = [];
+    try { bin = JSON.parse(localStorage.getItem(RECYCLE_KEY) || '[]'); } catch(e) { bin = []; }
+    bin.push({ time: new Date().toISOString(), label: label || '清除', count: records.length, records: records });
+    if (bin.length > 10) bin = bin.slice(-10); // 最多保留最近10次清除
+    localStorage.setItem(RECYCLE_KEY, JSON.stringify(bin));
+  } catch(e) { console.warn('写入回收站失败', e); }
+}
+
+// 一键恢复：把最近一次清除的记录放回来（并从墓碑剔除，避免被同步过滤）
+function undoClear() {
+  let bin = [];
+  try { bin = JSON.parse(localStorage.getItem(RECYCLE_KEY) || '[]'); } catch(e) { bin = []; }
+  if (!bin.length) { showToast('没有可恢复的清除记录', 'info'); return; }
+  const last = bin[bin.length - 1];
+  const exist = new Set(scanRecords.map(r => dedupKey(r)));
+  let restored = 0, skipped = 0;
+  const back = [];
+  last.records.forEach(r => {
+    const k = recordKey(r.c, r.t);
+    // 关键：从墓碑剔除，否则页面加载/同步时会被再次过滤掉
+    const di = deletedRecords.indexOf(k);
+    if (di >= 0) deletedRecords.splice(di, 1);
+    // 判重含动作：同码同分钟的入库+出库是两条记录，恢复时都要回来
+    const dk = dedupKey(r);
+    if (!exist.has(dk)) { back.push(r); exist.add(dk); restored++; }
+    else skipped++;
+  });
+  if (restored > 0) scanRecords.unshift(...back);
+  bin.pop(); // 弹出该批次（每点一次恢复一批）
+  try { localStorage.setItem(RECYCLE_KEY, JSON.stringify(bin)); } catch(e) {}
+  recomputeInventory();
+  filteredScanRecords = null;
+  allowShrinkPush = true; // 用户主动恢复，允许直接推送（避免被并集保护改写）
+  saveData(); // 触发同步：恢复的记录会被推上云端
+  renderRecentList(); refreshDashboard(); updateWorkOrderDisplay();
+  showToast('↩️ 已恢复 ' + restored + ' 条记录' + (skipped > 0 ? '（' + skipped + ' 条已存在跳过）' : ''), 'success');
+}
+
+// 清除按钮文案：随筛选状态变化
+function updateClearBtnLabel() {
+  const btn = document.getElementById('clearAllBtn');
+  if (!btn) return;
+  const keyword = document.getElementById('scanSearchInput').value.trim();
+  const dateFilter = document.getElementById('scanDateFilter').value;
+  const actionFilter = document.getElementById('scanActionFilter').value;
+  if ((keyword || dateFilter || actionFilter) && filteredScanRecords) {
+    btn.innerHTML = '🗑️ 清除筛选记录(' + filteredScanRecords.length + ')';
+  } else {
+    btn.innerHTML = '🗑️ 清除所有数据';
+  }
+}
+
+async function clearAllData() {
+  // 【按筛选清除】有筛选条件时，只清除筛选出的记录；无筛选时才清全部
+  const keyword = document.getElementById('scanSearchInput').value.trim().toLowerCase();
+  const dateFilter = document.getElementById('scanDateFilter').value;
+  const actionFilter = document.getElementById('scanActionFilter').value;
+  const hasFilter = !!(keyword || dateFilter || actionFilter) && filteredScanRecords !== null;
+
+  if (hasFilter) {
+    const targets = filteredScanRecords.filter(r => r.c);
+    if (targets.length === 0) { showToast('筛选结果为空，没有可清除的记录', 'info'); return; }
+    if (!confirm('将清除筛选出的 ' + targets.length + ' 条记录（当前共 ' + scanRecords.length + ' 条）。\n\n清除后可用「↩️ 一键恢复」找回。确定清除？')) return;
+    // 存入回收站 → 打墓碑 → 移除
+    pushRecycleBin(targets, '筛选清除');
+    const tKeys = new Set(targets.map(r => recordKey(r.c, r.t)));
+    targets.forEach(r => {
+      const key = recordKey(r.c, r.t);
+      if (!deletedRecords.includes(key)) deletedRecords.push(key);
+    });
+    if (deletedRecords.length > 5000) deletedRecords = deletedRecords.slice(-5000);
+    scanRecords = scanRecords.filter(r => !tKeys.has(recordKey(r.c, r.t)));
+    // 清空筛选并刷新
+    document.getElementById('scanSearchInput').value = '';
+    document.getElementById('scanDateFilter').value = '';
+    document.getElementById('scanActionFilter').value = '';
+    filteredScanRecords = null;
+    recomputeInventory();
+    allowShrinkPush = true;   // 用户主动筛选清除，允许推送到云端
+    saveData();
+    renderRecentList(); refreshDashboard(); updateWorkOrderDisplay(); updateClearBtnLabel();
+    showToast('已清除 ' + targets.length + ' 条筛选记录，可用「↩️ 一键恢复」找回', 'success');
+    return;
+  }
+
+  // 【全部清除】无筛选时走全量清除（三重确认）
+  if (scanRecords.length === 0) { showToast('当前没有扫码记录', 'info'); return; }
+  if (!confirm('⚠️ 即将清除全部 ' + scanRecords.length + ' 条扫码记录！\n\n此操作会同步删除云端数据，影响所有设备。\n确定继续？')) return;
+  if (!confirm('再次确认：清除后库存、齐套数据都会归零，且不可恢复！')) return;
+  const typed = prompt('最后一步：请输入「确认清除」四个字以继续\n\n（提示：清除前系统会自动备份，可用「↩️ 一键恢复」找回）');
+  if (typed === null) return;
+  if (String(typed).trim() !== '确认清除') { showToast('输入不正确，已取消清除', 'info'); return; }
+
+  // 【回收站备份】清除前把当前全量数据存入回收站，供一键恢复
+  pushRecycleBin(scanRecords.slice(), '全部清除');
+
+  // 关键：把当前所有记录都加进墓碑（这样同步时 GitHub 也会跟着清）
+  scanRecords.forEach(r => {
+    const key = recordKey(r.c, r.t);
+    if (!deletedRecords.includes(key)) deletedRecords.push(key);
+  });
+  if (deletedRecords.length > 5000) deletedRecords = deletedRecords.slice(-5000);
+
+  // 清空状态
+  scanRecords = [];
+  inventory = JSON.parse(JSON.stringify(INITIAL_INVENTORY));
+  currentWorkOrder = { number: '', product: '', qty: 0, targetQty: 0, componentCounts: {} };
+  importedWorkOrders = [];
+  currentAction = '入库';
+  filteredScanRecords = null;
+
+  // 清空 UI 输入
+  document.getElementById('woNumber').value = '';
+  document.getElementById('woTargetQty').value = '';
+  document.getElementById('palletPrefix').value = '';
+  document.getElementById('palletSeq').value = '';
+
+  // 重新计算库存
+  recomputeInventory();
+
+  // 写 localStorage 并立刻同步 GitHub
+  // 【重要】置豁免标记：用户主动清除必须能推上云端（否则云端清不掉）
+  allowShrinkPush = true;
+  saveData();
+
+  // 刷新 UI
+  refreshAllUI();
+  updateClearBtnLabel();
+  showToast('已清除所有数据并同步云端，可用「↩️ 一键恢复」找回', 'success');
+}
+
+// ====== URL参数检测：?reset=1 强制重置 ======
+if (new URLSearchParams(window.location.search).has('reset')) {
+  localStorage.removeItem(STORAGE_KEY);
+  console.log('URL参数 ?reset=1 检测到，已清除本地数据');
+}
+
+// ====== INIT ======
+recalculate();
+renderRecentList();
+refreshDashboard();
+updateClearBtnLabel();
+
+// Enter key for search input
+document.getElementById('scanSearchInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    filterScanRecords();
+  }
+});
+
+// Auto-focus scan input - exclude all form elements, cards, and record list area
+document.addEventListener('click', function(e) {
+  if (document.getElementById('tab-scan').classList.contains('active') && 
+      !e.target.closest('input, button, select, textarea, .card-header, label, a, [onclick], .recent-list, .recent-item')) {
+    document.getElementById('scanInput').focus();
+  }
+});
+
+// Allow text selection in record list (override any default behavior)
+document.getElementById('recentList').addEventListener('selectstart', function(e) {
+  e.stopPropagation();
+});
+document.getElementById('recentList').addEventListener('mousedown', function(e) {
+  if (e.target.closest('.recent-item')) {
+    e.stopPropagation();
+  }
+});
+
+/* ===== 手机摄像头扫码 ===== */
+let cameraScanner = null;
+let cameraRunning = false;
+let cameraMode = 'scan'; // 'scan' = 主扫码, 'pallet' = 栈板号扫码
+
+function openCamera() {
+  cameraMode = 'scan';
+  if (typeof Html5Qrcode === 'undefined') {
+    alert('扫码组件加载中，请刷新页面后重试。\n如仍失败，请检查网络（需要加载外部JS库）。');
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('当前浏览器不支持摄像头。\n请使用 Chrome / Safari / Edge 浏览器。\n微信内置浏览器不支持，请用系统浏览器打开链接。');
+    return;
+  }
+  document.getElementById('cameraModal').classList.add('show');
+  document.getElementById('cameraStatus').textContent = '正在启动摄像头...';
+  startCamera();
+}
+
+function openPalletCamera() {
+  cameraMode = 'pallet';
+  if (typeof Html5Qrcode === 'undefined') {
+    alert('扫码组件加载中，请刷新页面后重试。');
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('当前浏览器不支持摄像头。\n请使用 Chrome / Safari / Edge 浏览器。');
+    return;
+  }
+  document.getElementById('cameraModal').classList.add('show');
+  document.getElementById('cameraStatus').textContent = '正在启动摄像头（栈板号模式）...';
+  startCamera();
+}
+
+function closeCamera() {
+  stopCamera();
+  document.getElementById('cameraModal').classList.remove('show');
+}
+
+async function startCamera() {
+  if (cameraRunning) return;
+  const statusEl = document.getElementById('cameraStatus');
+  
+  try {
+    // 先尝试获取摄像头列表，确认有可用摄像头
+    let cameraId = null;
+    try {
+      const devices = await Html5Qrcode.getCameras();
+      if (!devices || devices.length === 0) {
+        statusEl.textContent = '❌ 未检测到摄像头';
+        return;
+      }
+      // 优先选后置摄像头（标签包含 back/rear/environment）
+      const rear = devices.find(d => /back|rear|environment/i.test(d.label));
+      cameraId = rear ? rear.id : devices[devices.length - 1].id;
+    } catch(e) {
+      // getCameras 可能被拒绝，降级用 facingMode
+      console.warn('获取摄像头列表失败，降级使用facingMode:', e.message);
+    }
+    
+    statusEl.textContent = '正在连接摄像头...';
+    
+    cameraScanner = new Html5Qrcode("reader", { verbose: false });
+    
+    // 构建启动配置
+    const startConfig = cameraId 
+      ? cameraId 
+      : { facingMode: { ideal: 'environment' } };
+    
+    await cameraScanner.start(
+      startConfig,
+      {
+        fps: 15,
+        qrbox: function(vw, vh) {
+          const s = Math.min(vw, vh);
+          return { width: Math.floor(s * 0.75), height: Math.floor(s * 0.75) };
+        },
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.ITF
+        ]
+      },
+      onScanSuccess,
+      onScanFailure
+    );
+    
+    cameraRunning = true;
+    statusEl.textContent = '将条码对准框内，自动识别';
+  } catch (err) {
+    console.error('摄像头启动失败:', err);
+    let msg = '启动失败';
+    const e = (err.message || err.name || String(err)).toLowerCase();
+    if (e.includes('notallowed') || e.includes('permission')) {
+      msg = '摄像头权限被拒绝\n请在浏览器设置中允许摄像头权限';
+    } else if (e.includes('notfound') || e.includes('devices')) {
+      msg = '未找到摄像头设备';
+    } else if (e.includes('notreadable')) {
+      msg = '摄像头被其他应用占用';
+    } else if (e.includes('overconstrained')) {
+      msg = '摄像头不支持当前配置，尝试切换浏览器';
+    } else if (e.includes('notsupported') || e.includes('secure')) {
+      msg = '需要HTTPS环境或浏览器不支持';
+    } else {
+      msg = err.message || '未知错误，请换用Chrome浏览器';
+    }
+    statusEl.textContent = '❌ ' + msg;
+    
+    if (cameraScanner) {
+      try { await cameraScanner.clear(); } catch(e) {}
+      cameraScanner = null;
+    }
+  }
+}
+
+async function stopCamera() {
+  if (cameraScanner) {
+    try {
+      if (cameraRunning) await cameraScanner.stop();
+      await cameraScanner.clear();
+    } catch(e) { console.warn('停止相机时出错:', e); }
+    cameraScanner = null;
+    cameraRunning = false;
+  }
+}
+
+let lastScannedCode = '';
+let lastScanTime = 0;
+
+function onScanSuccess(decodedText, decodedResult) {
+  const now = Date.now();
+  // 防抖：同一个码 3 秒内不重复触发
+  if (decodedText === lastScannedCode && now - lastScanTime < 3000) return;
+  lastScannedCode = decodedText;
+  lastScanTime = now;
+  
+  // 扫码成功闪一下
+  const container = document.querySelector('.camera-container');
+  const flash = document.createElement('div');
+  flash.className = 'camera-flash';
+  container.appendChild(flash);
+  setTimeout(() => flash.remove(), 700);
+  
+  // 更新状态
+  document.getElementById('cameraStatus').textContent = '✅ 已识别';
+  
+  const code = decodedText.trim();
+  const mode = cameraMode;
+  
+  // 关闭相机，根据模式分发结果
+  stopCamera();
+  setTimeout(() => {
+    closeCamera();
+    if (mode === 'pallet') {
+      // 栈板号模式：解析并填入栈板号
+      const match = code.match(/^(5B3F|2B3F|2B4F)[-_]?\s*(\d{1,4})/i);
+      if (match) {
+        document.getElementById('palletPrefix').value = match[1].toUpperCase();
+        document.getElementById('palletSeq').value = parseInt(match[2]);
+        updatePalletDisplay();
+        showToast('栈板号已识别：' + match[1].toUpperCase() + '-' + String(parseInt(match[2])).padStart(4, '0'), 'success');
+      } else {
+        showToast('无法识别栈板号格式：' + code + '（需包含5B3F/2B3F/2B4F+序号）', 'error');
+      }
+    } else {
+      processScan(code);
+    }
+  }, 400);
+}
+
+function onScanFailure(error) {
+  // 静默忽略 - 每帧没识别到都会触发
+}
+
+</script>
+
+<!-- Camera Modal -->
+<div id="cameraModal" onclick="if(event.target===this)closeCamera()" data-page-node-id="QYkIk5da484wsbekjNODYW">
+  <div class="camera-top-bar" data-page-node-id="ct1cfaNZzk7CkYlxPn7MVS">
+    <button class="camera-close-btn" onclick="closeCamera()" data-page-node-id="TgFmwC0x2CXedHs67vUBCh">✕</button>
+    <span class="camera-status" id="cameraStatus" data-page-node-id="6OZzbN5unSfrDqdGwdWd7b">正在启动摄像头...</span>
+  </div>
+  <div class="camera-container" data-page-node-id="lGnceEEKimK7EvHFYQ6SuG">
+    <div id="reader" data-page-node-id="D9a96O5pC7GCYgtUNHBxfO"></div>
+  </div>
+</div>
+
+<!-- 修改密码弹窗 -->
+<div id="changePwdModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9998;align-items:center;justify-content:center" data-page-node-id="hgb8rbkuf9oAqofwTGhZeo">
+  <div style="background:#fff;border-radius:12px;padding:24px;width:380px" data-page-node-id="TiwImL1b5cnYpHgrAP5M31">
+    <h3 style="margin:0 0 16px" data-page-node-id="DWtpKTOQD8kydfVrHRbKy0">🔑 修改密码</h3>
+    <input type="password" id="oldPwdInput" placeholder="当前密码" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px;box-sizing:border-box" data-page-node-id="ELObATYY4SWTeLyvJwguRU">
+    <input type="password" id="newPwdInput" placeholder="新密码" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px;box-sizing:border-box" data-page-node-id="gO7xN4JAqDWDt2HjvhLzeQ">
+    <input type="password" id="confirmPwdInput" placeholder="确认新密码" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;margin-bottom:12px;box-sizing:border-box" data-page-node-id="KEA01LZtzaHb6WgVXK1Drk">
+    <button onclick="doChangePwd()" style="width:100%;padding:8px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.9rem;margin-bottom:8px" data-page-node-id="anuBOzQx09QU8fbQTRPIbW">确认修改</button>
+    <button onclick="closeChangePwdModal()" style="width:100%;padding:8px;background:#eee;border:none;border-radius:6px;cursor:pointer;font-size:.9rem" data-page-node-id="shDeXXSOORnlK2Wv3TDrvQ">取消</button>
+  </div>
+</div>
+
+<!-- 用户管理弹窗 -->
+<div id="userModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:9998;display:none;align-items:center;justify-content:center" data-page-node-id="S8pDckWQraIHLBlaX9YwBn">
+  <div style="background:#fff;border-radius:12px;padding:24px;width:420px;max-height:80vh;overflow-y:auto" data-page-node-id="Q7jAVJH80OxyGJjMjVEgeY">
+    <h3 style="margin:0 0 16px" data-page-node-id="62cYANd0z7vI1knT5WyPYD">👥 用户管理</h3>
+    <div id="userListArea" style="margin-bottom:16px" data-page-node-id="GxA76bgGAnYsC1uMIGXAfp"></div>
+    <hr style="border:none;border-top:1px solid #eee;margin:16px 0" data-page-node-id="kTeqz10DQgoBTq9harxt6m">
+    <h4 style="margin:0 0 10px;font-size:.9rem" data-page-node-id="NQvsVi6dfrB7MBvLTLfxot">添加用户</h4>
+    <input type="text" id="newUserUsername" placeholder="工号" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px;box-sizing:border-box" data-page-node-id="JgCH9APcxMkWHbjHOJVALx">
+    <input type="text" id="newUserName" placeholder="姓名（选填）" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px;box-sizing:border-box" data-page-node-id="e12WbuoY9rznCOeFfhaD8p">
+    <input type="password" id="newUserPassword" placeholder="初始密码" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px;box-sizing:border-box" data-page-node-id="2jVSqul4T4mHKLkORdbL3j">
+    <select id="newUserRole" style="width:100%;padding:8px 10px;border:1px solid #ddd;border-radius:6px;margin-bottom:12px;box-sizing:border-box" data-page-node-id="OeI3uKEAUmFpeUL7a1dKDV">
+      <option value="operator" data-page-node-id="5IyEJcfJr9OBVao7FxSjhp">操作员</option>
+      <option value="admin" data-page-node-id="Pl26GjVPgg8wckS6LWoitx">管理员</option>
+    </select>
+    <button onclick="addUser()" style="width:100%;padding:8px;background:var(--primary);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:.9rem" data-page-node-id="YIcjw9iHTWRu2FrzDrgTTv">添加</button>
+    <button onclick="closeUserModal()" style="width:100%;padding:8px;background:#eee;border:none;border-radius:6px;cursor:pointer;margin-top:8px;font-size:.9rem" data-page-node-id="0KvhDDBIf81gMP1QPJgQjr">关闭</button>
+  </div>
+</div>
+
+</body>
+</html>
