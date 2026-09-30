@@ -1,0 +1,774 @@
+<title>Stranded on the Ice</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout: a bounded top-down frozen lake. A small rowboat (with its dozing angler) sits stuck in the
+   ice; a live rotating throw-arrow tracks the pointer over the canvas. Everything below the canvas is
+   deliberately compact — inventory + one status/readout bar — so the whole game fits on one screen. */
+:root {
+  --ice-light: #eaf6fb;
+  --ice-mid: #cfe9f4;
+  --ice-crack: #a9d3e3;
+  --water: #0d2c42;
+  --water-deep: #061a29;
+  --safety: #3ecf8e;
+  --safety-line: #1f8f60;
+  --player: #ff7a45;
+  --player-dark: #c94f22;
+  --panel: #10243a;
+  --panel-2: #16314c;
+  --panel-line: #2b4a68;
+  --ink: #eaf3fb;
+  --ink-dim: #9fb7cc;
+  --warn: #ff6b6b;
+  --font-display: "Fredoka", "Arial Rounded MT Bold", sans-serif;
+  --font-body: "Work Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--panel); color: var(--ink); font-family: var(--font-body); }
+
+.wrap { max-width: 900px; margin: 0 auto; padding-inline: 16px; padding-block: 14px 20px; display: flex; flex-direction: column; gap: 10px; }
+
+header.page { border-bottom: 2px solid var(--panel-line); padding-bottom: 8px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--safety); margin: 0; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(20px, 3.6vw, 27px); margin: 0; text-wrap: balance; color: var(--ink); }
+.sub { font-size: 12.5px; line-height: 1.4; color: var(--ink-dim); margin: 2px 0 0; flex-basis: 100%; }
+.sub strong { color: var(--ink); }
+
+.stage-frame {
+  position: relative; border: 2px solid var(--panel-line); border-radius: 12px; overflow: hidden;
+  background: var(--ice-light);
+}
+.stage-box { width: 100%; aspect-ratio: 16 / 9; max-height: 52vh; min-width: 0; display: block; }
+canvas { width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+
+.hud {
+  position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 6px; flex-wrap: wrap;
+  justify-content: space-between; pointer-events: none;
+}
+.hud-left, .hud-right { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  background: rgba(16,36,58,0.85); border: 1px solid var(--panel-line); color: var(--ink);
+  font-family: var(--font-mono); font-size: 11px; padding: 4px 9px; border-radius: 7px;
+}
+.chip b { color: var(--safety); font-weight: 600; }
+.chip.hint { font-family: var(--font-body); color: var(--ink-dim); }
+
+.banner {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center;
+  padding: 14px; background: rgba(6,26,41,0.78); backdrop-filter: blur(1px); overflow-y: auto;
+}
+.banner-card {
+  background: var(--panel); border: 1px solid var(--panel-line); border-radius: 12px; padding: 16px 20px; max-width: 420px;
+  max-height: 100%;
+}
+.banner-card h3 { font-family: var(--font-display); font-size: 20px; margin: 0 0 6px; }
+.banner-card p { font-size: 13px; color: var(--ink-dim); margin: 0 0 12px; line-height: 1.45; }
+.banner.win .banner-card h3 { color: var(--safety); }
+.banner.lose .banner-card h3 { color: var(--warn); }
+
+.banner.intro { background: var(--panel); backdrop-filter: none; }
+
+.intro-card { max-width: 460px; text-align: left; }
+.intro-card h3 { font-size: 20px; }
+.intro-card p { color: var(--ink); }
+.law-diagram {
+  display: flex; align-items: center; justify-content: center; gap: 12px; margin: 12px 0; padding: 10px 8px;
+  background: var(--panel-2); border: 1px solid var(--panel-line); border-radius: 10px;
+}
+.law-side { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+.law-arrow { font-size: 20px; line-height: 1; }
+.law-side.action .law-arrow { color: var(--player); }
+.law-side.reaction .law-arrow { color: var(--safety); transform: scaleX(-1); display: inline-block; }
+.law-label { font-size: 11px; color: var(--ink); text-align: center; line-height: 1.3; }
+.law-vs { font-family: var(--font-mono); font-size: 11px; color: var(--ink-dim); }
+
+/* ---------- controls below stage ---------- */
+.deck { display: flex; flex-direction: column; gap: 8px; }
+
+.inventory { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+@media (max-width: 680px) { .inventory { grid-template-columns: repeat(2, 1fr); } }
+.item {
+  appearance: none; text-align: left; cursor: pointer;
+  background: var(--panel-2); border: 1px solid var(--panel-line); border-radius: 9px; padding: 7px 9px;
+  color: var(--ink); font-family: var(--font-body);
+}
+.item:hover:not(:disabled) { border-color: var(--player); }
+.item:focus-visible { outline: 2px solid var(--safety); outline-offset: 2px; }
+.item[aria-pressed="true"] { border-color: var(--player); box-shadow: 0 0 0 1px var(--player) inset; background: #1c2f47; }
+.item:disabled { opacity: 0.35; cursor: not-allowed; }
+.item .nm { font-family: var(--font-display); font-weight: 600; font-size: 13px; line-height: 1.15; display: block; min-height: 2.3em; }
+.item .mass { font-family: var(--font-mono); font-size: 11px; color: var(--player); display: block; margin: 1px 0; }
+.item .fl { font-size: 10.5px; color: var(--ink-dim); line-height: 1.25; display: block; }
+
+.bottombar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; }
+.bottombar-left { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.btn {
+  appearance: none; border: 1px solid var(--safety); background: var(--safety); color: #08281c;
+  font-family: var(--font-display); font-weight: 600; font-size: 14px; padding: 8px 16px; border-radius: 8px; cursor: pointer;
+}
+.btn:hover { filter: brightness(1.08); }
+.btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.btn.ghost { background: transparent; color: var(--ink-dim); border-color: var(--panel-line); }
+.btn.ghost:hover { color: var(--ink); border-color: var(--ink-dim); }
+
+.status-line { font-size: 12.5px; color: var(--ink-dim); min-width: 0; }
+
+.readout-mini { display: flex; gap: 6px; flex-wrap: wrap; }
+.readout-mini .cell {
+  background: var(--panel-2); border: 1px solid var(--panel-line); border-radius: 7px; padding: 5px 9px;
+  font-family: var(--font-mono); font-size: 11.5px; white-space: nowrap;
+}
+.readout-mini .cell.action { color: var(--player); }
+.readout-mini .cell.reaction { color: var(--safety); }
+
+[hidden] { display: none !important; }
+</style>
+
+<div class="wrap">
+  <header class="page">
+    <p class="eyebrow">Newton's Third Law · Mini Game</p>
+    <h1>Stranded on the Ice</h1>
+    <p class="sub">You dozed off fishing from your little rowboat &mdash; the whole lake froze solid while you napped. <strong>Throw stuff to recoil toward shore.</strong></p>
+  </header>
+
+  <div class="stage-frame">
+    <div class="stage-box"><canvas id="stage" width="1000" height="563"></canvas></div>
+    <div class="hud">
+      <div class="hud-left">
+        <span class="chip">Level: <b id="hud-level">1</b></span>
+        <span class="chip">Speed: <b id="hud-speed">0.0</b> m/s</span>
+        <span class="chip">Heading: <b id="hud-angle">0&deg;</b></span>
+      </div>
+      <div class="hud-right">
+        <span class="chip hint">Aim, then click the ice to throw</span>
+      </div>
+    </div>
+    <div class="banner intro" id="intro">
+      <div class="banner-card intro-card">
+        <p class="eyebrow">Newton's Third Law</p>
+        <h3>Every Action Has an Equal and Opposite Reaction</h3>
+        <p>You fell asleep with your line in the water &mdash; and woke up to find the whole lake frozen solid, boat and all. No oars work on ice, and there's nothing solid to push off of.</p>
+        <div class="law-diagram">
+          <div class="law-side action"><span class="law-arrow">&#10148;</span><span class="law-label">You throw an object one way</span></div>
+          <span class="law-vs">=</span>
+          <div class="law-side reaction"><span class="law-arrow">&#10148;</span><span class="law-label">It pushes you back, the other way</span></div>
+        </div>
+        <p>Same push, opposite direction, <strong>every single throw</strong> &mdash; that's Newton's 3rd Law. Heavier objects push back harder. Get yourself to the safety zone without landing in a hole.</p>
+        <button class="btn" id="intro-start">I'm Awake &mdash; Let's Go</button>
+      </div>
+    </div>
+    <div class="banner" id="banner" hidden>
+      <div class="banner-card">
+        <h3 id="banner-title"></h3>
+        <p id="banner-text"></p>
+        <button class="btn" id="banner-retry">New Attempt</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="deck">
+    <div class="inventory" id="inventory"></div>
+
+    <div class="bottombar">
+      <div class="bottombar-left">
+        <button class="btn ghost" id="reset-btn">New Attempt</button>
+        <span class="status-line" id="status-line"></span>
+      </div>
+      <div class="readout-mini">
+        <span class="cell action" id="ro-action">Action: &mdash;</span>
+        <span class="cell reaction" id="ro-reaction">Reaction: &mdash;</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- inventory ----------
+  var ITEMS = [
+    { id: "burger", name: "Lewis Middle School Cafeteria Burger", mass: 0.4, flavor: "Extra ketchup." },
+    { id: "chromebook", name: "Chromebook", mass: 1.3, flavor: "IT is going to have questions." },
+    { id: "trombone", name: "Trombone", mass: 3.0, flavor: "“Borrowed” from the band room." },
+    { id: "backpack", name: "Overstuffed Backpack", mass: 7.0, flavor: "Three textbooks you didn't need today." },
+    { id: "desk", name: "Principal Phillip's Desk", mass: 35, flavor: "He's definitely going to want answers." }
+  ];
+  var PLAYER_MASS = 45;   // kg, roughly an 8th grader
+  var THROW_ENERGY = 60;  // J, same "effort" every throw
+  var PLAY_SPEEDUP = 5;   // visual time multiplier so drifting is watchable, not literal real-time
+
+  var state = null;
+  var gameStarted = false; // gated by the intro screen — physics + clicks are inert until dismissed
+  var level = 1; // persists across newGame() calls — climbs on every win, holds steady after a loss
+
+  function rand(min, max) { return min + Math.random() * (max - min); }
+  function dist(x1, y1, x2, y2) { return Math.hypot(x2 - x1, y2 - y1); }
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+  function segCircleHit(x1, y1, x2, y2, cx, cy, r) {
+    var dx = x2 - x1, dy = y2 - y1;
+    var len2 = dx * dx + dy * dy;
+    var t = len2 > 0 ? ((cx - x1) * dx + (cy - y1) * dy) / len2 : 0;
+    t = Math.max(0, Math.min(1, t));
+    var px = x1 + t * dx, py = y1 + t * dy;
+    return dist(px, py, cx, cy) < r;
+  }
+
+  function jaggedPoints(r) {
+    var pts = [];
+    var n = 10;
+    for (var i = 0; i < n; i++) {
+      var a = (i / n) * Math.PI * 2;
+      var rr = r * rand(0.78, 1.12);
+      pts.push({ a: a, r: rr });
+    }
+    return pts;
+  }
+
+  function newGame() {
+    // difficulty climbs with level: more holes, packed tighter, less clear space around the start
+    var holeCount = clamp(6 + (level - 1), 6, 15);
+    var minR = clamp(0.03 + (level - 1) * 0.0015, 0.03, 0.05);
+    var maxR = clamp(0.05 + (level - 1) * 0.002, 0.05, 0.075);
+    var startClear = clamp(0.16 - (level - 1) * 0.008, 0.09, 0.16);
+    var packGap = clamp(0.035 - (level - 1) * 0.002, 0.016, 0.035);
+    var guaranteedBlocks = 1 + Math.floor((level - 1) / 3); // an extra forced obstacle every 3 levels
+
+    var holes = [];
+    var tries = 0;
+    while (holes.length < holeCount && tries < 900) {
+      tries++;
+      var hx = rand(0.2, 0.86), hy = rand(0.06, 0.94);
+      var r = rand(minR, maxR);
+      var ok = dist(hx, hy, 0.08, 0.5) > startClear; // clear of start
+      if (ok) {
+        for (var i = 0; i < holes.length; i++) {
+          if (dist(hx, hy, holes[i].x, holes[i].y) < r + holes[i].r + packGap) { ok = false; break; }
+        }
+      }
+      if (ok) holes.push({ x: hx, y: hy, r: r, pts: jaggedPoints(1), phase: rand(0, 6.28) });
+    }
+    // guarantee the direct start-to-safety line is blocked (more forced blockers at higher levels),
+    // so a single straight throw can never solve it
+    var blockedCount = holes.filter(function (h) { return segCircleHit(0.08, 0.5, SAFETY_X0, 0.5, h.x, h.y, h.r * 1.4); }).length;
+    var need = Math.max(0, guaranteedBlocks - blockedCount);
+    for (var b = 0; b < need; b++) {
+      var bx = rand(0.3, 0.8), by = rand(0.25, 0.75);
+      var br = rand(0.045, 0.065);
+      holes.push({ x: bx, y: by, r: br, pts: jaggedPoints(1), phase: rand(0, 6.28) });
+    }
+    state = {
+      px: 0.08, py: 0.5,   // fractional field coords
+      vx: 0, vy: 0,         // m/s
+      trail: [],
+      holes: holes,
+      inventory: ITEMS.map(function (it) { return { def: it, used: false }; }),
+      armed: null,
+      aimAngle: 0,
+      thrown: [],           // flying objects {x,y,vx,vy,mass,life}
+      over: false,
+      won: false
+    };
+    renderInventory();
+    document.getElementById("banner").hidden = true;
+    document.getElementById("status-line").textContent = "Level " + level + " — pick something to throw, then aim on the ice.";
+    setReadout(null, null);
+    updateHud();
+    updateLevelHud();
+  }
+
+  function updateLevelHud() {
+    document.getElementById("hud-level").textContent = level;
+  }
+
+  // ---------- inventory UI ----------
+  var invHost = document.getElementById("inventory");
+  function renderInventory() {
+    invHost.innerHTML = "";
+    state.inventory.forEach(function (slot) {
+      var btn = document.createElement("button");
+      btn.className = "item";
+      btn.type = "button";
+      btn.disabled = slot.used || state.over;
+      btn.setAttribute("aria-pressed", state.armed === slot ? "true" : "false");
+      btn.innerHTML =
+        "<span class=\"nm\">" + slot.def.name + "</span>" +
+        "<span class=\"mass\">" + slot.def.mass + " kg</span>" +
+        "<span class=\"fl\">" + slot.def.flavor + "</span>";
+      btn.addEventListener("click", function () {
+        if (slot.used || state.over) return;
+        state.armed = slot;
+        renderInventory();
+        document.getElementById("status-line").textContent = "Aim on the ice, then click to throw the " + slot.def.name.toLowerCase() + ".";
+      });
+      invHost.appendChild(btn);
+    });
+  }
+
+  function setReadout(actionText, reactionText) {
+    document.getElementById("ro-action").textContent = "Action: " + (actionText || "—");
+    document.getElementById("ro-reaction").textContent = "Reaction: " + (reactionText || "—");
+  }
+
+  function updateHud() {
+    var speed = Math.hypot(state.vx, state.vy);
+    document.getElementById("hud-speed").textContent = speed.toFixed(1);
+    var deg = Math.round(((Math.atan2(state.vy, state.vx) * 180 / Math.PI) + 360) % 360);
+    document.getElementById("hud-angle").textContent = (speed > 0.02 ? deg : 0) + "°";
+  }
+
+  // ---------- canvas ----------
+  var canvas = document.getElementById("stage");
+  var ctx = canvas.getContext("2d");
+  function resize() {
+    var box = canvas.parentElement.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    var w = Math.max(1, box.width), h = Math.max(1, box.height);
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    canvas._cw = w; canvas._ch = h;
+  }
+  resize();
+  if (window.ResizeObserver) { new ResizeObserver(resize).observe(canvas.parentElement); }
+  else { window.addEventListener("resize", resize); }
+
+  function toPx(fx, fy, cw, ch) { return { x: fx * cw, y: fy * ch }; }
+
+  var SAFETY_X0 = 0.90; // fractional
+
+  function pointerAngle(evt) {
+    var rect = canvas.getBoundingClientRect();
+    var clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+    var clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+    var mx = clientX - rect.left, my = clientY - rect.top;
+    var p = toPx(state.px, state.py, canvas._cw, canvas._ch);
+    return Math.atan2(my - p.y, mx - p.x);
+  }
+
+  // Listen on the whole window, not just the canvas — when the boat is near an edge, the correct
+  // aim direction can require the pointer to leave the canvas (or the page) entirely. Without this,
+  // the arrow freezes the moment the mouse crosses the canvas boundary and you can't aim back inward.
+  window.addEventListener("mousemove", function (e) {
+    if (!gameStarted || !state || state.over) return;
+    state.aimAngle = pointerAngle(e);
+  });
+  window.addEventListener("touchmove", function (e) {
+    if (!gameStarted || !state || state.over) return;
+    state.aimAngle = pointerAngle(e);
+  }, { passive: true });
+  canvas.addEventListener("touchstart", function (e) {
+    if (!gameStarted || !state || state.over) return;
+    state.aimAngle = pointerAngle(e);
+  }, { passive: true });
+  canvas.addEventListener("click", function (e) {
+    if (!gameStarted || !state || state.over) return;
+    if (!state.armed) {
+      document.getElementById("status-line").textContent = "Pick something from below first.";
+      return;
+    }
+    // Fire using the live-tracked aim angle, not the click's own position — the click just confirms
+    // the throw, so a extreme angle you aimed by moving the pointer off the canvas still fires true
+    // even though you have to click back on the canvas itself to register the click.
+    throwItem(state.aimAngle);
+  });
+
+  function throwItem(angle) {
+    var slot = state.armed;
+    var m = slot.def.mass;
+    var objSpeed = Math.sqrt((2 * THROW_ENERGY) / m);
+    var momentum = m * objSpeed;
+    var playerRecoil = momentum / PLAYER_MASS;
+
+    state.vx += -Math.cos(angle) * playerRecoil;
+    state.vy += -Math.sin(angle) * playerRecoil;
+
+    var flightT = clamp(0.55 + m * 0.02, 0.55, 1.5);
+    state.thrown.push({
+      id: slot.def.id,
+      mass: m,
+      x: state.px, y: state.py,
+      vx: Math.cos(angle) * objSpeed, vy: Math.sin(angle) * objSpeed,
+      t: 0, T: flightT,
+      Hmax: clamp(16 + objSpeed * 2.2, 22, 85),
+      rot: rand(0, 6.28), rotSpeed: (rand(0, 1) < 0.5 ? -1 : 1) * clamp(2.5 + objSpeed * 0.35, 2.5, 9),
+      life: 1.0, landed: false
+    });
+
+    slot.used = true;
+    state.armed = null;
+    renderInventory();
+
+    setReadout(
+      slot.def.name + " → " + objSpeed.toFixed(1) + " m/s",
+      "You → " + playerRecoil.toFixed(2) + " m/s"
+    );
+    document.getElementById("status-line").textContent = "Momentum: " + momentum.toFixed(1) + " kg·m/s each way — equal and opposite.";
+  }
+
+  // ---------- drawing ----------
+  function drawIce(cw, ch) {
+    ctx.fillStyle = "#eaf6fb";
+    ctx.fillRect(0, 0, cw, ch);
+    var g = ctx.createLinearGradient(0, 0, cw, ch);
+    g.addColorStop(0, "rgba(207,233,244,0.0)");
+    g.addColorStop(1, "rgba(169,211,227,0.5)");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, cw, ch);
+    // crack lines (static, seeded by simple hash so they don't jitter each frame)
+    ctx.strokeStyle = "rgba(169,211,227,0.8)";
+    ctx.lineWidth = 1;
+    var seed = 7;
+    function rnd() { seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+    for (var i = 0; i < 14; i++) {
+      var x0 = rnd() * cw, y0 = rnd() * ch;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      var x = x0, y = y0;
+      for (var s = 0; s < 3; s++) {
+        x += (rnd() - 0.5) * 90;
+        y += (rnd() - 0.5) * 90;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+  }
+
+  function drawSafety(cw, ch) {
+    var x0 = SAFETY_X0 * cw;
+    var g = ctx.createLinearGradient(x0, 0, cw, 0);
+    g.addColorStop(0, "rgba(62,207,142,0.15)");
+    g.addColorStop(1, "rgba(62,207,142,0.55)");
+    ctx.fillStyle = g;
+    ctx.fillRect(x0, 0, cw - x0, ch);
+    ctx.strokeStyle = "#1f8f60";
+    ctx.setLineDash([8, 6]);
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, ch); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.save();
+    ctx.translate(cw - 22, ch / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.font = "700 15px 'Fredoka', sans-serif";
+    ctx.fillStyle = "#0e5a3b";
+    ctx.textAlign = "center";
+    ctx.fillText("SAFETY", 0, 0);
+    ctx.restore();
+  }
+
+  function jaggedPath(cx, cy, r, yScale, pts) {
+    ctx.beginPath();
+    pts.forEach(function (pt, i) {
+      var rr = r * pt.r;
+      var x = cx + Math.cos(pt.a) * rr;
+      var y = cy + Math.sin(pt.a) * rr * yScale;
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+  }
+
+  function drawHoles(cw, ch, t) {
+    state.holes.forEach(function (h) {
+      var p = toPx(h.x, h.y, cw, ch);
+      var r = h.r * cw;
+      // jagged dark water shape
+      var g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r);
+      g.addColorStop(0, "#0d2c42");
+      g.addColorStop(0.7, "#081f33");
+      g.addColorStop(1, "#061a29");
+      ctx.fillStyle = g;
+      jaggedPath(p.x, p.y, r, 0.82, h.pts);
+      ctx.fill();
+      // cracked ice rim
+      ctx.strokeStyle = "rgba(255,255,255,0.45)";
+      ctx.lineWidth = 2;
+      jaggedPath(p.x, p.y, r, 0.82, h.pts);
+      ctx.stroke();
+      // pulsing ripple ring to sell "open water, don't step here"
+      var pulse = (Math.sin(t * 1.6 + h.phase) + 1) / 2; // 0..1
+      var ringR = r * (0.4 + pulse * 0.32);
+      ctx.strokeStyle = "rgba(180,225,240," + (0.5 - pulse * 0.25) + ")";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, ringR, ringR * 0.82, 0, 0, Math.PI * 2); ctx.stroke();
+    });
+  }
+
+  function drawTrail(cw, ch) {
+    if (state.trail.length < 2) return;
+    ctx.strokeStyle = "rgba(255,122,69,0.35)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    state.trail.forEach(function (pt, i) {
+      var p = toPx(pt.x, pt.y, cw, ch);
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+  }
+
+  function drawPlayer(cw, ch) {
+    var p = toPx(state.px, state.py, cw, ch);
+
+    // hull shadow on the ice
+    ctx.beginPath(); ctx.ellipse(p.x, p.y + 15, 30, 9, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(4,18,29,0.22)"; ctx.fill();
+
+    // rowboat hull, viewed from slightly above — stuck fast in the ice
+    ctx.beginPath();
+    ctx.moveTo(p.x - 27, p.y + 1);
+    ctx.quadraticCurveTo(p.x - 31, p.y + 13, p.x - 15, p.y + 16);
+    ctx.lineTo(p.x + 15, p.y + 16);
+    ctx.quadraticCurveTo(p.x + 31, p.y + 13, p.x + 27, p.y + 1);
+    ctx.quadraticCurveTo(p.x, p.y - 9, p.x - 27, p.y + 1);
+    ctx.closePath();
+    ctx.fillStyle = "#8a5a34"; ctx.fill();
+    ctx.strokeStyle = "#5c3a1f"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(p.x, p.y - 2, 21, 6.5, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "#6f4527"; ctx.fill();
+    // plank lines for a little texture
+    ctx.strokeStyle = "rgba(0,0,0,0.15)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(p.x - 24, p.y + 7); ctx.lineTo(p.x + 24, p.y + 7); ctx.stroke();
+    // small bait bucket by the stern
+    ctx.beginPath(); ctx.rect(p.x - 23, p.y - 1, 8, 7);
+    ctx.fillStyle = "#3c6e8f"; ctx.fill();
+    ctx.strokeStyle = "#274a60"; ctx.lineWidth = 1; ctx.stroke();
+
+    // the angler — still bundled up, just woke up
+    ctx.beginPath(); ctx.ellipse(p.x, p.y - 9, 12, 11, 0, 0, Math.PI * 2);
+    ctx.fillStyle = "#ff7a45"; ctx.fill();
+    ctx.strokeStyle = "#c94f22"; ctx.lineWidth = 2; ctx.stroke();
+    // head + beanie
+    ctx.beginPath(); ctx.arc(p.x, p.y - 21, 7, 0, Math.PI * 2);
+    ctx.fillStyle = "#e8b98a"; ctx.fill();
+    ctx.beginPath(); ctx.arc(p.x, p.y - 24, 7.5, Math.PI, 0);
+    ctx.fillStyle = "#2b4a68"; ctx.fill();
+    ctx.fillRect(p.x - 7.5, p.y - 24, 15, 3);
+    ctx.beginPath(); ctx.arc(p.x, p.y - 31, 3, 0, Math.PI * 2);
+    ctx.fillStyle = "#eaf3fb"; ctx.fill();
+    // simple sleepy/awake eyes
+    ctx.fillStyle = "#3a2a1e";
+    ctx.fillRect(p.x - 4, p.y - 22, 2.4, 1.6);
+    ctx.fillRect(p.x + 1.6, p.y - 22, 2.4, 1.6);
+
+    // fishing rod propped over the side, line trailing down to the ice
+    ctx.strokeStyle = "#7a4a26"; ctx.lineWidth = 2; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(p.x + 9, p.y - 13); ctx.lineTo(p.x + 33, p.y - 33); ctx.stroke();
+    ctx.strokeStyle = "rgba(234,243,251,0.55)"; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(p.x + 33, p.y - 33); ctx.lineTo(p.x + 29, p.y + 9); ctx.stroke();
+
+    // aim arrow
+    var angle = state.armed ? state.aimAngle : (Math.hypot(state.vx, state.vy) > 0.05 ? Math.atan2(state.vy, state.vx) : state.aimAngle);
+    var ax = p.x + Math.cos(angle) * 34, ay = p.y - 9 + Math.sin(angle) * 34;
+    ctx.strokeStyle = state.armed ? "#3ecf8e" : "rgba(62,207,142,0.35)";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(p.x, p.y - 9); ctx.lineTo(ax, ay); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(ax - Math.cos(angle - 0.5) * 9, ay - Math.sin(angle - 0.5) * 9);
+    ctx.lineTo(ax - Math.cos(angle + 0.5) * 9, ay - Math.sin(angle + 0.5) * 9);
+    ctx.closePath();
+    ctx.fillStyle = state.armed ? "#3ecf8e" : "rgba(62,207,142,0.35)";
+    ctx.fill();
+  }
+
+  function objSize(mass) { return clamp(14 + Math.sqrt(mass) * 9, 14, 46); }
+  function arcHeight(o) {
+    if (o.landed) return 0;
+    var progress = clamp(o.t / o.T, 0, 1);
+    return Math.sin(progress * Math.PI) * o.Hmax;
+  }
+
+  function drawShadows(cw, ch) {
+    // ground shadow for every airborne thrown object — this is what sells "height" on a flat canvas
+    state.thrown.forEach(function (o) {
+      var p = toPx(o.x, o.y, cw, ch);
+      var h = arcHeight(o);
+      var s = objSize(o.mass);
+      var shrink = clamp(1 - h / (o.Hmax + 40), 0.35, 1);
+      ctx.globalAlpha = (o.landed ? Math.max(0, o.life) : 1) * 0.28;
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y + s * 0.12, s * 0.55 * shrink, s * 0.22 * shrink, 0, 0, Math.PI * 2);
+      ctx.fillStyle = "#04121d";
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    });
+  }
+
+  // ---- tiny recognizable sprites, each drawn in a local ~40x40 box centered on (0,0) ----
+  function spriteBurger(s) {
+    var u = s / 40;
+    ctx.fillStyle = "#e3a856"; ctx.beginPath(); ctx.ellipse(0, -8 * u, 15 * u, 8 * u, 0, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = "#6fb24a"; ctx.fillRect(-15 * u, -4 * u, 30 * u, 4 * u);
+    ctx.fillStyle = "#7a4a26"; ctx.fillRect(-15 * u, 0, 30 * u, 6 * u);
+    ctx.fillStyle = "#d94a3d"; ctx.fillRect(-15 * u, 6 * u, 30 * u, 3 * u);
+    ctx.fillStyle = "#e8c07a"; ctx.beginPath(); ctx.ellipse(0, 11 * u, 15 * u, 6 * u, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#f2e2c0";
+    for (var i = -1; i <= 1; i++) { ctx.beginPath(); ctx.arc(i * 6 * u, -9 * u, 1.4 * u, 0, Math.PI * 2); ctx.fill(); }
+  }
+  function spriteChromebook(s) {
+    var u = s / 40;
+    ctx.save(); ctx.rotate(-0.12);
+    ctx.fillStyle = "#c7d0d8"; ctx.fillRect(-18 * u, -13 * u, 36 * u, 22 * u);
+    ctx.fillStyle = "#2a6fd6"; ctx.fillRect(-15 * u, -10 * u, 30 * u, 16 * u);
+    ctx.fillStyle = "#7fb2ef"; ctx.fillRect(-13 * u, -8 * u, 26 * u, 3 * u);
+    ctx.fillStyle = "#9aa7b0"; ctx.fillRect(-19 * u, 9 * u, 38 * u, 4 * u);
+    ctx.restore();
+  }
+  function spriteTrombone(s) {
+    var u = s / 40;
+    ctx.strokeStyle = "#d8a93a"; ctx.lineWidth = 4 * u; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(-16 * u, 4 * u); ctx.lineTo(6 * u, -8 * u); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-16 * u, -2 * u); ctx.lineTo(6 * u, -14 * u); ctx.stroke();
+    ctx.fillStyle = "#f0c860";
+    ctx.beginPath(); ctx.moveTo(4 * u, -16 * u); ctx.lineTo(18 * u, -20 * u); ctx.lineTo(18 * u, -6 * u); ctx.lineTo(4 * u, -10 * u); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#b8862a";
+    ctx.beginPath(); ctx.arc(-16 * u, 1 * u, 3.2 * u, 0, Math.PI * 2); ctx.fill();
+  }
+  function spriteBackpack(s) {
+    var u = s / 40;
+    ctx.fillStyle = "#3c6e8f";
+    ctx.beginPath();
+    ctx.moveTo(-13 * u, -14 * u); ctx.lineTo(13 * u, -14 * u); ctx.lineTo(15 * u, 14 * u); ctx.lineTo(-15 * u, 14 * u);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#2c5470"; ctx.fillRect(-9 * u, -4 * u, 18 * u, 12 * u);
+    ctx.strokeStyle = "#1f3e54"; ctx.lineWidth = 3 * u;
+    ctx.beginPath(); ctx.moveTo(-7 * u, -18 * u); ctx.lineTo(-9 * u, -14 * u); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(7 * u, -18 * u); ctx.lineTo(9 * u, -14 * u); ctx.stroke();
+  }
+  function spriteDesk(s) {
+    var u = s / 40;
+    ctx.fillStyle = "#8a5a34"; ctx.fillRect(-20 * u, -10 * u, 40 * u, 7 * u);
+    ctx.strokeStyle = "#5c3a1f"; ctx.lineWidth = 3 * u;
+    ctx.beginPath(); ctx.moveTo(-16 * u, -3 * u); ctx.lineTo(-16 * u, 16 * u); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(16 * u, -3 * u); ctx.lineTo(16 * u, 16 * u); ctx.stroke();
+    ctx.fillStyle = "#6f4527"; ctx.fillRect(-20 * u, -10 * u, 40 * u, 2.5 * u);
+  }
+  var SPRITES = { burger: spriteBurger, chromebook: spriteChromebook, trombone: spriteTrombone, backpack: spriteBackpack, desk: spriteDesk };
+
+  function drawThrown(cw, ch) {
+    state.thrown.forEach(function (o) {
+      var p = toPx(o.x, o.y, cw, ch);
+      var h = arcHeight(o);
+      var s = objSize(o.mass);
+      var alpha = o.landed ? Math.max(0, o.life) : 1;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(p.x, p.y - h);
+      ctx.rotate(o.rot);
+      var draw = SPRITES[o.id] || spriteBurger;
+      draw(s);
+      ctx.restore();
+    });
+  }
+
+  // ---------- physics step ----------
+  var FIELD_W_M = 30, FIELD_H_M = 17; // meters represented by the field (matches the 16:9 stage aspect), for converting m/s to fractional/sec
+
+  function endGame(won, text) {
+    state.over = true;
+    state.won = won;
+    renderInventory();
+    var banner = document.getElementById("banner");
+    banner.hidden = false;
+    banner.className = "banner " + (won ? "win" : "lose");
+    document.getElementById("banner-title").textContent = won ? "You made it!" : "You fell in!";
+    document.getElementById("banner-text").textContent = text;
+  }
+
+  function step(dt) {
+    if (!state || state.over) return;
+    if (!gameStarted) return;
+    var sdt = dt * PLAY_SPEEDUP;
+
+    state.px += (state.vx / FIELD_W_M) * sdt;
+    state.py += (state.vy / FIELD_H_M) * sdt;
+
+    // bounce off top/bottom/left edges; right edge is safety
+    if (state.py < 0.02) { state.py = 0.02; state.vy *= -0.6; }
+    if (state.py > 0.98) { state.py = 0.98; state.vy *= -0.6; }
+    if (state.px < 0.02) { state.px = 0.02; state.vx *= -0.6; }
+
+    state.trail.push({ x: state.px, y: state.py });
+    if (state.trail.length > 120) state.trail.shift();
+
+    // thrown objects: fly in an arc for T seconds, then sit landed briefly before fading
+    state.thrown.forEach(function (o) {
+      if (!o.landed) {
+        o.x += (o.vx / FIELD_W_M) * sdt;
+        o.y += (o.vy / FIELD_H_M) * sdt;
+        o.t += sdt;
+        o.rot += o.rotSpeed * sdt;
+        if (o.t >= o.T) { o.landed = true; o.t = o.T; }
+      } else {
+        o.life -= dt * 0.9;
+      }
+    });
+    state.thrown = state.thrown.filter(function (o) { return o.life > 0 && o.x > -0.1 && o.x < 1.1 && o.y > -0.1 && o.y < 1.1; });
+
+    // hole collision
+    for (var i = 0; i < state.holes.length; i++) {
+      var h = state.holes[i];
+      if (dist(state.px, state.py, h.x, h.y) < h.r * 0.9) {
+        endGame(false, "The ice gave way on Level " + level + ". Hit New Attempt to try this level again.");
+        return;
+      }
+    }
+    // safety
+    if (state.px >= SAFETY_X0) {
+      var throwsUsed = state.inventory.filter(function (s) { return s.used; }).length;
+      var justCompleted = level;
+      level += 1;
+      endGame(true, "Level " + justCompleted + " complete — you used " + throwsUsed + " of your 5 throws. Hit New Attempt for Level " + level + ".");
+      return;
+    }
+    // stuck check
+    var allUsed = state.inventory.every(function (s) { return s.used; });
+    var speed = Math.hypot(state.vx, state.vy);
+    if (allUsed && speed < 0.03 && !state.armed) {
+      endGame(false, "Out of things to throw on Level " + level + ", and you're not going anywhere. Hit New Attempt.");
+      return;
+    }
+
+    updateHud();
+  }
+
+  var last = performance.now();
+  var clockT = 0;
+  function frame(now) {
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    clockT += dt;
+    if (state) {
+      step(dt);
+      drawIce(canvas._cw, canvas._ch);
+      drawSafety(canvas._cw, canvas._ch);
+      drawHoles(canvas._cw, canvas._ch, clockT);
+      drawTrail(canvas._cw, canvas._ch);
+      drawShadows(canvas._cw, canvas._ch);
+      drawPlayer(canvas._cw, canvas._ch);
+      drawThrown(canvas._cw, canvas._ch);
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  document.getElementById("reset-btn").addEventListener("click", newGame);
+  document.getElementById("banner-retry").addEventListener("click", newGame);
+  document.getElementById("intro-start").addEventListener("click", function () {
+    gameStarted = true;
+    document.getElementById("intro").hidden = true;
+  });
+
+  newGame();
+
+  // ---------- hot reload: just remember nothing critical, always safe to restart fresh ----------
+  if (window.claude && window.claude.hot) {
+    window.claude.hot.snapshot(function () { return {}; });
+    window.claude.hot.ready && window.claude.hot.ready(function () {});
+  }
+})();
+</script>

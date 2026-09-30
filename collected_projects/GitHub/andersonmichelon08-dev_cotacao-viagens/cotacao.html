@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090909"><title>Solicitar Cotação | MICHELON V3.4</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#080808;color:#f7f1df;font-family:Arial,sans-serif}
+.wrap{max-width:560px;margin:auto;min-height:100vh;padding:28px 18px;background:radial-gradient(circle at top,#282014,#0b0b0b 38%,#050505)}
+.card{border:1px solid #b98a35;border-radius:26px;padding:24px 20px;box-shadow:0 0 30px #000}
+.logo{text-align:center;color:#e0b75f;font-family:Georgia,serif;letter-spacing:3px;font-size:30px;font-weight:bold}
+.sub{text-align:center;letter-spacing:4px;font-size:11px;color:#e7c77e;margin:5px 0 25px}
+h2{font-size:21px;margin:0 0 8px}.hint{color:#bfb394;font-size:13px;line-height:1.45;margin-bottom:18px}
+label{display:block;color:#d9c28d;font-size:13px;font-weight:bold;margin:13px 0 6px}
+input,select,textarea{width:100%;padding:14px;border-radius:12px;border:1px solid #66512b;background:#151515;color:#fff;font-size:16px}
+textarea{min-height:85px;resize:vertical}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{width:100%;border:0;border-radius:14px;padding:16px;margin-top:20px;font-size:17px;font-weight:800;background:linear-gradient(135deg,#b17c26,#efd07a,#a87321);color:#090909}
+.note{text-align:center;font-size:12px;color:#9f9479;margin-top:16px}@media(max-width:430px){.grid{grid-template-columns:1fr}}
+</style></head><body><main class="wrap"><section class="card">
+<div class="logo">MICHELON</div><div class="sub">VIAGENS EXECUTIVAS</div>
+<h2>🚐 Solicitar cotação</h2><div class="hint">Preencha os dados da viagem. Ao final, sua solicitação será enviada pelo WhatsApp para a MICHELON.</div>
+<label>Seu nome *</label><input id="nome" placeholder="Nome do cliente">
+<label>Seu WhatsApp</label><input id="fone" inputmode="tel" placeholder="(19) 99999-9999">
+<label>Tipo de serviço</label>
+<select id="servico" onchange="mudarServico()">
+<option value="viagem">🛣️ Viagem entre cidades</option>
+<option value="urbano">📍 Corrida dentro da cidade</option>
+</select>
+<label>Tipo de trajeto</label><select id="tipo" onchange="mudarTrajeto()"><option>Ida</option><option>Ida e volta</option></select>
+<label id="lblOrigem">Cidade de origem *</label><input id="origem" placeholder="Ex.: Limeira, SP">
+<label id="lblDestino">Cidade de destino *</label><input id="destino" placeholder="Ex.: Campinas, SP"><div id="cepBox" style="display:none">
+<div class="grid">
+<div><label>CEP de saída (opcional)</label><input id="cepOrigem" inputmode="numeric" maxlength="9" placeholder="13480-000"></div>
+<div><label>Número de saída</label><input id="numOrigem" inputmode="numeric" placeholder="Ex.: 366"></div>
+</div>
+<div class="grid">
+<div><label>CEP de destino (opcional)</label><input id="cepDestino" inputmode="numeric" maxlength="9" placeholder="13480-000"></div>
+<div><label>Número do destino</label><input id="numDestino" inputmode="numeric" placeholder="Ex.: 100"></div>
+</div>
+<div class="hint" style="margin-top:8px">Se o mapa não encontrar a rua pelo nome, informe o CEP. O endereço será preenchido automaticamente e o número ficará registrado.</div>
+</div>
+<div id="localizarBox" style="display:none">
+<button type="button" class="btn" style="margin-top:12px;padding:13px" onclick="localizarEnderecos()">🔎 Localizar endereços</button>
+<div id="statusEndereco" class="hint" style="margin:10px 0 0"></div>
+</div>
+<div class="grid"><div><label>Data *</label><input id="data" type="date"></div><div><label>Horário *</label><input id="hora" type="time"></div></div>
+<div class="grid"><div><label>Passageiros</label><input id="passageiros" type="number" min="1" value="1"></div><div id="retornoResumo" style="display:none"></div></div>
+<div id="camposRetorno" style="display:none;border-top:1px solid #66512b;margin-top:18px;padding-top:6px">
+<h2 style="font-size:18px;margin-top:14px">↩️ Dados do retorno</h2>
+<div class="hint">Os locais são preenchidos automaticamente invertendo a ida, mas o cliente pode alterar.</div>
+<label>Origem do retorno *</label><input id="origemRetorno" placeholder="Local onde começa o retorno">
+<label>Destino do retorno *</label><input id="destinoRetorno" placeholder="Local final do retorno">
+<div class="grid">
+<div><label>Data do retorno *</label><input id="dataRetorno" type="date"></div>
+<div><label>Horário do retorno *</label><input id="horaRetorno" type="time"></div>
+</div>
+</div>
+<label>Parada opcional</label><input id="parada" placeholder="Outro local no trajeto">
+<label>Observações</label><textarea id="obs" placeholder="Ex.: malas, aeroporto, cadeirinha, horário especial..."></textarea>
+<button class="btn" onclick="enviar()">📲 Enviar solicitação pelo WhatsApp</button>
+<div class="note">Nenhum custo interno ou parâmetro de cálculo é exibido ao cliente.</div>
+</section></main>
+<script>
+const $=id=>document.getElementById(id);
+function mudarServico(){
+ const urbano=$('servico').value==='urbano';
+ $('lblOrigem').textContent=urbano?'Endereço completo de saída *':'Cidade de origem *';
+ $('lblDestino').textContent=urbano?'Endereço completo de destino *':'Cidade de destino *';
+ $('origem').placeholder=urbano?'Ex.: Avenida Campinas, 1441, Limeira - SP':'Ex.: Limeira, SP';
+ $('destino').placeholder=urbano?'Ex.: Shopping, empresa ou endereço, Limeira - SP':'Ex.: Campinas, SP';
+ $('localizarBox').style.display=urbano?'block':'none';
+ $('cepBox').style.display=urbano?'block':'none';
+}
+let enderecosConfirmados=false;
+function numeroDigitado(txt){const m=(txt||'').match(/\b(\d{1,6})\b/);return m?m[1]:''}
+async function acharLocal(txt){
+ const tentativas=[txt,txt+', Limeira, SP, Brasil'];
+ for(const q of tentativas){
+  try{
+   const u='https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&countrycodes=br&q='+encodeURIComponent(q);
+   const r=await fetch(u,{headers:{'Accept-Language':'pt-BR,pt;q=0.9'}});
+   if(!r.ok)continue; const j=await r.json();
+   if(j&&j[0])return j[0];
+  }catch(e){}
+ }
+ throw new Error('Não foi possível localizar: '+txt);
+}
+function linhaConfirmacao(rotulo, digitado, achado){
+ const n=numeroDigitado(digitado), okNum=!n||(achado.display_name||'').includes(n);
+ return '✅ <b>'+rotulo+':</b> '+achado.display_name+(okNum?'':'<br>⚠️ O mapa não confirmou o número '+n+'. Confira antes de enviar.');
+}
+async function buscarCEP(cep){
+ cep=(cep||'').replace(/\D/g,''); if(cep.length!==8)return null;
+ try{
+  const r=await fetch('https://viacep.com.br/ws/'+cep+'/json/');
+  if(!r.ok)return null; const j=await r.json(); if(j.erro)return null;
+  return j;
+ }catch(e){return null}
+}
+function montarEnderecoCEP(j,n){
+ return [j.logradouro,n,j.bairro,j.localidade,j.uf].filter(Boolean).join(', ');
+}
+async function localizarEnderecos(){
+ let o=$('origem').value.trim(),d=$('destino').value.trim(),st=$('statusEndereco');
+ const co=$('cepOrigem').value.trim(),cd=$('cepDestino').value.trim(),no=$('numOrigem').value.trim(),nd=$('numDestino').value.trim();
+ if(!o&&!co||!d&&!cd){st.textContent='⚠️ Informe saída e destino pelo endereço ou CEP.';return}
+ st.textContent='🔎 Localizando endereços...'; enderecosConfirmados=false;
+ try{
+  if(co){const j=await buscarCEP(co);if(!j)throw new Error('CEP de saída não encontrado.');o=montarEnderecoCEP(j,no);$('origem').value=o}
+  if(cd){const j=await buscarCEP(cd);if(!j)throw new Error('CEP de destino não encontrado.');d=montarEnderecoCEP(j,nd);$('destino').value=d}
+  if($('tipo').value==='Ida e volta'){
+    $('origemRetorno').value=$('destino').value.trim();
+    $('destinoRetorno').value=$('origem').value.trim();
+  }
+  let a=null,b=null,erroA='',erroB='';
+  try{a=await acharLocal(o)}catch(e){erroA=e.message}
+  try{b=await acharLocal(d)}catch(e){erroB=e.message}
+  const la=a?linhaConfirmacao('Saída',o,a):'⚠️ <b>Saída:</b> endereço registrado, mas o mapa não confirmou o ponto exato.';
+  const lb=b?linhaConfirmacao('Destino',d,b):'⚠️ <b>Destino:</b> endereço registrado, mas o mapa não confirmou o ponto exato.';
+  st.innerHTML=la+'<br>'+lb;
+  // Client may still send a quote request even when the free map lacks the exact house number.
+  enderecosConfirmados=true;
+ }catch(e){st.textContent='⚠️ '+e.message}
+}
+function mudarTrajeto(){
+ const volta=$('tipo').value==='Ida e volta';
+ $('camposRetorno').style.display=volta?'block':'none';
+ if(volta){
+  $('origemRetorno').value=$('destino').value.trim();
+  $('destinoRetorno').value=$('origem').value.trim();
+ }
+}
+['origem','destino'].forEach(id=>{
+ const el=$(id);
+ if(el)el.addEventListener('change',()=>{
+  if($('tipo').value==='Ida e volta'){
+   if(id==='origem')$('destinoRetorno').value=el.value.trim();
+   if(id==='destino')$('origemRetorno').value=el.value.trim();
+  }
+ });
+});
+function enviar(){
+ const nome=$('nome').value.trim(),origem=$('origem').value.trim(),destino=$('destino').value.trim(),data=$('data').value,hora=$('hora').value;
+ if(!nome||!origem||!destino||!data||!hora){alert('Preencha nome, origem, destino, data e horário.');return}
+ if($('servico').value==='urbano'&&!enderecosConfirmados){alert('Primeiro toque em “Localizar endereços” para conferir saída e destino.');return}
+ if($('tipo').value==='Ida e volta'){
+  if(!$('origemRetorno').value.trim()||!$('destinoRetorno').value.trim()||!$('dataRetorno').value||!$('horaRetorno').value){
+   alert('Preencha origem, destino, data e horário do retorno.');return
+  }
+ }
+ const dataBR=data.split('-').reverse().join('/');
+ const linhas=['🚐 *SOLICITAÇÃO DE COTAÇÃO - MICHELON*','',
+ '👤 Cliente: '+nome,
+ $('fone').value.trim()?'📱 WhatsApp: '+$('fone').value.trim():'',
+ '🚘 Serviço: '+($('servico').value==='urbano'?'Corrida dentro da cidade':'Viagem entre cidades'),
+ '🛣️ Trajeto: '+$('tipo').value,
+ '📍 Origem: '+origem+($('cepOrigem').value.trim()?' | CEP: '+$('cepOrigem').value.trim():'')+($('numOrigem').value.trim()?' | Nº: '+$('numOrigem').value.trim():''),
+ '🏁 Destino: '+destino+($('cepDestino').value.trim()?' | CEP: '+$('cepDestino').value.trim():'')+($('numDestino').value.trim()?' | Nº: '+$('numDestino').value.trim():'') ,
+ $('parada').value.trim()?'📌 Parada: '+$('parada').value.trim():'',
+ '📅 Data: '+dataBR,
+ '🕐 Horário: '+hora,
+ '👥 Passageiros: '+$('passageiros').value,
+ $('tipo').value==='Ida e volta'?'':'',
+ $('tipo').value==='Ida e volta'?'↩️ *RETORNO*':'',
+ $('tipo').value==='Ida e volta'?'📍 Origem do retorno: '+$('origemRetorno').value.trim():'',
+ $('tipo').value==='Ida e volta'?'🏁 Destino do retorno: '+$('destinoRetorno').value.trim():'',
+ $('tipo').value==='Ida e volta'?'📅 Data do retorno: '+$('dataRetorno').value.split('-').reverse().join('/'):'',
+ $('tipo').value==='Ida e volta'?'🕐 Horário do retorno: '+$('horaRetorno').value:'',
+ 
+ $('obs').value.trim()?'📝 Observações: '+$('obs').value.trim():'',
+ '','Gostaria de receber uma cotação.'].filter(Boolean);
+ const dadosMichelon=[
+ '---MICHELON-DADOS---',
+ 'VERSAO=1',
+ 'SERVICO='+($('servico').value==='urbano'?'urbano':'viagem'),
+ 'TRAJETO='+$('tipo').value,
+ 'ORIGEM='+origem,
+ 'DESTINO='+destino,
+ 'PARADA='+$('parada').value.trim(),
+ 'DATA='+data,
+ 'HORA='+hora,
+ 'PASSAGEIROS='+$('passageiros').value,
+ 'ORIGEM_RETORNO='+($('tipo').value==='Ida e volta'?$('origemRetorno').value.trim():''),
+ 'DESTINO_RETORNO='+($('tipo').value==='Ida e volta'?$('destinoRetorno').value.trim():''),
+ 'DATA_RETORNO='+($('tipo').value==='Ida e volta'?$('dataRetorno').value:''),
+ 'HORA_RETORNO='+($('tipo').value==='Ida e volta'?$('horaRetorno').value:''),
+ '---FIM-MICHELON-DADOS---'
+ ];
+ location.href='https://wa.me/5519992462362?text='+encodeURIComponent(linhas.join('\n')+'\n\n'+dadosMichelon.join('\n'));
+}
+mudarTrajeto();
+</script></body></html>
