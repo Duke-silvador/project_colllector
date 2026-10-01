@@ -1,0 +1,780 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# ============================================================
+# VoxelRPG: скрипт сборки APK в Termux.
+#
+# Подготовка окружения — один раз:
+#   ./tools/termux-setup.sh
+#   source ~/.voxelrpg-env
+#
+# Проверить, чего не хватает:
+#   ./tools/termux-doctor.sh
+#
+# Внимание: пакета termux-ndk в Termux НЕ существует, а имя пакета
+# Java менялось (openjdk-17 -> openjdk-21). Поэтому установка вынесена
+# в termux-setup.sh, который определяет доступные имена сам.
+#
+# Использование:
+#   ./build.sh              — release APK
+#   ./build.sh debug        — debug APK
+#   ./build.sh clean        — очистка
+#   ./build.sh install      — собрать и установить через adb
+# ============================================================
+
+set -e
+
+# ---- Настройки ----
+PROJ="$(cd "$(dirname "$0")" && pwd)"
+APP_DIR="$PROJ/app"
+SRC_DIR="$APP_DIR/src/main"
+CPP_DIR="$SRC_DIR/cpp"
+ASSETS_DIR="$SRC_DIR/assets/shaders"
+JNI_DIR="$SRC_DIR/jniLibs/arm64-v8a"
+
+BUILD_DIR="$PROJ/build"
+CMAKE_BUILD_DIR="$BUILD_DIR/cmake"
+APK_OUT_DIR="$BUILD_DIR/apk"
+
+ABI="arm64-v8a"
+API=24
+
+. "$PROJ/tools/ndk-common.sh"
+
+NDK_HOME="${ANDROID_NDK_HOME:-$PREFIX/lib/android-ndk}"
+TOOLCHAIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-aarch64"
+SYSROOT="$TOOLCHAIN/sysroot"
+
+# Android SDK нужен ровно ради android.jar (aapt2 link -I).
+# aapt2/apksigner/zipalign берутся из PATH — в Termux они из pkg.
+# Путь и версия не зашиты: SDK ставится в разные места, а подойдёт
+# любая платформа не ниже compileSdk.
+ANDROID_HOME="${ANDROID_HOME:-$HOME/android/android-sdk}"
+ANDROID_JAR=""
+
+# Ключ для подписи debug
+DEBUG_KEYSTORE="$APP_DIR/debug.keystore"
+
+# Имя итогового APK
+GAME_NAME="VoxelRPG"
+
+# ---- Цветной вывод ----
+C_RED='\033[0;31m'
+C_GREEN='\033[0;32m'
+C_YELLOW='\033[1;33m'
+C_BLUE='\033[0;34m'
+C_RESET='\033[0m'
+
+log()  { printf "${C_BLUE}==>${C_RESET} %s\n" "$*"; }
+ok()   { printf "${C_GREEN}✓${C_RESET}  %s\n" "$*"; }
+warn() { printf "${C_YELLOW}!${C_RESET}  %s\n" "$*"; }
+err()  { printf "${C_RED}✗${C_RESET}  %s\n" "$*" >&2; }
+
+# ---- Параметры ----
+MODE="release"
+INSTALL=0
+for arg in "$@"; do
+    case "$arg" in
+        debug)   MODE="debug" ;;
+        release) MODE="release" ;;
+        clean)
+            log "Очистка..."
+            rm -rf "$BUILD_DIR"
+            rm -rf "$JNI_DIR"
+            rm -rf "$ASSETS_DIR"
+            ok "Очищено"
+            exit 0
+            ;;
+        install) INSTALL=1 ;;
+        *) warn "Неизвестный аргумент: $arg" ;;
+    esac
+done
+
+# ---- Проверка окружения ----
+log "Проверка окружения..."
+
+# Какой код собираем. «Already up to date» при git pull на другой ветке —
+# обычное дело: обновляется origin/*, а рабочее дерево остаётся прежним,
+# и сборка молча идёт по старым исходникам. Без этой строки понять это
+# по выводу компилятора невозможно.
+if command -v git >/dev/null 2>&1 && [ -d "$PROJ/.git" ]; then
+    GIT_BRANCH="$(git -C "$PROJ" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?')"
+    GIT_HEAD="$(git -C "$PROJ" rev-parse --short HEAD 2>/dev/null || echo '?')"
+    GIT_DIRTY=""
+    git -C "$PROJ" diff --quiet 2>/dev/null || GIT_DIRTY="  (есть незакоммиченные правки)"
+    log "Исходники: $GIT_BRANCH @ $GIT_HEAD$GIT_DIRTY"
+
+    UPSTREAM="$(git -C "$PROJ" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+    if [ -n "${UPSTREAM:-}" ]; then
+        BEHIND="$(git -C "$PROJ" rev-list --count "HEAD..$UPSTREAM" 2>/dev/null || echo 0)"
+        if [ "${BEHIND:-0}" -gt 0 ]; then
+            warn "Ветка отстаёт от $UPSTREAM на $BEHIND коммит(ов) — собирается старый код."
+            warn "Обновиться: git merge --ff-only $UPSTREAM"
+        fi
+    fi
+fi
+
+# Подхватываем переменные, записанные termux-setup.sh, если текущая
+# оболочка их ещё не видит.
+if [ -z "${ANDROID_NDK_HOME:-}" ] && [ -f "$HOME/.voxelrpg-env" ]; then
+    . "$HOME/.voxelrpg-env"
+    NDK_HOME="${ANDROID_NDK_HOME:-$NDK_HOME}"
+fi
+
+# Штатное место установки termux-setup.sh — на случай, если ~/.voxelrpg-env
+# потёрт, но сам NDK на диске остался.
+if [ ! -d "$NDK_HOME" ] && [ -d "$HOME/android/android-ndk" ]; then
+    NDK_HOME="$HOME/android/android-ndk"
+fi
+
+# Берём тот каталог prebuilt, чей clang реально запускается на этой
+# машине: имя каталога ничего не гарантирует, а NDK под x86_64
+# распакован ровно так же и отличается только тем, что не работает.
+if _tc="$(ndk_toolchain "$NDK_HOME")"; then
+    TOOLCHAIN="$_tc"
+fi
+SYSROOT="$TOOLCHAIN/sysroot"
+
+if [ ! -d "$NDK_HOME" ]; then
+    err "Android NDK не найден: $NDK_HOME"
+    err ""
+    err "Пакета termux-ndk в Termux нет — официальный NDK собран под"
+    err "x86_64 и на телефоне не запустится. Нужна сборка под aarch64."
+    err ""
+    err "Установить всё разом:"
+    err "    ./tools/termux-setup.sh && source ~/.voxelrpg-env"
+    err ""
+    err "Если GitHub недоступен, скачайте android-ndk-*-aarch64.zip вручную"
+    err "с https://github.com/lzhiyong/termux-ndk/releases и укажите архив:"
+    err "    ./tools/termux-setup.sh --ndk ~/storage/downloads/android-ndk-....zip"
+    err ""
+    err "Посмотреть, чего именно не хватает:"
+    err "    ./tools/termux-doctor.sh"
+    exit 1
+fi
+
+if ! ndk_toolchain "$NDK_HOME" >/dev/null; then
+    err "В NDK нет работоспособного clang. Что нашлось в $NDK_HOME:"
+    ndk_toolchain_report "$NDK_HOME" >&2
+    err ""
+    err "Если архитектура выше не aarch64 — это NDK под x86_64."
+    err "На телефоне он не запускается: системный загрузчик Android"
+    err "отвергает такой файл с сообщением про unexpected e_type."
+    err "Нужна сборка под linux-aarch64:"
+    err "    https://github.com/lzhiyong/termux-ndk/releases"
+    err "    ./tools/termux-setup.sh --ndk <скачанный архив>"
+    exit 1
+fi
+
+# Официальный android.toolchain.cmake знает только хост linux-x86_64.
+# На телефоне из-за этого CMake зовёт компилятор не из того каталога
+# и падает с «unexpected e_type: 2» — ошибкой, по которой причина не
+# читается совсем. Чиним не здесь (это не дело сборки), но говорим,
+# что именно запустить.
+if ! ndk_cmake_host_ok "$NDK_HOME"; then
+    err "android.toolchain.cmake в этом NDK не знает про хост aarch64:"
+    err "    $NDK_HOME/build/cmake/android.toolchain.cmake"
+    err "CMake будет искать компилятор в prebuilt/linux-x86_64 и упадёт"
+    err "с сообщением про unexpected e_type. Почините одной командой:"
+    err "    ./tools/termux-setup.sh --fix-ndk"
+    exit 1
+fi
+
+_foreign="$(ndk_foreign_toolchains "$NDK_HOME" || true)"
+if [ -n "$_foreign" ]; then
+    warn "В NDK есть toolchain, который здесь не запускается:"
+    printf '%s\n' "$_foreign" | sed 's/^/      /'
+    warn "Он занимает место и путает CMake. Убрать: ./tools/termux-setup.sh --fix-ndk"
+fi
+
+# glue из NDK — без него не соберётся точка входа.
+if [ ! -f "$NDK_HOME/sources/android/native_app_glue/android_native_app_glue.c" ]; then
+    err "В NDK нет native_app_glue:"
+    err "    $NDK_HOME/sources/android/native_app_glue/"
+    err "NDK распакован не полностью. Проверьте: ./tools/termux-doctor.sh"
+    exit 1
+fi
+
+ANDROID_JAR="$(find_android_jar "$ANDROID_HOME" || true)"
+if [ -n "$ANDROID_JAR" ]; then
+    # build-tools лежат рядом с platforms, поэтому корень SDK берём
+    # оттуда же, откуда нашёлся android.jar: ANDROID_HOME мог быть
+    # не задан или указывать на другой каталог.
+    ANDROID_HOME="${ANDROID_JAR%/platforms/*}"
+    export ANDROID_HOME
+fi
+if [ -z "$ANDROID_JAR" ]; then
+    warn "android.jar не найден — ручная сборка APK пропущена"
+    warn "Искали в: \$ANDROID_HOME, ~/android/android-sdk, ~/android-sdk,"
+    warn "          \$PREFIX/share/android-sdk (platforms/android-*/android.jar)"
+    warn "Поставить: ./tools/termux-setup.sh --skip-packages --sdk <архив SDK>"
+    warn "Установи SDK или используй gradle."
+    USE_GRADLE=1
+else
+    USE_GRADLE=0
+fi
+
+# ---- Заголовочные зависимости ----
+mkdir -p "$PROJ/third_party"
+
+if [ ! -d "$PROJ/third_party/glm/glm" ]; then
+    log "Клонирую GLM..."
+    git -c advice.detachedHead=false clone --depth=1 https://github.com/g-truc/glm.git "$PROJ/third_party/glm"
+    ok "GLM готов"
+fi
+
+# EnTT — ECS из ТЗ 3.2. Нужен только single-header.
+if [ ! -f "$PROJ/third_party/entt/include/entt/entt.hpp" ]; then
+    log "Клонирую EnTT..."
+    rm -rf "$PROJ/third_party/entt-src"
+    git -c advice.detachedHead=false clone --depth=1 --branch v3.13.2 \
+        https://github.com/skypjack/entt.git "$PROJ/third_party/entt-src"
+    mkdir -p "$PROJ/third_party/entt/include/entt"
+    cp "$PROJ/third_party/entt-src/single_include/entt/entt.hpp" \
+       "$PROJ/third_party/entt/include/entt/"
+    rm -rf "$PROJ/third_party/entt-src"
+    ok "EnTT готов"
+fi
+
+# toml++ — разбор файлов контента (решение Р11), заголовочная.
+if [ ! -f "$PROJ/third_party/tomlplusplus/include/toml++/toml.hpp" ]; then
+    log "Клонирую toml++..."
+    rm -rf "$PROJ/third_party/tomlplusplus"
+    git -c advice.detachedHead=false clone --depth=1 --branch v3.4.0 \
+        https://github.com/marzer/tomlplusplus.git "$PROJ/third_party/tomlplusplus"
+    ok "toml++ готов"
+fi
+
+# ---- Компиляция шейдеров ----
+log "Компиляция шейдеров..."
+mkdir -p "$ASSETS_DIR"
+
+if ! command -v glslc >/dev/null 2>&1; then
+    err "glslc не найден. Обычно он в пакете shaderc:"
+    err "    pkg install shaderc"
+    err "Если пакета нет — посмотрите, как он называется: pkg search glsl"
+    exit 1
+fi
+
+SHADERS_SRC="$CPP_DIR/shaders"
+if [ ! -d "$SHADERS_SRC" ]; then
+    err "Директория шейдеров не найдена: $SHADERS_SRC"
+    exit 1
+fi
+
+SHADER_COUNT=0
+for f in "$SHADERS_SRC"/*.vert "$SHADERS_SRC"/*.frag "$SHADERS_SRC"/*.comp; do
+    [ -f "$f" ] || continue
+    base=$(basename "$f")
+    echo "  - $base"
+    glslc -O "$f" -o "$ASSETS_DIR/${base}.spv"
+    SHADER_COUNT=$((SHADER_COUNT + 1))
+done
+
+if [ "$SHADER_COUNT" -eq 0 ]; then
+    warn "Не найдено ни одного шейдера в $SHADERS_SRC"
+else
+    ok "Скомпилировано шейдеров: $SHADER_COUNT"
+fi
+
+
+# ---- CMake ----
+# Вызовы NDK новее минимального API или убранные из свежих NDK ловим
+# здесь: сообщение понятнее, чем сотня строк от компилятора, и ошибка
+# видна до того, как ninja начнёт собирать 97 файлов.
+if command -v python3 >/dev/null 2>&1 && [ -f "$PROJ/tools/hostcheck/check_android_api.py" ]; then
+    log "Сверка вызовов NDK с минимальным API..."
+    if ! python3 "$PROJ/tools/hostcheck/check_android_api.py"; then
+        err "Проверьте, что рабочее дерево обновлено: git log --oneline -1"
+        exit 1
+    fi
+fi
+
+# Сколько задач и нужна ли LTO. На телефоне память кончается раньше
+# ядер: восемь параллельных компиляций C++20 или линковка всего модуля
+# с LTO не помещаются в ОЗУ, и процесс убивает ядро — со стороны это
+# выглядит как обрыв сборки без сообщения. Считаем по свободной памяти,
+# а не по числу ядер.
+MEM_MB=0
+if [ -r /proc/meminfo ]; then
+    MEM_MB="$(awk '/^MemAvailable:/ {print int($2/1024); exit}' /proc/meminfo 2>/dev/null || echo 0)"
+fi
+CPUS="$(nproc 2>/dev/null || echo 2)"
+BUILD_JOBS="$CPUS"
+USE_LTO=ON
+
+if [ "${MEM_MB:-0}" -gt 0 ]; then
+    # Тяжёлый файл C++20 в пике занимает около гигабайта.
+    JOBS_BY_MEM=$(( MEM_MB / 1024 ))
+    [ "$JOBS_BY_MEM" -lt 1 ] && JOBS_BY_MEM=1
+    [ "$JOBS_BY_MEM" -lt "$BUILD_JOBS" ] && BUILD_JOBS="$JOBS_BY_MEM"
+fi
+
+# Явное пожелание пользователя решает: автоматика вступает в дело,
+# только если VOXEL_LTO не задана. Иначе выходило странно — скрипт
+# сообщал «LTO выключена», а собирал с LTO.
+case "${VOXEL_LTO:-}" in
+    ON|on|1)   USE_LTO=ON ;;
+    OFF|off|0) USE_LTO=OFF ;;
+    "")
+        if [ "${MEM_MB:-0}" -gt 0 ] && [ "$MEM_MB" -lt 3072 ]; then
+            USE_LTO=OFF
+            warn "Свободно ${MEM_MB} МБ — LTO выключена, иначе линковку убьёт ядро."
+            warn "Включить принудительно: VOXEL_LTO=ON ./build.sh"
+        fi
+        ;;
+    *)
+        err "VOXEL_LTO=$VOXEL_LTO не понято. Допустимо: ON, OFF, 1, 0."
+        exit 1
+        ;;
+esac
+[ -n "${BUILD_JOBS_OVERRIDE:-}" ] && BUILD_JOBS="$BUILD_JOBS_OVERRIDE"
+
+log "Конфигурация CMake ($MODE)..."
+
+mkdir -p "$CMAKE_BUILD_DIR"
+cd "$CMAKE_BUILD_DIR"
+
+CMAKE_BUILD_TYPE="Release"
+if [ "$MODE" = "debug" ]; then
+    CMAKE_BUILD_TYPE="Debug"
+fi
+
+cmake "$CPP_DIR" \
+    -G Ninja \
+    -DCMAKE_TOOLCHAIN_FILE="$NDK_HOME/build/cmake/android.toolchain.cmake" \
+    -DANDROID_ABI="$ABI" \
+    -DANDROID_PLATFORM="android-$API" \
+    -DANDROID_STL="c++_shared" \
+    -DANDROID_ARM_NEON=ON \
+    -DCMAKE_BUILD_TYPE="$CMAKE_BUILD_TYPE" \
+    -DVOXEL_LTO="$USE_LTO" \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+ok "CMake настроен"
+
+# ---- Сборка ----
+log "Сборка native библиотеки, параллельных задач: $BUILD_JOBS..."
+ninja -j"$BUILD_JOBS"
+
+if [ ! -f "libnative-lib.so" ]; then
+    err "libnative-lib.so не создан"
+    exit 1
+fi
+
+mkdir -p "$JNI_DIR"
+cp libnative-lib.so "$JNI_DIR/"
+
+# Копируем libc++_shared.so — при ANDROID_STL=c++_shared без неё
+# приложение не запустится: загрузчик не найдёт стандартную библиотеку.
+# Раскладка sysroot между версиями NDK менялась, поэтому если по
+# обычному пути файла нет — ищем, а не сдаёмся.
+LIBCXX="$SYSROOT/usr/lib/aarch64-linux-android/libc++_shared.so"
+if [ ! -f "$LIBCXX" ]; then
+    LIBCXX="$(find "$SYSROOT" -name 'libc++_shared.so' -path '*aarch64*' 2>/dev/null | head -1)"
+fi
+if [ -n "$LIBCXX" ] && [ -f "$LIBCXX" ]; then
+    cp "$LIBCXX" "$JNI_DIR/"
+    ok "libc++_shared.so скопирована"
+else
+    err "libc++_shared.so не найдена в $SYSROOT"
+    err "Без неё APK установится, но приложение упадёт при запуске."
+    err "Проверьте целостность NDK: ./tools/termux-doctor.sh"
+    exit 1
+fi
+
+SO_SIZE=$(du -h "$JNI_DIR/libnative-lib.so" | cut -f1)
+ok "Native собран: libnative-lib.so ($SO_SIZE)"
+
+# Точка входа NativeActivity. Она приходит из android_native_app_glue —
+# статической библиотеки, из которой линковщик берёт только объекты с
+# нужными кому-то символами. На ANativeActivity_onCreate не ссылается
+# никто: его ищет система через dlsym. Без -u ANativeActivity_onCreate
+# glue не попадает в .so, и приложение падает мгновенно, до первой
+# нашей строки — ни логов, ни внятного отчёта.
+so_exports "$JNI_DIR/libnative-lib.so" ANativeActivity_onCreate
+case "$?" in
+    0) ok "Точка входа ANativeActivity_onCreate на месте" ;;
+    2) warn "Нечем проверить экспорт символов (нет readelf/nm) — пропускаю" ;;
+    *) err "В libnative-lib.so нет ANativeActivity_onCreate."
+       err "NativeActivity ищет её через dlsym и, не найдя, убивает процесс"
+       err "до запуска кода: приложение вылетает мгновенно и без следа."
+       err "Причина — glue не вытянут из статической библиотеки."
+       err "В app/src/main/cpp/CMakeLists.txt должно быть:"
+       err "    target_link_options(native-lib PRIVATE -u ANativeActivity_onCreate)"
+       exit 1 ;;
+esac
+
+# ---- Упаковка APK ----
+if [ "$USE_GRADLE" -eq 1 ]; then
+    log "android.jar не найден — попытка использовать gradle..."
+    if command -v gradle >/dev/null 2>&1; then
+        cd "$PROJ"
+        ./gradlew :app:assembleRelease
+        ok "Собрано через gradle"
+        exit 0
+    else
+        err "gradle не найден. Установи Android SDK или gradle."
+        exit 1
+    fi
+fi
+
+log "Упаковка APK (ручная)..."
+
+# Инструменты SDK проверяем запуском, а не наличием. Пакет aapt2 в
+# Termux бывает собран под x86_64: файл на месте, бит «исполняемый»
+# стоит, а загрузчик Android отвечает «unexpected e_type: 2», и до
+# самой программы дело не доходит. В каталоге SDK под aarch64 при этом
+# лежит рабочая сборка, поэтому сначала смотрим туда.
+AAPT2="$(find_sdk_tool aapt2 version || true)"
+if [ -z "$AAPT2" ]; then
+    err "Рабочий aapt2 не найден. Что есть:"
+    tool_report aapt2 >&2
+    err ""
+    err "Если архитектура выше не aarch64 — это сборка под другую машину."
+    err "Нужен SDK build-tools под aarch64:"
+    err "    https://github.com/lzhiyong/termux-ndk/releases"
+    err "    ./tools/termux-setup.sh --skip-packages --sdk <архив android-sdk>"
+    err ""
+    err "Библиотека уже собрана: $JNI_DIR/libnative-lib.so"
+    err "Её можно упаковать на любой машине с рабочим Android SDK."
+    exit 1
+fi
+log "aapt2: $AAPT2"
+
+ZIPALIGN="$(find_sdk_tool zipalign || true)"
+APKSIGNER="$(find_sdk_tool apksigner --version || true)"
+
+# ---- Java -> classes.dex ----
+#
+# Манифест объявляет hasCode="true" и активность `.MainActivity`
+# (системный выбор файла — из нативного кода его не открыть). Значит в
+# APK обязан лежать classes.dex, иначе он установится и упадёт при
+# запуске: ClassNotFoundException ещё до первого кадра.
+#
+# Ручная упаковка этого не делала вовсе — ни javac, ни d8, — и
+# проверка готового APK про classes.dex не спрашивала, так что сборка
+# бодро рапортовала «APK проверен» о заведомо нерабочем файле. Сборка
+# через gradle этим не страдала, и дефект жил только на том пути,
+# которым собирают на телефоне.
+D8="$(find_sdk_tool d8 --version || true)"
+if ! command -v javac >/dev/null 2>&1 || [ -z "$D8" ]; then
+    err "Для APK игры нужны javac и d8 — в манифесте hasCode=\"true\"."
+    command -v javac >/dev/null 2>&1 || err "    javac не найден (pkg install openjdk-17)"
+    [ -z "$D8" ] || true
+    if [ -z "$D8" ]; then
+        err "    d8 не найден в SDK build-tools:"
+        tool_report d8 >&2
+        err "    ./tools/termux-setup.sh --skip-packages --sdk <архив android-sdk>"
+    fi
+    err ""
+    err "Библиотека уже собрана: $JNI_DIR/libnative-lib.so"
+    err "Упаковать можно gradle: ./gradlew :app:assembleRelease"
+    exit 1
+fi
+log "d8: $D8"
+
+JAVA_OUT="$APK_OUT_DIR/javac"
+DEX_OUT="$APK_OUT_DIR/dex"
+rm -rf "$JAVA_OUT" "$DEX_OUT"
+mkdir -p "$JAVA_OUT" "$DEX_OUT"
+
+# Те же два каталога, что у gradle (app/build.gradle, sourceSets):
+# активность игры и активность движка.
+JAVA_SRC_DIRS="$PROJ/app/src/main/java $PROJ/app/src/main/cpp/src/platform/android/java"
+JAVA_FILES="$(find $JAVA_SRC_DIRS -name '*.java' 2>/dev/null)"
+if [ -z "$JAVA_FILES" ]; then
+    err "Исходников Java не найдено в: $JAVA_SRC_DIRS"
+    exit 1
+fi
+
+log "javac ($(printf '%s\n' $JAVA_FILES | wc -l) файлов)..."
+# Уровень языка — как в gradle (compileOptions, VERSION_17). Классы
+# платформы берутся из android.jar, своего bootclasspath у нас нет:
+# -classpath и предупреждение о нём снимается -nowarn.
+if ! javac -nowarn -source 17 -target 17 \
+        -classpath "$ANDROID_JAR" \
+        -d "$JAVA_OUT" $JAVA_FILES > "$APK_OUT_DIR/javac.log" 2>&1; then
+    err "javac не собрал активности:"
+    grep -v JAVA_TOOL_OPTIONS "$APK_OUT_DIR/javac.log" | head -20 | sed 's/^/    /' >&2
+    exit 1
+fi
+
+log "d8..."
+# --min-api обязан совпадать с minSdk (app/build.gradle): d8 иначе
+# соберёт байт-код, который старый загрузчик не примет.
+if ! "$D8" --lib "$ANDROID_JAR" --min-api 24 --output "$DEX_OUT" \
+        $(find "$JAVA_OUT" -name '*.class') > "$APK_OUT_DIR/d8.log" 2>&1; then
+    err "d8 не собрал classes.dex:"
+    grep -v JAVA_TOOL_OPTIONS "$APK_OUT_DIR/d8.log" | head -20 | sed 's/^/    /' >&2
+    exit 1
+fi
+[ -f "$DEX_OUT/classes.dex" ] || { err "d8 отработал, а classes.dex нет"; exit 1; }
+ok "classes.dex собран ($(wc -c < "$DEX_OUT/classes.dex") Б)"
+
+mkdir -p "$APK_OUT_DIR"
+cd "$APK_OUT_DIR"
+rm -f *.apk *.zip *.arsc *.dex resources.ap_ 2>/dev/null || true
+
+# ---- aapt2 compile ----
+log "aapt2 compile..."
+
+RES_DIR="$SRC_DIR/res"
+RES_ZIP="$APK_OUT_DIR/res.zip"
+
+if [ ! -d "$RES_DIR" ]; then
+    err "Директория ресурсов не найдена: $RES_DIR"
+    err "Манифест ссылается на @mipmap/ic_launcher — без res сборка не пройдёт."
+    exit 1
+fi
+"$AAPT2" compile --dir "$RES_DIR" -o "$RES_ZIP"
+
+# ---- aapt2 link ----
+log "aapt2 link..."
+
+MANIFEST="$SRC_DIR/AndroidManifest.xml"
+if [ ! -f "$MANIFEST" ]; then
+    err "AndroidManifest.xml не найден"
+    exit 1
+fi
+
+# aapt2 требует атрибут package в манифесте, а AGP 8 его там запрещает:
+# для gradle имя пакета задаётся через namespace в build.gradle. Чтобы
+# работали оба пути, для ручной сборки делаем копию манифеста с
+# подставленным package — сам файл в репозитории остаётся пригодным
+# для gradle.
+APP_ID="$(sed -n 's/.*applicationId[[:space:]]*["'"'"']\([^"'"'"']*\).*/\1/p' \
+          "$APP_DIR/build.gradle" | head -1)"
+if [ -z "$APP_ID" ]; then
+    APP_ID="$(sed -n 's/.*namespace[[:space:]]*["'"'"']\([^"'"'"']*\).*/\1/p' \
+              "$APP_DIR/build.gradle" | head -1)"
+fi
+if [ -z "$APP_ID" ]; then
+    err "Не удалось определить applicationId из $APP_DIR/build.gradle"
+    err "aapt2 без имени пакета собрать APK не может."
+    exit 1
+fi
+
+if grep -q 'package=' "$MANIFEST"; then
+    # Манифест уже содержит package (например, поправлен вручную) —
+    # берём как есть, чтобы не подставить второй атрибут.
+    GEN_MANIFEST="$MANIFEST"
+else
+    GEN_MANIFEST="$APK_OUT_DIR/AndroidManifest.xml"
+    sed "s|<manifest |<manifest package=\"$APP_ID\" |" "$MANIFEST" > "$GEN_MANIFEST"
+    if ! grep -q "package=\"$APP_ID\"" "$GEN_MANIFEST"; then
+        err "Не удалось подставить package в манифест"
+        exit 1
+    fi
+fi
+log "Пакет: $APP_ID"
+
+"$AAPT2" link \
+    -o base.apk \
+    -I "$ANDROID_JAR" \
+    --manifest "$GEN_MANIFEST" \
+    --min-sdk-version "$API" \
+    --target-sdk-version 34 \
+    --version-code 1 \
+    --version-name "1.0.0" \
+    --no-version-vectors \
+    -A "$SRC_DIR/assets" \
+    -A "$SRC_DIR/data" \
+    --auto-add-overlay \
+    "$RES_ZIP"
+
+if [ ! -f "base.apk" ]; then
+    err "aapt2 link не создал base.apk"
+    exit 1
+fi
+ok "base.apk создан"
+
+# ---- Добавляем native libs и assets ----
+log "Добавляем native libs и assets..."
+
+# aapt2 уже включил assets, но .so нужно добавить вручную.
+cd "$APK_OUT_DIR"
+
+# Копируем .so в staging
+STAGING="$APK_OUT_DIR/staging"
+rm -rf "$STAGING"
+mkdir -p "$STAGING/lib/$ABI"
+cp "$JNI_DIR"/*.so "$STAGING/lib/$ABI/"
+
+# Манифест объявляет extractNativeLibs="false": система грузит .so
+# прямо из APK, поэтому они должны лежать без сжатия (-0), иначе
+# установка пройдёт, а запуск — нет.
+cd "$STAGING"
+zip -q -0 -r ../base.apk lib
+
+# classes.dex — в корень APK и со сжатием: требование «без сжатия»
+# касается только .so, которые система грузит прямо из архива.
+cp "$DEX_OUT/classes.dex" "$STAGING/classes.dex"
+zip -q ../base.apk classes.dex
+
+cd "$APK_OUT_DIR"
+ok "Native libs (без сжатия) и classes.dex добавлены"
+
+# ---- zipalign ----
+log "zipalign..."
+if [ -n "$ZIPALIGN" ]; then
+    # -p выравнивает .so по границе страницы: обязательно для
+    # extractNativeLibs="false".
+    "$ZIPALIGN" -f -p 4 base.apk aligned.apk
+    mv aligned.apk base.apk
+    ok "zipalign выполнен"
+else
+    err "Рабочий zipalign не найден, а он обязателен при extractNativeLibs=false."
+    tool_report zipalign >&2
+    err "Нужен SDK build-tools под aarch64 — см. сообщение про aapt2 выше."
+    exit 1
+fi
+
+# ---- Подпись ----
+log "Подпись APK..."
+
+# Release-ключ, если он есть; иначе debug.
+RELEASE_KEYSTORE="$APP_DIR/release.keystore"
+if [ "$MODE" = "release" ] && [ -f "$RELEASE_KEYSTORE" ] \
+   && [ -n "$APKSIGNER" ]; then
+    log "Подписываю release-ключом..."
+    "$APKSIGNER" sign \
+        --ks "$RELEASE_KEYSTORE" \
+        --ks-pass "pass:${RELEASE_KEYSTORE_PASSWORD:-release}" \
+        --ks-key-alias "${RELEASE_KEY_ALIAS:-release}" \
+        --key-pass "pass:${RELEASE_KEY_PASSWORD:-release}" \
+        --out "$APK_OUT_DIR/${GAME_NAME}.apk" \
+        base.apk
+    ok "APK подписан release-ключом"
+    SKIP_DEBUG_SIGN=1
+else
+    SKIP_DEBUG_SIGN=0
+fi
+
+# Создаём debug keystore, если его нет.
+if [ "$SKIP_DEBUG_SIGN" -eq 0 ] && [ ! -f "$DEBUG_KEYSTORE" ]; then
+    log "Создаю debug keystore..."
+    mkdir -p "$(dirname "$DEBUG_KEYSTORE")"
+    if ! command -v keytool >/dev/null 2>&1; then
+        warn "keytool не найден — APK не подписан."
+        warn "Установи JDK: pkg install openjdk-21"
+        warn "(если такого пакета нет: pkg search openjdk)"
+        mv base.apk "$APK_OUT_DIR/${GAME_NAME}.apk"
+        exit 0
+    fi
+    # Ошибку keytool раньше глушили в /dev/null и объявляли «keytool не
+    # найден» — причина не доходила до пользователя вообще.
+    if ! KEYTOOL_ERR="$(keytool -genkeypair \
+            -keystore "$DEBUG_KEYSTORE" \
+            -storepass android \
+            -alias androiddebugkey \
+            -keypass android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Android Debug, O=Android, C=US" 2>&1)"; then
+        warn "keytool не смог создать $DEBUG_KEYSTORE:"
+        printf '%s\n' "$KEYTOOL_ERR" | sed 's/^/      /' >&2
+        warn "APK останется без подписи — установить его не получится."
+        mv base.apk "$APK_OUT_DIR/${GAME_NAME}.apk"
+        exit 0
+    fi
+    ok "debug keystore создан"
+fi
+
+if [ "$SKIP_DEBUG_SIGN" -eq 1 ]; then
+    :   # уже подписан release-ключом
+elif [ -n "$APKSIGNER" ]; then
+    "$APKSIGNER" sign \
+        --ks "$DEBUG_KEYSTORE" \
+        --ks-pass pass:android \
+        --ks-key-alias androiddebugkey \
+        --key-pass pass:android \
+        --out "$APK_OUT_DIR/${GAME_NAME}.apk" \
+        base.apk
+    ok "APK подписан"
+else
+    warn "Рабочий apksigner не найден — копирую APK без подписи."
+    warn "Такой APK Android установить не даст: подпишите его где-нибудь ещё"
+    warn "или поставьте SDK build-tools под aarch64."
+    mv base.apk "$APK_OUT_DIR/${GAME_NAME}.apk"
+fi
+
+# ---- Проверка готового APK ----
+#
+# APK, который собрался, но не запускается, выглядит как успех. Здесь
+# проверяется ровно то, из-за чего приложение падает сразу при старте:
+# нет библиотеки, нет шейдеров, .so упакованы со сжатием (при
+# extractNativeLibs="false" система такие не грузит).
+verify_apk() {                    # путь к apk
+    local apk="$1" bad size
+    command -v unzip >/dev/null 2>&1 || {
+        warn "unzip не найден — содержимое APK не проверено"
+        return 0
+    }
+
+    # classes.dex — наравне с библиотекой: манифест объявляет
+    # hasCode="true", и без него APK устанавливается, а запускается
+    # исключением загрузчика классов. Прежний список его не
+    # спрашивал, и проверка подтверждала APK, который не стартует.
+    local needed="lib/$ABI/libnative-lib.so lib/$ABI/libc++_shared.so \
+                  classes.dex \
+                  assets/shaders/voxel.vert.spv assets/shaders/voxel.frag.spv \
+                  AndroidManifest.xml"
+    local entry
+    for entry in $needed; do
+        unzip -l "$apk" | grep -q "$entry" || {
+            err "в APK нет $entry"
+            return 1
+        }
+    done
+
+    bad="$(unzip -v "$apk" | awk -v abi="$ABI" \
+           '$NF ~ "lib/" abi "/.*\\.so$" && $2 != "Stored" {print $NF}')"
+    if [ -n "$bad" ]; then
+        err "эти .so упакованы со сжатием — система их не загрузит:"
+        printf '%s\n' "$bad" | sed 's/^/      /' >&2
+        return 1
+    fi
+
+    size="$(unzip -l "$apk" | awk '/libnative-lib.so$/ {print $1}' | head -1)"
+    if [ "${size:-0}" -lt 500000 ]; then
+        err "libnative-lib.so внутри APK всего ${size:-0} байт — сборка не отработала"
+        return 1
+    fi
+
+    ok "APK проверен: библиотека ${size} Б, classes.dex и шейдеры на месте, .so без сжатия"
+    return 0
+}
+
+FINAL_APK="$APK_OUT_DIR/${GAME_NAME}.apk"
+if [ -f "$FINAL_APK" ]; then
+    if ! verify_apk "$FINAL_APK"; then
+        err "APK собран, но к запуску непригоден — см. выше."
+        exit 1
+    fi
+fi
+
+# ---- Итог ----
+if [ -f "$FINAL_APK" ]; then
+    FINAL_SIZE=$(du -h "$FINAL_APK" | cut -f1)
+    echo ""
+    ok "==========================================="
+    ok "  APK готов: $FINAL_APK"
+    ok "  Размер: $FINAL_SIZE"
+    ok "  Mode: $MODE"
+    ok "==========================================="
+    echo ""
+else
+    err "APK не создан"
+    exit 1
+fi
+
+# ---- Установка через adb ----
+if [ "$INSTALL" -eq 1 ]; then
+    log "Установка через adb..."
+    if command -v adb >/dev/null 2>&1; then
+        adb install -r "$FINAL_APK"
+        ok "Установлено"
+    else
+        warn "adb не найден. Установи вручную: $FINAL_APK"
+    fi
+fi
