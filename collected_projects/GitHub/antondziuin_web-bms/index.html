@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1017" media="(prefers-color-scheme: dark)" />
+  <meta name="theme-color" content="#f3f6fa" media="(prefers-color-scheme: light)" />
+  <meta name="color-scheme" content="dark light" />
+  <meta name="description" content="Монитор BMS JK / JBD через Web Bluetooth: напряжение, ток, SOC, ячейки, графики." />
+  <title>Battery monitor — Web Bluetooth</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="css/styles.css" />
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-bt" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m7 7 10 10-5 5V2l5 5L7 17"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path fill="currentColor" d="M13 2 4 14h7l-1 8 9-12h-7l1-8z"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m-6-6 6 6 6-6"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" d="M9 6v12M15 6v12"/></symbol>
+    <symbol id="i-offline" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></g></symbol>
+    <symbol id="i-battery" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="17" height="10" rx="2"/><path d="M22 11v2"/></g></symbol>
+  </svg>
+
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-logo" src="icon.svg" alt="" />
+        <div class="brand-text">
+          <div class="brand-title">Battery monitor</div>
+          <div class="conn" id="connChip" data-tone="idle"><span class="dot"></span><span id="statusBar" role="status" aria-live="polite" data-i18n="status.idle">Не подключено</span></div>
+        </div>
+      </div>
+      <button id="btn-bt" class="btn btn-primary" title="Bluetooth: подключить / отключить" data-i18n-title="btn.btTitle"><svg><use href="#i-bt"/></svg><span id="btnBtLabel">Подключить</span></button>
+    </header>
+
+    <nav class="batbar" id="batBar" hidden aria-label="Батареи"></nav>
+
+    <div class="card banner" id="offlineBanner" hidden>
+      <div class="banner-icon"><svg><use href="#i-offline"/></svg></div>
+      <div class="banner-body">
+        <div class="banner-title" data-i18n="off.title">Работа без интернета</div>
+        <div class="banner-text" id="offlineBannerText" data-i18n="off.text">Сохранить приложение на устройстве, чтобы оно открывалось без сети.</div>
+        <div class="banner-actions">
+          <button class="btn btn-primary btn-sm" id="offlineEnable" data-i18n="off.enable">Включить</button>
+          <button class="btn btn-sm" id="offlineInstallBanner" hidden data-i18n="off.install">Установить приложение</button>
+          <button class="btn btn-sm btn-ghost" id="offlineLater" data-i18n="off.later">Не сейчас</button>
+        </div>
+      </div>
+    </div>
+
+    <main class="layout">
+      <section class="col col-left">
+        <div class="card hero" id="metricsCard">
+          <div class="gauge" id="socGauge" data-level="none" role="img" aria-label="Уровень заряда" data-i18n-aria="gauge.ariaUnknown">
+            <svg viewBox="0 0 124 124">
+              <circle class="track" cx="62" cy="62" r="54" fill="none" stroke-width="10"/>
+              <circle class="arc" id="socArc" cx="62" cy="62" r="54" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="339.29" stroke-dashoffset="339.29"/>
+            </svg>
+            <div class="gauge-center">
+              <div class="gauge-val num"><span id="socVal">—</span><small>%</small></div>
+              <div class="gauge-label" data-i18n="gauge.label">заряд</div>
+            </div>
+          </div>
+          <div class="hero-main">
+            <div class="flow" id="flowState" data-flow="none"><svg><use id="flowIcon" href="#i-pause"/></svg><span id="flowText">Нет данных</span></div>
+            <div class="power"><span id="powerVal" class="num">—</span><span class="unit">W</span></div>
+            <div class="eta"><span id="etaLabel">Время</span>: <b id="etaVal" class="num">—</b></div>
+          </div>
+        </div>
+
+        <div class="metrics">
+          <div class="tile">
+            <div class="tile-label" data-i18n="tile.voltage">Напряжение</div>
+            <div class="tile-value num"><span id="voltVal">—</span><span class="unit">V</span></div>
+          </div>
+          <div class="tile">
+            <div class="tile-label" data-i18n="tile.current">Ток</div>
+            <div class="tile-value num"><span id="ampVal">—</span><span class="unit">A</span></div>
+          </div>
+          <div class="tile">
+            <div class="tile-label" data-i18n="tile.remaining">Остаток</div>
+            <div class="tile-value num"><span id="capRemVal">—</span><span class="unit">Ah</span></div>
+            <div class="tile-sub num" id="capFullSub">&nbsp;</div>
+          </div>
+          <div class="tile" id="deltaTile">
+            <div class="tile-label" data-i18n="tile.imbalance">Разбаланс ячеек</div>
+            <div class="tile-value num"><span id="deltaVal">—</span><span class="unit">mV</span></div>
+            <div class="tile-sub num" id="deltaSub">&nbsp;</div>
+          </div>
+          <div class="tile" id="tempTile">
+            <div class="tile-label"><span data-i18n="tile.temp">Температура</span> <span style="opacity:.7" data-i18n="tile.tempMax">(макс.)</span></div>
+            <div class="tile-value num"><span id="tempsVal">—</span><span class="unit">°C</span></div>
+            <div class="tile-sub num" id="tempsSub">&nbsp;</div>
+          </div>
+          <div class="tile">
+            <div class="tile-label" data-i18n="tile.cycles">Циклы</div>
+            <div class="tile-value num"><span id="cyclesVal">—</span></div>
+            <div class="tile-sub num" id="cyclesSub">&nbsp;</div>
+          </div>
+        </div>
+
+        <div class="chips">
+          <div class="chip" id="balancingPill"><span class="dot"></span><span id="balancingText">Балансировка выкл.</span></div>
+          <div class="chip ok" id="errorsPill"><span class="dot"></span><span id="errorsText">Ошибок нет</span></div>
+        </div>
+      </section>
+
+      <section class="col col-right">
+        <div class="card panel-card">
+          <div class="seg tabbar" id="tabBar" role="tablist">
+            <button id="tab-cells-btn" class="active" role="tab" aria-controls="tab-cells" aria-selected="true" data-tab="cells" data-i18n="tab.cells">Ячейки</button>
+            <button id="tab-chart-btn" role="tab" aria-controls="tab-chart" aria-selected="false" data-tab="chart" data-i18n="tab.chart">График</button>
+            <button id="tab-session-btn" role="tab" aria-controls="tab-session" aria-selected="false" data-tab="session" data-i18n="tab.session">Сессия</button>
+            <button id="tab-log-btn" role="tab" aria-controls="tab-log" aria-selected="false" data-tab="log" data-i18n="tab.log">Журнал</button>
+            <button id="tab-details-btn" role="tab" aria-controls="tab-details" aria-selected="false" data-tab="details" data-i18n="tab.details">Детали</button>
+          </div>
+
+          <div id="tab-cells" class="panel active" role="tabpanel" aria-labelledby="tab-cells-btn">
+            <div class="empty" id="cellsEmpty">
+              <svg><use href="#i-battery"/></svg>
+              <div class="empty-title" data-i18n="cells.emptyTitle">Нет данных по ячейкам</div>
+              <div data-i18n="cells.emptyText">Подключитесь к BMS JK или JBD по Bluetooth.</div>
+              <button class="btn btn-primary btn-sm" id="cellsConnect"><svg><use href="#i-bt"/></svg><span data-i18n="btn.connect">Подключить</span></button>
+            </div>
+            <div class="cells-summary" id="cellsSummary" hidden>
+              <div class="stat"><div class="stat-label" data-i18n="cells.min">Мин</div><div class="stat-val num" id="cellMin">—</div></div>
+              <div class="stat"><div class="stat-label" data-i18n="cells.avg">Сред</div><div class="stat-val num" id="cellAvg">—</div></div>
+              <div class="stat"><div class="stat-label" data-i18n="cells.max">Макс</div><div class="stat-val num" id="cellMax">—</div></div>
+              <div class="stat"><div class="stat-label" data-i18n="cells.sum">Σ ячеек</div><div class="stat-val num" id="cellSum">—</div></div>
+            </div>
+            <div id="cellsSimple" aria-label="Поклеточные напряжения" data-i18n-aria="cells.aria"></div>
+            <div id="overview" class="overview" hidden></div>
+          </div>
+
+          <div id="tab-chart" class="panel" role="tabpanel" aria-labelledby="tab-chart-btn">
+            <div class="chart-head">
+              <div class="seg seg-sm" id="chartMetric" role="group" aria-label="Показатель графика" data-i18n-aria="chart.metricAria">
+                <button data-metric="w" aria-pressed="true" data-i18n="metric.w">Мощность</button>
+                <button data-metric="i" aria-pressed="false" data-i18n="metric.i">Ток</button>
+                <button data-metric="v" aria-pressed="false" data-i18n="metric.v">Напряжение</button>
+                <button data-metric="soc" aria-pressed="false">SOC</button>
+              </div>
+              <div class="chart-now" id="chartNow"></div>
+            </div>
+            <div id="chartWrap"><canvas id="chart" aria-label="График" data-i18n-aria="chart.aria"></canvas></div>
+          </div>
+
+          <div id="tab-session" class="panel" role="tabpanel" aria-labelledby="tab-session-btn">
+            <div class="empty" id="sessionEmpty">
+              <svg><use href="#i-battery"/></svg>
+              <div data-i18n="ses.empty">Счётчики сессии начнутся после подключения BMS.</div>
+            </div>
+            <div id="sessionBody" hidden>
+              <div class="raw-head">
+                <div class="session-since" id="sesSince"></div>
+                <button class="btn btn-sm" id="sesReset" data-i18n="ses.reset">Сбросить</button>
+              </div>
+              <div class="session-note" id="sesNote" hidden data-i18n="ses.allNote">Суммарно по всем подключённым батареям.</div>
+              <div class="energy">
+                <div class="energy-card in"><div class="stat-label" data-i18n="ses.charged">Заряжено</div><div class="energy-val num" id="sesAhIn">—</div><div class="energy-sub num" id="sesWhIn">—</div></div>
+                <div class="energy-card out"><div class="stat-label" data-i18n="ses.discharged">Разряжено</div><div class="energy-val num" id="sesAhOut">—</div><div class="energy-sub num" id="sesWhOut">—</div></div>
+                <div class="energy-card"><div class="stat-label" data-i18n="ses.net">Баланс</div><div class="energy-val num" id="sesAhNet">—</div><div class="energy-sub num" id="sesWhNet">—</div></div>
+              </div>
+              <div class="section-title" data-i18n="ses.extremes">Экстремумы</div>
+              <dl class="kv kv-session">
+                <dt data-i18n="ses.duration">Длительность</dt><dd id="sesDuration" class="num">—</dd>
+                <dt data-i18n="ses.peakChg">Пик заряда</dt><dd id="sesPeakChg" class="num">—</dd>
+                <dt data-i18n="ses.peakDis">Пик разряда</dt><dd id="sesPeakDis" class="num">—</dd>
+                <dt data-i18n="ses.packV">Напряжение мин / макс</dt><dd id="sesPackV" class="num">—</dd>
+                <dt data-i18n="ses.soc">SOC начало → сейчас</dt><dd id="sesSoc" class="num">—</dd>
+                <dt data-i18n="ses.cellV">Ячейка мин / макс</dt><dd id="sesCellV" class="num">—</dd>
+                <dt data-i18n="ses.deltaMax">Макс. разбаланс</dt><dd id="sesDelta" class="num">—</dd>
+                <dt data-i18n="ses.tMax">Макс. температура</dt><dd id="sesTMax" class="num">—</dd>
+              </dl>
+            </div>
+          </div>
+
+          <div id="tab-log" class="panel" role="tabpanel" aria-labelledby="tab-log-btn">
+            <!-- Event log / counters stored in the BMS itself -->
+            <div class="section-title" data-i18n="mem.title">Память BMS</div>
+            <div class="mem-head">
+              <div class="setting-sub" id="memSub"></div>
+              <button class="btn btn-primary btn-sm" id="memRead" data-i18n="mem.read">Считать из BMS</button>
+            </div>
+            <div class="mem-status" id="memStatus" hidden></div>
+            <div id="memResult" hidden>
+              <div class="raw-head">
+                <div class="log-summary" id="memSummary"></div>
+                <button class="btn btn-sm" id="memCsv" data-i18n="mem.csv">Скачать CSV</button>
+              </div>
+              <div class="log-table-wrap" id="memTableWrap">
+                <table class="log-table">
+                  <thead><tr><th>#</th><th data-i18n="log.colTime">Время</th><th data-i18n="mem.colEvent">Событие</th></tr></thead>
+                  <tbody id="memRows"></tbody>
+                </table>
+              </div>
+              <div class="setting-sub" id="memNote"></div>
+              <dl class="kv" id="memCounters"></dl>
+            </div>
+
+            <!-- Log recorded by this app in the browser -->
+            <div class="section-title" data-i18n="log.browserTitle">Журнал в браузере</div>
+            <div class="log-file" id="logFileBar" hidden>
+              <span id="logFileName"></span>
+              <button class="btn btn-sm" id="logCloseFile" data-i18n="log.closeFile">К журналу</button>
+            </div>
+            <div class="log-controls">
+              <div class="seg seg-sm" id="logRange" role="group" aria-label="Период" data-i18n-aria="log.rangeAria">
+                <button data-range="1h" aria-pressed="false" data-i18n="log.r1h">1 ч</button>
+                <button data-range="6h" aria-pressed="true" data-i18n="log.r6h">6 ч</button>
+                <button data-range="24h" aria-pressed="false" data-i18n="log.r24h">24 ч</button>
+                <button data-range="all" aria-pressed="false" data-i18n="log.rAll">Всё</button>
+              </div>
+              <select id="logDevice" class="select" hidden></select>
+            </div>
+            <div class="log-summary" id="logSummary"></div>
+            <div class="mem-status err" id="logError" hidden></div>
+            <div class="empty empty-sm" id="logEmpty"><div id="logEmptyText"></div></div>
+            <div id="logBody" class="log-body" hidden>
+              <div class="seg seg-sm" id="logMetric" role="group" aria-label="Показатель" data-i18n-aria="log.metricAria">
+                <button data-metric="w" aria-pressed="true" data-i18n="metric.w">Мощность</button>
+                <button data-metric="i" aria-pressed="false" data-i18n="metric.i">Ток</button>
+                <button data-metric="v" aria-pressed="false" data-i18n="metric.v">Напряжение</button>
+                <button data-metric="soc" aria-pressed="false">SOC</button>
+                <button data-metric="d" aria-pressed="false" data-i18n="metric.d">Δ ячеек</button>
+                <button data-metric="tc" aria-pressed="false" data-i18n="metric.tc">Темп.</button>
+              </div>
+              <div id="logChartWrap"><canvas id="logChart"></canvas></div>
+              <div class="log-table-wrap" id="logTableWrap">
+                <table class="log-table">
+                  <thead><tr><th data-i18n="log.colTime">Время</th><th>V</th><th>A</th><th>W</th><th>SOC</th><th>Δ mV</th><th>°C</th><th data-i18n="log.colErrors">Ошибки</th></tr></thead>
+                  <tbody id="logRows"></tbody>
+                </table>
+              </div>
+              <button class="btn btn-sm" id="logMore" data-i18n="log.more">Показать ещё</button>
+            </div>
+            <div class="log-actions">
+              <span class="setting-sub" data-i18n="log.download">Скачать</span>
+              <button class="btn btn-sm" id="logCsv">CSV</button>
+              <button class="btn btn-sm" id="logJson">JSON</button>
+              <button class="btn btn-sm" id="logOpen" data-i18n="log.open">Открыть файл…</button>
+              <input type="file" id="logFile" accept=".json,.csv,application/json,text/csv" hidden>
+            </div>
+            <div class="settings">
+              <div class="setting-sub" id="logUnsupported" hidden data-i18n="log.unsupported">Этот браузер не может хранить журнал.</div>
+              <label class="setting">
+                <div><div data-i18n="log.enabled">Вести журнал</div><div class="setting-sub" id="logEnabledSub"></div></div>
+                <input id="logEnabled" class="switch" type="checkbox">
+              </label>
+              <label class="setting">
+                <div data-i18n="log.interval">Интервал записи</div>
+                <select id="logInterval" class="select">
+                  <option value="5"></option><option value="10"></option><option value="30"></option><option value="60"></option>
+                </select>
+              </label>
+              <label class="setting">
+                <div><div data-i18n="log.rawEnabled">Записывать сырые кадры BLE</div><div class="setting-sub" id="rawSub"></div></div>
+                <input id="rawEnabled" class="switch" type="checkbox">
+              </label>
+              <div class="log-actions">
+                <button class="btn btn-sm" id="rawDownload" data-i18n="log.rawDownload">Скачать кадры</button>
+                <button class="btn btn-sm btn-danger" id="logClear" data-i18n="log.clear">Очистить журнал</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="tab-details" class="panel" role="tabpanel" aria-labelledby="tab-details-btn">
+            <div class="section-title" data-i18n="det.device">Устройство</div>
+            <dl class="kv">
+              <dt data-i18n="det.name">Имя</dt><dd id="detName">—</dd>
+              <dt data-i18n="det.protocol">Протокол</dt><dd id="detKind">—</dd>
+              <dt data-i18n="det.model">Модель</dt><dd id="detModel">—</dd>
+              <dt data-i18n="det.capacity">Ёмкость</dt><dd id="detCap" class="num">—</dd>
+              <dt data-i18n="det.data">Данные</dt><dd id="detFresh" class="num">—</dd>
+            </dl>
+            <button class="btn btn-danger" id="btn-disconnect" hidden>Отключить</button>
+            <div id="settingsBlock" class="settings">
+              <div class="section-title" data-i18n="det.settings">Настройки</div>
+              <label class="setting">
+                <div data-i18n="det.language">Язык</div>
+                <select id="langSelect" class="select">
+                  <option value="auto"></option>
+                  <option value="en">English</option>
+                  <option value="ru">Русский</option>
+                  <option value="uk">Українська</option>
+                </select>
+              </label>
+              <label class="setting" id="offlineSw" hidden>
+                <div><div data-i18n="off.title">Работа без интернета</div><div class="setting-sub" data-i18n="off.settingSub">Хранит копию приложения на устройстве</div></div>
+                <input id="offlineChk" class="switch" type="checkbox">
+              </label>
+              <div class="setting" id="installRow" hidden>
+                <div><div data-i18n="off.install">Установить приложение</div><div class="setting-sub" data-i18n="off.installSub">Добавить на главный экран или рабочий стол</div></div>
+                <button class="btn btn-sm" id="installBtn" data-i18n="off.install">Установить</button>
+              </div>
+              <label class="setting" id="wakeLockSw" hidden>
+                <div><div data-i18n="det.wake">Не гасить экран</div><div class="setting-sub" data-i18n="det.wakeSub">На телефоне BLE часто рвётся, когда экран выключается</div></div>
+                <input id="wakeLock" class="switch" type="checkbox">
+              </label>
+            </div>
+            <div class="raw-head">
+              <div class="section-title" data-i18n="det.raw">Сырые данные</div>
+              <button class="btn btn-sm" id="copyRaw" data-i18n="det.copy">Копировать</button>
+            </div>
+            <pre id="rawInfo"></pre>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Picker -->
+    <dialog id="dlg-picker">
+      <div class="dlg-head">
+        <div class="dlg-icon"><svg><use href="#i-bt"/></svg></div>
+        <h3 class="dlg-title" data-i18n="dlg.title">Подключение JK / JBD</h3>
+      </div>
+      <p class="dlg-text" data-i18n="dlg.text">Выберите BMS в системном окне. PIN, если спросят, обычно 123456. Web Bluetooth не умеет фоновое сканирование — только системный выбор устройства.</p>
+      <div class="dlg-actions">
+        <button id="btn-choose" class="btn btn-primary" data-i18n="dlg.choose">Выбрать устройство…</button>
+        <button id="btn-reconnect" class="btn" data-i18n="dlg.recent">Недавние</button>
+      </div>
+      <div id="picker-status"></div>
+      <div id="recent-list" hidden></div>
+      <div class="dlg-foot">
+        <button id="btn-close-picker" class="btn btn-sm" data-i18n="dlg.close">Закрыть</button>
+      </div>
+    </dialog>
+  </div>
+</body>
+</html>
