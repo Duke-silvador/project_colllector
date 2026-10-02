@@ -1,0 +1,1 @@
+interface CloudflareEnv { WALLPAPERS_BUCKET: R2Bucket; ASSETS: Fetcher; }
