@@ -1,0 +1,1835 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#6f52c8" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="도살자 길드 운영" />
+  <title>균열 · 은하 길드 운영현황 V0.2.6</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <link rel="stylesheet" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <style>
+    :root{
+      --canvas:430px;
+      --ui-scale:1;
+      --bg:#f3effc;
+      --panel:#ffffff;
+      --panel2:#f8f6ff;
+      --ink:#261f3b;
+      --muted:#7f7796;
+      --line:#ddd5f0;
+      --purple:#7354c7;
+      --purple2:#8f73df;
+      --purple3:#efe9ff;
+      --gold:#f0b64c;
+      --green:#2c9b67;
+      --greenBg:#e9f8f1;
+      --red:#d65b6d;
+      --redBg:#fff0f3;
+      --orange:#c37a22;
+      --orangeBg:#fff5e7;
+      --shadow:0 8px 24px rgba(78,55,139,.11);
+    }
+    *{box-sizing:border-box}
+    html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,system-ui,sans-serif;}
+    button,input,select{font:inherit}
+    button{cursor:pointer}
+    body{overflow-x:hidden}
+
+    /* Fixed 430px logical canvas. On narrower screens the whole UI scales as one unit. */
+    #shell{position:relative;margin:0 auto;overflow:visible}
+    #app{
+      width:var(--canvas);
+      min-height:100vh;
+      transform-origin:top left;
+      background:
+        radial-gradient(circle at 12% -4%,rgba(143,115,223,.18),transparent 25%),
+        radial-gradient(circle at 88% 2%,rgba(240,182,76,.10),transparent 20%),
+        linear-gradient(180deg,#f7f4ff 0,#f2eefb 34%,#f4f1fb 100%);
+      padding:12px 12px 30px;
+    }
+    .topbar{position:relative;display:block;margin-bottom:7px;padding:1px 1px 0;min-height:51px}
+    .topbar-copy{min-width:0;width:100%;text-align:center}
+    .calculator-back-link{position:absolute;right:0;top:0;height:30px;display:inline-flex;align-items:center;justify-content:center;padding:0 10px;border:1px solid #cfc3ee;border-radius:9px;background:rgba(255,255,255,.86);color:#5a4690;text-decoration:none;font-size:10px;font-weight:900;letter-spacing:-.15px;box-shadow:0 2px 8px rgba(91,65,156,.06);white-space:nowrap}
+    .calculator-back-link:active{background:#f3effc;border-color:#ab98df}
+    h1{margin:0;text-align:center;font-size:21px;line-height:1.16;letter-spacing:-.55px;font-weight:900}
+    .subhead{font-size:11px;color:#365486;font-weight:850;margin-top:7px;line-height:1.25;text-align:center;letter-spacing:-.08px}
+    .admin-bar{height:38px;display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(255,255,255,.78);border:1px solid #e1daef;border-radius:11px;padding:0 6px 0 9px;margin-bottom:8px;box-shadow:0 3px 11px rgba(78,55,139,.05)}
+
+    .booting .section-card,.booting .footer{display:none}
+    .boot-loader{display:none;height:180px;align-items:center;justify-content:center;flex-direction:column;gap:10px;color:#72658d;font-size:11px;font-weight:850}
+    .booting .boot-loader{display:flex}
+    .boot-spinner{width:24px;height:24px;border-radius:50%;border:3px solid #ded6f0;border-top-color:#7354c7;animation:bootSpin .8s linear infinite}
+    @keyframes bootSpin{to{transform:rotate(360deg)}}
+    .sync-state{display:flex;align-items:center;gap:6px;min-width:0;color:#7a718e;font-size:10px;font-weight:800}
+    #syncText{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .top-actions{display:flex;gap:5px;flex:0 0 auto}
+    .mini-btn{height:27px;padding:0 9px;border:1px solid #cfc3ee;border-radius:8px;background:#fff;color:#56438f;font-size:10.5px;font-weight:850;box-shadow:0 2px 7px rgba(91,65,156,.06)}
+    .mini-btn.primary{background:linear-gradient(180deg,#8264d4,#6f50c2);border-color:#6c4dbd;color:#fff}
+    .mini-btn:disabled{opacity:.48;cursor:default}
+
+    .status-left{display:flex;align-items:center;gap:6px;min-width:0}
+    .dot{width:7px;height:7px;border-radius:50%;background:#b9afc9;box-shadow:0 0 0 3px rgba(185,175,201,.18);flex:0 0 auto}
+    .dot.online{background:#32aa72;box-shadow:0 0 0 3px rgba(50,170,114,.14)}
+    .dot.preview{background:#efad42;box-shadow:0 0 0 3px rgba(239,173,66,.14)}
+
+    .section-card{background:rgba(255,255,255,.93);border:1px solid #ded6f0;border-radius:15px;box-shadow:var(--shadow);padding:10px;margin-top:9px}
+    .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .section-title{font-size:13.5px;font-weight:900;letter-spacing:-.2px}
+    .section-note{font-size:10px;color:var(--muted);font-weight:700}
+
+    .boss-rail{display:grid;grid-template-columns:82px 1fr;gap:6px;align-items:stretch}
+    .history-wrap{position:relative;min-width:0;overflow:hidden}
+    .history-scroll{display:flex;gap:5px;overflow-x:auto;scroll-behavior:smooth;overscroll-behavior-inline:contain;scrollbar-width:none;padding:0 0 2px}
+    .history-scroll::-webkit-scrollbar{display:none}
+    .history-wrap::after{content:"";position:absolute;right:0;top:0;bottom:2px;width:14px;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(255,255,255,.92));opacity:.78}
+    .boss-card{position:relative;width:75px;min-width:75px;height:163px;border-radius:11px;border:1px solid #ddd5ec;background:#fbfaff;padding:5px 4px 6px;text-align:center;box-shadow:0 3px 11px rgba(83,61,140,.06);overflow:hidden;transition:transform .16s ease,box-shadow .16s ease}
+    .boss-card:active{transform:scale(.985)}
+    .boss-card.current{width:82px;min-width:82px;border:2px solid #7655cb;background:linear-gradient(180deg,#ffffff,#f5f0ff);box-shadow:0 0 0 2px rgba(118,85,203,.09),0 7px 18px rgba(92,65,164,.14);padding:4px 4px 5px}
+    .current-badge{position:absolute;z-index:2;top:4px;left:4px;height:17px;padding:0 5px;border-radius:6px;background:#7152c7;color:#fff;font-size:8.5px;font-weight:950;line-height:17px;box-shadow:0 2px 7px rgba(70,48,133,.22)}
+    .boss-img{display:block;width:65px;height:65px;border-radius:8px;object-fit:cover;margin:0 auto 4px;background:linear-gradient(135deg,#eee8ff,#fff);border:1px solid rgba(110,83,186,.12)}
+    .current .boss-img{width:69px;height:69px}
+    .boss-index{font-size:8.5px;color:#948aa9;font-weight:800;line-height:1.1;margin-bottom:1px}
+    .boss-name{font-size:11px;color:#382d55;font-weight:950;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .boss-level{font-size:8.5px;color:#7d6aa8;font-weight:900;line-height:1.15;margin-top:2px;font-variant-numeric:tabular-nums}
+    .boss-metrics{margin-top:4px;border-top:1px solid #ece7f4;padding-top:4px;display:grid;gap:2px}
+    .metric-line{font-size:8.5px;color:#837b93;font-weight:750;line-height:1.12}
+    .metric-line b{display:block;color:#4b3a7b;font-size:9.5px;font-weight:950;margin-top:1px;white-space:nowrap;letter-spacing:-.2px}
+    .empty-boss{display:flex;align-items:center;justify-content:center;height:100%;font-size:9px;color:#9b92aa;font-weight:800;padding:4px;line-height:1.35}
+
+    .quick-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+    .sum-box{border:1px solid #e4ddf1;background:#faf8ff;border-radius:10px;padding:7px 5px;text-align:center}
+    .sum-label{font-size:9px;color:#8b829e;font-weight:800}
+    .sum-value{font-size:13px;color:#4d3a80;font-weight:950;margin-top:1px;line-height:1.2}
+
+    .members-card{padding:10px 7px 8px}
+    .member-table{width:100%;border-collapse:separate;border-spacing:0;table-layout:fixed;border:1px solid #ddd5eb;border-radius:11px;overflow:hidden;background:#fff}
+    .member-table col:nth-child(1){width:22%}.member-table col:nth-child(2){width:16%}.member-table col:nth-child(3){width:20%}.member-table col:nth-child(4){width:26%}.member-table col:nth-child(5){width:16%}
+    .member-table th{height:34px;background:#ece6fa;color:#57467f;font-size:9.5px;font-weight:950;border-bottom:1px solid #d8cfea;text-align:center;line-height:1.08;padding:0 2px}
+    .member-table th+th,.member-table td+td{border-left:1px solid #eee9f5}
+    .member-table td{height:52px;border-bottom:1px solid #eeeaf4;text-align:center;font-size:10.5px;font-weight:800;background:#fff;padding:3px 3px}
+    .member-table tr:last-child td{border-bottom:none}
+    .member-table tbody tr{cursor:pointer}
+    .member-table tbody tr:active td{background:#faf8ff}
+    .member-name{text-align:left!important;padding-left:8px!important;color:#302746;font-weight:900!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10.7px!important}
+    .participation-cell{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px}
+    .participation-count{font-size:10.5px;font-weight:950;color:#4b3a7b;font-variant-numeric:tabular-nums}
+    .participation-track{width:34px;height:4px;border-radius:999px;background:#eee9f6;overflow:hidden}
+    .participation-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#8b6ede,#6547bb)}
+    .sword-cell{display:flex;flex-direction:column;align-items:center;gap:3px}
+    .sword-value{font-size:10.5px;font-weight:950;color:#3f3262;font-variant-numeric:tabular-nums;line-height:1}
+    .sword-segments{display:grid;grid-template-columns:repeat(10,1fr);gap:1px;width:49px}
+    .sword-segments i{display:block;height:4px;border-radius:2px;background:#ece7f3}
+    .sword-segments i.on{background:linear-gradient(90deg,#8568d6,#684abd)}
+    .sword-cell.low .sword-value{color:#c17826}.sword-cell.low .sword-segments i.on{background:#e2a13b}
+    .sword-cell.empty .sword-value{color:#d4576a}.sword-cell.empty .sword-segments i.on{background:#d65b6d}
+    .time-cell{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+    .time-value{font-size:10.5px;font-weight:950;color:#3f3262;font-variant-numeric:tabular-nums;line-height:1.05}
+    .time-used{font-size:7.5px;color:#968da6;font-weight:800;line-height:1}
+    .time-track{width:58px;height:5px;border-radius:999px;background:#eee9f5;overflow:hidden;margin-top:1px}
+    .time-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#8a6ddd,#6748bb)}
+    .time-cell.low .time-value{color:#c17826}.time-cell.low .time-fill{background:#e2a13b}
+    .time-cell.empty .time-value{color:#d4576a}.time-cell.empty .time-fill{background:#d65b6d}
+    .status-pill{display:inline-flex;align-items:center;justify-content:center;min-width:53px;height:23px;padding:0 7px;border-radius:999px;font-size:10px;font-weight:950;border:1px solid transparent}
+    .status-pill.joined{color:#237e55;background:var(--greenBg);border-color:#bfe8d4}
+    .status-pill.waiting{color:#c24f63;background:var(--redBg);border-color:#f4cad2}
+    .status-pill.no-boss{color:#776e89;background:#f2eff7;border-color:#e2ddea}
+    .table-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:7px 3px 0;font-size:9.5px;color:#8b839a;font-weight:700}
+    .table-foot strong{color:#644ab0}
+
+    .legend{display:flex;align-items:center;gap:10px;font-size:9.5px;color:#8a8299;font-weight:750}
+    .legend i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:3px;vertical-align:1px}
+    .legend .g{background:#3aaa75}.legend .r{background:#d96678}
+    .member-head{align-items:flex-start;margin-bottom:5px}
+    .member-subrow{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 2px 7px}
+    .resource-updated{flex:0 0 auto;display:flex;align-items:center;gap:6px;min-height:28px;padding-left:9px;border-left:2px solid #d9cff0;text-align:right;line-height:1.08}
+    .resource-updated::before{content:"";width:7px;height:7px;border-radius:50%;background:#6e52c4;box-shadow:0 0 0 3px rgba(110,82,196,.10)}
+    .resource-updated span{font-size:7.8px;color:#978eaa;font-weight:850;white-space:nowrap}
+    .resource-updated b{display:block;font-size:9.4px;color:#5b468c;font-weight:950;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+    .footer{text-align:center;color:#9a91ab;font-size:9.5px;font-weight:700;margin-top:16px;line-height:1.6}
+    .footer b{color:#7156b8}
+
+    .toast{position:fixed;transform-origin:bottom center;z-index:70;left:50%;bottom:22px;transform:translate(-50%,18px) scale(var(--ui-scale));opacity:0;pointer-events:none;background:#30264b;color:#fff;border-radius:10px;padding:9px 13px;font-size:11px;font-weight:800;box-shadow:0 8px 24px rgba(31,22,53,.28);transition:.2s ease;white-space:nowrap}
+    .toast.show{opacity:1;transform:translate(-50%,0) scale(var(--ui-scale))}
+
+    .modal-backdrop{position:fixed;z-index:60;inset:0;background:rgba(31,23,48,.43);display:none;align-items:flex-end;justify-content:center;padding:0}
+    .modal-backdrop.open{display:flex}
+    .modal{width:430px;max-height:91vh;transform:scale(var(--ui-scale));transform-origin:bottom center;background:#f8f6fd;border-radius:18px 18px 0 0;box-shadow:0 -14px 40px rgba(34,23,65,.24);border:1px solid #d6cdec;overflow:hidden;display:flex;flex-direction:column}
+    .modal.tall{max-height:94vh}
+    .modal-head{height:53px;min-height:53px;background:#fff;border-bottom:1px solid #e1daef;display:flex;align-items:center;justify-content:space-between;padding:0 12px}
+    .modal-title{font-size:15px;font-weight:950;color:#332751;letter-spacing:-.2px}
+    .close-btn{width:31px;height:31px;border-radius:9px;border:1px solid #ded5ed;background:#faf8ff;color:#6c5a94;font-size:17px;font-weight:800;line-height:1}
+    .modal-body{padding:10px 12px 14px;overflow:auto;-webkit-overflow-scrolling:touch}
+    .modal-actions{display:flex;gap:7px;padding:9px 12px 12px;background:#fff;border-top:1px solid #e4deee}
+    .action-btn{flex:1;height:38px;border-radius:10px;border:1px solid #d8cfeb;background:#fff;color:#5f4c91;font-size:12px;font-weight:900}
+    .action-btn.primary{background:linear-gradient(180deg,#8264d4,#6f50c2);border-color:#6c4dbd;color:#fff}
+    .action-btn.danger{background:#fff3f5;border-color:#f2c9d0;color:#c95163}
+    .modal-actions.confirming-delete{flex-wrap:wrap;align-items:center}
+    .delete-confirm-copy{flex:0 0 100%;padding:2px 2px 6px;color:#ad4354;font-size:10.5px;font-weight:800;line-height:1.45;text-align:center}
+    .delete-confirm-copy b{font-weight:950;color:#9f3346}
+
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .round-start-grid{grid-template-columns:1.1fr 1fr .72fr}
+    .boss-register-grid{grid-template-columns:1fr 1fr}
+    .field{display:grid;gap:4px}
+    .field.full{grid-column:1/-1}
+    .field label{font-size:10px;color:#7f7692;font-weight:850}
+    .field input,.field select{width:100%;height:37px;border:1px solid #d8cfeb;background:#fff;color:#3b3152;border-radius:9px;padding:0 9px;font-size:16px;font-weight:780;outline:none;appearance:none;-webkit-appearance:none}
+    .field input:focus,.field select:focus{border-color:#8d73d8;box-shadow:0 0 0 3px rgba(141,115,216,.10)}
+    .field select{background-image:linear-gradient(45deg,transparent 50%,#6d5796 50%),linear-gradient(135deg,#6d5796 50%,transparent 50%);background-position:calc(100% - 14px) 15px,calc(100% - 9px) 15px;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:26px}
+    .level-stepper{height:37px;display:grid;grid-template-columns:31px 1fr 31px;align-items:center;border:1px solid #d8cfeb;background:#fff;border-radius:9px;overflow:hidden}
+    .level-stepper b{text-align:center;color:#493d68;font-size:13px;font-weight:950;font-variant-numeric:tabular-nums}
+    .step-btn{height:35px;border:0;background:#f7f4fd;color:#654e9f;font-size:18px;font-weight:900;line-height:1}
+    .step-btn:active{background:#eee8fa}
+    .help{font-size:9.5px;line-height:1.45;color:#8c849b;font-weight:700;margin-top:4px}
+
+    .setup-list{margin-top:10px;border:1px solid #ded6ec;border-radius:11px;overflow:hidden;background:#fff}
+    .setup-row{display:grid;grid-template-columns:1.05fr .52fr 1.18fr;align-items:center;min-height:40px;border-bottom:1px solid #eeeaf4;padding:0 7px;gap:5px}
+    .setup-row:last-child{border-bottom:none}
+    .setup-row.head{min-height:30px;background:#eee8fa;color:#68558f;font-size:9.5px;font-weight:950;text-align:center}
+    .setup-name{font-size:10.7px;font-weight:900;color:#332a49;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .setup-sword-fixed{height:29px;border:1px solid #e1d9ee;border-radius:7px;background:#f8f6fc;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:950;color:#54456f}
+    .setup-time-stepper{height:29px;display:grid;grid-template-columns:27px 1fr 27px;border:1px solid #ddd5ea;border-radius:7px;background:#fff;overflow:hidden}
+    .setup-time-stepper button{border:0;background:#f8f6fd;color:#66509e;font-size:15px;font-weight:900}
+    .setup-time-stepper button:active{background:#eee8fa}
+    .setup-time-value{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;color:#493d68;font-variant-numeric:tabular-nums}
+
+    .boss-detail-hero{display:grid;grid-template-columns:82px 1fr;gap:9px;align-items:center;background:#fff;border:1px solid #dfd7ec;border-radius:12px;padding:8px;margin-bottom:9px}
+    .boss-detail-hero img{width:82px;height:82px;object-fit:cover;border-radius:10px;border:1px solid #dfd6ed}
+    .boss-detail-name{font-size:16px;font-weight:950;color:#342751;margin-bottom:5px}
+    .boss-detail-stats{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+    .detail-stat{background:#f6f2ff;border-radius:8px;padding:5px 6px;font-size:9px;color:#84799c;font-weight:800}
+    .detail-stat b{display:block;color:#4d3a7d;font-size:11px;margin-top:1px}
+    .participant-list{border:1px solid #ddd5eb;border-radius:11px;overflow:hidden;background:#fff}
+    .participant-head,.participant-row{display:grid;grid-template-columns:1fr 72px 100px;align-items:center;gap:5px;padding:0 8px}
+    .participant-head{height:30px;background:#ece6fa;color:#645287;font-size:9.5px;font-weight:950;text-align:center}
+    .participant-row{min-height:40px;border-top:1px solid #eeeaf4;font-size:11px}
+    .participant-row .pname{font-weight:900;color:#332a4a}
+    .participant-row .ptime,.participant-row .pscore{text-align:right;font-weight:900;font-variant-numeric:tabular-nums;color:#54446f}
+    .participant-empty{padding:22px 8px;text-align:center;color:#938aa3;font-size:11px;font-weight:800}
+
+    .edit-list{border:1px solid #ddd5eb;border-radius:11px;overflow:hidden;background:#fff}
+    .edit-head,.edit-row{display:grid;grid-template-columns:28px 1fr 72px 104px;align-items:center;gap:5px;padding:0 6px}
+    .edit-head{height:30px;background:#ece6fa;color:#645287;font-size:9px;font-weight:950;text-align:center}
+    .edit-row{min-height:42px;border-top:1px solid #eeeaf4}
+    .edit-row .ename{font-size:10.5px;font-weight:900;color:#342b4a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .edit-row input[type="checkbox"]{width:18px;height:18px;accent-color:#7354c7;margin:auto}
+    .edit-row input[type="text"],.edit-row input[type="number"]{width:100%;height:31px;border:1px solid #ded6ea;border-radius:7px;background:#fff;text-align:center;font-size:16px;font-weight:800;color:#493d68;min-width:0;padding:0 4px}
+    .edit-row.disabled input[type="text"],.edit-row.disabled input[type="number"]{background:#f5f2f8;color:#b1a9bd}
+
+    .member-detail-card{background:#fff;border:1px solid #dfd7ec;border-radius:12px;padding:10px;margin-bottom:9px}
+    .member-detail-name{font-size:18px;font-weight:950;color:#342751}
+    .resource-cards{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}
+    .resource-card{border-radius:10px;background:#f5f1ff;padding:8px;text-align:center}
+    .resource-card span{display:block;font-size:9px;color:#817798;font-weight:850}
+    .resource-card b{display:block;margin-top:2px;font-size:18px;color:#503d86;font-weight:950;font-variant-numeric:tabular-nums}
+    .calc-note{margin-top:8px;padding:8px;border-radius:9px;background:#fff8e8;color:#8b6725;font-size:9.5px;font-weight:750;line-height:1.45;border:1px solid #f0dfb5}
+
+    .galaxy-placeholder{display:flex!important;align-items:center;justify-content:center;background:radial-gradient(circle,#a786f2,#4f3a8d)!important;color:white;font-size:20px;font-weight:950}
+
+    /* V0.1.5 dashboard clarity refinements */
+    .boss-card{height:196px;padding:5px 4px 6px;display:flex;flex-direction:column;align-items:stretch}
+    .boss-card.current{height:196px;padding:4px 4px 5px}
+    .boss-image-area{position:relative;flex:0 0 auto}
+    .boss-img{margin:0 auto;width:65px;height:65px}
+    .current .boss-img{width:69px;height:69px}
+    .boss-title-area{min-height:43px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:4px 1px 3px;border-bottom:1px solid #eee8f5}
+    .boss-title-line{font-size:10.5px;line-height:1.1;color:#382d55;font-weight:950;white-space:nowrap;letter-spacing:-.25px}
+    .boss-level-badge{display:inline-flex;align-items:center;justify-content:center;min-width:36px;height:16px;padding:0 5px;border-radius:999px;background:#efe9ff;color:#6d55ad;font-size:8px;font-weight:950;font-variant-numeric:tabular-nums}
+    .boss-summary-area{flex:1;display:flex;flex-direction:column;justify-content:center;gap:4px;padding:5px 1px 1px}
+    .boss-summary-row{display:flex;align-items:center;justify-content:space-between;gap:3px;font-size:8px;line-height:1.1;color:#8a819a;font-weight:800}
+    .boss-summary-row b{color:#4a3979;font-size:9px;font-weight:950;white-space:nowrap;font-variant-numeric:tabular-nums;max-width:47px;overflow:hidden;text-overflow:ellipsis}
+    .empty-boss{flex:1}
+
+    .member-table col:nth-child(1){width:16%}.member-table col:nth-child(2){width:18%}.member-table col:nth-child(3){width:18%}.member-table col:nth-child(4){width:27%}.member-table col:nth-child(5){width:21%}
+    .member-table th{height:40px;font-size:9px;line-height:1.08}
+    .member-table td{height:56px}
+    .member-name{text-align:center!important;padding-left:2px!important;padding-right:2px!important;font-size:10px!important}
+    .participation-cell{gap:0}
+    .participation-count{font-size:11px;color:#4b3a7b}
+    .participation-track{display:none}
+    .sword-value{color:#236bb7}
+    .sword-segments{width:50px;gap:1.5px}
+    .sword-segments i{height:5px;border-radius:50%;background:#e5edf7}
+    .sword-segments i.on{background:#2f7fd0}
+    .sword-cell.low .sword-value,.sword-cell.empty .sword-value{color:#236bb7}
+    .sword-cell.low .sword-segments i.on,.sword-cell.empty .sword-segments i.on{background:#2f7fd0}
+    .time-cell{gap:3px}
+    .time-value{font-size:11px}
+    .time-used{font-size:7.7px}
+    .time-battery{display:grid;grid-template-columns:repeat(10,1fr);gap:1.5px;width:66px;margin-top:1px}
+    .time-battery i{display:block;height:8px;border-radius:2px;background:#ecebf0;border:1px solid rgba(0,0,0,.02)}
+    .time-battery.safe i.on{background:linear-gradient(180deg,#53c984,#2faa68)}
+    .time-battery.mid i.on{background:linear-gradient(180deg,#f0c75c,#e39c32)}
+    .time-battery.danger i.on{background:linear-gradient(180deg,#ef7885,#d85465)}
+    .time-track{display:none}
+    .time-cell.low .time-value,.time-cell.empty .time-value{color:#3f3262}
+    .status-pill{min-width:44px;height:22px;padding:0 6px;font-size:9.5px}
+    .member-head{align-items:center;margin-bottom:6px}
+    .resource-updated{min-height:23px;padding:0 0 0 8px;border-left:2px solid #cbbdf0;gap:5px}
+    .resource-updated::before{width:6px;height:6px;box-shadow:0 0 0 3px rgba(110,82,196,.08)}
+    .resource-updated span{font-size:7.5px}
+    .resource-updated b{font-size:9px}
+
+    .picker-display{width:100%;height:37px;border:1px solid #d8cfeb;background:#fff;color:#3b3152;border-radius:9px;padding:0 9px;font-size:13px;font-weight:900;outline:none;text-align:center;font-variant-numeric:tabular-nums}
+    .picker-display:active{background:#f6f2ff;border-color:#9d87dc}
+    .setup-row{grid-template-columns:1.05fr .52fr 1.18fr}
+    .setup-name{text-align:center}
+    .setup-time-choice{width:100%;height:29px;border:1px solid #ddd5ea;border-radius:7px;background:#fff;color:#493d68;font-size:11px;font-weight:900;font-variant-numeric:tabular-nums}
+    #pickerModal{z-index:90}
+    .picker-modal{max-height:82vh}
+    .picker-shell{display:grid;gap:10px}
+    .picker-caption{text-align:center;color:#817694;font-size:9.5px;font-weight:800}
+    .calendar-head{display:grid;grid-template-columns:36px 1fr 36px;align-items:center;gap:6px}
+    .calendar-nav{height:34px;border:1px solid #ddd5eb;border-radius:9px;background:#fff;color:#66509e;font-size:18px;font-weight:900}
+    .calendar-month{text-align:center;font-size:14px;font-weight:950;color:#3b2f58}
+    .calendar-week,.calendar-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+    .calendar-week span{text-align:center;font-size:8.5px;color:#90879f;font-weight:850}
+    .calendar-day{height:36px;border:1px solid #ebe6f2;border-radius:9px;background:#fff;color:#43375e;font-size:11px;font-weight:850}
+    .calendar-day.other{opacity:.32}
+    .calendar-day.selected{background:#7354c7;color:#fff;border-color:#7354c7;box-shadow:0 3px 9px rgba(98,72,177,.22)}
+    .wheel-picker{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+    .wheel-col{border:1px solid #dfd8ec;border-radius:11px;background:#fff;overflow:hidden}
+    .wheel-label{text-align:center;padding:7px 4px;background:#f1ecfb;color:#6c5a92;font-size:9px;font-weight:900}
+    .wheel-list{height:210px;overflow:auto;scrollbar-width:none;padding:4px}
+    .wheel-list::-webkit-scrollbar{display:none}
+    .wheel-option{width:100%;height:34px;border:0;border-radius:8px;background:transparent;color:#4b405f;font-size:12px;font-weight:850;font-variant-numeric:tabular-nums}
+    .wheel-option.selected{background:#7354c7;color:#fff}.wheel-option:disabled{opacity:.25}
+    .choice-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+    .choice-btn{height:37px;border:1px solid #ddd5eb;border-radius:9px;background:#fff;color:#4b405f;font-size:11px;font-weight:900}
+    .choice-btn.selected{background:#7354c7;color:#fff;border-color:#7354c7}
+    .duration-preview{display:flex;align-items:center;justify-content:center;height:52px;border-radius:12px;background:#f1ecfb;color:#4f3d7f;font-size:25px;font-weight:950;font-variant-numeric:tabular-nums}
+    .etime-picker{width:100%;height:31px;border:1px solid #ded6ea;border-radius:7px;background:#fff;text-align:center;font-size:12px;font-weight:900;color:#493d68;min-width:0;padding:0 4px;font-variant-numeric:tabular-nums}
+    .edit-row.disabled .etime-picker{background:#f5f2f8;color:#b1a9bd}
+    .normal-time-picker{height:37px}
+  
+    /* V0.1.5 final visual balance */
+    .section-card:first-of-type{padding-top:10px}
+    .boss-card{height:214px}
+    .boss-card.current{height:214px}
+    .boss-title-area{min-height:40px;padding:4px 1px 3px}
+    .boss-summary-area{gap:4px;padding:6px 1px 2px;justify-content:flex-start}
+    .boss-summary-row{font-size:8px}
+    .boss-summary-row b{font-size:9px;max-width:49px}
+    .boss-summary-row.missing-row span,.boss-summary-row.missing-row b{color:#d94f62}
+    .boss-summary-row.score-row{margin-top:2px;padding-top:4px;border-top:1px solid #eee8f5}
+    .boss-summary-row.score-row span{color:#746a86}
+    .boss-summary-row.score-row b{color:#3f3262;font-size:8.8px}
+    .sum-box.join-summary{background:#effaf4;border-color:#a8dfc1}
+    .sum-box.join-summary .sum-label,.sum-box.join-summary .sum-value{color:#23885b}
+    .sum-box.missing-summary{background:#fff1f3;border-color:#f2b9c3}
+    .sum-box.missing-summary .sum-label,.sum-box.missing-summary .sum-value{color:#c94c60}
+    .sum-box.score-summary{background:#faf8ff;border-color:#dfd5f2}
+    .member-table col:nth-child(1){width:15%}
+    .member-table col:nth-child(2){width:18%}
+    .member-table col:nth-child(3){width:18%}
+    .member-table col:nth-child(4){width:26%}
+    .member-table col:nth-child(5){width:23%}
+    .member-name{text-align:center!important;padding-left:1px!important;padding-right:1px!important}
+    .time-cell{gap:4px}
+    .time-value{color:#2f2b48!important;font-size:11px}
+    .time-battery{width:68px;gap:1.5px}
+    .time-battery i{height:8px;border-radius:2px;background:#ececf1;border:1px solid rgba(61,48,83,.04)}
+    .time-battery.safe i.on{background:linear-gradient(180deg,#f5c957,#e8a92e)}
+    .time-battery.mid i.on{background:linear-gradient(180deg,#f2a04d,#e77728)}
+    .time-battery.danger i.on{background:linear-gradient(180deg,#ef7481,#d94d60)}
+    .time-used{display:none!important}
+
+
+    /* V0.1.6 boss 5x1 + status hierarchy */
+    .section-card:first-of-type{padding:9px 7px 10px}
+    .boss-rail{grid-template-columns:74px minmax(0,1fr);gap:4px;align-items:stretch}
+    .history-scroll{gap:4px;padding-bottom:2px}
+    .history-wrap::after{width:8px}
+    .boss-card,.boss-card.current{width:74px;min-width:74px;height:202px;padding:4px 4px 5px;border-radius:11px}
+    .boss-card.current{border-width:2px}
+    .boss-image-area{height:66px;display:flex;align-items:flex-start;justify-content:center}
+    .boss-img,.current .boss-img{width:64px;height:64px;margin:0 auto;border-radius:8px}
+    .current-badge{top:4px;left:4px;height:16px;line-height:16px;padding:0 5px;font-size:8px;border-radius:6px}
+    .boss-title-area{min-height:42px;padding:4px 0 4px;gap:3px}
+    .boss-title-line{font-size:10px;line-height:1.05;letter-spacing:-.35px}
+    .boss-level-badge{min-width:35px;height:16px;padding:0 5px;font-size:8px}
+    .boss-summary-area{padding:5px 0 0;gap:3px;justify-content:flex-start}
+    .boss-summary-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:2px;font-size:7.6px;line-height:1.05;text-align:left}
+    .boss-summary-row b{max-width:none;overflow:visible;text-overflow:clip;font-size:8.7px;line-height:1.05;letter-spacing:-.25px}
+    .boss-summary-row.missing-row span,.boss-summary-row.missing-row b{color:#d94f62}
+    .boss-summary-row.score-row{display:block;margin-top:3px;padding-top:4px;border-top:1px solid #eee8f5;text-align:center}
+    .boss-summary-row.score-row span{display:block;color:#746a86;font-size:7.4px;line-height:1}
+    .boss-summary-row.score-row b{display:block;margin-top:2px;color:#342953;font-size:8.5px;line-height:1;letter-spacing:-.45px;white-space:nowrap}
+    .empty-boss{font-size:8.5px}
+
+    .quick-summary{gap:6px;margin-top:8px}
+    .sum-box{min-height:46px;padding:6px 4px;border-width:1.5px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+    .sum-box.join-summary{background:#eaf9f1;border-color:#82d7ac}
+    .sum-box.join-summary .sum-label,.sum-box.join-summary .sum-value{color:#188653}
+    .sum-box.missing-summary{background:#fff0f3;border-color:#ee9ead}
+    .sum-box.missing-summary .sum-label,.sum-box.missing-summary .sum-value{color:#c83f57}
+    .sum-box.score-summary{background:#faf8ff;border-color:#d8ccef}
+    .sum-label{font-size:8.7px}
+    .sum-value{font-size:13.5px}
+
+    .member-table col:nth-child(1){width:14%}
+    .member-table col:nth-child(2){width:18%}
+    .member-table col:nth-child(3){width:18%}
+    .member-table col:nth-child(4){width:26%}
+    .member-table col:nth-child(5){width:24%}
+    .member-name{font-size:9.8px!important}
+    .status-pill{min-width:42px;height:22px;padding:0 6px}
+    .time-battery.safe i.on{background:linear-gradient(180deg,#f6cc55,#e5a82d)}
+    .time-battery.mid i.on{background:linear-gradient(180deg,#f3a24d,#e57a29)}
+    .time-battery.danger i.on{background:linear-gradient(180deg,#ef7481,#d74c5f)}
+
+  
+
+    /* V0.1.7 boss rail rebuild — fixed 5x1 composition */
+    .section-card:first-of-type{padding:9px 8px 10px}
+    .boss-rail{
+      display:grid!important;
+      grid-template-columns:76px minmax(0,1fr)!important;
+      gap:3px!important;
+      align-items:stretch!important;
+      width:100%!important;
+    }
+    #currentBossSlot{width:76px;min-width:76px}
+    .history-wrap{min-width:0;overflow:hidden;position:relative}
+    .history-scroll{
+      display:grid!important;
+      grid-auto-flow:column!important;
+      grid-auto-columns:76px!important;
+      grid-template-rows:1fr!important;
+      gap:3px!important;
+      overflow-x:auto!important;
+      overflow-y:hidden!important;
+      scroll-snap-type:x proximity;
+      padding:0 0 2px!important;
+      scrollbar-width:none;
+    }
+    .history-scroll::-webkit-scrollbar{display:none}
+    .history-wrap::after{display:none!important}
+    .boss-card,.boss-card.current{
+      width:76px!important;
+      min-width:76px!important;
+      height:194px!important;
+      padding:4px!important;
+      border-radius:11px!important;
+      overflow:hidden!important;
+      display:flex!important;
+      flex-direction:column!important;
+      align-items:stretch!important;
+      scroll-snap-align:start;
+      box-sizing:border-box;
+    }
+    .boss-card.current{border-width:2px!important}
+    .boss-image-area{height:66px!important;flex:0 0 66px!important;display:flex!important;align-items:flex-start!important;justify-content:center!important;position:relative!important}
+    .boss-img,.current .boss-img{width:64px!important;height:64px!important;margin:0 auto!important;border-radius:8px!important}
+    .current-badge{top:3px!important;left:3px!important;height:16px!important;line-height:16px!important;padding:0 5px!important;font-size:8px!important;border-radius:6px!important}
+    .boss-title-area{min-height:39px!important;height:39px!important;padding:4px 0 3px!important;gap:2px!important;display:flex!important;flex-direction:column!important;justify-content:center!important;align-items:center!important;border-bottom:1px solid #eee8f5!important;box-sizing:border-box}
+    .boss-title-line{font-size:10px!important;line-height:1.05!important;letter-spacing:-.35px!important;white-space:nowrap!important;overflow:visible!important}
+    .boss-level-badge{height:15px!important;min-width:34px!important;padding:0 5px!important;font-size:7.8px!important}
+    .boss-summary-area{flex:1!important;min-height:0!important;padding:5px 0 0!important;gap:4px!important;display:flex!important;flex-direction:column!important;justify-content:flex-start!important}
+    .boss-summary-row{display:grid!important;grid-template-columns:1fr auto!important;align-items:center!important;gap:2px!important;font-size:7.7px!important;line-height:1.05!important;text-align:left!important;padding:0 1px!important;min-width:0!important}
+    .boss-summary-row span{white-space:nowrap!important}
+    .boss-summary-row b{font-size:8.7px!important;line-height:1.05!important;letter-spacing:-.25px!important;white-space:nowrap!important;overflow:visible!important;max-width:none!important}
+    .boss-summary-row.missing-row span,.boss-summary-row.missing-row b{color:#d94f62!important}
+    .boss-summary-row.score-row{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;margin-top:2px!important;padding:4px 0 0!important;border-top:1px solid #eee8f5!important;text-align:center!important;gap:2px!important}
+    .boss-summary-row.score-row span{font-size:7.5px!important;line-height:1!important;color:#746a86!important}
+    .boss-summary-row.score-row b{font-size:7.8px!important;line-height:1!important;letter-spacing:-.55px!important;color:#342953!important;max-width:100%!important}
+    .empty-boss{height:100%!important;min-height:0!important;display:flex!important;align-items:center!important;justify-content:center!important;padding:5px!important;font-size:8.3px!important;line-height:1.35!important;color:#a39aae!important;text-align:center!important}
+
+    .quick-summary{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:6px!important;margin-top:8px!important}
+    .sum-box{min-height:46px!important;padding:6px 4px!important;border-width:1.5px!important}
+    .sum-box.join-summary{background:#e8f8ef!important;border-color:#72d4a1!important;box-shadow:inset 0 0 0 1px rgba(40,157,98,.04)}
+    .sum-box.join-summary .sum-label,.sum-box.join-summary .sum-value{color:#188653!important}
+    .sum-box.missing-summary{background:#fff0f3!important;border-color:#ef9bad!important;box-shadow:inset 0 0 0 1px rgba(204,63,86,.03)}
+    .sum-box.missing-summary .sum-label,.sum-box.missing-summary .sum-value{color:#c83f57!important}
+    .sum-box.score-summary{background:#faf8ff!important;border-color:#d8ccef!important}
+
+  
+
+    /* V0.1.8 readability-first refinement — preserve structure, enlarge information */
+    .section-card:first-of-type{padding:10px 6px 11px!important}
+    .boss-rail{grid-template-columns:76px minmax(0,1fr)!important;gap:2px!important}
+    .history-scroll{grid-auto-columns:76px!important;gap:2px!important}
+    .boss-card,.boss-card.current{height:208px!important}
+    .boss-title-area{height:42px!important;min-height:42px!important;padding:4px 0 4px!important;gap:3px!important}
+    .boss-title-line{font-size:10.6px!important;letter-spacing:-.32px!important}
+    .boss-level-badge{height:16px!important;min-width:36px!important;font-size:8.4px!important;padding:0 5px!important}
+    .boss-summary-area{padding:6px 0 0!important;gap:5px!important}
+    .boss-summary-row{font-size:8.2px!important;line-height:1.08!important;padding:0 1px!important}
+    .boss-summary-row b{font-size:9.3px!important;letter-spacing:-.2px!important}
+    .boss-summary-row.score-row{margin-top:1px!important;padding-top:5px!important;gap:3px!important}
+    .boss-summary-row.score-row span{font-size:8px!important}
+    .boss-summary-row.score-row b{font-size:8.5px!important;letter-spacing:-.6px!important}
+    .empty-boss{font-size:8.8px!important}
+    .quick-summary{gap:5px!important;margin-top:9px!important}
+    .sum-box{min-height:49px!important;padding:7px 4px!important}
+    .sum-label{font-size:9.2px!important}
+    .sum-value{font-size:14.2px!important}
+
+    .members-card{padding:12px 7px 10px!important}
+    .member-head{margin-bottom:7px!important}
+    .members-card .section-title{font-size:15px!important;letter-spacing:-.25px!important}
+    .member-subrow{margin:0 2px 9px!important}
+    .member-subrow .section-note{font-size:10.2px!important}
+    .legend{font-size:10.2px!important;gap:9px!important}
+    .resource-updated{min-height:31px!important;padding-left:10px!important;gap:7px!important}
+    .resource-updated span{font-size:8.5px!important}
+    .resource-updated b{font-size:10.2px!important}
+
+    .member-table col:nth-child(1){width:16%!important}
+    .member-table col:nth-child(2){width:17%!important}
+    .member-table col:nth-child(3){width:20%!important}
+    .member-table col:nth-child(4){width:27%!important}
+    .member-table col:nth-child(5){width:20%!important}
+    .member-table th{height:46px!important;font-size:10.7px!important;line-height:1.13!important;padding:0 3px!important;letter-spacing:-.15px!important}
+    .member-table td{height:69px!important;font-size:12px!important;padding:5px 3px!important}
+    .member-name{font-size:12.4px!important;font-weight:950!important;letter-spacing:-.22px!important;text-align:center!important;padding-left:2px!important;padding-right:2px!important;overflow:visible!important;text-overflow:clip!important}
+    .participation-cell{gap:0!important}
+    .participation-count{font-size:12.8px!important;line-height:1!important}
+    .sword-cell{gap:5px!important}
+    .sword-value{font-size:12.6px!important;line-height:1!important;color:#176fbd!important}
+    .sword-segments{width:58px!important;gap:1.5px!important}
+    .sword-segments i{height:5px!important;border-radius:2.5px!important}
+    .sword-segments i.on{background:linear-gradient(180deg,#42a7ef,#187dcc)!important}
+    .time-cell{gap:6px!important}
+    .time-value{font-size:13.3px!important;line-height:1!important;color:#2f2b48!important;letter-spacing:-.15px!important}
+    .time-battery{width:74px!important;gap:2px!important;margin-top:0!important}
+    .time-battery i{height:9px!important;border-radius:2px!important}
+    .status-pill{min-width:50px!important;height:26px!important;padding:0 7px!important;font-size:10.8px!important}
+    .table-foot{padding-top:9px!important;font-size:10px!important}
+
+
+    /* V0.1.9 — 4x1 boss rail, fixed current + scrollable recent history */
+    .section-card:first-of-type{padding:10px 7px 11px!important}
+    .boss-rail{
+      grid-template-columns:97px minmax(0,1fr)!important;
+      gap:5px!important;
+      align-items:stretch!important;
+      width:100%!important;
+    }
+    #currentBossSlot{
+      width:97px!important;
+      min-width:97px!important;
+      padding-right:6px!important;
+      border-right:3px solid #c8b7ef!important;
+      box-sizing:border-box!important;
+    }
+    .history-wrap{
+      position:relative!important;
+      min-width:0!important;
+      overflow:hidden!important;
+    }
+    .history-scroll{
+      display:grid!important;
+      grid-auto-flow:column!important;
+      grid-auto-columns:88px!important;
+      grid-template-rows:1fr!important;
+      gap:4px!important;
+      overflow-x:auto!important;
+      overflow-y:hidden!important;
+      scroll-behavior:smooth!important;
+      scroll-snap-type:x proximity!important;
+      overscroll-behavior-inline:contain!important;
+      padding:0 18px 2px 0!important;
+      scrollbar-width:none!important;
+    }
+    .history-scroll::-webkit-scrollbar{display:none!important}
+    .boss-card,.boss-card.current{
+      width:88px!important;
+      min-width:88px!important;
+      height:216px!important;
+      padding:5px!important;
+      border-radius:12px!important;
+      scroll-snap-align:start!important;
+    }
+    .boss-card.current{border-width:2px!important}
+    .boss-image-area{height:76px!important;flex:0 0 76px!important}
+    .boss-img,.current .boss-img{width:74px!important;height:74px!important;border-radius:9px!important}
+    .current-badge{top:3px!important;left:3px!important;height:17px!important;line-height:17px!important;font-size:8.4px!important;padding:0 5px!important}
+    .boss-title-area{height:44px!important;min-height:44px!important;padding:4px 0!important;gap:3px!important}
+    .boss-title-line{font-size:11.4px!important;line-height:1.05!important;letter-spacing:-.35px!important}
+    .boss-level-badge{height:17px!important;min-width:38px!important;padding:0 6px!important;font-size:8.8px!important}
+    .boss-summary-area{padding:6px 1px 0!important;gap:5px!important}
+    .boss-summary-row{font-size:8.8px!important;line-height:1.08!important;padding:0 1px!important;gap:3px!important}
+    .boss-summary-row b{font-size:10px!important;letter-spacing:-.2px!important}
+    .boss-summary-row.score-row{margin-top:1px!important;padding-top:5px!important;gap:3px!important}
+    .boss-summary-row.score-row span{font-size:8.4px!important}
+    .boss-summary-row.score-row b{font-size:9.7px!important;letter-spacing:-.4px!important;white-space:nowrap!important}
+    .empty-boss{font-size:9.3px!important;line-height:1.4!important;color:#a59cad!important}
+    .history-next-btn{
+      position:absolute;
+      z-index:5;
+      right:0;
+      top:0;
+      width:18px;
+      height:216px;
+      border:0;
+      padding:0;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      gap:0;
+      background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.94) 48%,#fff 100%);
+      color:#7657ca;
+      cursor:pointer;
+      -webkit-tap-highlight-color:transparent;
+    }
+    .history-next-btn.show{display:flex}
+    .history-chevron{
+      width:8px;
+      height:8px;
+      border-top:2.5px solid currentColor;
+      border-right:2.5px solid currentColor;
+      transform:rotate(45deg);
+      margin-left:-3px;
+      filter:drop-shadow(0 0 3px rgba(118,87,202,.35));
+      animation:historyArrowPulse 1.35s ease-in-out infinite;
+    }
+    .history-chevron+ .history-chevron{animation-delay:.18s}
+    @keyframes historyArrowPulse{0%,100%{opacity:.28;transform:translateX(-2px) rotate(45deg)}50%{opacity:1;transform:translateX(2px) rotate(45deg)}}
+    @media (prefers-reduced-motion:reduce){.history-chevron{animation:none;opacity:.85}}
+
+    .member-table th:nth-child(2) span{display:inline-block;text-align:center}
+
+
+
+    /* V0.2.2 — current boss command panel + destroyed boss history */
+    .boss-dashboard-card{padding:10px!important}
+    .current-boss-panel{display:grid;grid-template-columns:148px minmax(0,1fr);gap:9px;align-items:stretch}
+    .current-boss-image-card,.current-boss-info{border:0;font:inherit;text-align:left;-webkit-tap-highlight-color:transparent}
+    .current-boss-image-card{position:relative;height:148px;padding:5px;border:2px solid #7555ca;border-radius:14px;background:linear-gradient(180deg,#fff,#f6f1ff);box-shadow:0 0 0 2px rgba(117,85,202,.08),0 6px 17px rgba(83,59,145,.12);overflow:hidden}
+    .current-main-image{width:100%;height:100%;display:block;object-fit:cover;border-radius:9px;border:1px solid rgba(105,77,177,.12);background:#f1ecff}
+    .current-main-badge{top:9px!important;left:9px!important;height:22px!important;line-height:22px!important;padding:0 8px!important;border-radius:7px!important;font-size:10px!important;white-space:nowrap}
+    .empty-current{display:flex;align-items:center;justify-content:center;border-style:dashed;background:#faf8ff}
+    .empty-current-mark{text-align:center;color:#9489aa;font-size:12px;font-weight:900;line-height:1.35}
+    .current-boss-info{height:148px;border:1px solid #ded6ef;border-radius:14px;background:linear-gradient(180deg,#fff,#fbf9ff);padding:10px;box-shadow:0 4px 13px rgba(84,62,139,.06);color:#342953}
+    .current-boss-info:active,.current-boss-image-card:active{transform:scale(.992)}
+    .current-boss-identity{display:flex;align-items:center;gap:8px;padding-bottom:8px;border-bottom:1px solid #eee8f5}
+    .current-boss-identity strong{font-size:20px;line-height:1;font-weight:950;letter-spacing:-.45px;color:#2f2547}
+    .current-level{display:inline-flex;align-items:center;justify-content:center;height:25px;min-width:54px;padding:0 8px;border-radius:999px;background:#eee7ff;color:#684db4;font-size:11px;font-weight:950;font-variant-numeric:tabular-nums}
+    .current-info-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px}
+    .current-info-box{min-width:0;height:38px;border:1px solid #e2dced;border-radius:9px;background:#faf9fd;padding:5px 7px;display:flex;align-items:center;justify-content:space-between;gap:5px}
+    .current-info-box span{font-size:8.8px;font-weight:850;color:#81778f;white-space:nowrap}
+    .current-info-box b{font-size:12px;line-height:1;font-weight:950;color:#342953;white-space:nowrap;font-variant-numeric:tabular-nums}
+    .current-info-box.join{background:#ecf9f2;border-color:#a8e1c5}
+    .current-info-box.join span,.current-info-box.join b{color:#168553}
+    .current-info-box.missing{background:#fff1f4;border-color:#f1b3c0}
+    .current-info-box.missing span,.current-info-box.missing b{color:#cd455c}
+    .current-info-box.score{grid-column:1/-1;background:#f5f1ff;border-color:#d9cdf1;height:42px}
+    .current-info-box.score span{font-size:9.3px;color:#71648a}
+    .current-info-box.score b{font-size:16px;color:#493477;letter-spacing:-.25px}
+    .empty-current-info{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:6px;color:#8d839f}
+    .empty-current-info b{font-size:12px}.empty-current-info span{font-size:9px;line-height:1.35}
+
+    .history-zone{margin-top:10px;padding-top:9px;border-top:2px solid #e3dcef}
+    .history-zone-head{font-size:10px;font-weight:950;color:#6b5c88;margin:0 0 7px 2px;letter-spacing:-.1px}
+    .history-wrap{position:relative!important;min-width:0!important;overflow:hidden!important}
+    .history-scroll{display:flex!important;gap:7px!important;overflow-x:auto!important;overflow-y:hidden!important;scroll-behavior:smooth!important;scroll-snap-type:x proximity!important;overscroll-behavior-inline:contain!important;padding:0 22px 2px 0!important;scrollbar-width:none!important}
+    .history-scroll::-webkit-scrollbar{display:none!important}
+    .history-card{position:relative;flex:0 0 118px;width:118px;height:190px;padding:6px;border:1px solid #ddd6eb;border-radius:12px;background:#fff;text-align:center;box-shadow:0 3px 10px rgba(70,50,123,.06);scroll-snap-align:start;color:#342953;overflow:hidden;-webkit-tap-highlight-color:transparent}
+    .history-card:active{transform:scale(.988);background:#fbf9ff}
+    .history-image-wrap{position:relative;height:83px}
+    .history-boss-image{display:block;width:83px;height:83px;object-fit:cover;border-radius:9px;margin:0 auto;border:1px solid rgba(104,77,173,.12);background:#f1ecff}
+    .history-seq{position:absolute;z-index:2;left:2px;top:2px;min-width:20px;height:20px;line-height:20px;padding:0 5px;border-radius:7px;background:#5b478e;color:#fff;font-size:10px;font-weight:950;box-shadow:0 2px 5px rgba(48,35,85,.2)}
+    .history-title{height:30px;display:flex;align-items:center;justify-content:center;gap:5px;border-bottom:1px solid #eee9f4}
+    .history-title strong{font-size:11.5px;font-weight:950;white-space:nowrap}
+    .history-title span{height:17px;line-height:17px;padding:0 5px;border-radius:999px;background:#eee8ff;color:#7157b5;font-size:8.2px;font-weight:950;white-space:nowrap}
+    .history-stats{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding-top:5px}
+    .history-stats>div{min-width:0;border-radius:6px;background:#faf9fd;padding:4px 3px;display:flex;flex-direction:column;gap:1px;align-items:center;justify-content:center}
+    .history-stats span{font-size:7.5px;color:#857b95;font-weight:850;line-height:1}
+    .history-stats b{font-size:9.4px;color:#3f3262;font-weight:950;line-height:1.05;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+    .history-stats .missing span,.history-stats .missing b{color:#d64b60}
+    .history-stats .score{grid-column:1/-1;background:#f6f2ff}
+    .history-stats .score b{font-size:10.2px}
+    .history-stats .rank{position:absolute;right:7px;top:7px;width:41px;height:23px;padding:3px;background:#fff5db;border:1px solid #f0cf80;z-index:3}
+    .history-stats .rank span{display:none}
+    .history-stats .rank b{font-size:9.3px;color:#a16e0d}
+    .history-empty{flex:1 0 100%;height:96px;border:1px dashed #ddd5eb;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#9b92aa;font-size:10px;font-weight:850;background:#fbfaff}
+    .history-next-btn{position:absolute!important;z-index:6!important;right:0!important;top:0!important;width:24px!important;height:190px!important;border:0!important;padding:0!important;display:none;align-items:center!important;justify-content:center!important;background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.96) 50%,#fff 100%)!important;color:#7657ca!important}
+    .history-next-btn.show{display:flex!important}
+    .history-chevron{width:9px!important;height:9px!important}
+    .ended-rank-editor{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px;padding:8px 9px;border:1px solid #e1daec;border-radius:10px;background:#faf8ff;color:#5c4d7b;font-size:10px;font-weight:900}
+    .ended-rank-editor>div{display:flex;align-items:center;gap:4px}
+    .ended-rank-editor input{width:70px;height:34px;border:1px solid #d8ceed;border-radius:8px;background:#fff;padding:0 8px;text-align:center;font-size:16px;font-weight:950;color:#3e3062}
+    .ended-rank-editor em{font-style:normal;color:#6f6282;font-size:10px;font-weight:900}
+
+
+
+    /* V0.2.2 — current boss layout repair + compact empty history */
+    #currentBossSlot.current-boss-panel{
+      width:100%!important;
+      min-width:0!important;
+      padding-right:0!important;
+      border-right:0!important;
+      box-sizing:border-box!important;
+      display:grid!important;
+      grid-template-columns:160px minmax(0,1fr)!important;
+      gap:10px!important;
+      align-items:stretch!important;
+    }
+    #currentBossSlot .current-boss-image-card,
+    #currentBossSlot .current-boss-info{
+      width:100%!important;
+      min-width:0!important;
+      height:160px!important;
+      box-sizing:border-box!important;
+      margin:0!important;
+    }
+    #currentBossSlot .current-boss-image-card{
+      padding:6px!important;
+      border:2.5px solid #7555ca!important;
+      border-radius:15px!important;
+      box-shadow:0 0 0 2px rgba(117,85,202,.08),0 7px 18px rgba(83,59,145,.13)!important;
+    }
+    #currentBossSlot .current-main-image{
+      width:100%!important;
+      height:100%!important;
+      border-radius:10px!important;
+      object-fit:cover!important;
+    }
+    #currentBossSlot .current-main-badge{
+      top:10px!important;
+      left:10px!important;
+      height:23px!important;
+      line-height:23px!important;
+      padding:0 8px!important;
+      border-radius:7px!important;
+      font-size:10px!important;
+      letter-spacing:-.1px!important;
+    }
+    #currentBossSlot .current-boss-info{
+      padding:11px 12px!important;
+      border:1px solid #ddd5ee!important;
+      border-radius:15px!important;
+      background:linear-gradient(180deg,#fff 0%,#fbf9ff 100%)!important;
+      box-shadow:0 4px 13px rgba(84,62,139,.06)!important;
+      overflow:hidden!important;
+    }
+    #currentBossSlot .current-boss-identity{
+      height:39px!important;
+      display:flex!important;
+      align-items:center!important;
+      justify-content:flex-start!important;
+      gap:9px!important;
+      padding:0 0 8px!important;
+      border-bottom:1px solid #eee8f5!important;
+      box-sizing:border-box!important;
+      min-width:0!important;
+    }
+    #currentBossSlot .current-level{
+      flex:0 0 auto!important;
+      height:25px!important;
+      min-width:55px!important;
+      padding:0 8px!important;
+      font-size:11px!important;
+    }
+    #currentBossSlot .current-boss-identity strong{
+      min-width:0!important;
+      font-size:23px!important;
+      line-height:1!important;
+      font-weight:950!important;
+      letter-spacing:-.55px!important;
+      white-space:nowrap!important;
+      overflow:hidden!important;
+      text-overflow:ellipsis!important;
+    }
+    #currentBossSlot .current-info-grid{
+      display:grid!important;
+      grid-template-columns:1fr!important;
+      grid-template-rows:27px 27px 37px!important;
+      gap:5px!important;
+      margin-top:7px!important;
+      min-width:0!important;
+    }
+    #currentBossSlot .current-info-box{
+      width:100%!important;
+      min-width:0!important;
+      height:auto!important;
+      padding:0 9px!important;
+      border-radius:8px!important;
+      display:flex!important;
+      align-items:center!important;
+      justify-content:space-between!important;
+      gap:8px!important;
+      box-sizing:border-box!important;
+    }
+    #currentBossSlot .current-info-box span{
+      min-width:0!important;
+      font-size:10px!important;
+      font-weight:850!important;
+      white-space:nowrap!important;
+    }
+    #currentBossSlot .current-info-box b{
+      flex:0 0 auto!important;
+      font-size:13px!important;
+      line-height:1!important;
+      font-weight:950!important;
+      white-space:nowrap!important;
+    }
+    #currentBossSlot .current-info-box.score{
+      grid-column:auto!important;
+      height:auto!important;
+      padding:0 9px!important;
+      background:#f5f1ff!important;
+      border-color:#d9cdf1!important;
+    }
+    #currentBossSlot .current-info-box.score span{font-size:10px!important}
+    #currentBossSlot .current-info-box.score b{
+      font-size:17px!important;
+      letter-spacing:-.35px!important;
+      overflow:visible!important;
+      text-overflow:clip!important;
+      max-width:none!important;
+    }
+    #currentBossSlot .empty-current,
+    #currentBossSlot .empty-current-info{height:128px!important}
+    #currentBossSlot .empty-current-info{padding:12px!important}
+
+    .history-zone{
+      margin-top:9px!important;
+      padding-top:8px!important;
+      border-top:2px solid #e3dcef!important;
+    }
+    .history-zone-head{
+      margin:0 0 6px 2px!important;
+      font-size:10.5px!important;
+    }
+    .history-empty{
+      flex:1 0 100%!important;
+      height:48px!important;
+      min-height:48px!important;
+      border-radius:10px!important;
+      font-size:9.8px!important;
+      background:#fcfbff!important;
+    }
+    .history-scroll{
+      gap:7px!important;
+      padding:0 24px 2px 0!important;
+    }
+    .history-card{
+      flex:0 0 126px!important;
+      width:126px!important;
+      height:194px!important;
+      padding:6px!important;
+      border-radius:12px!important;
+    }
+    .history-image-wrap{height:88px!important}
+    .history-boss-image{width:88px!important;height:88px!important;border-radius:9px!important}
+    .history-title{height:31px!important;gap:5px!important}
+    .history-title strong{font-size:12px!important}
+    .history-title span{font-size:8.6px!important}
+    .history-stats{gap:4px!important;padding-top:5px!important}
+    .history-stats span{font-size:7.8px!important}
+    .history-stats b{font-size:9.8px!important}
+    .history-stats .score b{font-size:10.6px!important}
+    .history-next-btn{height:194px!important}
+
+
+    /* V0.2.3 — simplified boss participation + direct resource control */
+    #currentBossSlot .current-boss-identity{
+      height:38px!important;
+      justify-content:center!important;
+      padding:0 0 7px!important;
+    }
+    #currentBossSlot .current-boss-identity strong{
+      width:100%!important;
+      text-align:center!important;
+      font-size:21px!important;
+      letter-spacing:-.55px!important;
+      overflow:visible!important;
+      text-overflow:clip!important;
+    }
+    #currentBossSlot .current-info-grid{
+      grid-template-rows:repeat(3,27px)!important;
+      gap:5px!important;
+      margin-top:8px!important;
+    }
+    #currentBossSlot .current-info-box,
+    #currentBossSlot .current-info-box.score{
+      height:27px!important;
+      min-height:27px!important;
+      padding:0 9px!important;
+      border-radius:8px!important;
+    }
+    #currentBossSlot .current-info-box span,
+    #currentBossSlot .current-info-box.score span{font-size:9.6px!important}
+    #currentBossSlot .current-info-box b{font-size:13px!important}
+    #currentBossSlot .current-info-box.score b{font-size:14px!important}
+    #currentBossSlot .current-main-badge{min-width:42px!important;text-align:center!important}
+
+    .history-zone{margin-top:10px!important;padding-top:10px!important}
+    .history-scroll{gap:7px!important;padding:0!important;scroll-snap-type:x mandatory!important}
+    .history-card{
+      flex:0 0 calc((100% - 14px)/3)!important;
+      width:calc((100% - 14px)/3)!important;
+      height:202px!important;
+      padding:6px!important;
+      scroll-snap-align:start!important;
+    }
+    .history-image-wrap{height:84px!important}
+    .history-boss-image{width:84px!important;height:84px!important}
+    .history-seq{font-size:10.5px!important;min-width:24px!important}
+    .history-title{height:32px!important}
+    .history-title strong{font-size:12.5px!important}
+    .history-title span{font-size:9.2px!important;height:18px!important;line-height:18px!important}
+    .history-stats{gap:4px!important;padding-top:6px!important}
+    .history-stats>div{padding:5px 3px!important}
+    .history-stats span{font-size:8.5px!important}
+    .history-stats b{font-size:10.8px!important}
+    .history-stats .score b{font-size:11.5px!important}
+    .history-stats .rank{right:7px!important;top:7px!important;width:43px!important;height:24px!important}
+    .history-stats .rank b{font-size:10px!important}
+    .history-empty{
+      height:72px!important;min-height:72px!important;border:0!important;background:transparent!important;
+      font-size:13px!important;font-weight:900!important;color:#8e849f!important;
+    }
+    .history-next-btn{
+      width:30px!important;height:202px!important;right:0!important;
+      background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.72) 42%,rgba(255,255,255,.94) 100%)!important;
+      color:#7457c4!important;opacity:.82!important;
+    }
+    .history-chevron{width:10px!important;height:10px!important;border-width:2px 2px 0 0!important}
+
+    .participant-head,.participant-row{grid-template-columns:minmax(0,1fr) 132px!important;gap:8px!important}
+    .participant-row .pname{text-align:center!important}
+    .participant-row .pscore{text-align:center!important;font-size:12px!important}
+    .edit-head,.edit-row{grid-template-columns:58px minmax(0,1fr) 132px!important;gap:7px!important;padding:0 8px!important}
+    .edit-head{font-size:10px!important}
+    .edit-row{min-height:46px!important}
+    .edit-row .ename{text-align:center!important;font-size:11.5px!important}
+    .edit-row .escore{height:34px!important;font-size:15px!important}
+
+    .member-detail-card{padding:12px!important;margin-bottom:10px!important}
+    .member-detail-name{font-size:20px!important;text-align:left!important;margin-bottom:9px!important}
+    .member-resource-edit-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+    .member-resource-edit{background:#f5f1ff;border:1px solid #e1d8f1;border-radius:11px;padding:9px;text-align:center}
+    .member-resource-edit>span{display:block;font-size:9.5px;font-weight:900;color:#766a8e;margin-bottom:5px}
+    .sword-edit-line{height:37px;display:flex;align-items:center;justify-content:center;gap:5px}
+    .sword-edit-line input{width:58px;height:37px;border:1px solid #d7cdea;border-radius:9px;background:#fff;text-align:center;font-size:20px;font-weight:950;color:#4b397c;padding:0}
+    .sword-edit-line em{font-style:normal;font-size:16px;font-weight:950;color:#544377}
+    .member-remaining-time{height:37px!important;font-size:18px!important;color:#4b397c!important}
+    .member-history-title{font-size:12.5px;font-weight:950;color:#493c68;margin:2px 2px 7px}
+    .member-history-list{border:1px solid #dfd7ec;border-radius:11px;overflow:hidden;background:#fff}
+    .member-history-item{min-height:46px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 10px;border-bottom:1px solid #eeeaf4}
+    .member-history-item:last-child{border-bottom:0}
+    .member-history-boss{min-width:0;display:flex;flex-direction:column;gap:2px}
+    .member-history-boss b{font-size:11.5px;color:#372d4d;font-weight:950;white-space:nowrap}
+    .member-history-boss span{font-size:8.8px;color:#8b8299;font-weight:850}
+    .member-history-status{flex:0 0 auto;min-width:54px;height:25px;display:flex;align-items:center;justify-content:center;border-radius:999px;font-size:9.5px;font-weight:950}
+    .member-history-status.joined{background:#eaf8f1;color:#178354;border:1px solid #a9dec5}
+    .member-history-status.missed{background:#fff1f4;color:#cb4b60;border:1px solid #efb8c2}
+    .member-history-empty{height:70px;display:flex;align-items:center;justify-content:center;border:1px dashed #ded7e9;border-radius:11px;color:#958ca4;font-size:10.5px;font-weight:850;background:#fbfaff}
+
+    /* V0.2.4 — readability + top anchored boss detail */
+    /* V0.2.6 — centered header, simplified resource heading, Updated label, latest guild stats */
+    #currentBossSlot .current-boss-identity strong{
+      font-size:21.5px!important;
+      text-align:center!important;
+      letter-spacing:-.6px!important;
+    }
+    #currentBossSlot .current-info-layout{
+      display:grid!important;
+      grid-template-columns:minmax(0,1.06fr) minmax(0,.94fr)!important;
+      gap:7px!important;
+      margin-top:8px!important;
+      min-width:0!important;
+    }
+    #currentBossSlot .current-info-grid{
+      margin-top:0!important;
+      grid-template-rows:repeat(3,27px)!important;
+      gap:5px!important;
+    }
+    #currentBossSlot .current-info-box span,
+    #currentBossSlot .current-info-box.score span{
+      font-size:10.6px!important;
+      font-weight:900!important;
+      letter-spacing:-.18px!important;
+    }
+    #currentBossSlot .current-info-box b{font-size:14.8px!important}
+    #currentBossSlot .current-info-box.score b{font-size:15.5px!important}
+    #currentBossSlot .current-participants-box{
+      min-width:0!important;
+      height:91px!important;
+      border:1px solid #ddd5ee!important;
+      border-radius:9px!important;
+      background:#faf8ff!important;
+      padding:7px 7px!important;
+      box-sizing:border-box!important;
+      text-align:left!important;
+      overflow:hidden!important;
+    }
+    #currentBossSlot .current-participants-box>strong{
+      display:block!important;
+      font-size:10.4px!important;
+      line-height:1!important;
+      color:#65567f!important;
+      margin-bottom:6px!important;
+      text-align:center!important;
+    }
+    #currentBossSlot .current-participants-box>div{
+      display:grid!important;
+      grid-template-columns:1fr 1fr!important;
+      gap:4px 5px!important;
+      align-content:start!important;
+    }
+    #currentBossSlot .current-participants-box span,
+    #currentBossSlot .current-participants-box em,
+    #currentBossSlot .current-participants-box i{
+      min-width:0!important;
+      font-style:normal!important;
+      font-size:9.8px!important;
+      line-height:15px!important;
+      font-weight:900!important;
+      color:#473968!important;
+      white-space:nowrap!important;
+      overflow:hidden!important;
+      text-overflow:ellipsis!important;
+      text-align:center!important;
+    }
+    #currentBossSlot .current-participants-box em{color:#776a8d!important}
+    #currentBossSlot .current-participants-box i{grid-column:1/-1;color:#948aa3!important;padding-top:17px!important}
+
+    .history-card{height:204px!important}
+    .history-title strong{font-size:13.2px!important}
+    .history-title span{font-size:10px!important}
+    .history-stats span{font-size:9.7px!important;font-weight:900!important}
+    .history-stats b{font-size:12.3px!important}
+    .history-stats>div{min-height:31px!important;padding:4px 5px!important}
+    .history-stats .score{
+      min-height:29px!important;
+      padding:0 7px!important;
+      display:flex!important;
+      flex-direction:row!important;
+      align-items:center!important;
+      justify-content:space-between!important;
+      gap:7px!important;
+      text-align:left!important;
+    }
+    .history-stats .score span{font-size:9.8px!important;white-space:nowrap!important}
+    .history-stats .score b{font-size:13.3px!important;text-align:right!important;overflow:visible!important;text-overflow:clip!important}
+    .history-next-btn{height:204px!important}
+
+    .member-table thead th+th{border-left:1px solid #d3cae7!important}
+    .member-table tbody td:first-child{font-size:13.4px!important;font-weight:950!important;letter-spacing:-.25px!important}
+
+    #bossModal.open{
+      align-items:flex-start!important;
+      justify-content:center!important;
+      padding:calc(env(safe-area-inset-top, 0px) + 78px) 0 18px!important;
+      box-sizing:border-box!important;
+    }
+    #bossModal .modal{
+      transform-origin:top center!important;
+      border-radius:18px!important;
+      max-height:calc(100dvh - env(safe-area-inset-top, 0px) - 104px)!important;
+      box-shadow:0 15px 42px rgba(34,23,65,.28)!important;
+    }
+    #bossModal .boss-detail-name{font-size:15.5px!important}
+    #bossModal .detail-stat{font-size:10.5px!important}
+    #bossModal .detail-stat b{font-size:13.2px!important}
+
+</style>
+</head>
+<body>
+  <div id="shell">
+    <main id="app" class="booting">
+      <div class="topbar">
+        <div class="topbar-copy">
+          <h1 id="pageTitle">균열의 격전지</h1>
+          <div class="subhead" id="periodText">운영기간 · 토요일 09:00 ~ 월요일 08:45</div>
+        </div>
+        <a class="calculator-back-link" href="https://seungbeomcat.github.io/dosalja/" aria-label="도살자 격전지 계산기로 돌아가기">계산기로 돌아가기</a>
+      </div>
+
+      <div class="admin-bar">
+        <div class="sync-state"><span id="syncDot" class="dot preview"></span><span id="syncText">데이터 불러오는 중</span></div>
+        <div class="top-actions">
+          <button class="mini-btn" id="roundSetupBtn">회차 설정</button>
+          <button class="mini-btn primary" id="addBossBtn">보스 추가</button>
+        </div>
+      </div>
+
+      <div class="boot-loader" id="bootLoader"><span class="boot-spinner"></span><b>현재 회차 데이터를 불러오는 중</b></div>
+
+      <section class="section-card boss-dashboard-card">
+        <div class="current-boss-panel" id="currentBossSlot"></div>
+        <div class="history-zone">
+          <div class="history-wrap">
+            <div class="history-scroll" id="historyBossRail"></div>
+            <button type="button" class="history-next-btn" id="historyNextBtn" aria-label="더 이전 소멸 초대형 보기">
+              <span class="history-chevron"></span><span class="history-chevron"></span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section-card members-card">
+        <div class="section-head member-head">
+          <div class="section-title">현재 자원 및 초대형 참여현황</div>
+          <div class="resource-updated"><span>Updated</span><b id="updatedAt">-</b></div>
+        </div>
+        <table class="member-table" aria-label="현재 자원 및 초대형 참여현황">
+          <colgroup><col><col><col><col><col></colgroup>
+          <thead><tr><th>길드원</th><th><span>초대형<br>참여현황</span></th><th>칼(기회)</th><th>잔여 시간</th><th>현재 초대형</th></tr></thead>
+          <tbody id="memberRows"></tbody>
+        </table>
+        <div class="table-foot"><span>길드원을 누르면 <strong>초대형 참여 이력</strong>과 현재 자원을 확인·수정할 수 있습니다.</span></div>
+      </section>
+
+      <div class="footer">
+        <b>Created by 돗돔 · V0.2.6</b>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="roundModal">
+    <div class="modal tall">
+      <div class="modal-head"><div class="modal-title">회차 시작 설정</div><button class="close-btn" data-close="roundModal">×</button></div>
+      <div class="modal-body">
+        <div class="form-grid round-start-grid">
+          <div class="field"><label>콘텐츠</label><select id="setupMode"><option value="rift">균열의 격전지</option><option value="galaxy">은하의 격전지</option></select></div>
+          <div class="field"><label>시작 날짜</label><button type="button" class="picker-display" id="setupStartDateBtn">2026.10.03.</button><input type="hidden" id="setupStartDate" /></div>
+          <div class="field"><label>시작 시각</label><button type="button" class="picker-display" id="setupStartTimeBtn">09:00</button><input type="hidden" id="setupStartTime" /></div>
+        </div>
+        <div class="help">기본 10칼 / 20분. 차공 시간 확장자는 20:20 ~ 22:00 범위에서 길드원별로 설정합니다. 새 회차 시작 시 이전 회차 운영기록은 별도 문서로 남습니다.</div>
+        <div class="setup-list" id="setupMemberList"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="action-btn" data-close="roundModal">취소</button>
+        <button class="action-btn primary" id="saveRoundSetupBtn">현재 기준값 저장</button>
+        <button class="action-btn primary" id="startNewRoundBtn">새 회차 시작</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="addBossModal">
+    <div class="modal">
+      <div class="modal-head"><div class="modal-title">새 보스 등록</div><button class="close-btn" data-close="addBossModal">×</button></div>
+      <div class="modal-body">
+        <div class="form-grid boss-register-grid">
+          <div class="field"><label>지역</label><select id="newBossArea"><option value="wolf">늑대</option><option value="pirate">해적</option><option value="cat">고양이</option><option value="food">음식</option><option value="galaxy">은하</option></select></div>
+          <div class="field"><label>보스 레벨</label><button type="button" class="picker-display" id="newBossLevelBtn">Lv.20</button><input type="hidden" id="newBossLevel" value="20"></div>
+          <div class="field"><label>팝업 날짜</label><button type="button" class="picker-display" id="newBossStartDateBtn">2026.10.03.</button><input type="hidden" id="newBossStartDate" /></div>
+          <div class="field"><label>팝업 시각</label><button type="button" class="picker-display" id="newBossStartTimeBtn">09:00</button><input type="hidden" id="newBossStartTime" /></div>
+        </div>
+        <div class="help">다음 보스 지역은 예측하지 않습니다. 실제 등장한 보스만 등록하며, 새 보스를 등록하면 직전 현재 보스는 이전 보스로 이동합니다.</div>
+      </div>
+      <div class="modal-actions"><button class="action-btn" data-close="addBossModal">취소</button><button class="action-btn primary" id="confirmAddBossBtn">등록</button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="bossModal">
+    <div class="modal tall">
+      <div class="modal-head"><div class="modal-title" id="bossModalTitle">보스 상세</div><button class="close-btn" data-close="bossModal">×</button></div>
+      <div class="modal-body" id="bossModalBody"></div>
+      <div class="modal-actions" id="bossModalActions"></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="memberModal">
+    <div class="modal">
+      <div class="modal-head"><div class="modal-title">길드원 상세</div><button class="close-btn" data-close="memberModal">×</button></div>
+      <div class="modal-body" id="memberModalBody"></div>
+      <div class="modal-actions"><button class="action-btn" data-close="memberModal">취소</button><button class="action-btn primary" id="saveMemberUsageBtn">저장</button></div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="pickerModal">
+    <div class="modal picker-modal">
+      <div class="modal-head"><div class="modal-title" id="pickerTitle">선택</div><button class="close-btn" data-close="pickerModal">×</button></div>
+      <div class="modal-body" id="pickerBody"></div>
+      <div class="modal-actions"><button class="action-btn" data-close="pickerModal">취소</button><button class="action-btn primary" id="pickerApplyBtn">적용</button></div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  "use strict";
+  const LOGICAL_WIDTH = 430;
+  const WRITE_PIN = "154100";
+  const VALID_TIME_BONUSES = [0,20,40,60,80,100,120];
+  const MEMBER_ORDER = ["돗돔","매콤갈비","사마엘","혀녕","데이다라","XIGN","뱅수띠","승부왕","진니","토시살","페르시안","하니엘","벨제붑","바포메트","옥돔"];
+
+  // Existing calculator reference data is kept internally for future calculations/links, but not exposed as duplicate lookup UI.
+  const INTERNAL_REFERENCE = Object.freeze({
+    serverKill:6,
+    members:{
+      "돗돔":{base:191.6,z1:0,z2:5,z3:0,field:{wolf:13,pirate:22,cat:22,food:6,galaxy:0}},
+      "매콤갈비":{base:142.5,z1:5,z2:5,z3:0,field:{wolf:8,pirate:8,cat:8,food:8,galaxy:0}},
+      "사마엘":{base:129.5,z1:0,z2:5,z3:0,field:{wolf:13,pirate:7,cat:7,food:7,galaxy:0}},
+      "혀녕":{base:93.8,z1:0,z2:5,z3:0,field:{wolf:24,pirate:22,cat:22,food:22,galaxy:0}},
+      "데이다라":{base:93,z1:0,z2:0,z3:0,field:{wolf:0,pirate:0,cat:0,food:0,galaxy:0}},
+      "XIGN":{base:84,z1:0,z2:5,z3:0,field:{wolf:0,pirate:0,cat:0,food:0,galaxy:0}},
+      "뱅수띠":{base:64,z1:0,z2:0,z3:0,field:{wolf:0,pirate:0,cat:0,food:0,galaxy:0}},
+      "승부왕":{base:60.2,z1:0,z2:0,z3:0,field:{wolf:0,pirate:1,cat:0,food:1,galaxy:0}},
+      "진니":{base:57.5,z1:0,z2:5,z3:0,field:{wolf:7,pirate:6,cat:6,food:6,galaxy:0}},
+      "토시살":{base:60,z1:0,z2:0,z3:0,field:{wolf:0,pirate:0,cat:0,food:0,galaxy:0}},
+      "페르시안":{base:57,z1:0,z2:0,z3:0,field:{wolf:0,pirate:0,cat:0,food:0,galaxy:0}},
+      "하니엘":{base:45,z1:0,z2:0,z3:0,field:{wolf:0,pirate:0,cat:0,food:0,galaxy:0}},
+      "벨제붑":{base:38,z1:0,z2:0,z3:0,field:{wolf:0,pirate:0,cat:0,food:0,galaxy:0}},
+      "바포메트":{base:35.5,z1:0,z2:0,z3:0,field:{wolf:0,pirate:0,cat:0,food:0,galaxy:0}},
+      "옥돔":{base:34.5,z1:0,z2:0,z3:0,field:{wolf:0,pirate:0,cat:0,food:0,galaxy:0}}
+    }
+  });
+
+  const BOSS_META = {
+    wolf:{name:"늑대",asset:"assets/boss-wolf.png"},
+    pirate:{name:"해적",asset:"assets/boss-pirate.png"},
+    cat:{name:"고양이",asset:"assets/boss-cat.png"},
+    food:{name:"음식",asset:"assets/boss-food.png"},
+    galaxy:{name:"은하",asset:null}
+  };
+
+  const deepClone = obj => JSON.parse(JSON.stringify(obj));
+  const makeMemberState = (initialSeconds=1200) => ({initialSwords:10,initialSeconds,normalSwords:0,normalSeconds:0});
+  const makeMembers = () => Object.fromEntries(MEMBER_ORDER.map(n => [n,makeMemberState()]));
+  const nowParts = () => { const d=new Date(); return {date:`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")}.`,time:`${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`}; };
+  const fmtNum = n => Number(n||0).toLocaleString("ko-KR");
+  const fmtTime = s => { s=Math.max(0,Math.round(Number(s)||0)); return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`; };
+  const parseTime = v => {
+    const t=String(v||"").trim();
+    if(/^\d+$/.test(t)) return Number(t)*60;
+    const m=t.match(/^(\d{1,2}):(\d{1,2})$/); if(!m) return 0;
+    return Number(m[1])*60+Math.min(59,Number(m[2]));
+  };
+  const toDateSafe = value => {
+    if(!value) return null;
+    if(typeof value?.toDate === "function") return value.toDate();
+    if(typeof value === "object" && Number.isFinite(Number(value.seconds))) return new Date(Number(value.seconds)*1000);
+    const d=new Date(value); return Number.isNaN(d.getTime())?null:d;
+  };
+  const isoToLocal = value => {
+    const d=toDateSafe(value); if(!d) return "-";
+    return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  };
+  const fmtPeriod = (start,end) => {
+    const a=toDateSafe(start), b=toDateSafe(end); if(!a||!b) return "운영기간 · 토요일 09:00 ~ 월요일 08:45";
+    const days=["일","월","화","수","목","금","토"];
+    const f=d=>`${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")} (${days[d.getDay()]}) ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    return `운영기간 · ${f(a)} ~ ${f(b)}`;
+  };
+  const fmtResourceUpdate = value => {
+    const d=toDateSafe(value); if(!d) return "-";
+    return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")}. ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+  };
+  const formatDateField = value => { const d=toDateSafe(value)||new Date(); return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")}.`; };
+  const formatTimeField = value => { const d=toDateSafe(value)||new Date(); return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`; };
+  const parseLocalDateTimeFields = (dateText,timeText) => {
+    const dm=String(dateText||"").trim().match(/^(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})\.?$/);
+    const tm=String(timeText||"").trim().match(/^(\d{1,2}):(\d{2})$/);
+    if(!dm||!tm) return null;
+    const y=Number(dm[1]),mo=Number(dm[2]),da=Number(dm[3]),h=Number(tm[1]),mi=Number(tm[2]);
+    if(mo<1||mo>12||da<1||da>31||h<0||h>23||mi<0||mi>59) return null;
+    const d=new Date(y,mo-1,da,h,mi,0,0);
+    if(d.getFullYear()!==y||d.getMonth()!==mo-1||d.getDate()!==da) return null;
+    return d.toISOString();
+  };
+  const uniqueId = p => `${p}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2,7)}`;
+  function makeDraftRound(){
+    return {id:null,mode:"rift",startAt:null,endAt:null,members:makeMembers(),bosses:[],currentBossId:null,isDraft:true,resourceUpdatedAt:null};
+  }
+  function normalizeRound(raw,id){
+    const r=deepClone(raw||{}); r.id=id||r.id||null; r.mode=r.mode||"rift"; r.members=r.members||{}; r.bosses=Array.isArray(r.bosses)?r.bosses:[];
+    if(r.members["별제븝"]&&!r.members["벨제붑"]) r.members["벨제붑"]=r.members["별제븝"];
+    delete r.members["별제븝"];
+    for(const name of MEMBER_ORDER) r.members[name]={...makeMemberState(),...(r.members[name]||{})};
+    r.bosses=r.bosses.map((b,i)=>{
+      const x={...b,order:Number(b.order)||i+1,participants:{...(b.participants||{})}};
+      if(x.participants["별제븝"]&&!x.participants["벨제붑"]) x.participants["벨제붑"]=x.participants["별제븝"];
+      delete x.participants["별제븝"];
+      x.bossLevel=Number.isFinite(Number(x.bossLevel))?Math.max(20,Math.min(50,Number(x.bossLevel))):null;
+      return x;
+    });
+    r.isDraft=!r.id; return r;
+  }
+
+  let state={round:null,firebase:null,firebaseError:null,connected:false,loading:true,adminUnlocked:false,selectedBossId:null,editingBoss:false,selectedMember:null,unsubscribeRound:null};
+  let firebaseReadyPromise=null;
+
+  function bossById(id){ return state.round?.bosses?.find(b=>b.id===id)||null; }
+  function currentBoss(){ return bossById(state.round?.currentBossId); }
+  function participantCount(b){ return b ? Object.keys(b.participants||{}).length : 0; }
+  function bossScore(b){ return b ? Object.values(b.participants||{}).reduce((a,p)=>a+(Number(p.score)||0),0) : 0; }
+  function bossParticipationCountForRound(round,name){ return (round?.bosses||[]).reduce((a,b)=>a+(b.participants&&b.participants[name]?1:0),0); }
+  function bossUsedSecondsForRound(round,name){ return (round?.bosses||[]).reduce((a,b)=>a+(Number(b.participants?.[name]?.usedSeconds)||0),0); }
+  function memberRemainingForRound(round,name){
+    const m=round?.members?.[name]||makeMemberState();
+    const usedBoss=bossParticipationCountForRound(round,name);
+    const usedBossSeconds=bossUsedSecondsForRound(round,name);
+    const initialSwords=Number(m.initialSwords)||10, initialSeconds=Number(m.initialSeconds)||1200;
+    const swords=Math.max(0,initialSwords-usedBoss-(Number(m.normalSwords)||0));
+    const seconds=Math.max(0,initialSeconds-usedBossSeconds-(Number(m.normalSeconds)||0));
+    return {swords,seconds,usedBoss,usedSeconds:usedBossSeconds,initialSwords,initialSeconds,usedSwords:initialSwords-swords,totalUsedSeconds:initialSeconds-seconds};
+  }
+  function bossParticipationCount(name){ return bossParticipationCountForRound(state.round,name); }
+  function bossUsedSeconds(name){ return bossUsedSecondsForRound(state.round,name); }
+  function memberRemaining(name){ return memberRemainingForRound(state.round,name); }
+  function resourceSignature(round){ return MEMBER_ORDER.map(n=>{const r=memberRemainingForRound(round,n);return `${n}:${r.swords}:${r.seconds}`;}).join("|"); }
+
+  function bossImageMarkup(area,cls="boss-img"){
+    const meta=BOSS_META[area]||BOSS_META.wolf;
+    if(!meta.asset) return `<div class="${cls} galaxy-placeholder">✦</div>`;
+    return `<img class="${cls}" src="${meta.asset}" alt="${meta.name} 초대형 보스">`;
+  }
+
+  function currentBossPanelMarkup(b){
+    if(!b){
+      return `<div class="current-boss-image-card empty-current"><div class="empty-current-mark">현재 초대형<br>등록 전</div></div><div class="current-boss-info empty-current-info"><b>현재 진행 중인 초대형 보스가 없습니다.</b><span>보스 추가에서 실제 팝업된 보스를 등록해주세요.</span></div>`;
+    }
+    const meta=BOSS_META[b.area]||{name:b.area};
+    const joined=participantCount(b), missing=Math.max(0,MEMBER_ORDER.length-joined), score=bossScore(b);
+    const joinedNames=MEMBER_ORDER.filter(n=>b.participants?.[n]);
+    const visibleNames=joinedNames.slice(0,6);
+    const extraCount=Math.max(0,joinedNames.length-visibleNames.length);
+    const participantMarkup=visibleNames.length
+      ? `${visibleNames.map(n=>`<span>${n}</span>`).join("")}${extraCount?`<em>외 ${extraCount}명</em>`:""}`
+      : `<i>아직 없음</i>`;
+    return `<button type="button" class="current-boss-image-card" data-boss-id="${b.id}" aria-label="현재 ${meta.name} 초대형 상세보기"><span class="current-badge current-main-badge">현재</span>${bossImageMarkup(b.area,"current-main-image")}</button>
+      <button type="button" class="current-boss-info" data-boss-id="${b.id}" aria-label="현재 ${meta.name} 초대형 상세보기">
+        <div class="current-boss-identity"><strong>#${Number(b.order)||'-'} ${b.bossLevel?`Lv.${b.bossLevel}`:"Lv.-"} ${meta.name}</strong></div>
+        <div class="current-info-layout">
+          <div class="current-info-grid">
+            <div class="current-info-box join"><span>참여인원</span><b>${joined}명</b></div>
+            <div class="current-info-box missing"><span>불참인원</span><b>${missing}명</b></div>
+            <div class="current-info-box score"><span>점수합계</span><b>${fmtNum(score)}</b></div>
+          </div>
+          <div class="current-participants-box"><strong>참여 길드원</strong><div>${participantMarkup}</div></div>
+        </div>
+      </button>`;
+  }
+
+  function historyBossCardMarkup(b,historyIndex){
+    const meta=BOSS_META[b.area]||{name:b.area};
+    const joined=participantCount(b), missing=Math.max(0,MEMBER_ORDER.length-joined), score=bossScore(b);
+    const rank=Number(b.rank)>0?`${Number(b.rank)}위`:'-';
+    const popupOrder=Number(b.order)||historyIndex;
+    return `<button type="button" class="history-card" data-boss-id="${b.id}" aria-label="#${popupOrder} 소멸 ${meta.name} 초대형 상세보기">
+      <div class="history-image-wrap"><span class="history-seq">#${popupOrder}</span>${bossImageMarkup(b.area,"history-boss-image")}</div>
+      <div class="history-title"><strong>${meta.name}</strong><span>${b.bossLevel?`Lv.${b.bossLevel}`:"Lv.-"}</span></div>
+      <div class="history-stats">
+        <div><span>참여</span><b>${joined}명</b></div>
+        <div class="missing"><span>불참</span><b>${missing}명</b></div>
+        <div class="score"><span>총합계</span><b>${fmtNum(score)}</b></div>
+        <div class="rank"><span>등수</span><b>${rank}</b></div>
+      </div>
+    </button>`;
+  }
+
+  function updateHistoryNextButton(){
+    const rail=document.getElementById("historyBossRail"), btn=document.getElementById("historyNextBtn");
+    if(!rail||!btn) return;
+    const hasMore=rail.scrollWidth>rail.clientWidth+2;
+    const atEnd=rail.scrollLeft+rail.clientWidth>=rail.scrollWidth-3;
+    btn.classList.toggle("show",hasMore&&!atEnd);
+  }
+
+  function renderBossRail(){
+    const cur=currentBoss();
+    document.getElementById("currentBossSlot").innerHTML=currentBossPanelMarkup(cur);
+    const history=(state.round?.bosses||[])
+      .filter(b=>b.id!==state.round.currentBossId && (b.status==="ended" || b.endedAt))
+      .sort((a,b)=>{
+        const byOrder=(Number(b.order)||0)-(Number(a.order)||0);
+        if(byOrder) return byOrder;
+        const ad=toDateSafe(a.endedAt)?.getTime()||0, bd=toDateSafe(b.endedAt)?.getTime()||0;
+        return bd-ad;
+      });
+    const rail=document.getElementById("historyBossRail");
+    rail.innerHTML=history.length?history.map((b,i)=>historyBossCardMarkup(b,i+1)).join(""):`<div class="history-empty">소멸보스 없음</div>`;
+    rail.scrollLeft=0;
+    document.querySelectorAll("[data-boss-id]").forEach(el=>el.onclick=()=>openBossModal(el.dataset.bossId,false));
+    requestAnimationFrame(updateHistoryNextButton);
+  }
+
+  function renderMembers(){
+    const cur=currentBoss(), totalBosses=(state.round?.bosses||[]).length;
+    const rows=MEMBER_ORDER.map(name=>{
+      const r=memberRemaining(name);
+      const joined=!!cur?.participants?.[name];
+      const status=cur?(joined?`<span class="status-pill joined">참여</span>`:`<span class="status-pill waiting">미참여</span>`):`<span class="status-pill no-boss">대기</span>`;
+      const swordSegs=Array.from({length:10},(_,i)=>`<i class="${i<r.swords?"on":""}"></i>`).join("");
+      const remainPct=r.initialSeconds?Math.max(0,Math.min(100,(r.seconds/r.initialSeconds)*100)):0;
+      const remainCells=Math.max(0,Math.min(10,Math.ceil(remainPct/10)));
+      const timeTone=remainPct>60?"safe":remainPct>30?"mid":"danger";
+      const battery=Array.from({length:10},(_,i)=>`<i class="${i<remainCells?"on":""}"></i>`).join("");
+      const participationText=totalBosses?`${r.usedBoss}/${totalBosses}`:"-";
+      return `<tr data-member="${name}">
+        <td class="member-name">${name}</td>
+        <td><div class="participation-cell"><div class="participation-count">${participationText}</div></div></td>
+        <td><div class="sword-cell"><div class="sword-value">${r.swords}/10</div><div class="sword-segments">${swordSegs}</div></div></td>
+        <td><div class="time-cell"><div class="time-value">${fmtTime(r.seconds)}</div><div class="time-battery ${timeTone}">${battery}</div></div></td>
+        <td>${status}</td>
+      </tr>`;
+    }).join("");
+    document.getElementById("memberRows").innerHTML=rows;
+    document.querySelectorAll("#memberRows tr").forEach(tr=>tr.onclick=()=>openMemberModal(tr.dataset.member));
+  }
+
+  function renderHeader(){
+    const r=state.round;
+    const dot=document.getElementById("syncDot");
+    dot.className=`dot ${state.loading?"preview":state.connected&&r&&!r.isDraft?"online":"preview"}`;
+    document.getElementById("pageTitle").textContent=r?.mode==="galaxy"?"은하의 격전지":"균열의 격전지";
+    document.getElementById("periodText").textContent=r?.startAt&&r?.endAt?fmtPeriod(r.startAt,r.endAt):"운영기간 · 토요일 09:00 ~ 월요일 08:45";
+    const syncText=document.getElementById("syncText");
+    if(state.loading) syncText.textContent="데이터 불러오는 중";
+    else if(r?.isDraft) syncText.textContent="실제 회차 미설정";
+    else if(state.connected) syncText.textContent="실시간 동기화";
+    else if(state.firebaseError) syncText.textContent="Firebase 연결 오류";
+    else syncText.textContent="연결 대기";
+    const updated=r?.resourceUpdatedAtServer||r?.resourceUpdatedAt;
+    document.getElementById("updatedAt").textContent=fmtResourceUpdate(updated);
+    document.getElementById("app").classList.toggle("booting",!!state.loading);
+    document.getElementById("roundSetupBtn").disabled=!!state.loading;
+    document.getElementById("addBossBtn").disabled=!!state.loading;
+  }
+
+  function renderAll(){ renderHeader(); renderBossRail(); renderMembers(); syncCanvasScale(); }
+
+  function showToast(msg){ const t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(showToast._t); showToast._t=setTimeout(()=>t.classList.remove("show"),1800); }
+  function openModal(id){ document.getElementById(id).classList.add("open"); syncCanvasScale(); }
+  function closeModal(id){ document.getElementById(id).classList.remove("open"); }
+  document.querySelectorAll("[data-close]").forEach(b=>b.onclick=()=>closeModal(b.dataset.close));
+  document.querySelectorAll(".modal-backdrop").forEach(m=>m.addEventListener("click",e=>{if(e.target===m) closeModal(m.id);}));
+
+  function fillRoundSetup(){
+    const r=state.round||makeDraftRound();
+    document.getElementById("setupMode").value=r.mode||"rift";
+    const base=r.startAt?toDateSafe(r.startAt):new Date();
+    const dateVal=formatDateField(base),timeVal=formatTimeField(base);
+    document.getElementById("setupStartDate").value=dateVal; document.getElementById("setupStartDateBtn").textContent=dateVal;
+    document.getElementById("setupStartTime").value=timeVal; document.getElementById("setupStartTimeBtn").textContent=timeVal;
+    document.getElementById("setupMemberList").innerHTML=`<div class="setup-row head"><div>길드원</div><div>시작 칼</div><div>시작 시간</div></div>`+MEMBER_ORDER.map(name=>{
+      const m=r.members?.[name]||makeMemberState();
+      const idx=Math.max(0,VALID_TIME_BONUSES.indexOf(Math.max(0,(Number(m.initialSeconds)||1200)-1200)));
+      return `<div class="setup-row" data-setup-member="${name}" data-time-index="${idx}"><div class="setup-name">${name}</div><div class="setup-sword-fixed">10</div><button type="button" class="setup-time-choice">${fmtTime(1200+VALID_TIME_BONUSES[idx])}</button></div>`;
+    }).join("");
+    document.querySelectorAll("[data-setup-member]").forEach(row=>{
+      row.querySelector(".setup-time-choice").onclick=()=>openSetupTimePicker(row);
+    });
+  }
+
+  function gatherSetupMembers(preserveUsage=true){
+    const out={};
+    document.querySelectorAll("[data-setup-member]").forEach(row=>{
+      const name=row.dataset.setupMember, prev=state.round?.members?.[name]||makeMemberState();
+      const idx=Math.max(0,Math.min(VALID_TIME_BONUSES.length-1,Number(row.dataset.timeIndex)||0));
+      out[name]={initialSwords:10,initialSeconds:1200+VALID_TIME_BONUSES[idx],normalSwords:preserveUsage?(Number(prev.normalSwords)||0):0,normalSeconds:preserveUsage?(Number(prev.normalSeconds)||0):0};
+    });
+    return out;
+  }
+
+  const pickerState={kind:null,targetInput:null,targetButton:null,selectedDate:null,viewYear:null,viewMonth:null,hour:0,minute:0,durationSeconds:0,maxSeconds:0,setupRow:null};
+
+  function parseDateFieldValue(v){
+    const m=String(v||"").match(/^(\d{4})\.(\d{2})\.(\d{2})\.?$/);
+    return m?new Date(Number(m[1]),Number(m[2])-1,Number(m[3])):new Date();
+  }
+  function dateText(d){return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,"0")}.${String(d.getDate()).padStart(2,"0")}.`;}
+  function pickerOpen(title){document.getElementById("pickerTitle").textContent=title;openModal("pickerModal");}
+  function renderCalendarPicker(){
+    const y=pickerState.viewYear,m=pickerState.viewMonth,selected=pickerState.selectedDate||new Date();
+    const first=new Date(y,m,1), start=new Date(y,m,1-first.getDay());
+    let days="";
+    for(let i=0;i<42;i++){
+      const d=new Date(start);d.setDate(start.getDate()+i);
+      const same=d.getFullYear()===selected.getFullYear()&&d.getMonth()===selected.getMonth()&&d.getDate()===selected.getDate();
+      const other=d.getMonth()!==m;
+      days+=`<button type="button" class="calendar-day ${other?"other":""} ${same?"selected":""}" data-date="${dateText(d)}">${d.getDate()}</button>`;
+    }
+    document.getElementById("pickerBody").innerHTML=`<div class="picker-shell"><div class="calendar-head"><button type="button" class="calendar-nav" id="calPrev">‹</button><div class="calendar-month">${y}.${String(m+1).padStart(2,"0")}</div><button type="button" class="calendar-nav" id="calNext">›</button></div><div class="calendar-week"><span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span></div><div class="calendar-grid">${days}</div></div>`;
+    document.getElementById("calPrev").onclick=()=>{pickerState.viewMonth--;if(pickerState.viewMonth<0){pickerState.viewMonth=11;pickerState.viewYear--;}renderCalendarPicker();};
+    document.getElementById("calNext").onclick=()=>{pickerState.viewMonth++;if(pickerState.viewMonth>11){pickerState.viewMonth=0;pickerState.viewYear++;}renderCalendarPicker();};
+    document.querySelectorAll(".calendar-day").forEach(b=>b.onclick=()=>{pickerState.selectedDate=parseDateFieldValue(b.dataset.date);pickerState.viewYear=pickerState.selectedDate.getFullYear();pickerState.viewMonth=pickerState.selectedDate.getMonth();renderCalendarPicker();});
+  }
+  function openDatePicker(inputId,buttonId,title="날짜 선택"){
+    const input=document.getElementById(inputId),d=parseDateFieldValue(input.value||dateText(new Date()));
+    Object.assign(pickerState,{kind:"date",targetInput:inputId,targetButton:buttonId,selectedDate:d,viewYear:d.getFullYear(),viewMonth:d.getMonth()});
+    renderCalendarPicker();pickerOpen(title);
+  }
+  function renderClockPicker(){
+    const hours=Array.from({length:24},(_,i)=>`<button type="button" class="wheel-option ${i===pickerState.hour?"selected":""}" data-hour="${i}">${String(i).padStart(2,"0")}</button>`).join("");
+    const mins=Array.from({length:60},(_,i)=>`<button type="button" class="wheel-option ${i===pickerState.minute?"selected":""}" data-minute="${i}">${String(i).padStart(2,"0")}</button>`).join("");
+    document.getElementById("pickerBody").innerHTML=`<div class="picker-shell"><div class="duration-preview">${String(pickerState.hour).padStart(2,"0")}:${String(pickerState.minute).padStart(2,"0")}</div><div class="wheel-picker"><div class="wheel-col"><div class="wheel-label">시</div><div class="wheel-list" id="hourList">${hours}</div></div><div class="wheel-col"><div class="wheel-label">분</div><div class="wheel-list" id="minuteList">${mins}</div></div></div></div>`;
+    document.querySelectorAll("[data-hour]").forEach(b=>b.onclick=()=>{pickerState.hour=Number(b.dataset.hour);renderClockPicker();});
+    document.querySelectorAll("[data-minute]").forEach(b=>b.onclick=()=>{pickerState.minute=Number(b.dataset.minute);renderClockPicker();});
+    requestAnimationFrame(()=>document.querySelectorAll(".wheel-option.selected").forEach(x=>x.scrollIntoView({block:"center"})));
+  }
+  function openClockPicker(inputId,buttonId,title="시각 선택"){
+    const raw=document.getElementById(inputId).value||"09:00",m=raw.match(/^(\d{1,2}):(\d{2})$/);
+    Object.assign(pickerState,{kind:"clock",targetInput:inputId,targetButton:buttonId,hour:m?Number(m[1]):9,minute:m?Number(m[2]):0});
+    renderClockPicker();pickerOpen(title);
+  }
+  function renderChoicePicker(values,labeler){
+    document.getElementById("pickerBody").innerHTML=`<div class="choice-grid">${values.map((v,i)=>`<button type="button" class="choice-btn ${i===pickerState.choiceIndex?"selected":""}" data-choice="${i}">${labeler(v)}</button>`).join("")}</div>`;
+    document.querySelectorAll("[data-choice]").forEach(b=>b.onclick=()=>{pickerState.choiceIndex=Number(b.dataset.choice);renderChoicePicker(values,labeler);});
+  }
+  function openSetupTimePicker(row){
+    pickerState.kind="setupTime";pickerState.setupRow=row;pickerState.choiceIndex=Number(row.dataset.timeIndex)||0;
+    renderChoicePicker(VALID_TIME_BONUSES,v=>fmtTime(1200+v));pickerOpen("시작 시간 선택");
+  }
+  function openLevelPicker(){
+    const levels=Array.from({length:31},(_,i)=>20+i);pickerState.kind="level";pickerState.choiceIndex=Math.max(0,levels.indexOf(bossLevelValue));pickerState.levelValues=levels;
+    renderChoicePicker(levels,v=>`Lv.${v}`);pickerOpen("보스 레벨 선택");
+  }
+  function renderDurationPicker(){
+    let sec=Math.max(0,Math.min(pickerState.maxSeconds,pickerState.durationSeconds));pickerState.durationSeconds=sec;
+    const curMin=Math.floor(sec/60),curSec=sec%60,maxMin=Math.floor(pickerState.maxSeconds/60);
+    const mins=Array.from({length:maxMin+1},(_,i)=>`<button type="button" class="wheel-option ${i===curMin?"selected":""}" data-dmin="${i}">${String(i).padStart(2,"0")}</button>`).join("");
+    const secs=Array.from({length:60},(_,i)=>{const disabled=(curMin===maxMin && i>pickerState.maxSeconds%60);return `<button type="button" class="wheel-option ${i===curSec?"selected":""}" data-dsec="${i}" ${disabled?"disabled":""}>${String(i).padStart(2,"0")}</button>`;}).join("");
+    document.getElementById("pickerBody").innerHTML=`<div class="picker-shell"><div class="duration-preview">${fmtTime(sec)}</div><div class="picker-caption">최대 ${fmtTime(pickerState.maxSeconds)}</div><div class="wheel-picker"><div class="wheel-col"><div class="wheel-label">분</div><div class="wheel-list">${mins}</div></div><div class="wheel-col"><div class="wheel-label">초</div><div class="wheel-list">${secs}</div></div></div></div>`;
+    document.querySelectorAll("[data-dmin]").forEach(b=>b.onclick=()=>{let m=Number(b.dataset.dmin),ss=pickerState.durationSeconds%60;if(m===maxMin)ss=Math.min(ss,pickerState.maxSeconds%60);pickerState.durationSeconds=m*60+ss;renderDurationPicker();});
+    document.querySelectorAll("[data-dsec]").forEach(b=>b.onclick=()=>{pickerState.durationSeconds=Math.floor(pickerState.durationSeconds/60)*60+Number(b.dataset.dsec);renderDurationPicker();});
+    requestAnimationFrame(()=>document.querySelectorAll(".wheel-option.selected").forEach(x=>x.scrollIntoView({block:"center"})));
+  }
+  function availableSecondsForBossMember(name,bossId){
+    const m=state.round?.members?.[name]||makeMemberState();
+    const other=(state.round?.bosses||[]).filter(x=>x.id!==bossId).reduce((a,x)=>a+(Number(x.participants?.[name]?.usedSeconds)||0),0);
+    return Math.max(0,(Number(m.initialSeconds)||1200)-(Number(m.normalSeconds)||0)-other);
+  }
+  function openBossDurationPicker(row){
+    const btn=row.querySelector(".etime-picker"),name=row.dataset.editMember;
+    Object.assign(pickerState,{kind:"bossDuration",durationSeconds:Number(btn.dataset.seconds)||0,maxSeconds:availableSecondsForBossMember(name,state.selectedBossId),durationButton:btn});
+    renderDurationPicker();pickerOpen(`${name} 사용시간`);
+  }
+  function openNormalDurationPicker(name,btn){
+    const m=state.round?.members?.[name]||makeMemberState(),max=Math.max(0,(Number(m.initialSeconds)||1200)-bossUsedSeconds(name));
+    Object.assign(pickerState,{kind:"normalDuration",durationSeconds:Number(btn.dataset.seconds)||0,maxSeconds:max,durationButton:btn});
+    renderDurationPicker();pickerOpen(`${name} 일반몹 사용시간`);
+  }
+  function openMemberRemainingTimePicker(name,btn){
+    const max=Math.max(0,Number(btn.dataset.maxSeconds)||0);
+    Object.assign(pickerState,{kind:"memberRemainingTime",durationSeconds:Number(btn.dataset.seconds)||0,maxSeconds:max,durationButton:btn});
+    renderDurationPicker();pickerOpen(`${name} 잔여 시간`);
+  }
+  document.getElementById("setupStartDateBtn").onclick=()=>openDatePicker("setupStartDate","setupStartDateBtn","회차 시작 날짜");
+  document.getElementById("setupStartTimeBtn").onclick=()=>openClockPicker("setupStartTime","setupStartTimeBtn","회차 시작 시각");
+  document.getElementById("newBossStartDateBtn").onclick=()=>openDatePicker("newBossStartDate","newBossStartDateBtn","보스 팝업 날짜");
+  document.getElementById("newBossStartTimeBtn").onclick=()=>openClockPicker("newBossStartTime","newBossStartTimeBtn","보스 팝업 시각");
+  document.getElementById("pickerApplyBtn").onclick=()=>{
+    if(pickerState.kind==="date"){
+      const v=dateText(pickerState.selectedDate);document.getElementById(pickerState.targetInput).value=v;document.getElementById(pickerState.targetButton).textContent=v;
+    }else if(pickerState.kind==="clock"){
+      const v=`${String(pickerState.hour).padStart(2,"0")}:${String(pickerState.minute).padStart(2,"0")}`;document.getElementById(pickerState.targetInput).value=v;document.getElementById(pickerState.targetButton).textContent=v;
+    }else if(pickerState.kind==="setupTime"){
+      const row=pickerState.setupRow,idx=pickerState.choiceIndex;row.dataset.timeIndex=String(idx);row.querySelector(".setup-time-choice").textContent=fmtTime(1200+VALID_TIME_BONUSES[idx]);
+    }else if(pickerState.kind==="level"){
+      bossLevelValue=pickerState.levelValues[pickerState.choiceIndex];renderBossLevelChoice();
+    }else if(pickerState.kind==="bossDuration"||pickerState.kind==="normalDuration"||pickerState.kind==="memberRemainingTime"){
+      const btn=pickerState.durationButton;btn.dataset.seconds=String(pickerState.durationSeconds);btn.textContent=fmtTime(pickerState.durationSeconds);
+    }
+    closeModal("pickerModal");
+  };
+
+  async function ensureAdmin(){
+    if(state.adminUnlocked) return true;
+    const pin=window.prompt("운영진 PIN을 입력하세요.");
+    if(pin===null) return false;
+    if(pin!==WRITE_PIN){showToast("PIN이 일치하지 않습니다.");return false;}
+    state.adminUnlocked=true; return true;
+  }
+
+  function firebaseErrorMessage(err){
+    const code=String(err?.code||"");
+    if(code.includes("permission-denied")) return "Firebase 권한 오류입니다. Firestore 규칙을 확인하세요.";
+    if(code.includes("unavailable")||code.includes("network")) return "네트워크 또는 Firebase 연결을 확인하세요.";
+    return err?.message?`저장 오류: ${String(err.message).slice(0,70)}`:"Firebase 저장 중 오류가 발생했습니다.";
+  }
+  async function ensureFirebaseReady(){
+    if(state.firebase) return true;
+    if(firebaseReadyPromise) await firebaseReadyPromise;
+    if(state.firebase) return true;
+    showToast(state.firebaseError?firebaseErrorMessage(state.firebaseError):"Firebase 연결에 실패했습니다.");
+    return false;
+  }
+  async function persistRound(round){
+    if(!(await ensureFirebaseReady())) return false;
+    if(!(await ensureAdmin())) return false;
+    const resourceChanged=resourceSignature(state.round)!==resourceSignature(round);
+    round.updatedAt=new Date().toISOString();
+    if(resourceChanged) round.resourceUpdatedAt=new Date().toISOString();
+    else if(state.round?.resourceUpdatedAt) round.resourceUpdatedAt=state.round.resourceUpdatedAt;
+    try{
+      await state.firebase.saveRound(round,resourceChanged);
+      state.round=normalizeRound(round,round.id); state.connected=true; state.loading=false; renderAll();
+      return true;
+    }
+    catch(err){ console.error(err); state.firebaseError=err; showToast(firebaseErrorMessage(err)); return false; }
+  }
+
+  document.getElementById("roundSetupBtn").onclick=()=>{fillRoundSetup();openModal("roundModal");};
+  document.getElementById("saveRoundSetupBtn").onclick=async()=>{
+    if(!state.round?.id){showToast("실제 회차가 없습니다. ‘새 회차 시작’을 사용하세요.");return;}
+    const startIso=parseLocalDateTimeFields(document.getElementById("setupStartDate").value,document.getElementById("setupStartTime").value);
+    if(!startIso){showToast("시작 날짜와 시각을 확인하세요.");return;}
+    const r=deepClone(state.round); r.mode=document.getElementById("setupMode").value; r.members=gatherSetupMembers(true); r.startAt=startIso; r.endAt=new Date(new Date(startIso).getTime()+(47*60+45)*60000).toISOString();
+    if(await persistRound(r)){closeModal("roundModal");showToast("현재 회차 기준값을 저장했습니다.");}
+  };
+  document.getElementById("startNewRoundBtn").onclick=async()=>{
+    const btn=document.getElementById("startNewRoundBtn");
+    if(!(await ensureFirebaseReady())) return;
+    if(!(await ensureAdmin())) return;
+    const startIso=parseLocalDateTimeFields(document.getElementById("setupStartDate").value,document.getElementById("setupStartTime").value);
+    if(!startIso){showToast("시작 날짜와 시각을 확인하세요.");return;}
+    const end=new Date(new Date(startIso).getTime()+(47*60+45)*60000).toISOString();
+    const nowIso=new Date().toISOString();
+    const round={id:`round_${startIso.slice(0,10)}_${Date.now().toString(36)}`,mode:document.getElementById("setupMode").value,startAt:startIso,endAt:end,members:gatherSetupMembers(false),bosses:[],currentBossId:null,isDraft:false,updatedAt:nowIso,resourceUpdatedAt:nowIso};
+    const oldText=btn.textContent; btn.disabled=true; btn.textContent="시작 중…";
+    try{
+      await state.firebase.createRound(round);
+      state.round=round; state.connected=true; state.loading=false; state.firebaseError=null; renderAll();
+      closeModal("roundModal"); showToast("새 회차를 시작했습니다.");
+    }catch(err){
+      console.error(err); state.firebaseError=err; renderHeader(); showToast(firebaseErrorMessage(err));
+    }finally{btn.disabled=false;btn.textContent=oldText;}
+  };
+
+  let bossLevelValue=20;
+  function renderBossLevelChoice(){
+    bossLevelValue=Math.max(20,Math.min(50,Number(bossLevelValue)||20));
+    document.getElementById("newBossLevel").value=String(bossLevelValue);
+    document.getElementById("newBossLevelBtn").textContent=`Lv.${bossLevelValue}`;
+  }
+  document.getElementById("newBossLevelBtn").onclick=()=>openLevelPicker();
+
+  document.getElementById("addBossBtn").onclick=()=>{
+    if(!state.round?.id){showToast("먼저 실제 회차를 시작하세요.");return;}
+    const np=nowParts(); document.getElementById("newBossStartDate").value=np.date; document.getElementById("newBossStartDateBtn").textContent=np.date; document.getElementById("newBossStartTime").value=np.time; document.getElementById("newBossStartTimeBtn").textContent=np.time;
+    bossLevelValue=20; renderBossLevelChoice();
+    const galaxyOpt=document.querySelector('#newBossArea option[value="galaxy"]'); galaxyOpt.disabled=state.round?.mode!=="galaxy";
+    if(galaxyOpt.disabled && document.getElementById("newBossArea").value==="galaxy") document.getElementById("newBossArea").value="wolf";
+    openModal("addBossModal");
+  };
+  document.getElementById("confirmAddBossBtn").onclick=async()=>{
+    if(!(await ensureAdmin())) return;
+    const startIso=parseLocalDateTimeFields(document.getElementById("newBossStartDate").value,document.getElementById("newBossStartTime").value);
+    if(!startIso){showToast("팝업 날짜와 시각을 확인하세요.");return;}
+    const r=deepClone(state.round);
+    const old=r.bosses.find(b=>b.id===r.currentBossId); if(old){old.status="ended"; old.endedAt=old.endedAt||startIso;}
+    const order=Math.max(0,...r.bosses.map(b=>Number(b.order)||0))+1;
+    const id=uniqueId("boss");
+    r.bosses.push({id,order,area:document.getElementById("newBossArea").value,bossLevel:bossLevelValue,status:"current",startedAt:startIso,endedAt:null,participants:{}});
+    r.currentBossId=id;
+    if(await persistRound(r)){closeModal("addBossModal");showToast(`#${order} Lv.${bossLevelValue} 보스를 등록했습니다.`);}
+  };
+
+  function openBossModal(id,edit=false){
+    const b=bossById(id); if(!b)return; state.selectedBossId=id; state.editingBoss=edit;
+    const meta=BOSS_META[b.area];
+    document.getElementById("bossModalTitle").textContent=`#${b.order} ${b.bossLevel?`Lv.${b.bossLevel} `:""}${meta.name} 보스`;
+    const body=document.getElementById("bossModalBody"), actions=document.getElementById("bossModalActions");
+    const rankText=b.status==="current"?"진행 중":(Number(b.rank)>0?`${Number(b.rank)}위`:"미입력");
+    const hero=`<div class="boss-detail-hero">${bossImageMarkup(b.area,"")}<div><div class="boss-detail-name">#${b.order} ${b.bossLevel?`Lv.${b.bossLevel}`:"Lv.-"} ${meta.name} ${b.id===state.round.currentBossId?'<span style="color:#7556c9;font-size:11px">· 현재</span>':''}</div><div class="boss-detail-stats"><div class="detail-stat">참여인원<b>${participantCount(b)} / ${MEMBER_ORDER.length}</b></div><div class="detail-stat">불참인원<b>${Math.max(0,MEMBER_ORDER.length-participantCount(b))}명</b></div><div class="detail-stat">길드 합계<b>${fmtNum(bossScore(b))}</b></div><div class="detail-stat">${b.status==="current"?"상태":"등수"}<b>${rankText}</b></div></div></div></div>`;
+    if(!edit){
+      const parts=MEMBER_ORDER.filter(n=>b.participants?.[n]);
+      const list=parts.length?`<div class="participant-list"><div class="participant-head"><div>참여 길드원</div><div>스코어</div></div>${parts.map(n=>{const p=b.participants[n];return `<div class="participant-row"><div class="pname">${n}</div><div class="pscore">${fmtNum(p.score)}</div></div>`;}).join("")}</div>`:`<div class="participant-list"><div class="participant-empty">아직 참여 기록이 없습니다.</div></div>`;
+      body.innerHTML=hero+list;
+      actions.classList.remove("confirming-delete");
+      actions.innerHTML=`<button class="action-btn danger" id="deleteBossBtn">삭제</button><button class="action-btn" data-boss-close>닫기</button><button class="action-btn primary" id="editBossBtn">참여 기록 수정</button>`;
+      actions.querySelector("[data-boss-close]").onclick=()=>closeModal("bossModal");
+      document.getElementById("editBossBtn").onclick=()=>openBossModal(id,true);
+      document.getElementById("deleteBossBtn").onclick=()=>showBossDeleteConfirm(id);
+    }else{
+      const rankEditor=b.status==="current"?"":`<div class="ended-rank-editor"><span>최종 길드 순위</span><div><input id="bossRankInput" type="number" inputmode="numeric" min="1" max="999" placeholder="순위" value="${Number(b.rank)>0?Number(b.rank):""}"><em>위</em></div></div>`;
+      body.innerHTML=hero+rankEditor+`<div class="edit-list"><div class="edit-head"><div>참여</div><div>길드원</div><div>스코어</div></div>${MEMBER_ORDER.map(n=>{const p=b.participants?.[n],on=!!p;return `<div class="edit-row" data-edit-member="${n}"><input type="checkbox" ${on?"checked":""}><div class="ename">${n}</div><input class="escore" type="number" inputmode="numeric" min="0" value="${on?Number(p.score)||0:0}"></div>`;}).join("")}</div>`;
+      body.querySelectorAll("[data-edit-member]").forEach(row=>{
+        const cb=row.querySelector('input[type="checkbox"]'), scoreInput=row.querySelector(".escore");
+        cb.onchange=()=>{ if(!cb.checked) scoreInput.value="0"; };
+        scoreInput.oninput=()=>{ if((Number(scoreInput.value)||0)>0) cb.checked=true; };
+      });
+      actions.classList.remove("confirming-delete");
+      actions.innerHTML=`<button class="action-btn" id="cancelBossEditBtn">취소</button><button class="action-btn primary" id="saveBossEditBtn">저장</button>`;
+      document.getElementById("cancelBossEditBtn").onclick=()=>openBossModal(id,false);
+      document.getElementById("saveBossEditBtn").onclick=saveBossParticipants;
+    }
+    openModal("bossModal");
+  }
+
+  function showBossDeleteConfirm(id){
+    const b=bossById(id); if(!b)return;
+    const meta=BOSS_META[b.area]||{name:b.area};
+    const actions=document.getElementById("bossModalActions");
+    actions.classList.add("confirming-delete");
+    actions.innerHTML=`<div class="delete-confirm-copy"><b>#${Number(b.order)||'-'} ${b.bossLevel?`Lv.${b.bossLevel} `:''}${meta.name}</b> 보스 기록을 삭제할까요?<br>참여자와 스코어도 함께 삭제되며 되돌릴 수 없습니다.</div><button class="action-btn" id="cancelDeleteBossBtn">취소</button><button class="action-btn danger" id="confirmDeleteBossBtn">정말 삭제</button>`;
+    document.getElementById("cancelDeleteBossBtn").onclick=()=>openBossModal(id,false);
+    document.getElementById("confirmDeleteBossBtn").onclick=()=>deleteBossRecord(id);
+  }
+
+  async function deleteBossRecord(id){
+    if(!(await ensureAdmin())) return;
+    const r=deepClone(state.round);
+    const idx=r.bosses.findIndex(x=>x.id===id);
+    if(idx<0){showToast("삭제할 보스 기록을 찾지 못했습니다.");return;}
+    const target=r.bosses[idx], meta=BOSS_META[target.area]||{name:target.area};
+    const wasCurrent=r.currentBossId===id;
+    r.bosses.splice(idx,1);
+    if(wasCurrent) r.currentBossId=null;
+    if(await persistRound(r)){
+      closeModal("bossModal");
+      showToast(`#${Number(target.order)||'-'} ${meta.name} 보스 기록을 삭제했습니다.`);
+    }
+  }
+
+  async function saveBossParticipants(){
+    if(!(await ensureAdmin())) return;
+    const r=deepClone(state.round), b=r.bosses.find(x=>x.id===state.selectedBossId); if(!b)return;
+    const next={}; let invalid="";
+    document.querySelectorAll("[data-edit-member]").forEach(row=>{
+      const name=row.dataset.editMember, score=Math.max(0,Number(row.querySelector(".escore").value)||0);
+      const on=row.querySelector('input[type="checkbox"]').checked || score>0; if(!on)return;
+      const m=r.members[name]||makeMemberState();
+      const otherBossCount=r.bosses.filter(x=>x.id!==b.id && x.participants?.[name]).length;
+      const availableSwords=(Number(m.initialSwords)||10)-(Number(m.normalSwords)||0)-otherBossCount;
+      if(availableSwords<1) invalid=`${name}님의 남은 칼이 없습니다.`;
+      const legacySeconds=Number(b.participants?.[name]?.usedSeconds)||0;
+      next[name]={usedSeconds:legacySeconds,score};
+    });
+    if(invalid){showToast(invalid);return;}
+    b.participants=next;
+    const rankInput=document.getElementById("bossRankInput");
+    if(b.status!=="current" && rankInput){
+      const rankVal=Number(rankInput.value);
+      b.rank=Number.isFinite(rankVal)&&rankVal>0?Math.min(999,Math.floor(rankVal)):null;
+    }
+    if(await persistRound(r)){showToast("보스 참여 기록을 저장했습니다.");openBossModal(b.id,false);}
+  }
+
+  function memberBossHistoryMarkup(name){
+    const bosses=[...(state.round?.bosses||[])].sort((a,b)=>(Number(a.order)||0)-(Number(b.order)||0));
+    if(!bosses.length) return `<div class="member-history-empty">이번 회차에 등록된 초대형 보스가 없습니다.</div>`;
+    return `<div class="member-history-list">${bosses.map(b=>{
+      const meta=BOSS_META[b.area]||{name:b.area};
+      const joined=!!b.participants?.[name];
+      const current=b.id===state.round.currentBossId;
+      return `<div class="member-history-item"><div class="member-history-boss"><b>#${Number(b.order)||'-'} ${meta.name}</b><span>${b.bossLevel?`Lv.${b.bossLevel}`:'Lv.-'}${current?' · 현재':''}</span></div><span class="member-history-status ${joined?'joined':'missed'}">${joined?'참여':'미참여'}</span></div>`;
+    }).join("")}</div>`;
+  }
+
+  function openMemberModal(name){
+    state.selectedMember=name; const m=state.round?.members?.[name]||makeMemberState(), r=memberRemaining(name);
+    const maxSwords=Math.max(0,(Number(m.initialSwords)||10)-bossParticipationCount(name));
+    const maxTime=Math.max(0,(Number(m.initialSeconds)||1200)-bossUsedSeconds(name));
+    document.getElementById("memberModalBody").innerHTML=`<div class="member-detail-card"><div class="member-detail-name">${name}</div><div class="member-resource-edit-grid"><div class="member-resource-edit"><span>현재 칼(기회)</span><div class="sword-edit-line"><input id="remainingSwordsInput" type="number" inputmode="numeric" min="0" max="${maxSwords}" value="${r.swords}"><em>/10</em></div></div><div class="member-resource-edit"><span>현재 잔여 시간</span><button type="button" class="picker-display member-remaining-time" id="remainingTimeBtn" data-seconds="${r.seconds}" data-max-seconds="${maxTime}">${fmtTime(r.seconds)}</button></div></div></div><div class="member-history-title">이번 회차 초대형 참여</div>${memberBossHistoryMarkup(name)}`;
+    const timeBtn=document.getElementById("remainingTimeBtn");
+    if(timeBtn) timeBtn.onclick=()=>openMemberRemainingTimePicker(name,timeBtn);
+    openModal("memberModal");
+  }
+
+  document.getElementById("saveMemberUsageBtn").onclick=async()=>{
+    if(!(await ensureAdmin())) return;
+    const name=state.selectedMember; if(!name)return; const r=deepClone(state.round), m=r.members[name]||makeMemberState();
+    const bossCount=bossParticipationCount(name), bossSec=bossUsedSeconds(name);
+    const initialSwords=Number(m.initialSwords)||10, initialSeconds=Number(m.initialSeconds)||1200;
+    const maxSwords=Math.max(0,initialSwords-bossCount), maxTime=Math.max(0,initialSeconds-bossSec);
+    const desiredSwords=Math.max(0,Math.floor(Number(document.getElementById("remainingSwordsInput").value)||0));
+    const desiredSeconds=Math.max(0,Number(document.getElementById("remainingTimeBtn").dataset.seconds)||0);
+    if(desiredSwords>maxSwords){showToast(`초대형 참여 ${bossCount}회를 반영하면 최대 ${maxSwords}칼까지 남을 수 있습니다.`);return;}
+    if(desiredSeconds>maxTime){showToast(`설정 가능한 최대 잔여 시간은 ${fmtTime(maxTime)}입니다.`);return;}
+    m.normalSwords=Math.max(0,initialSwords-bossCount-desiredSwords);
+    m.normalSeconds=Math.max(0,initialSeconds-bossSec-desiredSeconds);
+    r.members[name]=m;
+    if(await persistRound(r)){closeModal("memberModal");showToast("길드원 현재 자원을 저장했습니다.");}
+  };
+
+  const historyRailEl=document.getElementById("historyBossRail");
+  const historyNextBtn=document.getElementById("historyNextBtn");
+  if(historyRailEl){
+    historyRailEl.addEventListener("scroll",updateHistoryNextButton,{passive:true});
+  }
+  if(historyNextBtn){
+    historyNextBtn.addEventListener("click",()=>{
+      const rail=document.getElementById("historyBossRail");
+      if(!rail) return;
+      rail.scrollBy({left:rail.clientWidth,behavior:"smooth"});
+      setTimeout(updateHistoryNextButton,420);
+    });
+  }
+
+  function syncCanvasScale(){
+    const shell=document.getElementById("shell"), app=document.getElementById("app");
+    const scale=Math.min(1,window.innerWidth/LOGICAL_WIDTH);
+    app.style.transform=`scale(${scale})`;
+    document.documentElement.style.setProperty("--ui-scale",String(scale));
+    shell.style.width=`${LOGICAL_WIDTH*scale}px`;
+    requestAnimationFrame(()=>{shell.style.height=`${app.scrollHeight*scale}px`;});
+  }
+  window.addEventListener("resize",syncCanvasScale,{passive:true});
+  if(window.ResizeObserver) new ResizeObserver(syncCanvasScale).observe(document.getElementById("app"));
+
+  async function initFirebase(){
+    try{
+      const [appMod,authMod,fsMod]=await Promise.all([
+        import("https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js"),
+        import("https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js"),
+        import("https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js")
+      ]);
+      const firebaseConfig={apiKey:"AIzaSyBKJT7idO3z4uBvL645uNl2XSFa8mq7IO4",authDomain:"cat-hero-boss.firebaseapp.com",projectId:"cat-hero-boss",storageBucket:"cat-hero-boss.firebasestorage.app",messagingSenderId:"1065873409630",appId:"1:1065873409630:web:109f8edbe6a818833bd6cf",measurementId:"G-4QJSQ5DFDT"};
+      const app=appMod.initializeApp(firebaseConfig), auth=authMod.getAuth(app), db=fsMod.getFirestore(app);
+      if(!auth.currentUser) await authMod.signInAnonymously(auth);
+      const activeRef=fsMod.doc(db,"riftGalaxyOps","active");
+      const finishLoad=(round)=>{state.round=round;state.connected=true;state.loading=false;state.firebaseError=null;renderAll();};
+      const subscribeRound=(roundId)=>{
+        if(state.unsubscribeRound){state.unsubscribeRound();state.unsubscribeRound=null;}
+        if(!roundId){finishLoad(makeDraftRound());return;}
+        state.unsubscribeRound=fsMod.onSnapshot(fsMod.doc(db,"riftGalaxyRounds",roundId),snap=>{
+          if(snap.exists()) finishLoad(normalizeRound(snap.data(),snap.id));
+          else finishLoad(makeDraftRound());
+        },err=>{
+          console.error(err);state.firebaseError=err;state.connected=false;state.loading=false;
+          if(!state.round) state.round=makeDraftRound(); renderAll();
+        });
+      };
+      fsMod.onSnapshot(activeRef,snap=>{
+        const id=snap.exists()?snap.data().roundId:null;
+        subscribeRound(id||null);
+      },err=>{
+        console.error(err);state.firebaseError=err;state.connected=false;state.loading=false;
+        if(!state.round) state.round=makeDraftRound(); renderAll();
+      });
+      state.firebase={
+        async saveRound(round,resourceChanged=false){
+          const payload=deepClone(round); delete payload.updatedAtServer; delete payload.resourceUpdatedAtServer; delete payload.isDraft;
+          payload.updatedAt=new Date().toISOString();
+          payload.updatedAtServer=fsMod.serverTimestamp();
+          if(resourceChanged){
+            payload.resourceUpdatedAt=new Date().toISOString();
+            payload.resourceUpdatedAtServer=fsMod.serverTimestamp();
+          }else{
+            const oldResourceDate=toDateSafe(round.resourceUpdatedAtServer||round.resourceUpdatedAt);
+            if(oldResourceDate) payload.resourceUpdatedAtServer=fsMod.Timestamp.fromDate(oldResourceDate);
+          }
+          await fsMod.setDoc(fsMod.doc(db,"riftGalaxyRounds",round.id),payload,{merge:false});
+        },
+        async createRound(round){
+          const payload=deepClone(round); delete payload.updatedAtServer; delete payload.resourceUpdatedAtServer; delete payload.isDraft;
+          payload.updatedAt=new Date().toISOString();
+          payload.updatedAtServer=fsMod.serverTimestamp();
+          payload.resourceUpdatedAt=payload.resourceUpdatedAt||payload.updatedAt;
+          payload.resourceUpdatedAtServer=fsMod.serverTimestamp();
+          const batch=fsMod.writeBatch(db);
+          batch.set(fsMod.doc(db,"riftGalaxyRounds",round.id),payload,{merge:false});
+          batch.set(activeRef,{roundId:round.id,updatedAt:new Date().toISOString(),updatedAtServer:fsMod.serverTimestamp()},{merge:false});
+          await batch.commit();
+        }
+      };
+      state.firebaseError=null;
+      renderHeader();
+    }catch(err){
+      console.warn("Firebase connection error",err);state.firebaseError=err;state.connected=false;state.loading=false;
+      if(!state.round) state.round=makeDraftRound(); renderAll();
+    }
+  }
+
+  renderAll();
+  if(location.protocol!=="file:") firebaseReadyPromise=initFirebase();
+  else { state.round=makeDraftRound(); state.loading=false; renderAll(); }
+  window.__guildOps={getState:()=>deepClone(state.round),reference:INTERNAL_REFERENCE};
+})();
+</script>
+</body>
+</html>
