@@ -1,0 +1,2400 @@
+/* Spotify Mobile Prototype — style.css
+ * Dark adaptation of the "Current Track" concept: airy minimal card, thin
+ * outlines, blob-masked artwork ringed by a progress loop, centered
+ * uppercase titles, lyrics row. All selectors are scoped under #spm-root
+ * so Spotify's own styles are never rewritten.
+ */
+
+#spm-root {
+  --spm-bg: rgba(17, 18, 20, 0.92);
+  --spm-solid-bg: #111214;
+  --spm-card-border: rgba(244, 241, 234, 0.1);
+  --spm-cream: #f4f1ea;
+  --spm-solid: #f4f1ea;
+  --spm-on-solid: #101112;
+  --spm-glow-strong: rgba(244, 241, 234, 0.5);
+  --spm-halo-accent-rgb: 244, 241, 234;
+  --spm-halo-cover-rgb: 148, 120, 255;
+  --spm-text: #f4f1ea;
+  --spm-muted: rgba(244, 241, 234, 0.55);
+  --spm-faint: rgba(244, 241, 234, 0.32);
+  --spm-line: rgba(244, 241, 234, 0.14);
+  --spm-line-strong: rgba(244, 241, 234, 0.35);
+  --spm-radius: 28px;
+  --spm-shadow: 0 24px 70px rgba(0, 0, 0, 0.6), 0 2px 10px rgba(0, 0, 0, 0.4);
+  /* --spm-zoom / --spm-vw / --spm-vh are set from JS (see ui.js
+   * applyEnvironment + adapter.getViewportInfo). On desktop they are
+   * exactly 1 / innerWidth / innerHeight, i.e. visual no-ops. On phones
+   * where Spotify's desktop layout is scaled down to fit, zoom
+   * counter-magnifies ONLY our own box back to true physical size. */
+  --spm-zoom: 1;
+  --spm-vw: 100vw;
+  --spm-vh: 100dvh;
+  zoom: var(--spm-zoom);
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 999999;
+  font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color: var(--spm-text);
+  -webkit-tap-highlight-color: transparent;
+}
+
+#spm-root * {
+  box-sizing: border-box;
+}
+
+/* Never let the browser start a native image drag (PC grab hijack) or
+ * select anything inside our UI; gestures belong to us. */
+#spm-root img {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: none;
+}
+
+/* ---------- Card ---------- */
+
+#spm-root .spm-card {
+  position: relative;
+  width: min(360px, calc(var(--spm-vw) - 40px));
+  max-height: min(92vh, 800px, var(--spm-vh));
+  overflow-y: auto;
+  overflow-x: clip;
+  scrollbar-width: none;
+  padding: 18px 22px 12px;
+  background: var(--spm-solid-bg);
+  border: 1px solid var(--spm-card-border);
+  border-radius: var(--spm-radius);
+  box-shadow: var(--spm-shadow);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  animation: spm-in 0.2s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+  overscroll-behavior: contain;
+  /* None so collapse drags are never stolen mid-gesture (a vertical pan
+   * would hand the pointer to the page scroll and freeze the drag). All
+   * in-card gestures are custom pointer handlers; the volume slider is a
+   * custom bar for the same reason. Wheel scrolling still works. */
+  touch-action: none;
+  transition: transform 0.14s ease;
+  /* No text selection anywhere on the card: drags (collapse, seek, art
+   * swipe) must move the UI, never highlight titles and times. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#spm-root .spm-card::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes spm-in {
+  from {
+    transform: translate3d(0, 20px, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+#spm-root .spm-glow {
+  position: absolute;
+  inset: -40px -40px auto -40px;
+  height: 200px;
+  background: radial-gradient(60% 80% at 50% 0%, rgba(244, 241, 234, 0.07), transparent 70%);
+  pointer-events: none;
+}
+
+/* ---------- Buttons (shared) ---------- */
+
+#spm-root button {
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* A press that STARTS on a control must never be stolen by the card's own
+ * scrolling. .spm-card is an overflow-y:auto scroller, and `touch-action:
+ * manipulation` still permits panning — so on a phone, the small finger
+ * movement of an ordinary tap could tip the browser into a scroll. It then
+ * fires pointercancel and suppresses the click, so the button's own
+ * pointerup/click never ran and the tap did nothing. That is why "Connect
+ * devices" (and the rest of the card's controls) felt random: it depended on
+ * whether the card happened to be scrollable at that moment.
+ *
+ * `none` means a drag starting on a button will not scroll the card; scroll
+ * from the artwork/titles as usual. */
+#spm-root .spm-card button {
+  touch-action: none;
+}
+
+#spm-root button:focus-visible,
+#spm-root .spm-bar:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+
+/* Icon-only header buttons (back + heart): no circular outline — just the
+ * glyph, matching the ghost/queue/devices rows. The 44px box stays as the
+ * touch target; only the ring is gone. */
+#spm-root .spm-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: var(--spm-muted);
+  transition: color 0.18s, background 0.18s, transform 0.12s;
+}
+
+#spm-root .spm-circle:hover {
+  color: var(--spm-cream);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+#spm-root .spm-circle:active {
+  transform: scale(0.9);
+}
+
+#spm-root .spm-circle.spm-liked {
+  color: var(--spm-cream);
+}
+
+/* ---------- Liked flourish: bloom + shards ----------
+ * Triggered from ui.js (likeFlourish) on the heart's OFF -> ON transition.
+ * Everything animated lives here; JS only sets per-shard custom props, so
+ * reduced-motion below can disable the whole thing in one place.
+ * Colours come from the halo vars, so the light theme needs no extra rules. */
+
+/* The layers are children of #spm-root, NOT of the heart: .spm-card clips
+ * (overflow-x/y), so a burst rendered inside it is cropped to nothing. JS
+ * re-anchors each layer to its heart's centre via left/top. */
+#spm-root .spm-like-fx {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  /* Shards and bloom must be able to escape the origin box. */
+  overflow: visible;
+  z-index: 3;
+}
+
+/* The bloom: same radial-gradient language as .spm-halos. */
+#spm-root .spm-like-fx::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 38px;
+  height: 38px;
+  margin: -19px 0 0 -19px;
+  border-radius: 50%;
+  opacity: 0;
+  transform: scale(0.35);
+  background: radial-gradient(
+    circle,
+    rgba(var(--spm-halo-accent-rgb), 0.45) 0%,
+    rgba(var(--spm-halo-cover-rgb), 0.18) 45%,
+    transparent 72%
+  );
+}
+
+/* spm-like-fire and spm-like-fx are on the SAME element, so these must be a
+ * compound class selector — `.spm-like-fire .spm-like-fx` is a DESCENDANT
+ * combinator and would never match, silently killing the bloom and the ring. */
+#spm-root .spm-like-fx.spm-like-fire::before {
+  animation: spm-like-bloom 620ms cubic-bezier(0.16, 0.8, 0.3, 1) forwards;
+}
+
+/* Shards: rotate to the angle, then push straight out along it. */
+#spm-root .spm-like-fx i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--s, 5px);
+  height: var(--s, 5px);
+  margin: calc(var(--s, 5px) / -2) 0 0 calc(var(--s, 5px) / -2);
+  border-radius: 1.5px;
+  background: var(--c, rgba(var(--spm-halo-accent-rgb), 0.95));
+  opacity: 0;
+  will-change: transform, opacity;
+  animation: spm-like-shard var(--dur, 700ms) cubic-bezier(0.16, 0.72, 0.32, 1)
+    var(--delay, 0ms) forwards;
+}
+
+/* A soft ring so the burst has a leading edge, not just scattered dots. */
+#spm-root .spm-like-fx.spm-like-fire::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 38px;
+  height: 38px;
+  margin: -19px 0 0 -19px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(var(--spm-halo-accent-rgb), 0.85);
+  opacity: 0;
+  transform: scale(0.3);
+  animation: spm-like-ring 560ms cubic-bezier(0.16, 0.8, 0.3, 1) forwards;
+}
+
+@keyframes spm-like-bloom {
+  0% { opacity: 0; transform: scale(0.35); }
+  22% { opacity: 1; }
+  100% { opacity: 0; transform: scale(2.1); }
+}
+
+@keyframes spm-like-ring {
+  0% { opacity: 0; transform: scale(0.3); }
+  18% { opacity: 0.9; }
+  100% { opacity: 0; transform: scale(2.35); }
+}
+
+@keyframes spm-like-shard {
+  0% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateY(0) scale(0.3) rotate(0deg);
+  }
+  16% { opacity: 1; }
+  100% {
+    opacity: 0;
+    transform: rotate(var(--a)) translateY(calc(var(--d) * -1)) scale(1)
+      rotate(var(--spin));
+  }
+}
+
+/* The icon itself pops. Overshoot then settle, so it reads as a "thump".
+ * (spm-like-pop is on the button and the icon is its direct child.) */
+#spm-root .spm-like-pop > svg {
+  animation: spm-like-pop 520ms cubic-bezier(0.2, 1.5, 0.4, 1);
+  transform-origin: 50% 55%;
+}
+
+@keyframes spm-like-pop {
+  0% { transform: scale(0.55); }
+  42% { transform: scale(1.34); }
+  68% { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+
+/* The mini heart is smaller — tighten the burst so it does not swamp the bar.
+ * Keyed off the layer's own data-likefx (they are root children, so no
+ * sibling relationship exists to hang a combinator off). */
+#spm-root .spm-like-fx[data-likefx="mini"]::before,
+#spm-root .spm-like-fx[data-likefx="mini"]::after {
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+}
+#spm-root .spm-like-fx[data-likefx="mini"]::after {
+  border-width: 1.2px;
+}
+
+/* ---------- Header ---------- */
+
+#spm-root .spm-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#spm-root .spm-top-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--spm-muted);
+}
+
+#spm-root .spm-context {
+  margin: 6px 8px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--spm-muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#spm-root .spm-context[hidden] {
+  display: none;
+}
+
+#spm-root .spm-context-link {
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+
+#spm-root .spm-context-link:hover {
+  color: var(--spm-text);
+  text-decoration: underline;
+}
+
+/* ---------- Stage: squircle artwork ---------- */
+
+#spm-root .spm-stage {
+  position: relative;
+  width: min(100%, 264px);
+  aspect-ratio: 1 / 1;
+  margin: 14px auto 0;
+  isolation: isolate;
+}
+
+#spm-root .spm-blob {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 26%;
+  background: linear-gradient(145deg, #232326, #141415);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+  /* Swipe flights glide; finger-follow disables the transition (see
+   * .spm-dragging) so the art tracks 1:1 with zero lag. (No touch-action
+   * needed here: the card pins it to none, which wins the intersection.) */
+  transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.25, 1), opacity 0.18s ease;
+  cursor: grab;
+}
+
+#spm-root .spm-blob.spm-dragging {
+  transition: none;
+  cursor: grabbing;
+}
+
+#spm-root .spm-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+#spm-root .spm-art.spm-loaded {
+  opacity: 1;
+}
+
+#spm-root .spm-art-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(244, 241, 234, 0.22);
+}
+
+/* ---------- Progress: slim line under the artwork ---------- */
+
+#spm-root .spm-progress {
+  margin-top: 14px;
+  padding: 0 2px;
+}
+
+#spm-root .spm-bar {
+  position: relative;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+  border-radius: 8px;
+}
+
+#spm-root .spm-track {
+  position: relative;
+  height: 3px;
+  width: 100%;
+  border-radius: 99px;
+  background: var(--spm-line);
+  /* The fill's own rounding keeps its ends clean at every ratio. */
+  overflow: visible;
+}
+
+#spm-root .spm-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 99px;
+  background: var(--spm-solid);
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+
+#spm-root .spm-timerow {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 2px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--spm-faint);
+}
+
+#spm-root .spm-cur,
+#spm-root .spm-dur {
+  font-variant-numeric: tabular-nums;
+  min-width: 3.2em;
+}
+
+#spm-root .spm-cur {
+  text-align: left;
+}
+
+#spm-root .spm-dur {
+  text-align: right;
+}
+
+/* ---------- Titles ---------- */
+
+#spm-root .spm-titles {
+  margin-top: 14px;
+  text-align: center;
+}
+
+#spm-root .spm-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 750;
+  letter-spacing: 0.015em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#spm-root .spm-artist {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--spm-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#spm-root .spm-artist-link {
+  display: block;
+  width: 100%;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+#spm-root .spm-artist-link:hover {
+  color: var(--spm-text);
+  text-decoration: underline;
+}
+
+#spm-root .spm-artist-link:disabled {
+  cursor: default;
+  text-decoration: none;
+}
+
+/* ---------- Skeleton loading (before first track) ----------
+ * Replaces the "Nothing playing" dummy text with pulsing
+ * placeholders. Active only while #spm-root carries .spm-loading
+ * (toggled from ui.js: true until the first real track arrives).
+ * Text is made transparent and replaced by animated bars; artwork
+ * shows a pulse instead of the note fallback. Opacity-only on purpose:
+ * the old background-position shimmer repainted every frame, right in
+ * the middle of cold start when the phone is busiest. Purely visual:
+ * screen readers get aria-busy on the root. */
+@keyframes spm-skeleton {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+#spm-root.spm-loading .spm-title,
+#spm-root.spm-loading .spm-artist-link,
+#spm-root.spm-loading .spm-mini-title,
+#spm-root.spm-loading .spm-mini-artist {
+  color: transparent !important;
+  -webkit-user-select: none;
+  user-select: none;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    rgba(244, 241, 234, 0.07) 40%,
+    rgba(244, 241, 234, 0.18) 50%,
+    rgba(244, 241, 234, 0.07) 60%
+  );
+  background-size: 200% 100%;
+  animation: spm-skeleton 1.4s ease-in-out infinite;
+}
+
+#spm-root.spm-loading .spm-title {
+  height: 18px;
+  width: 62%;
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: 8px;
+}
+
+#spm-root.spm-loading .spm-artist {
+  overflow: visible;
+}
+
+#spm-root.spm-loading .spm-artist-link {
+  display: block;
+  height: 13px;
+  width: 42%;
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: 7px;
+}
+
+#spm-root.spm-loading .spm-mini-title {
+  height: 13px;
+  width: 70%;
+  border-radius: 6px;
+}
+
+#spm-root.spm-loading .spm-mini-artist {
+  height: 11px;
+  width: 45%;
+  margin-top: 6px;
+  border-radius: 6px;
+}
+
+/* Artwork shimmer while loading: hide the note fallback, shimmer the
+ * blob + mini artwrap instead. !important wins over the inline
+ * display set from render(). */
+#spm-root.spm-loading .spm-art-fallback,
+#spm-root.spm-loading .spm-mini-fallback {
+  display: none !important;
+}
+
+#spm-root.spm-loading .spm-blob,
+#spm-root.spm-loading .spm-mini-artwrap {
+  background: linear-gradient(
+    100deg,
+    #1b1b1e 40%,
+    #2a2a2f 50%,
+    #1b1b1e 60%
+  );
+  background-size: 200% 100%;
+  animation: spm-skeleton 1.4s ease-in-out infinite;
+}
+
+#spm-root.spm-loading .spm-bar,
+#spm-root.spm-loading .spm-progress {
+  opacity: 0.55;
+}
+
+/* ---------- Main controls (concept order) ---------- */
+
+#spm-root .spm-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding: 0 6px;
+}
+
+#spm-root .spm-mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--spm-muted);
+  transition: color 0.18s, transform 0.12s;
+}
+
+#spm-root .spm-mini:hover {
+  color: var(--spm-cream);
+}
+
+#spm-root .spm-mini:active {
+  transform: scale(0.88);
+}
+
+#spm-root .spm-mini.spm-active {
+  color: var(--spm-cream);
+}
+
+#spm-root .spm-repeat .spm-badge {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: none;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 99px;
+  background: var(--spm-solid);
+  color: var(--spm-on-solid);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 14px;
+  text-align: center;
+}
+
+#spm-root .spm-repeat.spm-repeat-one .spm-badge {
+  display: block;
+}
+
+#spm-root .spm-play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  background: var(--spm-solid);
+  color: var(--spm-on-solid);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  transition: transform 0.12s, box-shadow 0.2s;
+}
+
+/* Dancing glow behind the artwork: a breathing core plus three wisps
+ * circling around each other at different speeds and directions, so the
+ * composite never visibly loops. Each wisp is an OFF-CENTER gradient
+ * clipped to an organic blob shape — that asymmetry is what makes the
+ * rotation read as orbiting/tumbling rather than spinning in place — and
+ * each also swells as it travels. The first wisp carries the cover's
+ * primary hue; the second wisp carries the cover's runner-up hue, falling
+ * back to cream when the cover has no usable second color. The breathing
+ * core stays neutral. All layers animate CONSTANTLY; playback only fades the
+ * wrapper's opacity (same contract as the progress glow), so pause fades
+ * out symmetrically with play's fade in. Lives behind the art (earlier in
+ * DOM order); the art slides in and out of its light on track swipes.
+ * Visible only on the mobile sheet while playing AND an artwork URL is
+ * present (.spm-has-art, toggled synchronously in render) — desktop stays
+ * flat, and no artwork during app load means no halo, so it can never
+ * flash under the unloaded fallback. */
+#spm-root .spm-halos {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 130%;
+  height: 130%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background: radial-gradient(circle, var(--spm-glow-strong) 0%, transparent 65%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  animation: spm-halo-core 2.6s ease-in-out infinite;
+}
+
+#spm-root .spm-halos::before,
+#spm-root .spm-halos::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+#spm-root .spm-halos::before {
+  opacity: 0.9;
+  /* Elliptical, off-center gradient inside an asymmetric (static) clip:
+   * rotating THAT tumbles visibly — same dance, but everything animatable
+   * here (transform + translate) is compositor-only, so these layers never
+   * repaint per frame the way border-radius morphs did. */
+  border-radius: 58% 42% 55% 45% / 52% 56% 44% 48%;
+  background: radial-gradient(58% 42% at 38% 34%, rgba(var(--spm-halo-cover-rgb), 0.5) 0%, transparent 70%);
+  animation: spm-wisp-a 7s linear infinite, spm-wisp-drift-a 11s ease-in-out infinite alternate;
+}
+
+#spm-root .spm-halos::after {
+  opacity: 0.85;
+  border-radius: 46% 54% 60% 40% / 56% 44% 58% 42%;
+  background: radial-gradient(62% 48% at 62% 66%, rgba(var(--spm-halo-accent-rgb), 0.38) 0%, transparent 70%);
+  animation: spm-wisp-b 10s linear infinite, spm-wisp-drift-b 13s ease-in-out infinite alternate;
+}
+
+/* Sheet-only glow: the desktop corner card stays flat (zero animation
+ * cost there) while the mobile fullscreen keeps the full dance. Delete
+ * ".spm-sheet" from the two gates below to restore it on desktop. */
+#spm-root.spm-sheet.spm-playing.spm-has-art .spm-halos {
+  opacity: 1;
+}
+
+/* Battery + heat: the glow only animates while it is visible (playing +
+ * artwork). Otherwise every layer freezes in place — play-state preserves
+ * the current keyframe pose, so resume continues seamlessly with no jump
+ * and the opacity fade contract is untouched. */
+#spm-root .spm-halos,
+#spm-root .spm-halos::before,
+#spm-root .spm-halos::after {
+  animation-play-state: paused;
+}
+
+#spm-root.spm-sheet.spm-playing.spm-has-art .spm-halos,
+#spm-root.spm-sheet.spm-playing.spm-has-art .spm-halos::before,
+#spm-root.spm-sheet.spm-playing.spm-has-art .spm-halos::after {
+  animation-play-state: running;
+}
+
+@keyframes spm-halo-core {
+  /* NOTE: transform-only on purpose. A brightness pulse here repainted
+   * this whole layer every frame on phone GPUs; the scale breath plus the
+   * dancing wisps read identically without it. */
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+}
+
+/* Full-turn tumbles: an off-center ELLIPSE inside an asymmetric clip —
+ * rotating that reads as orbiting/tumbling/wobbling at once, while each
+ * wisp also swells mid-turn. 0%/100% match so the loop is seamless; the
+ * two wisps run opposite directions at 7s vs 10s (plus 11s/13s drifts on
+ * the separate `translate` property, which composes with `transform`), so
+ * the composite never visibly repeats. Deliberately no border-radius or
+ * filter in these keyframes: those repaint every frame, while transform
+ * and translate composite for free. */
+@keyframes spm-wisp-a {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.14);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes spm-wisp-b {
+  0% {
+    transform: rotate(0deg) scale(1.06);
+  }
+  50% {
+    transform: rotate(-180deg) scale(0.94);
+  }
+  100% {
+    transform: rotate(-360deg) scale(1.06);
+  }
+}
+
+@keyframes spm-wisp-drift-a {
+  from {
+    translate: -4% -3%;
+  }
+  to {
+    translate: 4% 3%;
+  }
+}
+
+@keyframes spm-wisp-drift-b {
+  from {
+    translate: 5% -4%;
+  }
+  to {
+    translate: -5% 4%;
+  }
+}
+
+#spm-root .spm-play:active {
+  transform: scale(0.93);
+}
+
+#spm-root .spm-press {
+  animation: spm-press 0.13s ease;
+}
+
+@keyframes spm-press {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(0.86);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ---------- In-cover Lyrics (squircle swap) ----------
+ * The layer lives inside .spm-blob at inset 0, clipped by the blob's own
+ * overflow + 26% radius — so it is pixel-identical to the artwork box by
+ * construction, in card and sheet layouts alike, with no measuring. */
+#spm-root .spm-coverlyr {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 18px;
+  overflow: hidden;
+  background: var(--spm-lyr-bg, #141415);
+}
+
+#spm-root .spm-coverlyr[hidden] {
+  display: none;
+}
+
+/* The list itself scrolls (native touch via pan-y + a card-gesture
+ * carve-out in ui.js, so reading never drags the card). Wheel scrolls it
+ * on desktop. scroll-padding keeps the auto-follow from parking the active
+ * line under the floating expand button. */
+#spm-root .spm-coverlyr-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  touch-action: pan-y;
+  scroll-padding-top: 56px;
+  scroll-padding-bottom: 12px;
+}
+
+#spm-root .spm-coverlyr-list::-webkit-scrollbar {
+  display: none;
+}
+
+/* Long lines wrap onto their own lines — never cut with an ellipsis. */
+#spm-root .spm-coverlyr-line {
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--spm-lyr-inactive, var(--spm-muted));
+  white-space: normal;
+  overflow-wrap: break-word;
+  /* Softly cross-fades each line as the active mark travels. */
+  transition: color 0.45s ease, opacity 0.45s ease;
+}
+
+/* Passed lines dim exactly like Spotify: inactive color, half opacity. */
+#spm-root .spm-coverlyr-line.spm-passed {
+  opacity: 0.45;
+}
+
+#spm-root .spm-coverlyr-line.spm-active {
+  color: var(--spm-lyr-active, var(--spm-text));
+  opacity: 1;
+}
+
+#spm-root .spm-coverlyr-line.spm-cgap {
+  min-height: 1.5em;
+}
+
+#spm-root .spm-coverlyr-expand {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--spm-lyr-active, var(--spm-text));
+  background: rgba(0, 0, 0, 0.25);
+}
+
+#spm-root .spm-coverlyr-expand:active {
+  transform: scale(0.9);
+}
+
+#spm-root .spm-coverlyr-state[hidden] {
+  display: none;
+}
+
+#spm-root .spm-coverlyr-msg {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--spm-lyr-inactive, var(--spm-muted));
+  text-align: center;
+  padding: 0 8px;
+}
+
+/* Mic toggle in the aux row reads selected while the cover shows lyrics. */
+#spm-root .spm-coverlyr-toggle.spm-active {
+  color: var(--spm-cream);
+}
+
+/* ---------- Aux: queue / devices / volume ---------- */
+
+#spm-root .spm-aux {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  margin-top: 6px;
+  /* Shift the row so the first button's icon sits on the same edge as the
+   * "Lyrics" label above, while every button keeps symmetric padding so
+   * hover pills stay even on both sides. */
+  margin-left: -8px;
+}
+
+#spm-root .spm-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  color: var(--spm-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  transition: color 0.18s, background 0.18s;
+}
+
+#spm-root .spm-ghost:hover {
+  color: var(--spm-cream);
+}
+
+/* Icon-only volume button: last in the aux row, pushed to the trailing edge
+ * where the old inline slider lived. */
+#spm-root .spm-volbtn {
+  margin-left: auto;
+}
+
+/* Small volume popup floating above the aux row (anchored to it, so it
+ * follows every layout with no measuring). Mute + bar are the same controls
+ * the inline slider used, only reparented. */
+#spm-root .spm-volpop {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: min(230px, 100%);
+  padding: 6px 12px 6px 2px;
+  background: var(--spm-solid-bg);
+  border: 1px solid var(--spm-card-border);
+  border-radius: 16px;
+  box-shadow: var(--spm-shadow);
+}
+
+#spm-root .spm-volpop[hidden] {
+  display: none;
+}
+
+#spm-root .spm-voltbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--spm-muted);
+  transition: color 0.18s;
+}
+
+#spm-root .spm-voltbtn:hover {
+  color: var(--spm-cream);
+}
+
+/* Custom bar (not a native input): the card pins touch-action so collapse
+ * drags are never stolen, which would also pin a native range slider. */
+#spm-root .spm-vol-bar {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+  border-radius: 8px;
+  outline: none;
+}
+
+#spm-root .spm-vol-track {
+  position: relative;
+  height: 3px;
+  width: 100%;
+  border-radius: 99px;
+  background: rgba(244, 241, 234, 0.16);
+  overflow: hidden;
+}
+
+#spm-root .spm-vol-fill {
+  position: absolute;
+  inset: 0;
+  border-radius: 99px;
+  background: var(--spm-solid);
+  transform-origin: left center;
+  transform: scaleX(1);
+}
+
+#spm-root .spm-status {
+  min-height: 16px;
+  margin: 6px 2px 0;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: var(--spm-faint);
+  text-align: center;
+}
+
+/* ---------- Collapsed state: the mini-player (all viewports) ---------- */
+
+#spm-root.spm-collapsed .spm-card {
+  display: none;
+}
+
+/* Mini + full are two states of one component: the card glides out while
+ * the mini-player rises — shared artwork bridges the swap. */
+#spm-root .spm-card.spm-card-drag {
+  transition: none;
+}
+
+#spm-root .spm-card.spm-leaving-card {
+  transform: translateY(28px);
+}
+
+/* ---------- Collapsed mobile mini-player ---------- */
+
+#spm-root .spm-miniplayer {
+  position: relative;
+  display: none;
+  align-items: center;
+  gap: 8px;
+  width: min(560px, calc(var(--spm-vw) - 24px));
+  margin-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  padding: 8px 8px 8px 10px;
+  /* Solid, no blur: the mini is on screen most of the time on phones, so
+   * it pays for itself in GPU every frame it is visible. */
+  background: var(--spm-solid-bg);
+  border: 1px solid var(--spm-card-border);
+  border-radius: 18px;
+  box-shadow: var(--spm-shadow);
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+  transition: transform 0.13s ease;
+}
+
+#spm-root.spm-collapsed .spm-miniplayer {
+  display: flex;
+  animation: spm-mini-in 0.16s cubic-bezier(0.2, 0.9, 0.25, 1) both;
+}
+
+@keyframes spm-mini-in {
+  from {
+    transform: translate3d(0, 8px, 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+#spm-root .spm-miniplayer.spm-leaving {
+  transform: translateY(12px);
+}
+
+#spm-root .spm-miniplayer.spm-mdrag {
+  transition: none;
+}
+
+#spm-root .spm-mini-artwrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 26%;
+  overflow: hidden;
+  background: linear-gradient(145deg, #232326, #141415);
+  z-index: 1;
+}
+
+#spm-root .spm-mini-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: none;
+}
+
+#spm-root .spm-mini-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(244, 241, 234, 0.25);
+}
+
+#spm-root .spm-mini-fallback svg {
+  width: 22px;
+  height: 22px;
+}
+
+#spm-root .spm-mini-titles {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  z-index: 1;
+}
+
+#spm-root .spm-mini-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#spm-root .spm-mini-artist {
+  margin-top: 2px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--spm-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#spm-root .spm-mini-like {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  color: var(--spm-muted);
+  transition: color 0.18s;
+}
+
+#spm-root .spm-mini-like.spm-liked {
+  color: var(--spm-cream);
+}
+
+#spm-root .spm-mini-prev,
+#spm-root .spm-mini-next {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  color: var(--spm-muted);
+  transition: color 0.18s, transform 0.12s;
+}
+
+#spm-root .spm-mini-prev:hover,
+#spm-root .spm-mini-next:hover {
+  color: var(--spm-text);
+}
+
+#spm-root .spm-mini-prev:active,
+#spm-root .spm-mini-next:active {
+  transform: scale(0.9);
+}
+
+#spm-root .spm-mini-prev svg,
+#spm-root .spm-mini-next svg {
+  width: 20px;
+  height: 20px;
+}
+
+#spm-root .spm-mini-play {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--spm-solid);
+  color: var(--spm-on-solid);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  transition: transform 0.12s;
+}
+
+#spm-root .spm-mini-play:active {
+  transform: scale(0.92);
+}
+
+/* Progress hairline hugging the mini-player's top edge: the same playback
+ * ratio as the full card, with a glossy highlight + glow. Decorative twin
+ * (pointer-events pass straight through to the mini body). */
+#spm-root .spm-mini-progress {
+  position: absolute;
+  /* Bleed 1px under the card border on every side so the hairline wraps
+   * flush with the mini's edge — no hairline gap above it. The strip is
+   * taller than the visible 3px line to give touch fingers a real target;
+   * the fill itself stays pinned to the top. */
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  height: 13px;
+  border-radius: 18px 18px 0 0;
+  overflow: hidden;
+  cursor: pointer;
+  touch-action: none;
+  outline: none;
+}
+
+#spm-root .spm-mini-progress:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+#spm-root .spm-mini-progress-fill {
+  width: 100%;
+  height: 3px;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: var(--spm-solid);
+}
+
+/* ---------- Narrow screens: bottom-sheet ----------
+ *
+ * The @media rule below covers desktop narrow windows (layout viewport is
+ * the visible one there). The .spm-sheet rules mirror it for phones where
+ * Spotify forces a WIDE desktop layout viewport: the query would never
+ * match, so ui.js toggles .spm-sheet from the measured VISIBLE width
+ * instead. Widths use --spm-vw/--spm-vh (visible px); after --spm-zoom is
+ * applied those render as the full physical screen. */
+
+#spm-root.spm-sheet {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  justify-content: center;
+  /* Bottom-anchored: the mini sits at the bottom when collapsed, and the
+   * full card grows upward from the bottom edge when expanded. */
+  align-items: flex-end;
+  pointer-events: none;
+  /* Deliberately NO backdrop-filter anywhere in sheet mode: a full-screen
+   * blur re-composites every frame on phone GPUs (the responsiveness
+   * killer), and behind a solid panel there is nothing to frost anyway. */
+}
+
+#spm-root.spm-sheet .spm-card {
+  background: var(--spm-solid-bg);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* NOTE: :not(.spm-collapsed) is load-bearing, not decorative. This rule
+ * sets display:flex with equal specificity to (but later in the file
+ * than) the .spm-collapsed display:none rule — without the guard it
+ * would override the hide and leave card + mini fighting side by side
+ * (card squeezed tiny, mini stretched full height). */
+#spm-root.spm-sheet:not(.spm-collapsed) .spm-card {
+  pointer-events: auto;
+  width: var(--spm-vw);
+  max-width: 100%;
+  /* Clamped to the visible root: a vh reading that overshoots reality can
+   * never again push the header off the top of the screen. */
+  height: min(var(--spm-vh), 100%);
+  max-height: 100%;
+  border-radius: 0;
+  border: none;
+  background: var(--spm-solid-bg);
+  /* No backdrop-filter here either (see above); overflow-x uses hidden
+   * rather than clip to keep the exotic keyword out of the suspect
+   * context. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  overflow-x: hidden;
+  padding-top: calc(18px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  /* Fit-layout: column flex where the artwork stage absorbs ALL leftover
+   * space, so the fullscreen sheet always shows everything — header on
+   * top, controls reachable at the bottom, nothing cut, no touch scroll
+   * needed (touch scrolling stays off for the collapse gesture). */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Every direct child except the stage keeps its natural size. */
+#spm-root.spm-sheet .spm-card > :not(.spm-stage) {
+  flex: none;
+}
+
+#spm-root.spm-sheet .spm-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  aspect-ratio: auto;
+  margin: 10px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Height-driven artwork: fills the flexible stage, stays square, never
+ * wider than the card, capped so tall screens keep air around it. */
+#spm-root.spm-sheet .spm-blob {
+  height: 100%;
+  max-height: 300px;
+  width: auto;
+  aspect-ratio: 1 / 1;
+  max-width: 100%;
+}
+
+/* Collapsed shows the full-width mini-player in every viewport, so the
+ * root keeps its anchoring (no corner-FAB placement anywhere). */
+#spm-root.spm-sheet.spm-collapsed {
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  #spm-root {
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  #spm-root .spm-card {
+    pointer-events: auto;
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 28px 28px 0 0;
+    border-left: none;
+    border-right: none;
+    border-bottom: none;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  }
+
+  #spm-root .spm-stage {
+    width: min(100%, 300px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #spm-root .spm-card,
+  #spm-root .spm-art,
+  #spm-root .spm-blob,
+  #spm-root .spm-circle,
+  #spm-root .spm-like-pop > svg,
+  #spm-root .spm-like-fx::before,
+  #spm-root .spm-like-fx::after,
+  #spm-root .spm-like-fx i,
+  #spm-root .spm-play,
+  #spm-root .spm-halos,
+  #spm-root .spm-halos::before,
+  #spm-root .spm-halos::after,
+  #spm-root .spm-mini,
+  #spm-root .spm-miniplayer,
+  #spm-root .spm-fill,
+  #spm-root .spm-mini-progress-fill,
+  #spm-root .spm-coverlyr-line,
+  #spm-root .spm-lline,
+  #spm-root.spm-loading .spm-title,
+  #spm-root.spm-loading .spm-artist-link,
+  #spm-root.spm-loading .spm-mini-title,
+  #spm-root.spm-loading .spm-mini-artist,
+  #spm-root.spm-loading .spm-blob,
+  #spm-root.spm-loading .spm-mini-artwrap {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ---------- Light system theme: the reference cream ----------
+ * Follows the OS/browser color scheme automatically (and live: flipping
+ * the system theme repaints the card with no reload). Same layout, same
+ * geometry — only the palette swaps to the concept's cream-on-ink. */
+@media (prefers-color-scheme: light) {
+  #spm-root {
+    --spm-bg: rgba(244, 241, 234, 0.94);
+    --spm-solid-bg: #f4f1ea;
+    --spm-card-border: rgba(20, 20, 18, 0.12);
+    --spm-solid: #171715;
+    --spm-on-solid: #f4f1ea;
+    --spm-glow-strong: rgba(30, 25, 15, 0.32);
+    --spm-halo-accent-rgb: 70, 60, 45;
+    --spm-halo-cover-rgb: 110, 80, 200;
+    --spm-text: #171715;
+    --spm-muted: rgba(23, 23, 21, 0.6);
+    --spm-faint: rgba(23, 23, 21, 0.38);
+    --spm-line: rgba(23, 23, 21, 0.16);
+    --spm-line-strong: rgba(23, 23, 21, 0.4);
+    --spm-shadow: 0 24px 70px rgba(30, 25, 15, 0.28), 0 2px 10px rgba(30, 25, 15, 0.18);
+  }
+
+  #spm-root .spm-glow {
+    background: radial-gradient(60% 80% at 50% 0%, rgba(20, 20, 18, 0.08), transparent 70%);
+  }
+
+  #spm-root .spm-blob {
+    background: linear-gradient(145deg, #e6e1d3, #d5cfbd);
+    box-shadow: 0 18px 44px rgba(60, 50, 30, 0.3);
+  }
+
+  #spm-root .spm-art-fallback {
+    color: rgba(23, 23, 21, 0.25);
+  }
+
+  #spm-root .spm-mini-artwrap {
+    background: linear-gradient(145deg, #e6e1d3, #d5cfbd);
+  }
+
+  #spm-root .spm-mini-fallback {
+    color: rgba(23, 23, 21, 0.25);
+  }
+
+  #spm-root.spm-loading .spm-title,
+  #spm-root.spm-loading .spm-artist-link,
+  #spm-root.spm-loading .spm-mini-title,
+  #spm-root.spm-loading .spm-mini-artist {
+    background: linear-gradient(
+      100deg,
+      rgba(23, 23, 21, 0.06) 40%,
+      rgba(23, 23, 21, 0.14) 50%,
+      rgba(23, 23, 21, 0.06) 60%
+    );
+    background-size: 200% 100%;
+  }
+
+  #spm-root.spm-loading .spm-blob,
+  #spm-root.spm-loading .spm-mini-artwrap {
+    background: linear-gradient(100deg, #e0dac9 40%, #f0ebdd 50%, #e0dac9 60%);
+    background-size: 200% 100%;
+  }
+
+  #spm-root .spm-circle.spm-liked {
+    background: rgba(20, 20, 18, 0.07);
+  }
+
+  #spm-root .spm-play {
+    box-shadow: 0 12px 30px rgba(30, 25, 15, 0.4);
+  }
+
+  #spm-root .spm-vol-track {
+    background: rgba(23, 23, 21, 0.18);
+  }
+}
+
+/* Short viewports: keep everything reachable without scrolling (touch
+ * scrolling is intentionally off so collapse drags are never stolen). */
+@media (max-height: 640px) {
+  #spm-root .spm-card {
+    padding: 12px 18px 10px;
+  }
+
+  #spm-root .spm-stage {
+    width: min(100%, 210px);
+  }
+
+  #spm-root .spm-main {
+    margin-top: 4px;
+  }
+
+  #spm-root .spm-play {
+    width: 58px;
+    height: 58px;
+  }
+}
+
+/* ---------- Custom Devices bottom sheet ----------
+ * A layer over the existing player: the card is never moved or rebuilt, the
+ * sheet slides up from the bottom edge and the backdrop owns all input while
+ * it is open. Same palette, radii, hairlines and shadows as the card, and
+ * every length uses the measured visible viewport (--spm-vw/--spm-vh) so it
+ * lands full-screen on phones where Spotify scales its wide layout down. */
+
+#spm-root {
+  --spm-row-hover: rgba(244, 241, 234, 0.06);
+  --spm-sheet-veil: rgba(0, 0, 0, 0.55);
+}
+
+#spm-root .spm-dbackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  background: var(--spm-sheet-veil);
+  opacity: 1;
+  /* The sheet-mode root is pointer-events:none so the page below stays
+   * reachable; the sheet layers must opt back in explicitly. */
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#spm-root .spm-dbackdrop[hidden],
+#spm-root .spm-dsheet[hidden],
+#spm-root .spm-dnotice[hidden] {
+  display: none;
+}
+
+#spm-root .spm-dsheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9;
+  pointer-events: auto;
+  margin: 0 auto;
+  width: min(560px, calc(100% - 24px));
+  max-height: min(calc(var(--spm-vh) * 0.82), 620px);
+  display: flex;
+  flex-direction: column;
+  background: var(--spm-solid-bg);
+  border-top: 1px solid var(--spm-card-border);
+  border-radius: var(--spm-radius) var(--spm-radius) 0 0;
+  box-shadow: 0 -22px 60px rgba(0, 0, 0, 0.5), 0 -2px 10px rgba(0, 0, 0, 0.3);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  overflow: hidden;
+  touch-action: none;
+  will-change: transform;
+  /* Transitions are opt-in: dragging sets the pose directly, the anim class
+   * hands control to the compositor for open/close/snap-back. */
+  transition: none;
+}
+
+#spm-root .spm-dsheet.spm-dsheet-anim {
+  transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#spm-root .spm-dbackdrop.spm-dsheet-anim {
+  transition: opacity 0.22s ease;
+}
+
+/* The player behind the sheet is visible but inert. */
+#spm-root.spm-dsheet-open .spm-card,
+#spm-root.spm-dsheet-open .spm-miniplayer {
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#spm-root .spm-dgrab {
+  padding: 9px 0 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+}
+
+#spm-root .spm-dhandle {
+  display: block;
+  width: 44px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--spm-line-strong);
+}
+
+#spm-root .spm-dhead {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 2px 22px 8px;
+  touch-action: none;
+}
+
+#spm-root .spm-dtitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: 0.015em;
+  color: var(--spm-text);
+}
+
+#spm-root .spm-dbody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  padding: 2px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+  touch-action: pan-y;
+}
+
+#spm-root .spm-dbody::-webkit-scrollbar {
+  display: none;
+}
+
+#spm-root .spm-dlist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Empty line sitting under the current-device row (not a full empty state). */
+#spm-root .spm-dlist:not([hidden]) + .spm-dstate .spm-dstatus {
+  gap: 6px;
+  padding: 12px 10px 18px;
+}
+
+#spm-root .spm-ditem {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#spm-root .spm-drow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  text-align: left;
+  color: var(--spm-text);
+  transition: background 0.16s, color 0.16s;
+}
+
+#spm-root .spm-drow:hover {
+  background: var(--spm-row-hover);
+}
+
+#spm-root .spm-drow:active {
+  background: var(--spm-row-hover);
+}
+
+#spm-root .spm-dicon {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--spm-row-hover);
+  color: var(--spm-muted);
+}
+
+#spm-root .spm-dicon svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
+
+#spm-root .spm-dtext {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+}
+
+#spm-root .spm-dname {
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: 0.015em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#spm-root .spm-dsub {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: var(--spm-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#spm-root .spm-dtail {
+  flex: 0 0 auto;
+  width: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--spm-faint);
+}
+
+#spm-root .spm-drow.spm-dactive {
+  background: var(--spm-row-hover);
+}
+
+#spm-root .spm-drow.spm-dactive .spm-dname {
+  font-weight: 750;
+}
+
+#spm-root .spm-drow.spm-dactive .spm-dicon,
+#spm-root .spm-drow.spm-dactive .spm-dtail {
+  color: var(--spm-solid);
+}
+
+#spm-root .spm-drow.spm-dpending .spm-dtail {
+  color: var(--spm-muted);
+}
+
+#spm-root .spm-dspin svg {
+  display: block;
+  animation: spm-dspin 0.9s linear infinite;
+  will-change: transform;
+}
+
+@keyframes spm-dspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#spm-root .spm-dstatus {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 10px 26px;
+}
+
+#spm-root .spm-dstatus .spm-dspin {
+  color: var(--spm-muted);
+}
+
+#spm-root .spm-dmsg {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 550;
+  letter-spacing: 0.03em;
+  color: var(--spm-muted);
+  text-align: center;
+}
+
+#spm-root .spm-dretry {
+  min-height: 38px;
+  padding: 8px 16px;
+  border: 1px solid var(--spm-line);
+  border-radius: 12px;
+  color: var(--spm-text);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+#spm-root .spm-dretry:hover {
+  border-color: var(--spm-line-strong);
+  background: var(--spm-row-hover);
+}
+
+#spm-root .spm-dnotice {
+  margin: 0;
+  padding: 2px 24px calc(12px + env(safe-area-inset-bottom, 0px));
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--spm-muted);
+  text-align: center;
+}
+
+/* Phones: the sheet spans the real glass width (measured, not 100vw). */
+#spm-root.spm-sheet .spm-dsheet {
+  width: var(--spm-vw);
+  max-width: none;
+  margin: 0;
+}
+
+@media (prefers-color-scheme: light) {
+  #spm-root {
+    --spm-row-hover: rgba(23, 23, 21, 0.06);
+    --spm-sheet-veil: rgba(30, 25, 15, 0.38);
+  }
+
+  #spm-root .spm-dsheet {
+    box-shadow: 0 -22px 60px rgba(30, 25, 15, 0.28), 0 -2px 10px rgba(30, 25, 15, 0.16);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #spm-root .spm-dsheet,
+  #spm-root .spm-dbackdrop,
+  #spm-root .spm-dspin svg {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ---------- Custom Save / Add-to-Playlist bottom sheet ----------
+ * Same visual language as the Devices sheet: same palette, radii,
+ * hairlines, shadows, grab handle, backdrop, gesture physics, light/dark
+ * and reduced-motion handling. Only the class prefix differs (spm-p*),
+ * plus playlist-specific bits: search field, artwork thumbs, Liked row.
+ */
+
+#spm-root .spm-pbackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  background: var(--spm-sheet-veil);
+  opacity: 1;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#spm-root .spm-pbackdrop[hidden],
+#spm-root .spm-psheet[hidden],
+#spm-root .spm-pnotice[hidden] {
+  display: none;
+}
+
+#spm-root .spm-psheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9;
+  pointer-events: auto;
+  margin: 0 auto;
+  width: min(560px, calc(100% - 24px));
+  max-height: min(calc(var(--spm-vh) * 0.82), 620px);
+  display: flex;
+  flex-direction: column;
+  background: var(--spm-solid-bg);
+  border-top: 1px solid var(--spm-card-border);
+  border-radius: var(--spm-radius) var(--spm-radius) 0 0;
+  box-shadow: 0 -22px 60px rgba(0, 0, 0, 0.5), 0 -2px 10px rgba(0, 0, 0, 0.3);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  overflow: hidden;
+  touch-action: none;
+  will-change: transform;
+  transition: none;
+}
+
+#spm-root .spm-psheet.spm-psheet-anim {
+  transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#spm-root .spm-pbackdrop.spm-psheet-anim {
+  transition: opacity 0.22s ease;
+}
+
+#spm-root.spm-psheet-open .spm-card,
+#spm-root.spm-psheet-open .spm-miniplayer {
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#spm-root .spm-pgrab {
+  padding: 9px 0 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  touch-action: none;
+}
+
+#spm-root .spm-phandle {
+  display: block;
+  width: 44px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--spm-line-strong);
+}
+
+#spm-root .spm-phead {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 2px 22px 8px;
+  touch-action: none;
+}
+
+#spm-root .spm-ptitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: 0.015em;
+  color: var(--spm-text);
+}
+
+#spm-root .spm-psearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 22px 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--spm-line);
+  border-radius: 12px;
+  color: var(--spm-muted);
+  background: transparent;
+}
+
+#spm-root .spm-psearch:focus-within {
+  border-color: var(--spm-line-strong);
+  color: var(--spm-text);
+}
+
+#spm-root .spm-psearch-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+#spm-root .spm-psearch-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--spm-text);
+  font: inherit;
+  font-size: 13px;
+  padding: 0;
+}
+
+#spm-root .spm-psearch-input::placeholder {
+  color: var(--spm-faint);
+}
+
+#spm-root .spm-psearch-input::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+
+#spm-root .spm-pbody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  padding: 2px 14px 8px;
+  touch-action: pan-y;
+}
+
+#spm-root .spm-pbody::-webkit-scrollbar {
+  display: none;
+}
+
+#spm-root .spm-plist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#spm-root .spm-pitem {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#spm-root .spm-prow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  text-align: left;
+  color: var(--spm-text);
+  transition: background 0.16s, color 0.16s;
+}
+
+#spm-root .spm-prow:hover {
+  background: var(--spm-row-hover);
+}
+
+#spm-root .spm-prow:active {
+  background: var(--spm-row-hover);
+}
+
+#spm-root .spm-picon {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: var(--spm-row-hover);
+  color: var(--spm-muted);
+  overflow: hidden;
+}
+
+#spm-root .spm-picon svg {
+  width: 17px;
+  height: 17px;
+  display: block;
+}
+
+#spm-root .spm-picon .spm-part {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
+}
+
+#spm-root .spm-liked-row .spm-picon {
+  background: var(--spm-row-hover);
+}
+
+#spm-root .spm-liked-row .spm-liked-icon {
+  color: var(--spm-text);
+}
+
+#spm-root .spm-ptext {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+}
+
+#spm-root .spm-pname {
+  font-size: 13.5px;
+  font-weight: 650;
+  letter-spacing: 0.015em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#spm-root .spm-psub {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  color: var(--spm-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#spm-root .spm-ptail {
+  flex: 0 0 auto;
+  width: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--spm-faint);
+}
+
+#spm-root .spm-prow.spm-pactive {
+  background: var(--spm-row-hover);
+}
+
+#spm-root .spm-prow.spm-pactive .spm-pname {
+  font-weight: 750;
+}
+
+#spm-root .spm-prow.spm-pactive .spm-ptail {
+  color: var(--spm-solid);
+}
+
+#spm-root .spm-prow.spm-ppending .spm-ptail {
+  color: var(--spm-muted);
+}
+
+#spm-root .spm-ptail svg {
+  display: block;
+  animation: none;
+}
+
+#spm-root .spm-ppending .spm-ptail svg,
+#spm-root .spm-pspin svg {
+  animation: spm-pspin 0.9s linear infinite;
+  will-change: transform;
+}
+
+@keyframes spm-pspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+#spm-root .spm-pstatus {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 10px 26px;
+}
+
+#spm-root .spm-pstatus .spm-pspin {
+  color: var(--spm-muted);
+}
+
+#spm-root .spm-pmsg {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 550;
+  letter-spacing: 0.03em;
+  color: var(--spm-muted);
+  text-align: center;
+}
+
+#spm-root .spm-pretry {
+  min-height: 38px;
+  padding: 8px 16px;
+  border: 1px solid var(--spm-line);
+  border-radius: 12px;
+  color: var(--spm-text);
+  font-size: 11.5px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+#spm-root .spm-pretry:hover {
+  border-color: var(--spm-line-strong);
+  background: var(--spm-row-hover);
+}
+
+#spm-root .spm-pnotice {
+  margin: 0;
+  padding: 2px 24px calc(12px + env(safe-area-inset-bottom, 0px));
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: var(--spm-muted);
+  text-align: center;
+}
+
+/* Draft footer: Cancel (ghost) + Done (primary pill), Spotify parity. */
+#spm-root .spm-pfoot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 4px 22px calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
+#spm-root .spm-pcancel {
+  min-height: 40px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  color: var(--spm-muted);
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: 0.03em;
+  transition: color 0.16s, background 0.16s;
+}
+
+#spm-root .spm-pcancel:hover {
+  color: var(--spm-text);
+  background: var(--spm-row-hover);
+}
+
+#spm-root .spm-pdone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  min-width: 96px;
+  padding: 8px 20px;
+  border-radius: 99px;
+  background: var(--spm-solid);
+  color: var(--spm-on-solid);
+  font-size: 12.5px;
+  font-weight: 750;
+  letter-spacing: 0.03em;
+  transition: transform 0.12s, opacity 0.16s;
+}
+
+#spm-root .spm-pdone:active {
+  transform: scale(0.96);
+}
+
+#spm-root .spm-pdone:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+#spm-root .spm-pdone svg {
+  animation: spm-pspin 0.9s linear infinite;
+  will-change: transform;
+}
+
+#spm-root .spm-pcancel:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Phones: the sheet spans the real glass width (measured, not 100vw). */
+#spm-root.spm-sheet .spm-psheet {
+  width: var(--spm-vw);
+  max-width: none;
+  margin: 0;
+}
+
+@media (prefers-color-scheme: light) {
+  #spm-root .spm-psheet {
+    box-shadow: 0 -22px 60px rgba(30, 25, 15, 0.28), 0 -2px 10px rgba(30, 25, 15, 0.16);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #spm-root .spm-psheet,
+  #spm-root .spm-pbackdrop,
+  #spm-root .spm-pspin svg,
+  #spm-root .spm-ppending .spm-ptail svg {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* ---------- Fullscreen Lyrics (custom mirror) ----------
+ * Opaque full-viewport overlay painted above everything in our root
+ * (which itself sits at z-index 999999, plus Spotify's own fullscreen is
+ * veiled underneath). Palette comes from Spotify's own lyrics section
+ * custom properties, mirrored onto --spm-lyr-* by ui.js. */
+#spm-root .spm-lbackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  /* Same contract as the sheet backdrops: the sheet-mode root is
+   * pointer-events:none, so overlays must opt back in or taps fall straight
+   * through to the card beneath (this is what made X "do nothing" while the
+   * tap liked the song). */
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#spm-root .spm-lbackdrop[hidden],
+#spm-root .spm-lsheet[hidden] {
+  display: none;
+}
+
+#spm-root .spm-lsheet {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--spm-lyr-bg, var(--spm-solid-bg));
+  color: var(--spm-lyr-inactive, var(--spm-text));
+  outline: none;
+  pointer-events: auto;
+}
+
+/* The player behind the lyrics is visible but inert (same as the sheets). */
+#spm-root.spm-lyrics-open .spm-card,
+#spm-root.spm-lyrics-open .spm-miniplayer {
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#spm-root .spm-lhead {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) 14px 10px;
+}
+
+#spm-root .spm-lclose {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  color: var(--spm-lyr-active, var(--spm-text));
+  transition: transform 0.12s;
+}
+
+#spm-root .spm-lclose:active {
+  transform: scale(0.9);
+}
+
+#spm-root .spm-lbody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  padding: 8px 26px calc(40px + env(safe-area-inset-bottom, 0px));
+}
+
+#spm-root .spm-lbody::-webkit-scrollbar {
+  display: none;
+}
+
+#spm-root .spm-llist {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12vh 0 30vh;
+}
+
+#spm-root .spm-lline {
+  font-size: 24px;
+  line-height: 1.45;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--spm-lyr-inactive, var(--spm-muted));
+  text-wrap: balance;
+  /* Softly cross-fades each line as the active mark travels. */
+  transition: color 0.45s ease, opacity 0.45s ease;
+}
+
+#spm-root .spm-lline.spm-lgap {
+  min-height: 18px;
+}
+
+/* Passed lines dim exactly like the cover (and Spotify). */
+#spm-root .spm-lline.spm-passed {
+  opacity: 0.45;
+}
+
+#spm-root .spm-lline.spm-active {
+  color: var(--spm-lyr-active, var(--spm-text));
+}
+
+#spm-root .spm-lstate[hidden] {
+  display: none;
+}
+
+#spm-root .spm-lstatus {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20vh 20px 0;
+}
+
+#spm-root .spm-lmsg {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--spm-lyr-inactive, var(--spm-muted));
+  text-align: center;
+}
+
+/* Phones: full glass, like the other sheets. */
+#spm-root.spm-sheet .spm-lsheet {
+  width: var(--spm-vw);
+  max-width: none;
+}
