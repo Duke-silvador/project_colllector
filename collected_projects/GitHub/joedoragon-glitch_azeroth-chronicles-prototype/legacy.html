@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0a0812">
+    <meta name="description" content="Una pequeña aventura RPG con controles táctiles y guardado local.">
+    <link rel="manifest" href="./manifest.webmanifest">
+    <link rel="icon" href="./icons/icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="./icons/icon-192.png">
+    <script src="./src/sprint.js" defer></script>
+    <script src="./src/controls.js" defer></script>
+    <script src="./src/classes.js" defer></script>
+    <script src="./src/world.js" defer></script>
+    <script src="./src/game.js" defer></script>
+    <script src="./src/squad.js" defer></script>
+    <script src="./src/app.js" defer></script>
+    <title>Azeroth Chronicles — Prototipo v0.5</title>
+    
+    <link rel="stylesheet" href="./styles/game.css">
+    <link rel="stylesheet" href="./styles/app.css">
+    <link rel="stylesheet" href="./styles/keyboard.css">
+</head>
+<body class="w-screen h-screen relative flex flex-col justify-between overflow-hidden select-none">
+
+    <button id="app-menu-button" onclick="toggleWindow('appmenu')" aria-label="Abrir menú del juego" title="Menú">☰</button>
+    <div id="joystick" class="touch-only" role="group" aria-label="Palanca de movimiento: arrastra para moverte">
+        <span id="joystick-knob"></span><span id="joystick-label" class="joystick-label">Mover</span>
+    </div>
+    <div id="session-tools" aria-label="Partida">
+        <span>Prototipo v0.5</span>
+        <button onclick="openWindow('help')">Ayuda [H]</button>
+        <button onclick="togglePause()" id="pause-button">Pausa [P]</button>
+        <button onclick="saveGame(true)">Guardar</button>
+        <button onclick="exportSave()">Exportar</button>
+        <button onclick="document.getElementById('save-import').click()">Importar</button>
+        <button onclick="newGame()">Nueva partida</button>
+        <input id="save-import" type="file" accept=".json,application/json" hidden onchange="importSave(this)">
+        <span id="save-status" role="status" aria-live="polite">Guardado automático cada 5 s.</span>
+    </div>
+    <button id="squad-panel-button" onclick="openWindow('squad')"><span id="squad-status">Escuadrón</span><small>Tab: órdenes · `: grupo</small></button>
+    <div id="objective-tracker" aria-live="polite"></div>
+    <output id="stamina-status" hidden aria-label="Resistencia"></output>
+    <div id="interaction-hint"></div>
+    <div id="event-feed" role="log" aria-live="polite"></div>
+    <div id="pause-notice" hidden>PAUSA — Pulsa P para continuar</div>
+    <button id="mini-map-button" onclick="openWindow('map')" aria-label="Abrir mapa desde el minimapa"><canvas id="mini-map" width="160" height="108"></canvas><span>Mapa · Z</span></button>
+    <!-- Main Render Canvas -->
+    <div id="canvas-container" class="absolute inset-0 w-full h-full bg-black z-0">
+        <canvas id="gameCanvas" class="w-full h-full"></canvas>
+    </div>
+
+    <!-- HUD Top Header -->
+    <div id="game-header" class="relative z-10 w-full p-3 flex justify-between items-start pointer-events-none">
+        <!-- Player Unit Frame -->
+        <div id="player-frame" class="flex items-center gap-3 bg-black/85 p-2.5 rounded-xl border-2 border-amber-600/70 backdrop-blur-md pointer-events-auto shadow-2xl min-w-[290px]">
+            <!-- Hero Avatar Icon -->
+            <div id="player-avatar" class="relative w-14 h-14 rounded-full border-2 border-amber-400 bg-slate-950 flex items-center justify-center overflow-hidden shrink-0 shadow-inner">
+                <span id="hero-icon" class="text-3xl">🛡️</span>
+                <span id="ui-player-level" class="absolute bottom-0 right-0 bg-amber-600 text-black font-extrabold text-xs px-1.5 py-0.5 rounded-tl border border-amber-300">1</span>
+            </div>
+            <!-- Player Status Bars -->
+            <div class="flex-1 flex flex-col justify-center gap-1">
+                <div class="flex justify-between items-center text-xs font-bold text-amber-200">
+                    <span id="ui-player-name" class="font-cinzel text-sm text-amber-300">Paladín de la Luz</span>
+                    <span id="ui-gold-text" class="text-yellow-400 font-mono text-xs">🪙 0g</span>
+                </div>
+                <!-- Health Bar -->
+                <div class="w-full h-3.5 bg-slate-950 rounded border border-red-900 overflow-hidden relative shadow-inner">
+                    <div id="ui-hp-bar" class="h-full bg-gradient-to-r from-red-700 via-red-600 to-red-500 w-full transition-all duration-100"></div>
+                    <span id="ui-hp-text" class="absolute inset-0 text-[10px] font-bold text-white flex items-center justify-center drop-shadow-[0_1px_2px_rgba(0,0,0,1)]">120 / 120</span>
+                </div>
+                <!-- Mana Bar -->
+                <div class="w-full h-3 bg-slate-950 rounded border border-blue-900 overflow-hidden relative shadow-inner">
+                    <div id="ui-mp-bar" class="h-full bg-gradient-to-r from-blue-700 via-blue-600 to-cyan-500 w-full transition-all duration-100"></div>
+                    <span id="ui-mp-text" class="absolute inset-0 text-[9px] font-bold text-white flex items-center justify-center drop-shadow-[0_1px_2px_rgba(0,0,0,1)]">60 / 60</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Targeted Unit Frame -->
+        <div id="target-frame" class="hidden flex items-center gap-3 bg-black/85 p-2.5 rounded-xl border-2 border-red-600/70 backdrop-blur-md pointer-events-auto shadow-2xl min-w-[220px]">
+            <div class="relative w-12 h-12 rounded-full border-2 border-red-500 bg-slate-950 flex items-center justify-center overflow-hidden shrink-0">
+                <span id="ui-target-icon" class="text-2xl">👹</span>
+            </div>
+            <div class="flex-1 flex flex-col justify-center gap-1">
+                <div class="flex justify-between items-center text-xs font-bold text-red-200">
+                    <span id="ui-target-name" class="font-cinzel">Goblin</span>
+                    <span id="ui-target-lvl" class="text-amber-400">Nv 1</span>
+                </div>
+                <div class="w-full h-3 bg-slate-950 rounded border border-red-900 overflow-hidden relative">
+                    <div id="ui-target-hp-bar" class="h-full bg-gradient-to-r from-red-600 to-red-400 w-full transition-all duration-100"></div>
+                    <span id="ui-target-hp-text" class="absolute inset-0 text-[9px] font-bold text-white flex items-center justify-center drop-shadow">50/50</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Left Hand Keyboard Controls Summary Banner -->
+        <div class="bg-black/80 border border-amber-500/50 px-3.5 py-2 rounded-lg text-xs text-amber-200/90 flex gap-4 font-mono backdrop-blur-md shadow-lg hidden md:flex">
+            <span><b class="text-amber-400">WASD:</b> Mover</span>
+            <span><b class="text-amber-400">1-5:</b> Habilidades · Espacio: Poder 6</span>
+            <span><b class="text-amber-400">E:</b> Hablar / Interactuar</span>
+            <span><b class="text-amber-400">R/C/X/T/Z:</b> Menús · Esc: volver</span>
+        </div>
+    </div>
+
+    <!-- Bottom HUD Hotbar & XP Bar -->
+    <div id="game-footer" class="relative z-10 w-full flex flex-col items-center pb-2 pointer-events-none gap-1">
+        <!-- Spells Action Hotbar (1-5) -->
+        <div id="action-bar" class="flex items-center gap-2 bg-black/90 p-2.5 rounded-2xl border-2 border-amber-600/80 shadow-2xl backdrop-blur-md pointer-events-auto">
+            <!-- Slot 1: Melee / Cleave -->
+            <div id="slot-1" class="relative w-12 h-12 rounded-lg bg-slate-900 border-2 border-amber-500 flex flex-col items-center justify-center overflow-hidden group">
+                <span id="spell-icon-1" class="text-2xl">⚔️</span>
+                <span class="absolute top-0.5 left-1 text-[10px] font-bold text-amber-300 font-mono">1</span>
+                <span id="spell-short-1" class="touch-spell-name">Espada</span>
+                <div id="cd-1" class="absolute inset-0 bg-black/80 flex items-center justify-center text-white font-bold text-xs h-0 transition-all"></div>
+                <div class="absolute -top-9 bg-black/95 text-amber-200 text-[10px] px-2 py-1 rounded border border-amber-500 opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none shadow-lg">Golpe de Espada (0 MP)</div>
+            </div>
+            <!-- Slot 2: Fireball -->
+            <div id="slot-2" class="relative w-12 h-12 rounded-lg bg-slate-900 border-2 border-amber-500 flex flex-col items-center justify-center overflow-hidden group">
+                <span id="spell-icon-2" class="text-2xl">🔥</span>
+                <span class="absolute top-0.5 left-1 text-[10px] font-bold text-amber-300 font-mono">2</span>
+                <span id="spell-short-2" class="touch-spell-name">Fuego</span>
+                <div id="cd-2" class="absolute inset-0 bg-black/80 flex items-center justify-center text-white font-bold text-xs h-0 transition-all"></div>
+                <div class="absolute -top-9 bg-black/95 text-amber-200 text-[10px] px-2 py-1 rounded border border-amber-500 opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none shadow-lg">Bola de Fuego (15 MP)</div>
+            </div>
+            <!-- Slot 3: Holy Healing -->
+            <div id="slot-3" class="relative w-12 h-12 rounded-lg bg-slate-900 border-2 border-amber-500 flex flex-col items-center justify-center overflow-hidden group">
+                <span id="spell-icon-3" class="text-2xl">✨</span>
+                <span class="absolute top-0.5 left-1 text-[10px] font-bold text-amber-300 font-mono">3</span>
+                <span id="spell-short-3" class="touch-spell-name">Curar</span>
+                <div id="cd-3" class="absolute inset-0 bg-black/80 flex items-center justify-center text-white font-bold text-xs h-0 transition-all"></div>
+                <div class="absolute -top-9 bg-black/95 text-amber-200 text-[10px] px-2 py-1 rounded border border-amber-500 opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none shadow-lg">Luz Sagrada (25 MP)</div>
+            </div>
+            <!-- Slot 4: Divine Shield -->
+            <div id="slot-4" class="relative w-12 h-12 rounded-lg bg-slate-900 border-2 border-amber-500 flex flex-col items-center justify-center overflow-hidden group">
+                <span id="spell-icon-4" class="text-2xl">🛡️</span>
+                <span class="absolute top-0.5 left-1 text-[10px] font-bold text-amber-300 font-mono">4</span>
+                <span id="spell-short-4" class="touch-spell-name">Escudo</span>
+                <div id="cd-4" class="absolute inset-0 bg-black/80 flex items-center justify-center text-white font-bold text-xs h-0 transition-all"></div>
+                <div class="absolute -top-9 bg-black/95 text-amber-200 text-[10px] px-2 py-1 rounded border border-amber-500 opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none shadow-lg">Escudo Divino (30 MP)</div>
+            </div>
+            <!-- Slot 5: Meteor Shower -->
+            <div id="slot-5" class="relative w-12 h-12 rounded-lg bg-slate-900 border-2 border-amber-500 flex flex-col items-center justify-center overflow-hidden group">
+                <span id="spell-icon-5" class="text-2xl">☄️</span>
+                <span class="absolute top-0.5 left-1 text-[10px] font-bold text-amber-300 font-mono">5</span>
+                <span id="spell-short-5" class="touch-spell-name">Área</span>
+                <div id="cd-5" class="absolute inset-0 bg-black/80 flex items-center justify-center text-white font-bold text-xs h-0 transition-all"></div>
+                <div class="absolute -top-9 bg-black/95 text-amber-200 text-[10px] px-2 py-1 rounded border border-amber-500 opacity-0 group-hover:opacity-100 whitespace-nowrap pointer-events-none shadow-lg">Meteorito Devastador (40 MP)</div>
+            </div>
+
+            <div id="slot-6" class="relative w-12 h-12 rounded-lg bg-slate-900 border-2 border-amber-500 flex flex-col items-center justify-center overflow-hidden group"><span id="spell-icon-6" class="text-2xl">⚡</span><span class="absolute top-0.5 left-1 text-[10px] font-bold text-amber-300">␣</span><span id="spell-short-6" class="touch-spell-name">Rápido</span><div id="cd-6" class="absolute inset-0 bg-black/80 flex items-center justify-center text-white font-bold text-xs h-0"></div></div>
+
+            <div id="slot-7" class="relative w-12 h-12 rounded-lg bg-slate-900 border-2 border-amber-500 flex flex-col items-center justify-center overflow-hidden group"><span id="spell-icon-7" class="text-2xl">⚡</span><span class="absolute top-0.5 left-1 text-[10px] font-bold text-amber-300">⇧</span><span id="spell-short-7" class="touch-spell-name">Especial</span><div id="cd-7" class="absolute inset-0 bg-black/80 flex items-center justify-center text-white font-bold text-xs h-0"></div></div>
+<div id="slot-8" class="relative w-12 h-12 rounded-lg bg-slate-900 border-2 border-amber-500 flex flex-col items-center justify-center overflow-hidden group"><span id="spell-icon-8" class="text-2xl">⚡</span><span class="absolute top-0.5 left-1 text-[10px] font-bold text-amber-300">B</span><span id="spell-short-8" class="touch-spell-name">Especial</span><div id="cd-8" class="absolute inset-0 bg-black/80 flex items-center justify-center text-white font-bold text-xs h-0"></div></div>
+            <button id="tactics-toggle" class="wow-btn squad-input" aria-label="Cambiar entre héroe y cursor de órdenes" aria-pressed="false">🎯<span>Órdenes · Tab</span></button>
+            <button id="tactics-select" class="wow-btn squad-input" aria-label="Doble toque izquierdo para seleccionar unidad">👆<span>Seleccionar · E</span></button>
+            <button id="squad-all" class="wow-btn squad-input" aria-label="Seleccionar héroe y todo el escuadrón">👥<span>Grupo · `</span></button>
+            <!-- Menu Hotkey Shortcuts Bar -->
+            <button id="interact-button" class="wow-btn touch-only" aria-label="Interactuar: hablar, recoger oro o seleccionar enemigo">🤝<span>Interactuar</span></button>
+            <button id="sprint-button" class="wow-btn touch-only" hidden aria-label="Mantener para esprintar">🏃<span>Esprintar · Q</span></button>
+            <div id="hotbar-divider" class="h-10 w-[2px] bg-amber-600/50 mx-1"></div>
+            <div id="desktop-menus" class="flex gap-1.5 font-bold">
+                <button onclick="toggleWindow('inventory')" class="wow-btn px-2 py-2 rounded-lg flex flex-col items-center min-w-[38px]" title="Inventario / Bolsas (R / I)">
+                    <span>🎒</span> <span class="text-[9px] text-amber-300">R / I</span>
+                </button>
+                <button onclick="toggleWindow('talents')" class="wow-btn px-2 py-2 rounded-lg flex flex-col items-center min-w-[38px]" title="Talentos y Estadísticas (C)">
+                    <span>📜</span> <span class="text-[9px] text-amber-300">C</span>
+                </button>
+                <button onclick="toggleWindow('spells')" class="wow-btn px-2 py-2 rounded-lg flex flex-col items-center min-w-[38px]" title="Libro de Hechizos (K)">
+                    <span>📖</span> <span class="text-[9px] text-amber-300">K</span>
+                </button>
+                <button onclick="toggleWindow('quest')" class="wow-btn px-2 py-2 rounded-lg flex flex-col items-center min-w-[38px]" title="Registro de Misiones (T)">
+                    <span>🗡️</span> <span class="text-[9px] text-amber-300">T</span>
+                </button>
+                <button onclick="toggleWindow('map')" class="wow-btn px-2 py-2 rounded-lg flex flex-col items-center min-w-[38px]" title="Mapa Completo (M)">
+                    <span>🗺️</span> <span class="text-[9px] text-amber-300">M</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Experience Bar -->
+        <div class="w-[90%] max-w-2xl h-2.5 bg-slate-950 rounded-full border border-amber-600/60 overflow-hidden relative shadow-lg">
+            <div id="ui-xp-bar" class="h-full bg-gradient-to-r from-purple-800 via-indigo-500 to-purple-400 w-0 transition-all duration-200"></div>
+            <span id="ui-xp-text" class="absolute inset-0 text-[8px] font-extrabold text-amber-100 flex items-center justify-center drop-shadow">XP: 0 / 100</span>
+        </div>
+    </div>
+
+    <!-- MODAL OVERLAY WINDOWS: pausan también combate y reapariciones. -->
+    <div id="modal-container" class="absolute inset-0 bg-black/65 z-30 flex items-center justify-center p-4 hidden pointer-events-auto">
+        
+        <div id="win-expedition" class="wow-panel wow-border w-full max-w-lg p-5 rounded-xl hidden flex-col gap-4"><h2 id="expedition-title" class="font-cinzel text-xl text-amber-300"></h2><p id="expedition-desc"></p><button id="expedition-action" onclick="handleExpeditionAction()" class="wow-btn">Aceptar</button><button onclick="closeAllWindows()" class="wow-btn">Cerrar</button></div>
+        <div id="win-squad" class="wow-panel wow-border w-full max-w-lg p-5 rounded-xl hidden flex-col gap-4"><h2 class="font-cinzel text-xl text-amber-300">Héroe y escuadrón</h2><p id="squad-summary"></p><div id="squad-options" class="flex flex-col gap-2"></div></div>
+        <div id="win-appmenu" class="wow-panel wow-border w-full max-w-md p-5 rounded-xl hidden flex-col gap-4">
+            <div class="flex justify-between items-center"><h2 class="font-cinzel text-xl text-amber-300">Aventura · v0.5</h2><button onclick="closeAllWindows()" aria-label="Cerrar menú">✕</button></div>
+            <div class="app-menu-grid">
+                <button id="menu-rts" class="wow-btn" onclick="openWindow('squad')">👥 Escuadrón y órdenes</button>
+                <button id="menu-inventory" class="wow-btn" onclick="openWindow('inventory')">🎒 Mochila</button>
+                <button id="menu-talents" class="wow-btn" onclick="openWindow('talents')">📜 Talentos</button>
+                <button id="menu-spells" class="wow-btn" onclick="openWindow('spells')">📖 Habilidades</button>
+                <button id="menu-quest" class="wow-btn" onclick="openWindow('quest')">🗡️ Misión</button>
+                <button id="menu-map" class="wow-btn" onclick="openWindow('map')">🗺️ Mapa</button>
+                <button id="menu-help" class="wow-btn" onclick="openWindow('help')">Ayuda</button>
+                <button id="app-pause-button" class="wow-btn">Pausar</button>
+                <button id="menu-save" class="wow-btn" onclick="saveGame(true)">Guardar</button>
+                <button id="menu-export" class="wow-btn" onclick="exportSave()">Exportar partida</button>
+                <button id="menu-import" class="wow-btn" onclick="document.getElementById('save-import').click()">Importar partida</button>
+                <button id="touch-toggle" class="wow-btn" aria-pressed="false">Controles táctiles</button>
+                <button id="menu-new" class="wow-btn" onclick="newGame()">Nueva partida</button>
+            </div>
+            <button id="install-button" class="wow-btn" hidden>Instalar aplicación</button>
+            <button id="update-button" class="wow-btn" hidden>Actualizar aplicación</button>
+            <p id="app-status" role="status" aria-live="polite">Puedes instalar este juego desde el menú de Chrome cuando esté disponible. En iPhone/iPad: Compartir → Añadir a pantalla de inicio.</p>
+            <p id="keyboard-menu-guide" class="keyboard-help">Mano izquierda: WASD selecciona · F o E confirma · Esc vuelve/cierra.<br>R: mochila · C: talentos · X: habilidades · T: misión · Z: mapa · V: pausa · G: ayuda.</p>
+
+            <button id="menu-resume" onclick="if (manualPaused) togglePause(); closeAllWindows()" class="wow-btn app-resume">Volver al juego</button>
+        </div>
+        <div id="win-help" class="wow-panel wow-border w-full max-w-lg p-5 rounded-xl hidden flex-col gap-4">
+            <h2 class="font-cinzel text-xl text-amber-300">Una aventura de héroe y escuadrón</h2>
+            <div id="class-choice"><label for="hero-class">Elige tu clase: 1 Paladín · 2 Maga · 3 Exploradora</label><select id="hero-class" onchange="chooseHeroClass(this.value)"><option value="paladin">🛡️ Paladín</option><option value="mage">🧙‍♀️ Maga</option><option value="ranger">🏹 Exploradora</option></select><p id="class-summary"></p></div>
+            <p id="keyboard-help-guide" class="keyboard-help">Todo cerca de WASD: 1–5 habilidades · E/F interactuar o confirmar · Esc menú/volver · R mochila · C talentos · X habilidades · T misión · Z mapa · V pausa · G ayuda. En los menús, WASD selecciona. F empieza esta aventura.</p>
+            <p>Un solo mundo, un héroe y sus subordinados. <b>Tab</b> cambia entre mover al héroe y mover el cursor de órdenes. En órdenes: <b>E</b> selecciona, <b>F</b> manda mover/atacar/interactuar, <b>`</b> selecciona todo, <b>C</b> construye cuartel con un trabajador y <b>R</b> recluta sobre un cuartel. En móvil, usa Órdenes, Seleccionar (dos toques), Grupo e Interactuar/Ordenar a la izquierda. Los poderes siguen disponibles en ambos controles.</p><p>Habla con el comandante, vence a cinco enemigos comunes y vuelve por tu recompensa. Recoge oro, compra equipo y mejora tus habilidades antes de desafiar al Señor Demonio. Explora la Cripta (nivel 3), la Mina (nivel 6) el Bastión (nivel 10) y la Ciudadela (nivel 15); sus entradas aparecen en el mapa.</p>
+            <p><b>WASD</b>: moverte en la dirección de la pantalla.<br><b>E</b>: hablar, recoger oro o fijar un objetivo cercano.<br><b>1</b>: ataque básico. <b>Espacio</b>: sexto poder (4 s). <b>2</b>: fuego. <b>3</b>: curar. <b>4</b>: inmunidad. <b>5</b>: ataque de área.</p>
+            <p><b>R / I</b>: inventario. <b>C</b>: talentos. <b>K</b>: habilidades. <b>T</b>: misión. <b>M</b>: mapa. <b>P</b>: pausa. <b>H</b>: ayuda.</p>
+            <p>Los menús pausan el juego. Puedes tocar las opciones o usar el ratón, WASD y Enter en ellos. Los ataques eligen un enemigo al alcance. La villa es un refugio: combate fuera de ella y regresa para recuperar vida y maná. El círculo rojo del jefe anuncia un ataque: sal de él o usa tu escudo.</p>
+            <p>El guardado automático pertenece a este navegador. Usa <b>Exportar</b> para llevar tu partida a otra versión o equipo. El séptimo poder usa Mayús izquierdo (60 maná, 90 s); el octavo usa B (60 maná, 120 s). Los clics del ratón son atajos opcionales. En móvil, la palanca, poderes e interacción están a la izquierda; el grupo también se dirige desde la izquierda. En los menús, usa la palanca izquierda para elegir y Confirmar para comprar, entrenar o aceptar misiones. Mantén <b>Espada</b> para atacar; suelta para detenerte. <b>Interactuar</b> permite hablar con los personajes. El menú reúne mochila, talentos, habilidades, misión y mapa.</p>
+            <button onclick="closeAllWindows()" class="wow-btn px-4 py-2 rounded">Jugar [Enter / ESC]</button>
+        </div>
+        <!-- 1. INVENTORY & BAGS WINDOW ('I' / 'B') -->
+        <div id="win-inventory" class="wow-panel wow-border w-full max-w-md p-5 rounded-xl hidden flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-amber-600/40 pb-2">
+                <h2 class="font-cinzel text-xl font-bold text-amber-300 flex items-center gap-2">🎒 Bolsa del Aventurero</h2>
+                <button onclick="closeAllWindows()" class="text-amber-400 font-bold hover:text-white">[ESC]</button>
+            </div>
+            
+            <div id="inv-grid" class="grid grid-cols-4 gap-2.5 max-h-64 overflow-y-auto p-1">
+                <!-- Dynamically populated -->
+            </div>
+
+            <div class="bg-black/50 p-2.5 rounded border border-amber-900/60 text-xs flex justify-between items-center">
+                <span class="text-amber-200/80"><b class="text-amber-400">WASD:</b> Seleccionar, <b class="text-amber-400">ENTER/ESPACIO:</b> Usar/Equipar</span>
+                <button onclick="closeAllWindows()" class="wow-btn px-3 py-1 rounded text-xs font-bold">Cerrar</button>
+            </div>
+        </div>
+
+        <!-- 2. CHARACTER SHEET & TALENT TREE WINDOW ('C') -->
+        <div id="win-talents" class="wow-panel wow-border w-full max-w-lg p-5 rounded-xl hidden flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-amber-600/40 pb-2">
+                <div>
+                    <h2 class="font-cinzel text-xl font-bold text-amber-300">🛡️ Rama de Talentos & Atributos</h2>
+                    <p class="text-xs text-amber-400">Puntos Disponibles: <span id="talent-points-count" class="font-bold text-amber-200">0</span></p>
+                </div>
+                <button onclick="closeAllWindows()" class="text-amber-400 font-bold hover:text-white">[ESC]</button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 text-xs border-b border-amber-900/50 pb-3">
+                <div class="bg-black/40 p-2 rounded flex justify-between"><span class="text-amber-200">Salud Max:</span><span id="stat-maxhp" class="text-red-400 font-bold">120</span></div>
+                <div class="bg-black/40 p-2 rounded flex justify-between"><span class="text-amber-200">Maná Max:</span><span id="stat-maxmp" class="text-blue-400 font-bold">60</span></div>
+                <div class="bg-black/40 p-2 rounded flex justify-between"><span class="text-amber-200">Poder de Ataque:</span><span id="stat-spellpower" class="text-purple-400 font-bold">18</span></div>
+                <div class="bg-black/40 p-2 rounded flex justify-between"><span class="text-amber-200">Armadura:</span><span id="stat-armor" class="text-yellow-500 font-bold">8</span></div>
+            </div>
+
+            <div id="talent-list" class="flex flex-col gap-2 max-h-56 overflow-y-auto pr-1">
+                <!-- Talents rendered dynamically -->
+            </div>
+
+            <div class="bg-black/50 p-2 rounded border border-amber-900/60 text-xs flex justify-between items-center">
+                <span class="text-amber-200/80">Selecciona con <b class="text-amber-400">W/S</b> y aprende con <b class="text-amber-400">ENTER</b></span>
+                <button onclick="closeAllWindows()" class="wow-btn px-3 py-1 rounded text-xs font-bold">Cerrar</button>
+            </div>
+        </div>
+
+        <!-- 3. SPELLBOOK WINDOW ('K') -->
+        <div id="win-spells" class="wow-panel wow-border w-full max-w-md p-5 rounded-xl hidden flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-amber-600/40 pb-2">
+                <h2 class="font-cinzel text-xl font-bold text-amber-300">📖 Libro de Habilidades</h2>
+                <button onclick="closeAllWindows()" class="text-amber-400 font-bold hover:text-white">[ESC]</button>
+            </div>
+            
+            <div id="spellbook-list" class="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
+                <!-- Spellbook rendered dynamically -->
+            </div>
+
+            <div class="flex justify-end">
+                <button onclick="closeAllWindows()" class="wow-btn px-4 py-1.5 rounded text-xs font-bold">Cerrar</button>
+            </div>
+        </div>
+
+        <!-- 4. MERCHANT SHOP WINDOW -->
+        <div id="win-shop" class="wow-panel wow-border w-full max-w-lg p-5 rounded-xl hidden flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-amber-600/40 pb-2">
+                <div>
+                    <h2 class="font-cinzel text-xl font-bold text-amber-300">🛒 Mercader de la Cruzada</h2>
+                    <p class="text-xs text-amber-400">Tu Oro: <span id="shop-player-gold" class="font-bold text-yellow-300">0g</span></p>
+                </div>
+                <button onclick="closeAllWindows()" class="text-amber-400 font-bold hover:text-white">[ESC]</button>
+            </div>
+
+            <div id="shop-item-list" class="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
+                <!-- Shop items rendered dynamically -->
+            </div>
+
+            <div class="bg-black/50 p-2 rounded border border-amber-900/60 text-xs flex justify-between items-center">
+                <span class="text-amber-200/80">Comprar con <b class="text-amber-400">W/S + ENTER</b></span>
+                <button onclick="closeAllWindows()" class="wow-btn px-3 py-1 rounded text-xs font-bold">Cerrar</button>
+            </div>
+        </div>
+
+        <!-- 5. SPELL TRAINER NPC WINDOW -->
+        <div id="win-trainer" class="wow-panel wow-border w-full max-w-lg p-5 rounded-xl hidden flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-amber-600/40 pb-2">
+                <div>
+                    <h2 id="trainer-name" class="font-cinzel text-xl font-bold text-amber-300">Entrenador de Clases</h2>
+                    <p class="text-xs text-amber-400">Aumenta el nivel de tus hechizos usando oro</p><p id="trainer-limit" class="text-xs text-amber-200"></p>
+                </div>
+                <button onclick="closeAllWindows()" class="text-amber-400 font-bold hover:text-white">[ESC]</button>
+            </div>
+
+            <div id="trainer-spells-list" class="flex flex-col gap-2 max-h-64 overflow-y-auto pr-1">
+                <!-- Trainer upgrades rendered dynamically -->
+            </div>
+
+            <div class="bg-black/50 p-2 rounded border border-amber-900/60 text-xs flex justify-between items-center">
+                <span class="text-amber-200/80">Sube nivel con <b class="text-amber-400">W/S + ENTER</b></span>
+                <button onclick="closeAllWindows()" class="wow-btn px-3 py-1 rounded text-xs font-bold">Cerrar</button>
+            </div>
+        </div>
+
+        <!-- 6. QUEST LOG / QUEST GIVER WINDOW -->
+        <div id="win-quest" class="wow-panel wow-border w-full max-w-md p-5 rounded-xl hidden flex-col gap-4">
+            <div class="flex justify-between items-center border-b border-amber-600/40 pb-2">
+                <h2 id="quest-title" class="font-cinzel text-xl font-bold text-amber-300">🗡️ Misión: Protege la villa</h2>
+                <button onclick="closeAllWindows()" class="text-amber-400 font-bold hover:text-white">[ESC]</button>
+            </div>
+
+            <div class="bg-black/50 p-3.5 rounded border border-amber-900/50 text-sm leading-relaxed text-amber-100/90" id="quest-desc">
+                "Los goblins, orcos y esqueletos amenazan la villa. Derrota a cinco de ellos y vuelve a cobrar tu recompensa. Después, prepárate para enfrentarte al Señor Demonio."
+            </div>
+
+            <div class="bg-amber-950/40 p-3 rounded border border-amber-600/40 text-xs flex flex-col gap-1">
+                <span class="font-bold text-amber-300">Progreso de la Misión:</span>
+                <div id="quest-progress-text" class="text-amber-200 font-mono">Enemigos comunes: 0 / 5</div>
+                <div class="text-yellow-400 font-bold mt-1">Recompensa: 120 XP + 60 Monedas de Oro</div>
+            </div>
+
+            <div class="flex justify-end gap-2">
+                <button id="quest-action-btn" onclick="handleQuestAction()" class="wow-btn px-5 py-2 rounded text-xs font-bold">Aceptar Misión [ENTER]</button>
+            </div>
+        </div>
+
+        <!-- 7. FULL ISOMETRIC WORLD MAP WINDOW ('M') -->
+        <div id="win-map" class="wow-panel wow-border w-full max-w-xl p-5 rounded-xl hidden flex-col gap-3">
+            <div class="flex justify-between items-center border-b border-amber-600/40 pb-2">
+                <h2 class="font-cinzel text-xl font-bold text-amber-300">🗺️ Mapa del Reino de Lordaeron</h2>
+                <button onclick="closeAllWindows()" class="text-amber-400 font-bold hover:text-white">[ESC]</button>
+            </div>
+            
+            <div class="relative w-full h-72 bg-slate-950 rounded border border-amber-700/60 overflow-hidden flex items-center justify-center">
+                <canvas id="mapCanvas" class="w-full h-full"></canvas>
+            </div>
+
+            <div class="flex justify-between items-center text-xs text-amber-200">
+                <div class="flex gap-4">
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 bg-blue-500 inline-block rounded-full"></span> Jugador</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 bg-amber-400 inline-block rounded-full"></span> NPCs</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 bg-red-500 inline-block rounded-full"></span> Enemigos</span>
+                    <span class="flex items-center gap-1"><span class="w-3 h-3 bg-purple-600 inline-block rounded-full"></span> Jefe</span>
+                </div>
+                <span class="text-amber-400/80">Presiona [M] o [ESC] para cerrar</span>
+            </div>
+        </div>
+
+    </div>
+    <div id="left-menu-pad" class="touch-only" aria-label="Controles izquierdos para menús"><button id="menu-confirm" onclick="executeMenuSelection()">Confirmar · F</button><button id="menu-back" onclick="returnToGameMenu()">Volver · Esc</button></div>
+    <div id="menu-pause-notice" hidden>Juego en pausa mientras el menú está abierto · ESC para cerrar</div>
+
+</body>
+</html>
