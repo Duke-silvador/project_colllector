@@ -1,0 +1,31 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {JSDOM} from 'jsdom';
+import WebSocket from 'ws';
+process.env.RPG_CONNECT_GM_KEY='test-key-abcdefghijklmnopqrstuvwxyz';process.env.PORT='0';
+const {server,wss}=await import('./rpg-connect-server.js');
+await new Promise(resolve=>server.listening?resolve():server.once('listening',resolve));
+const url=`ws://127.0.0.1:${server.address().port}`;
+const open=()=>new Promise((resolve,reject)=>{let ws=new WebSocket(url);ws.once('open',()=>resolve(ws));ws.once('error',reject)});
+const wait=(ws,type)=>new Promise((resolve,reject)=>{let timeout=setTimeout(()=>reject(Error('timeout '+type)),2000);const fn=data=>{let value=JSON.parse(String(data));if(value.type!==type)return;clearTimeout(timeout);ws.off('message',fn);resolve(value)};ws.on('message',fn)});
+const send=(ws,m)=>ws.send(JSON.stringify({v:1,...m}));
+const until=(fn)=>new Promise((resolve,reject)=>{let start=Date.now();const check=()=>{if(fn())return resolve();if(Date.now()-start>2000)return reject(Error('condition timeout'));setTimeout(check,10)};check()});
+
+test('client compagnon : état, attaque, décision MJ, dégâts, reconnexion',async()=>{
+ const gm=await open(),welcome=wait(gm,'welcome');send(gm,{type:'hello',role:'gm',key:process.env.RPG_CONNECT_GM_KEY});const room=(await welcome).room;
+ const invite=wait(gm,'invite');send(gm,{type:'invite',characterId:'samoth'});const token=(await invite).payload.token;
+ const dom=new JSDOM('<!doctype html><body></body>',{url:'https://bryantoualy-del.github.io/Samoth/',runScripts:'outside-only'});
+ const calls=[],listeners=[],s={characterId:'samoth',hp:{current:72,max:72,temp:0},ac:14};
+ dom.window.WebSocket=WebSocket;dom.window.requestAnimationFrame=fn=>dom.window.setTimeout(fn,0);dom.window.cancelAnimationFrame=id=>dom.window.clearTimeout(id);dom.window.CompanionAPI={getCharacter:()=>({id:'samoth',name:'Samoth'}),getState:()=>structuredClone(s),subscribe:fn=>listeners.push(fn),applyRemoteEvent:e=>{calls.push(e);if(e.type==='hp:damage')s.hp.current-=e.payload.amount;return true},applyHitDecision:(hit,attackId)=>{calls.push({type:'attack:decision',payload:{hit,attackId}});return true},emitLocal:e=>calls.push({type:e})};
+ dom.window.eval(readFileSync(new URL('../Samoth/rpg-connect-client.js',import.meta.url),'utf8'));
+ for(const [name,value] of Object.entries({endpoint:url,room,token}))dom.window.document.querySelector(`[name="${name}"]`).value=value;
+ dom.window.document.querySelector('[data-connect]').click();await until(()=>dom.window.RPGConnect.getStatus().connected);
+ dom.window.RPGConnect.setTargets([{id:'enemy-1',name:'Gobelin',creatureType:'humanoïde',boss:false,elite:false,ac:13,conditions:[],mechanics:{},healthGauge:null}],'enemy-1');
+ const event={id:'samoth-roll-1',type:'attack:rolled',characterId:'samoth',timestamp:new Date().toISOString(),payload:{attackId:'samoth-roll-1',roll:21,total:21,nat:14}};
+ let forwarded=wait(gm,'event');listeners[0](event);assert.equal((await forwarded).event.payload.roll,21);
+ let ack=wait(gm,'command-ack');send(gm,{type:'command',characterId:'samoth',event:{id:'gm-hit-1',type:'attack:decision',characterId:'samoth',payload:{attackId:'samoth-roll-1',hit:true}}});assert.equal((await ack).result,'applied');assert.ok(calls.some(x=>x.type==='attack:decision'&&x.payload?.attackId==='samoth-roll-1'&&x.payload?.hit===true));
+ ack=wait(gm,'command-ack');send(gm,{type:'command',characterId:'samoth',event:{id:'gm-damage-1',type:'hp:damage',characterId:'samoth',payload:{amount:8}}});assert.equal((await ack).result,'applied');assert.equal(s.hp.current,64);
+ dom.window.RPGConnect.disconnect();await until(()=>!dom.window.RPGConnect.getStatus().connected);dom.window.close();gm.close();
+});
+test.after(async()=>{for(const ws of wss.clients)ws.terminate();await new Promise(resolve=>server.close(resolve))});

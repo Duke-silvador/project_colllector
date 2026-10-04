@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#0c1420">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>ENCOUNTER V4.1 — Console MJ D&D 5e</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+  <meta name="apple-mobile-web-app-title" content="ENCOUNTER">
+  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="table.css?v=10">
+  <link rel="stylesheet" href="rpg-connect-mj.css?v=26">
+</head>
+<body>
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <div id="drawerScrim" class="drawer-scrim" data-close-drawers></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <img class="brand-mark" src="icon-192.png" alt="">
+      <div><h1>ENCOUNTER</h1><p>TABLE DE JEU · V4.1</p></div>
+    </div>
+    <div class="mode-switch" aria-label="Mode d'utilisation">
+      <button id="btnModePrep" class="mode-btn active">⚙ Préparation</button>
+      <button id="btnModeCombat" class="mode-btn">⚔ Combat</button>
+    </div>
+    <div class="top-actions">
+      <button id="btnUndo" class="ghost persistent-action">↶ Annuler</button>
+      <button id="btnEncounterManager" class="ghost">💾 Rencontres</button>
+      <button id="btnLibraryDrawer" class="ghost">☰ Bibliothèque</button>
+      <button id="btnJournalDrawer" class="ghost">≡ Journal</button>
+      <button id="btnCombatLock" class="ghost lock-btn" title="Verrouillage combat">🔓</button>
+      <button id="btnMore" class="ghost icon-only" title="Outils">•••</button>
+    </div>
+    <div id="moreMenu" class="more-menu hidden">
+      <button id="btnNewEncounter">Nouvelle rencontre</button>
+      <button id="btnImport">Importer JSON</button>
+      <button id="btnExport">Exporter JSON</button>
+      <button id="btnBackups">Backups automatiques</button>
+      <button id="btnTrash">Corbeille</button>
+      <button id="btnDensity">Densité : Confortable</button>
+      <label class="device-profile-setting" for="deviceProfile"><span>Interface tablette</span><select id="deviceProfile" aria-label="Profil d’interface tablette"><option value="ipad">iPad paysage</option><option value="samsung-s7fe">Samsung S7 FE paysage</option></select></label>
+      <button id="btnReset" class="danger">Réinitialiser</button>
+    </div>
+  </header>
+
+  <section class="roundbar">
+    <div class="round-left">
+      <span class="eyebrow">RENCONTRE</span>
+      <input id="encounterName" class="encounter-name" value="Rencontre sans titre" aria-label="Nom de la rencontre">
+    </div>
+    <div class="round-center">
+      <div class="round-box"><span>Round</span><strong id="roundNumber">1</strong></div>
+      <div id="initiativeRibbon" class="initiative-ribbon"></div><button id="btnReturnActive" class="turn-context" title="Revenir au combattant dont c’est le tour"><span class="eyebrow">À JOUER</span><strong id="nowPlaying">—</strong></button>
+    </div>
+    <div class="turn-next-wrap">
+      <button id="btnNextTurn" class="primary next-turn">Tour suivant →</button>
+      <small id="nextTurnHint">Aucun participant</small>
+    </div>
+  </section>
+
+  <main id="prepView" class="prep-view">
+    <section class="prep-hero panel-soft">
+      <div>
+        <span class="eyebrow">MODE PRÉPARATION</span>
+        <h2>Prépare la rencontre, puis passe en Combat.</h2>
+        <p>Ajoute les adversaires et PJ, règle l’initiative et vérifie les statblocks. En mode Combat, l’interface se simplifie automatiquement.</p>
+      </div>
+      <div class="prep-hero-actions">
+        <button class="primary" id="btnPrepOpenLibrary">+ Ouvrir la bibliothèque</button>
+        <button class="ghost" id="btnAddPlayer">+ PJ / PNJ</button>
+        <button class="ghost" id="btnPrepEncounters">💾 Rencontres sauvegardées</button>
+        <button class="ghost" id="btnSortInitiative">Trier l’initiative</button>
+        <button class="start-combat" id="btnStartCombat">⚔ Lancer la rencontre</button>
+      </div>
+    </section>
+
+    <section class="prep-grid">
+      <div class="panel prep-participants-panel">
+        <div class="panel-head"><div><span class="eyebrow">COMPOSITION</span><h2>Participants</h2></div><span id="prepCount" class="count-badge">0</span></div>
+        <div id="prepParticipants" class="prep-participants"></div>
+      </div>
+      <div class="panel prep-preview-panel">
+        <div class="panel-head"><div><span class="eyebrow">APERÇU</span><h2>Créature sélectionnée</h2></div></div>
+        <div id="prepPreview" class="prep-preview"></div>
+      </div>
+    </section>
+  </main>
+
+  <section id="targetingBanner" class="targeting-banner hidden" aria-live="polite"></section>
+
+  <main id="combatView" class="combat-view hidden">
+    <section class="panel participant-panel">
+      <div class="panel-head compact-head">
+        <div><span class="eyebrow">COMBAT</span><h2>Participants</h2></div>
+        <div class="participant-head-actions">
+          <button id="btnMultiMode" class="ghost small">☑ Multi-cibles</button>
+          <span id="multiCount" class="count-badge hidden">0</span>
+        </div>
+      </div>
+      <div class="roster-legend"><span>INIT.</span><span>COMBATTANT <small>• tour en or / cible en bleu</small></span><span>PV</span><span>CA</span><span></span></div><div id="tableReminders"></div><div id="combatList" class="combat-list"></div><div id="lastEvent" class="last-event" aria-live="polite">La rencontre est prête.</div>
+    </section>
+
+    <section class="panel detail-panel" aria-label="Fiche du combattant sélectionné"><button id="btnCloseDetail" class="detail-close">← Retour aux combattants</button>
+      <div id="activeDetail" class="active-detail empty-detail">
+        <div class="empty-crest">✦</div><h2>Aucune créature sélectionnée</h2><p>Ajoute un adversaire ou un PJ/PNJ.</p>
+      </div>
+    </section>
+  </main>
+
+  <section id="quickBar" class="quickbar hidden">
+    <div class="quick-target"><span class="eyebrow">CIBLE</span><strong id="quickTargetName">—</strong><button id="btnMobileDetail" class="ghost">Fiche ↗</button><small id="quickTargetMeta"></small></div>
+    <div class="quick-mode" role="group" aria-label="Type de modification des PV">
+      <button id="btnQuickDamage" class="danger active" data-quick-mode="damage">DÉGÂTS</button>
+      <button id="btnQuickHeal" class="heal" data-quick-mode="heal">SOINS</button>
+    </div>
+    <div class="quick-presets">
+      <button data-quick-amount="1">1</button><button data-quick-amount="5">5</button><button data-quick-amount="10">10</button>
+    </div>
+    <div class="quick-amount">
+      <input id="quickAmount" aria-label="Montant des dégâts ou soins" type="number" min="1" step="1" inputmode="numeric" placeholder="Valeur">
+      <select id="quickDamageType" aria-label="Type de dégâts">
+        <option value="">Type de dégâts…</option><option>acide</option><option>contondants</option><option>feu</option><option>force</option><option>foudre</option><option>froid</option><option>nécrotiques</option><option>perforants</option><option>poison</option><option>psychiques</option><option>radiants</option><option>tonnerre</option><option>tranchants</option>
+      </select>
+      <button id="btnQuickApply" class="primary">Appliquer</button>
+      <button id="btnQuickState" class="ghost">+ État</button>
+    </div>
+  </section>
+
+  <aside id="libraryDrawer" class="drawer drawer-left" aria-hidden="true">
+    <div class="drawer-head"><div><span class="eyebrow">BIBLIOTHÈQUE</span><h2>Profils de combat</h2></div><button class="icon-btn" data-close-drawers aria-label="Fermer la bibliothèque">×</button></div>
+    <div class="library-filters" role="group" aria-label="Filtrer la bibliothèque"><button class="active" data-library-filter="all">Tous</button><button data-library-filter="enemy">Adversaires</button><button data-library-filter="character">Personnages</button><button data-library-filter="companion">Compagnons</button><button data-library-filter="npc">PNJ alliés</button></div>
+    <div class="drawer-toolbar"><input id="monsterSearch" type="search" placeholder="Nom, type, source…"><button id="btnCreateMonster" class="primary">＋ Créer</button></div>
+    <div class="premium-library-toolbar"><button id="btnFavoriteFilter" class="ghost small">☆ Favoris</button><select id="libraryTagFilter"><option value="">Toutes les catégories</option></select></div>
+    <div id="monsterLibrary" class="monster-library"></div>
+    <p class="srd-credit-short">Monstres SRD : SRD 5.1 français · CC-BY-4.0. Attribution complète dans README.md.</p>
+  </aside>
+
+  <aside id="journalDrawer" class="drawer drawer-right" aria-hidden="true">
+    <div class="drawer-head"><div><span class="eyebrow">JOURNAL</span><h2>Historique</h2></div><button class="icon-btn" data-close-drawers>×</button></div>
+    <div class="journal-actions"><button id="btnUndoDrawer" class="ghost">↶ Annuler</button><button id="btnClearLog" class="ghost">Effacer</button></div>
+    <div id="combatLog" class="combat-log"></div>
+  </aside>
+
+  <dialog id="conditionDialog" class="modal condition-modal">
+    <form id="conditionForm">
+      <div class="modal-head"><div><span class="eyebrow">ÉTATS</span><h2>Condition avec durée</h2></div><button type="button" class="icon-btn" data-dialog-close="conditionDialog">×</button></div>
+      <p id="conditionTargetText" class="muted"></p>
+      <div id="conditionModalGrid" class="condition-grid"></div>
+      <div class="condition-options">
+        <label>Durée<select id="conditionDuration"><option value="indefinite">Indéfinie</option><option value="rounds">Nombre de tours</option><option value="untilStart">Jusqu’au début du prochain tour de la cible</option><option value="untilEnd">Jusqu’à la fin du prochain tour de la cible</option><option value="saveEnd">Sauvegarde à la fin de chaque tour</option></select></label>
+        <label id="conditionRoundsWrap">Tours<input id="conditionRounds" type="number" min="1" value="1" inputmode="numeric"></label>
+        <label id="conditionSaveWrap">Sauvegarde<select id="conditionSaveAbility"><option>FOR</option><option>DEX</option><option>CON</option><option>INT</option><option>SAG</option><option>CHA</option></select></label>
+        <label id="conditionDcWrap">DD<input id="conditionDc" type="number" min="1" value="15" inputmode="numeric"></label>
+        <label class="span2">Source / note<input id="conditionSource" placeholder="ex. Toile d’araignée, Pik…"></label>
+      </div>
+      <div id="conditionCurrentList" class="condition-current-list"></div>
+      <div class="modal-actions"><button type="button" class="ghost" data-dialog-close="conditionDialog">Fermer</button><button type="submit" class="primary">Appliquer l’état</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="monsterEditor" class="modal wide">
+    <form method="dialog" id="monsterForm">
+      <div class="modal-head"><div><span class="eyebrow">ÉDITEUR</span><h2 id="monsterEditorTitle">Nouvelle fiche</h2></div><button value="cancel" class="icon-btn">×</button></div>
+      <div class="editor-grid">
+        <label>Catégorie<select name="category"><option value="enemy">Adversaire</option><option value="character">Personnage</option><option value="companion">Compagnon</option><option value="npc">PNJ allié</option></select></label><label>Source<input name="source" placeholder="SRD 5.1, dossier perso…"></label>
+        <label class="span2">Sous-titre<input name="subtitle" placeholder="Gobelin · Clerc 8 · Domaine de la Vie"></label>
+        <label class="span2">Catégories personnalisées<input name="tags" placeholder="Clifftop ; Morts-vivants ; One-shot 26/09"></label>
+        <label class="check-label"><input name="favorite" type="checkbox"> ★ Favori</label><label class="check-label"><input name="isBoss" type="checkbox"> BOSS permanent</label>
+        <label>Nom<input name="name" required></label><label>Type<input name="type" placeholder="Aberration, humanoïde…"></label>
+        <label>Taille<input name="size" placeholder="M, G, TG…"></label><label>FP<input name="cr" placeholder="8"></label>
+        <label>CA<input name="ac" type="number" min="0"></label><label>PV max<input name="hp" type="number" min="1" required></label>
+        <label>Initiative<input name="initiative" type="number" value="0"></label><label>Vitesse<input name="speed" placeholder="9 m"></label>
+        <label>Attaques / action<input name="attacksPerAction" type="number" min="1" value="1"></label><label>Actions légendaires max<input name="legendaryMax" type="number" min="0" value="0"></label><label>Initiative du repaire<input name="lairInitiative" type="number" value="20"></label>
+        <label class="span2">Sauvegardes (affichage libre)<input name="saves" placeholder="FOR +7, DEX +3, CON +8"></label>
+        <label class="span2">Vulnérabilités aux dégâts<input name="damageVulnerabilities" placeholder="radiants ; contondants"></label>
+        <label class="span2">Résistances aux dégâts<input name="damageResistances" placeholder="froid ; psychiques"></label>
+        <label class="span2">Immunités aux dégâts<input name="damageImmunities" placeholder="poison ; feu"></label>
+        <label class="span2">Immunités aux états<input name="conditionImmunities" placeholder="Charmé ; Effrayé ; Empoisonné"></label>
+        <label class="span2">Sens & langues<input name="senses" placeholder="vision dans le noir 18 m ; commun…"></label>
+      </div>
+      <div class="editor-section"><div class="editor-section-head"><h3>Caractéristiques & jets de sauvegarde</h3></div><p class="muted tiny">Utilisés pour les tests de caractéristiques et les jets de sauvegarde automatiques. Laisse vide si la fiche ne doit pas les gérer.</p><div class="ability-stats-editor">
+        <label>FOR<input name="ability_FOR" type="number" min="1" max="30"><input name="save_FOR" type="number" placeholder="JS"></label>
+        <label>DEX<input name="ability_DEX" type="number" min="1" max="30"><input name="save_DEX" type="number" placeholder="JS"></label>
+        <label>CON<input name="ability_CON" type="number" min="1" max="30"><input name="save_CON" type="number" placeholder="JS"></label>
+        <label>INT<input name="ability_INT" type="number" min="1" max="30"><input name="save_INT" type="number" placeholder="JS"></label>
+        <label>SAG<input name="ability_SAG" type="number" min="1" max="30"><input name="save_SAG" type="number" placeholder="JS"></label>
+        <label>CHA<input name="ability_CHA" type="number" min="1" max="30"><input name="save_CHA" type="number" placeholder="JS"></label>
+      </div></div>
+      <div class="editor-section"><div class="editor-section-head"><h3>Compétences</h3></div><p class="muted tiny">Bonus finaux de la fiche. Une valeur vide est calculée depuis la caractéristique associée.</p><div class="skills-editor"><label>Athlétisme <small>FOR</small><input name="skill_athletisme" type="number" placeholder="Auto"><select name="skillstatus_athletisme"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Acrobaties <small>DEX</small><input name="skill_acrobaties" type="number" placeholder="Auto"><select name="skillstatus_acrobaties"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Escamotage <small>DEX</small><input name="skill_escamotage" type="number" placeholder="Auto"><select name="skillstatus_escamotage"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Discrétion <small>DEX</small><input name="skill_discretion" type="number" placeholder="Auto"><select name="skillstatus_discretion"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Arcanes <small>INT</small><input name="skill_arcanes" type="number" placeholder="Auto"><select name="skillstatus_arcanes"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Histoire <small>INT</small><input name="skill_histoire" type="number" placeholder="Auto"><select name="skillstatus_histoire"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Investigation <small>INT</small><input name="skill_investigation" type="number" placeholder="Auto"><select name="skillstatus_investigation"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Nature <small>INT</small><input name="skill_nature" type="number" placeholder="Auto"><select name="skillstatus_nature"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Religion <small>INT</small><input name="skill_religion" type="number" placeholder="Auto"><select name="skillstatus_religion"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Dressage <small>SAG</small><input name="skill_dressage" type="number" placeholder="Auto"><select name="skillstatus_dressage"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Intuition <small>SAG</small><input name="skill_intuition" type="number" placeholder="Auto"><select name="skillstatus_intuition"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Médecine <small>SAG</small><input name="skill_medecine" type="number" placeholder="Auto"><select name="skillstatus_medecine"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Perception <small>SAG</small><input name="skill_perception" type="number" placeholder="Auto"><select name="skillstatus_perception"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Survie <small>SAG</small><input name="skill_survie" type="number" placeholder="Auto"><select name="skillstatus_survie"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Intimidation <small>CHA</small><input name="skill_intimidation" type="number" placeholder="Auto"><select name="skillstatus_intimidation"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Persuasion <small>CHA</small><input name="skill_persuasion" type="number" placeholder="Auto"><select name="skillstatus_persuasion"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Représentation <small>CHA</small><input name="skill_representation" type="number" placeholder="Auto"><select name="skillstatus_representation"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label><label>Tromperie <small>CHA</small><input name="skill_tromperie" type="number" placeholder="Auto"><select name="skillstatus_tromperie"><option value="">—</option><option value="Maîtrise">Maîtrise</option><option value="Expertise">Expertise</option><option value="Touche-à-tout">Touche-à-tout</option></select></label></div></div>
+      <div class="editor-section"><div class="editor-section-head"><h3>Traits</h3><button type="button" class="ghost small" data-add-row="traits">+ Trait</button></div><div id="traitsRows" class="dynamic-rows"></div></div>
+      <div class="editor-section"><div class="editor-section-head"><h3>Actions</h3><button type="button" class="ghost small" data-add-row="actions">+ Action</button></div><div id="actionsRows" class="dynamic-rows"></div></div>
+      <div class="editor-section"><div class="editor-section-head"><h3>Réactions</h3><button type="button" class="ghost small" data-add-row="reactions">+ Réaction</button></div><div id="reactionsRows" class="dynamic-rows"></div></div>
+      <div class="editor-section"><div class="editor-section-head"><h3>Actions légendaires</h3><button type="button" class="ghost small" data-add-row="legendaryActions">+ Action légendaire</button></div><div id="legendaryRows" class="dynamic-rows"></div></div>
+      <div class="editor-section"><div class="editor-section-head"><h3>Actions de repaire</h3><button type="button" class="ghost small" data-add-row="lairActions">+ Action de repaire</button></div><div id="lairRows" class="dynamic-rows"></div></div>
+      <div class="editor-section"><div class="editor-section-head"><h3>Phases de boss</h3><button type="button" class="ghost small" data-add-row="phases">+ Phase</button></div><div id="phasesRows" class="dynamic-rows"></div></div>
+      <div class="editor-section"><div class="editor-section-head"><h3>Ressources</h3><button type="button" class="ghost small" data-add-row="resources">+ Ressource</button></div><div id="resourcesRows" class="dynamic-rows"></div></div>
+      <label class="block-label">Notes MJ<textarea name="notes" rows="4"></textarea></label>
+      <input type="hidden" name="monsterId">
+      <div class="modal-actions"><button value="cancel" class="ghost">Annuler</button><button type="button" id="btnDeleteMonster" class="danger ghost hidden">Supprimer</button><button type="submit" class="primary">Enregistrer</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="addMonsterDialog" class="modal">
+    <form method="dialog" id="addMonsterForm">
+      <div class="modal-head"><div><span class="eyebrow">AJOUTER AU COMBAT</span><h2 id="addMonsterName">Adversaire</h2></div><button value="cancel" class="icon-btn">×</button></div>
+      <div class="editor-grid"><label>Nombre<input name="count" type="number" min="1" max="50" value="1"></label><label>Initiative<input name="initiative" type="number" value="10"></label><label class="span2 check-label"><input name="sharedInitiative" type="checkbox" checked> Initiative commune pour le groupe</label><label id="companionOption" class="span2 check-label hidden"><input name="includeCompanion" type="checkbox" checked> Ajouter aussi C.R.A.S.S.E.U.S.E. au même rang d’initiative, juste après Silas</label><label id="lairOption" class="span2 check-label hidden"><input name="includeLair" type="checkbox" checked> Ajouter automatiquement le repaire à l’initiative indiquée</label></div>
+      <input type="hidden" name="monsterId"><div class="modal-actions"><button value="cancel" class="ghost">Annuler</button><button type="submit" class="primary">Ajouter</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="addPlayerDialog" class="modal">
+    <form method="dialog" id="addPlayerForm">
+      <div class="modal-head"><div><span class="eyebrow">PARTICIPANT</span><h2>Ajouter PJ / PNJ</h2></div><button type="button" class="icon-btn" data-dialog-close="addPlayerDialog">×</button></div>
+      <div class="editor-grid"><label>Nom<input name="name" required placeholder="Pik Ekrok"></label><label>Rôle<select name="role"><option value="npc">PNJ allié</option><option value="pj">PJ manuel</option></select></label><label>Initiative<input name="initiative" type="number" value="10"></label><label>CA<input name="ac" type="number" value="15"></label><label>PV max<input name="hp" type="number" min="1" value="50"></label></div>
+      <div class="modal-actions"><button type="button" class="ghost" data-dialog-close="addPlayerDialog">Annuler</button><button type="submit" class="primary">Ajouter</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="importDialog" class="modal wide">
+    <form method="dialog" id="importForm">
+      <div class="modal-head"><div><span class="eyebrow">IMPORT / EXPORT</span><h2>Importer des données JSON</h2></div><button type="button" class="icon-btn" data-dialog-close="importDialog">×</button></div>
+      <p class="muted">Ouvre un fichier JSON ou colle un export ENCOUNTER.</p><label class="import-file">Choisir un fichier JSON<input id="importFile" type="file" accept=".json,application/json"></label><textarea id="importText" rows="18" spellcheck="false" placeholder='{"name":"Gobelin vétéran", ...}'></textarea>
+      <div class="modal-actions"><button type="button" class="ghost" data-dialog-close="importDialog">Annuler</button><button type="submit" class="primary">Importer</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="legendaryDialog" class="modal legendary-modal">
+    <div class="modal-shell"><div class="modal-head"><div><span class="eyebrow">FIN DE TOUR</span><h2>Actions légendaires disponibles</h2></div><button type="button" class="icon-btn" id="btnLegendaryContinueTop">×</button></div><p id="legendaryContext" class="muted"></p><div id="legendaryOptions"></div><div class="modal-actions"><button type="button" class="primary" id="btnLegendaryContinue">Passer au tour suivant →</button></div></div>
+  </dialog>
+
+  <dialog id="phaseDialog" class="modal phase-modal">
+    <div class="modal-shell"><div class="phase-modal-mark">⚠</div><span class="eyebrow">CHANGEMENT DE PHASE</span><h2 id="phaseDialogTitle"></h2><p id="phaseDialogText"></p><div id="phaseDialogStats" class="phase-dialog-stats"></div><div class="modal-actions"><button type="button" class="primary" data-dialog-close="phaseDialog">Continuer le combat</button></div></div>
+  </dialog>
+
+
+  <dialog id="encounterManagerDialog" class="modal wide premium-modal">
+    <div class="modal-shell"><div class="modal-head"><div><span class="eyebrow">PRÉPARATION</span><h2>Rencontres sauvegardées</h2></div><button type="button" class="icon-btn" data-dialog-close="encounterManagerDialog">×</button></div>
+      <div class="saved-encounter-actions"><button id="btnSaveEncounter" class="primary">💾 Sauvegarder la rencontre actuelle</button><button id="btnSaveEncounterAs" class="ghost">Dupliquer / enregistrer sous…</button></div>
+      <div id="savedEncounterList" class="saved-encounter-list"></div>
+      <div class="modal-actions"><button type="button" class="ghost" data-dialog-close="encounterManagerDialog">Fermer</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="backupDialog" class="modal wide premium-modal">
+    <div class="modal-shell"><div class="modal-head"><div><span class="eyebrow">SÉCURITÉ</span><h2>Backups automatiques</h2></div><button type="button" class="icon-btn" data-dialog-close="backupDialog">×</button></div>
+      <p class="muted">ENCOUNTER conserve automatiquement des instantanés locaux. Restaurer un backup remplace l’état actuel.</p><div id="backupList" class="backup-list"></div>
+      <div class="modal-actions"><button id="btnBackupNow" class="ghost">Créer un backup maintenant</button><button type="button" class="primary" data-dialog-close="backupDialog">Fermer</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="trashDialog" class="modal wide premium-modal">
+    <div class="modal-shell"><div class="modal-head"><div><span class="eyebrow">CORBEILLE</span><h2>Éléments supprimés</h2></div><button type="button" class="icon-btn" data-dialog-close="trashDialog">×</button></div>
+      <div id="trashList" class="trash-list"></div>
+      <div class="modal-actions"><button id="btnEmptyTrash" class="danger ghost">Vider la corbeille</button><button type="button" class="primary" data-dialog-close="trashDialog">Fermer</button></div>
+    </div>
+  </dialog>
+
+  <dialog id="participantEditorDialog" class="modal participant-editor-modal">
+    <form method="dialog" id="participantEditorForm">
+      <div class="modal-head"><div><span class="eyebrow">INSTANCE DE COMBAT</span><h2>Modifier le participant</h2></div><button type="button" class="icon-btn" data-dialog-close="participantEditorDialog">×</button></div>
+      <input type="hidden" name="participantId">
+      <div class="participant-edit-grid">
+        <label>Nom<input name="name" required></label>
+        <label>Rôle<select name="kind"><option value="enemy">Adversaire</option><option value="player">PJ</option><option value="ally">PNJ allié</option></select></label>
+        <label>CA<input name="ac" type="number" min="0" required inputmode="numeric"></label>
+        <label>PV actuels<input name="hp" type="number" min="0" required inputmode="numeric"></label>
+        <label>PV maximum<input name="maxHp" type="number" min="1" required inputmode="numeric"></label>
+        <label>PV temporaires<input name="tempHp" type="number" min="0" inputmode="numeric"></label>
+        <label>Initiative<input name="initiative" type="number" inputmode="numeric"></label>
+        <label>Vitesse personnalisée<input name="speedOverride" placeholder="ex. 12 m"></label>
+      </div>
+      <label class="boss-instance-check"><input type="checkbox" name="bossOverride"> Considérer cette instance comme BOSS</label>
+      <p id="participantEditorHint" class="muted tiny"></p>
+      <div class="modal-actions"><button type="button" class="ghost" data-dialog-close="participantEditorDialog">Annuler</button><button type="submit" class="primary">Appliquer à cette instance</button></div>
+    </form>
+  </dialog>
+
+  <div id="actionPopup" class="action-popup" aria-live="assertive"><span class="eyebrow">ACTION</span><strong id="actionPopupTitle">Résolution</strong><p id="actionPopupText"></p></div>
+
+  <template id="abilityRowTemplate"><div class="dynamic-row ability-row"><input data-field="name" placeholder="Nom"><input data-field="detail" placeholder="Texte / effet"><select data-field="kind"><option value="text">Texte</option><option value="attack">Attaque</option><option value="heal">Soins</option><option value="save">Sauvegarde</option><option value="recharge">Recharge</option><option value="multiattack">Multiattaque</option></select><select data-field="economy"><option value="">Économie auto</option><option value="action">Action</option><option value="bonus">Action bonus</option><option value="reaction">Réaction</option><option value="none">Aucune</option></select><select data-field="target"><option value="auto">Cible auto</option><option value="enemy">Ennemi</option><option value="ally">Allié</option><option value="self">Soi</option><option value="any">Toute cible</option><option value="none">Aucune cible</option></select><input data-field="bonus" type="number" placeholder="Bonus"><input data-field="damage" placeholder="Dégâts ex. 2d10+5"><input data-field="damageType" placeholder="Type dégâts"><input data-field="dc" type="number" placeholder="DD"><input data-field="save" placeholder="JS ex. DEX"><input data-field="cost" type="number" min="1" value="1" placeholder="Coût"><input data-field="recharge" placeholder="5-6"><input data-field="sequence" placeholder="Séquence ex. Morsure*2"><select data-field="timing"><option value="">Pas de rappel</option><option value="start">Rappel début tour</option><option value="end">Rappel fin tour</option></select><button type="button" class="danger ghost small remove-row">Suppr.</button></div></template>
+  <template id="resourceRowTemplate"><div class="dynamic-row resource-edit-row"><input data-field="name" placeholder="Nom de la ressource"><input data-field="max" type="number" min="0" placeholder="Max"><input data-field="start" type="number" min="0" placeholder="Départ"><input data-field="reset" placeholder="Recharge / reset"><button type="button" class="danger ghost small remove-row">Suppr.</button></div></template>
+  <template id="phaseRowTemplate"><div class="dynamic-row phase-row"><input data-field="name" placeholder="Phase II"><input data-field="threshold" type="number" min="0" placeholder="Seuil PV"><input data-field="ac" type="number" min="0" placeholder="CA"><input data-field="legendaryMax" type="number" min="0" placeholder="Légendaires"><input data-field="speed" placeholder="Vitesse"><input data-field="addResistances" placeholder="Résistances ajoutées"><input data-field="addImmunities" placeholder="Immunités ajoutées"><input data-field="note" placeholder="Effet / rappel de phase"><button type="button" class="danger ghost small remove-row">Suppr.</button></div></template>
+
+  <script src="builtins.js"></script>
+  <script src="rpg-connect-icon-registry.js?v=4"></script>\n  <script src="app.js?v=11"></script>
+  <script src="table.js?v=9"></script>
+  <script src="rpg-connect-mj.js?v=49"></script>
+  <script src="creature-icons.js"></script>
+  <script>if('serviceWorker' in navigator){addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(console.warn));}</script>
+</body>
+</html>
