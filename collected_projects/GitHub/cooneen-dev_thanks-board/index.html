@@ -1,0 +1,2417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta name="robots" content="noindex, nofollow" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Values in Action</title>
+
+
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+
+<style>
+  /* ------------------------------------------------------------------ theme */
+
+  :root {
+    --orange:      #e87722;
+    --orange-deep: #cc6413;
+    --orange-soft: #fdf0e3;
+
+    --ink:       #231f1d;
+    --ink-2:     #4b453f;
+    --ink-soft:  #7c756d;
+    --ink-faint: #aaa39b;
+
+    --page:      #e9e2d8;
+    --bar:       #231f1d;
+    --bar-ink:   #ffffff;
+    --panel:     #fdfbf7;
+    --card:      #ffffff;
+    --line:      #e7e0d6;
+    --line-soft: #f2ece3;
+    --track:     #ece5db;
+
+    --shadow:    0 1px 3px rgba(35,31,29,.07);
+    --shadow-lg: 0 10px 28px rgba(35,31,29,.10);
+    --radius:    0.85rem;
+
+    /* The month's value sets both of these. --accent is the value's own colour,
+       the one it wears on the rail; --band is the same colour taken down far
+       enough to hold white text on a panel. Orange until an issue says
+       otherwise, which is the case on a month with no value named. */
+    --accent: #e87722;
+    --band:   #b85a10;
+
+    /* Plain rgba versions of the tints, replaced from applyAccent whenever the
+       colours above change. No color-mix(): the Yodeck player cannot read it. */
+    --accent-tint:  rgba(232,119,34,.09);
+    --accent-track: rgba(232,119,34,.22);
+    --accent-ink:   #cb6617;
+
+    /* One family on the whole board. What separates a quote from a caption
+       here is weight and size, not a second typeface. */
+    --quote: 'Nunito', system-ui, sans-serif;
+  }
+
+  html[data-theme="dark"] {
+    --orange:      #ff9142;
+    --orange-deep: #e87722;
+    --orange-soft: #2a1e13;
+
+    --ink:       #f4f0ea;
+    --ink-2:     #cdc6bd;
+    --ink-soft:  #9c948b;
+    --ink-faint: #6d665f;
+
+    --page:      #100e0c;
+    --bar:       #000000;
+    --bar-ink:   #f4f0ea;
+    --panel:     #1c1916;
+    --card:      #221e1a;
+    --line:      #332c25;
+    --line-soft: #2a241e;
+    --track:     #2c261f;
+
+    --shadow:    0 1px 3px rgba(0,0,0,.45);
+    --shadow-lg: 0 10px 30px rgba(0,0,0,.55);
+  }
+
+  /* One knob scales the whole board. A 1366 laptop lands near 18px, a 1080p
+     screen near 23px, a 4K panel hits the ceiling. */
+  html { font-size: clamp(15px, 1.05vw + 5px, 32px); }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    height: 100vh;
+    overflow: hidden;
+    background: var(--page);
+    color: var(--ink);
+    font-family: 'Nunito', system-ui, Helvetica, Arial, sans-serif;
+    line-height: 1.45;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    user-select: none;
+    cursor: none;              /* nothing here is clickable on a wall screen */
+  }
+
+  h1, h2, h3, p { margin: 0; }
+
+  .screen {
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    padding: 0.7rem 0.8rem 0.55rem;
+  }
+
+  /* ------------------------------------------------------------------- bar */
+
+  .top {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.5rem 1.1rem;
+    border-radius: var(--radius);
+    background: var(--bar);
+    color: var(--bar-ink);
+  }
+
+  .brand { flex: 0 0 auto; display: flex; align-items: center; gap: 0.6rem; }
+
+  .brand svg { height: 1.15rem; width: auto; display: block; color: var(--orange); }
+  .brand .wm { line-height: 1; }
+  .brand .wm b {
+    display: block;
+    font-size: 1.15rem;
+    font-weight: 900;
+    letter-spacing: 0.02em;
+  }
+  .brand .wm span {
+    display: block;
+    font-size: 0.58rem;
+    font-weight: 800;
+    letter-spacing: 0.42em;
+    color: var(--orange);
+  }
+
+  .topright { min-width: 0; text-align: right; line-height: 1.15; }
+  .topright .ttl {
+    font-size: 1.35rem;
+    font-weight: 900;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  .topright .tsub {
+    font-size: 1.05rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ----------------------------------------------------------- recognition */
+
+  .recog {
+    flex: 1 1 57%;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    padding: 0.85rem 1rem 1rem;
+    background: var(--panel);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+
+  .sechead {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+  }
+  .sechead h2 {
+    font-size: 1.4rem;
+    font-weight: 900;
+    letter-spacing: -0.01em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .sechead h2 em { font-style: normal; color: var(--orange); }
+  .sechead .lead {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sechead .now {
+    flex: 0 0 auto;
+    font-size: 0.82rem;
+    font-weight: 800;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .live {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: 0.7rem;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .live i { width: 0.42rem; height: 0.42rem; border-radius: 50%; background: currentColor; }
+  .live.stale { color: #b8730b; background: rgba(242,169,0,.14); }
+  .live.down  { color: #c2255c; background: rgba(194,37,92,.12); }
+  .live[hidden] { display: none; }
+
+  .recogbody {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    gap: 0.7rem;
+  }
+
+  /* minmax(0, 1fr) rather than 1fr: a plain fr will not shrink a track below
+     the width of what is in it, which is how one card ended up sitting over
+     the other instead of being made narrower. */
+  .cards {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.7rem;
+  }
+
+  .slot { min-width: 0; min-height: 0; overflow: hidden; display: flex; }
+  .slot--empty { visibility: hidden; }
+
+  /* ----------------------------------------------------------------- cards */
+
+  .card {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--c);
+    border-radius: 0.7rem;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+
+  .chead {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.7rem 0.9rem;
+    background: var(--ct, rgba(0,0,0,.04));
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .cav {
+    flex: 0 0 auto;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--c);
+  }
+  .cav svg { width: 1.4rem; height: 1.4rem; fill: #fff; }
+  /* The artwork is already a filled disc in the value's colour, so it needs no
+     circle behind it and no tint over it. */
+  .cav--img { background: none; border-radius: 0; object-fit: contain; }
+  .cnames { min-width: 0; }
+  .cbadge {
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--c);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .crecip {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.15;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cmsg {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    padding: 0.9rem 1rem;
+    font-size: 1.3rem;
+    font-weight: 500;
+    line-height: 1.4;
+    color: var(--ink-2);
+    overflow: hidden;
+  }
+  .cmsg span { display: block; }
+
+  .cfoot {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.55rem 0.9rem 0.7rem;
+    border-top: 1px solid var(--line-soft);
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+  }
+  .cfoot > span:first-child {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cfoot b { color: var(--ink); font-weight: 800; }
+  .cfoot .cdate { flex: 0 0 auto; font-weight: 700; color: var(--ink-faint); }
+
+  /* Two cards changing in step would read as the page reloading, so each gets
+     its own timer and its own way in. */
+  @keyframes riseIn { from { opacity: 0; transform: translateY(0.7rem); } to { opacity: 1; transform: none; } }
+  @keyframes slideIn { from { opacity: 0; transform: translateX(0.9rem); } to { opacity: 1; transform: none; } }
+
+  #slot0 .card.in { animation: riseIn 0.55s cubic-bezier(.22,.8,.3,1) both; }
+  #slot1 .card.in { animation: slideIn 0.55s cubic-bezier(.22,.8,.3,1) both; }
+
+  /* ------------------------------------------------------------ stats rail */
+
+  /* Everything inside the rail is sized in em against this one font-size, so a
+     rail that will not fit can be taken down as a whole rather than losing
+     three of the six values off the bottom. The width stays in rem: a narrower
+     column would only make the names wrap. */
+  /* Carried as a panel rather than as a column with a line beside it. A rule
+     on its own reads as a page break, which is what left it looking like it
+     had come off the board; the same border and radius as the thanks cards
+     makes it the third panel in a row of three. */
+  .stats {
+    flex: 0 0 15.5rem;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    font-size: 1rem;
+    gap: 0.46em;
+    padding: 0.85rem 0.95rem;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+  .stats > * { flex: 0 0 auto; }
+  .stats [hidden] { display: none; }
+
+  .skicker {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5em;
+    font-size: 0.65em;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  /* Only drawn when the top of the rail is shared, and then it is the reason
+     the name underneath keeps changing. */
+  .skicker .tie {
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+  }
+
+  .sbig { display: flex; align-items: baseline; gap: 0.4em; }
+  .sbig b {
+    font-size: 2.5em;
+    font-weight: 900;
+    line-height: 0.9;
+    color: var(--orange);
+    font-variant-numeric: tabular-nums;
+  }
+  .sbig span { font-size: 0.95em; font-weight: 800; }
+  .ssub {
+    font-size: 0.76em;
+    color: var(--ink-soft);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 0 0 auto, not 0 1 auto. Allowed to shrink, the block quietly clipped its
+     own last rows and reported that the rail fitted, which is how six values
+     went up as three and a half. It takes the height its rows need; whether
+     that height is available is the rail's problem to solve, above. */
+  .sbars {
+    flex: 0 0 auto;
+    min-height: 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.22em;
+  }
+  /* Icon, name, bar and count on one line. Two lines per value pushed the last
+     of the six, and the names under them, off the bottom of the rail. */
+  /* The row sets its own size, so everything measured across it is in em
+     against that and not against the rail, or a name column meant to hold
+     "Positivity" comes out a third narrower than it was. */
+  .sbar {
+    display: grid;
+    grid-template-columns: 1.32em 6.4em minmax(2.08em, 1fr) 1.53em;
+    align-items: center;
+    gap: 0.49em;
+    font-size: 0.72em;
+    font-weight: 700;
+  }
+  .sbar svg { width: 1.32em; height: 1.32em; fill: var(--c); }
+  .sbar .sbi { width: 1.32em; height: 1.32em; object-fit: contain; display: block; }
+  /* An unused value keeps its badge but stops competing for attention. */
+  .sbar--zero .sbi { filter: grayscale(1); opacity: 0.75; }
+  .sbar .sn {
+    color: var(--ink-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sbar .sc {
+    text-align: right;
+    font-weight: 900;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .sbar--zero { opacity: 0.4; }
+  .strk {
+    height: 0.39em;
+    border-radius: 999px;
+    background: var(--track);
+    overflow: hidden;
+  }
+  .strk i { display: block; height: 100%; border-radius: 999px; background: var(--c); }
+
+  .spair { flex: 0 0 auto; display: flex; flex-direction: column; gap: 0.42em; }
+  .sname {
+    font-size: 1em;
+    font-weight: 700;
+    line-height: 1.15;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sname small { font-weight: 700; color: var(--ink-faint); }
+  .sname.flick { animation: nameIn 0.45s cubic-bezier(.22,.8,.3,1) both; }
+  @keyframes nameIn { from { opacity: 0; transform: translateY(0.25em); } to { opacity: 1; transform: none; } }
+
+  /* ------------------------------------------------------------ value band */
+
+  /* Carried as a panel, the same as the recognition section above it. The
+     month's colour is kept to the things that name the value - the badge,
+     the label, the count, and a tint behind the passages at the strength the
+     thanks cards use for their heading strip - rather than poured over half
+     the band, which made the bottom of the board heavier than the top. */
+  .band {
+    flex: 1 1 43%;
+    min-height: 0;
+    display: flex;
+    background: var(--panel);
+    border-radius: var(--radius);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+
+    /* Type in the month's colour on a light panel. The badge colour is too
+       pale to be read as text in a Positivity or Trust month, and the band
+       colour is darker than the badge people know; three parts band to two
+       parts badge clears 3:1 for all six, on the panel and on the tint. On a
+       dark panel the badge colour is the readable one as it is. The mix is
+       worked out in applyAccent, not with color-mix(): the Yodeck player's
+       Chromium is too old for it and drops the whole declaration. */
+  }
+  html[data-theme="dark"] .band { --accent-ink: var(--accent); }
+  .band[hidden] { display: none; }
+
+  /* With nothing to cycle there is no second half, and a value stretched
+     across the whole width at the size it takes in half of one reads as a
+     mistake. Centre it, give it a measure, and take back the height the
+     cards can use. */
+  .band--solo { flex: 0 1 32%; }
+  .band--solo .vmain {
+    align-items: center;
+    text-align: center;
+    padding: 1.4rem 2rem;
+  }
+  .band--solo .vmain-text { max-width: 34ch; }
+  .band--solo .vmain-inner { justify-content: center; }
+  .band--solo .vcount { align-self: stretch; }
+  .band--solo .vcount .sbig { justify-content: center; }
+
+  /* A value that is only a name leaves most of its half empty, so where there
+     are passages beside it they are given the room instead. */
+  .band--title .vmain { flex-basis: 40%; }
+  .band--title .vflip { flex-basis: 60%; }
+
+  /* The month's value, as the badge people are actually given, beside the
+     wording rather than above it: the panel keeps one line of thought and the
+     text keeps the height it had. Sized off one custom property so the whole
+     thing moves from ?vbadge= without touching the layout. */
+  /* Stretched, not centred. Centred, the text column sized itself to its own
+     content instead of to the row, so a long value ran off the panel top and
+     bottom while measuring as though it fitted. The badge centres itself. */
+  .vmain-inner {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    align-items: stretch;
+    gap: 1.4rem;
+  }
+
+  .vbadge {
+    align-self: center;
+    flex: 0 0 auto;
+    width: var(--vbadge, 5.5rem);
+    height: var(--vbadge, 5.5rem);
+    object-fit: contain;
+    display: block;
+  }
+  .vbadge[hidden] { display: none; }
+
+  .vmain-body {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    max-width: 44ch;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .vmain {
+    flex: 1 1 52%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 1.2rem 1.6rem;
+  }
+
+  /* Static labels. Held to one line and scaled by fitLine to whatever width
+     the panel gives them, so they neither wrap nor sit oversized. */
+  .kicker {
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    color: var(--accent-ink, var(--accent));
+  }
+
+  /* Sized to the space it has rather than to how many characters it holds:
+     the panel is a fixed box and the text has to live inside it, whatever the
+     screen is and whatever the author wrote. */
+  /* Static for the month, so it is set to be read at a glance and then
+     ignored, not to hold the eye against a panel that turns over every few
+     seconds. Smaller, lighter, and held to a measure rather than run to the
+     full width of the panel - a short line length is most of what makes a
+     block of standing text look composed rather than dumped. */
+  .vmain-text {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.35em;
+    font-size: 1.05rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: var(--ink-2);
+  }
+  .vmain-text span { display: block; white-space: pre-line; }
+  .vmain-text .vln { display: block; white-space: normal; }
+  .vmain-text .vln + .vln { margin-top: 0.5em; }
+
+  /* Where the value opens with a line of its own, it is given one. The block
+     was a slab of one size at one weight, which is what made it heavy. */
+  .vmain-lead {
+    display: block;
+    font-size: 1.5em;
+    font-weight: 700;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .vmain-lead[hidden] { display: none; }
+
+  /* Most months the value arrives as a name, or a phrase no longer than a
+     heading, with nothing under it. That is set the way the thanks cards set
+     a colleague's name - heavy enough to be read first, in the names' ink -
+     rather than at paragraph weight in a box built for paragraphs. */
+  .vmain-text--title { font-weight: 700; line-height: 1.15; color: var(--ink); }
+
+  /* The month's value, counted: how many of the fortnight's thanks were given
+     for it. Set in the rail's own style for its total, so it reads as the
+     same kind of number as the one above it, in the month's colour. */
+  .vcount {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--line-soft);
+  }
+  .vcount[hidden] { display: none; }
+  .vcount .sbig { font-size: 1rem; white-space: nowrap; }
+  .vcount .sbig b { color: var(--accent-ink, var(--accent)); }
+  .vcount-ask {
+    font-size: 0.85rem;
+    color: var(--ink-soft);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .vflip {
+    flex: 1 1 48%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1.2rem 1.75rem;
+    background: var(--accent-tint);
+    color: var(--ink);
+  }
+  .vflip[hidden] { display: none; }
+  .vflip .kicker { color: var(--ink-soft); }
+
+  /* No overflow rule here: the panel itself is the backstop. */
+  .vstage {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+  .vstage.in { animation: riseIn 0.5s cubic-bezier(.22,.8,.3,1) both; }
+
+  /* The label and the number share a line, so the passage underneath gets the
+     row the number used to have to itself. */
+  .vhead {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.6rem;
+  }
+  .vnum {
+    flex: 0 0 auto;
+    font-size: 0.85rem;
+    font-weight: 900;
+    letter-spacing: 0.1em;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The passage is set in the same family as the rest of the board and told
+     apart by weight, not by a second typeface. */
+  .vquote {
+    flex: 1;
+    min-height: 0;
+    overflow: visible;
+    display: flex;
+    align-items: center;
+    position: relative;
+    font-family: var(--quote);
+    font-size: 1.5rem;
+    font-weight: 400;
+    line-height: 1.4;
+    color: var(--ink-2);
+  }
+  .vquote span { display: block; position: relative; white-space: pre-line; }
+  .vquote .vln { display: block; white-space: normal; }
+  .vquote .vln + .vln { margin-top: 0.5em; }
+
+  .vby {
+    flex: 0 0 auto;
+    font-size: 1rem;
+    padding-top: 0.55em;
+    border-top: 1px solid var(--line);
+  }
+  .vby[hidden] { display: none; }
+  /* The only heavy text left on the board. It is bold because nothing else
+     is, which is the whole of what makes it read as the attribution. */
+  .vby-name {
+    font-size: 1.2em;
+    font-weight: 900;
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .vby-role {
+    font-size: 0.68em;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* One segment per passage. The one on screen fills over the time it is
+     held, so someone reading from across the room can see it is about to turn
+     over; the ones before it stay full. Only transform is animated, which the
+     player can do without repainting the band. */
+  .dots { flex: 0 0 auto; display: flex; gap: 0.35rem; }
+  .dots[hidden] { display: none; }
+  .dots i {
+    position: relative;
+    width: 1.6rem;
+    height: 0.26rem;
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--accent-track);
+  }
+  .dots i::after {
+    content: "";
+    position: absolute;
+    top: 0; right: 0; bottom: 0; left: 0;
+    border-radius: inherit;
+    background: var(--band);
+    transform: scaleX(0);
+    transform-origin: left center;
+  }
+  html[data-theme="dark"] .dots i::after { background: var(--accent); }
+  .dots i.done::after { transform: none; }
+  .dots i.on::after { animation: vfill var(--vspeed, 40s) linear both; }
+  @keyframes vfill { to { transform: none; } }
+
+  /* ---------------------------------------------------------------- footer */
+
+  .foot {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0.35rem;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+  }
+  .foot .ask { color: var(--orange); }
+
+  /* -------------------------------------------------------------- overlays */
+
+  .overlay {
+    position: fixed;
+    top: 0; right: 0; bottom: 0; left: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.8rem;
+    text-align: center;
+    background: var(--page);
+    z-index: 10;
+    padding: 2rem;
+  }
+  .overlay[hidden], .gate[hidden] { display: none; }
+  .overlay .mark, .gate .mark { font-size: 3rem; line-height: 1; }
+  .overlay .big, .gate .big { font-size: 1.5rem; font-weight: 900; }
+  .overlay .small, .gate .small { font-size: 0.9rem; color: var(--ink-soft); max-width: 28rem; }
+
+  /* The key screen. Only ever seen on a published copy, where the data files
+     beside this page are sealed and nothing can be drawn until one is opened.
+     It sits above the offline overlay: a board waiting for a key is not a
+     board with a network problem, and only one of the two is worth reading. */
+  .gate {
+    position: fixed;
+    top: 0; right: 0; bottom: 0; left: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.9rem;
+    text-align: center;
+    background: var(--page);
+    z-index: 20;
+    padding: 2rem;
+    cursor: auto;
+  }
+  .gate form { display: flex; gap: 0.5rem; margin-top: 0.2rem; }
+  .gate input {
+    width: 20rem;
+    max-width: 60vw;
+    padding: 0.6rem 0.8rem;
+    font: inherit;
+    font-size: 1rem;
+    color: var(--ink);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 0.6rem;
+    outline: none;
+  }
+  .gate input:focus { border-color: var(--orange); }
+  .gate button {
+    padding: 0.6rem 1.2rem;
+    font: inherit;
+    font-size: 1rem;
+    font-weight: 900;
+    color: #fff;
+    background: var(--orange);
+    border: 0;
+    border-radius: 0.6rem;
+    cursor: pointer;
+  }
+  .gate .err {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: #c2255c;
+    min-height: 1.2rem;
+    max-width: 26rem;
+  }
+
+  /* A screen narrow enough that two cards side by side would each be a column
+     of single words. One card, and the rail underneath it. */
+  @media (max-aspect-ratio: 1/1) {
+    .recogbody { flex-direction: column; }
+    .cards { grid-template-columns: 1fr; }
+    #slot1 { display: none; }
+    .stats {
+      flex: 0 0 auto;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 1rem;
+      padding: 0.7rem 0 0;
+      border-left: 0;
+      border-top: 1px solid var(--line);
+    }
+    .band { flex-direction: column; }
+  }
+</style>
+</head>
+
+<body>
+
+<div class="screen">
+
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 100.00 40.55" aria-hidden="true">
+        <path fill="currentColor" fill-rule="evenodd" d="M27.65 -0.00L31.18 0.15L33.13 0.48L35.42 1.10L37.99 2.18L40.11 3.46L41.70 4.77L42.98 6.10L44.41 8.13L45.27 9.89L45.91 11.84L46.28 13.69L46.25 14.84L41.26 20.05L39.36 22.26L48.82 16.17L50.44 14.98L52.73 13.60L52.92 13.37L56.63 11.05L56.71 10.88L66.04 4.77L68.20 3.53L71.55 1.99L73.94 1.15L77.30 0.39L80.92 0.00L85.87 0.30L87.81 0.73L89.75 1.36L91.25 1.98L93.83 3.53L95.05 4.51L96.29 5.74L97.60 7.51L98.64 9.36L99.34 11.22L99.78 13.07L99.93 15.02L99.90 17.49L99.63 19.35L99.25 20.76L98.11 23.76L96.13 27.30L95.00 28.89L93.46 30.66L90.67 33.30L88.06 35.25L84.63 37.26L82.06 38.43L79.59 39.26L77.30 39.85L74.47 40.32L71.29 40.47L67.84 40.21L65.64 39.74L63.56 39.05L60.99 37.81L58.36 35.87L56.71 34.10L55.71 32.69L54.62 30.48L53.86 27.92L53.61 25.97L54.42 24.82L60.43 18.55L60.69 18.08L33.75 35.73L29.93 37.81L27.39 38.82L24.82 39.60L22.26 40.15L20.30 40.37L17.84 40.47L15.66 40.37L13.43 40.05L10.95 39.42L9.36 38.80L7.40 37.81L6.18 37.01L4.79 35.87L3.56 34.63L2.48 33.22L1.03 30.48L0.49 28.89L0.07 26.68L-0.00 23.85L0.61 20.05L1.99 16.25L3.36 13.69L6.26 9.89L9.36 6.98L12.19 4.94L14.31 3.68L16.98 2.39L20.49 1.12L23.67 0.41L27.65 -0.00ZM24.56 8.74L22.35 9.14L20.11 9.89L18.55 10.64L16.49 11.93L15.05 13.07L13.49 14.66L12.29 16.25L11.14 18.46L10.60 20.19L10.24 22.35L10.42 25.00L10.85 26.33L11.57 27.68L12.90 29.24L14.59 30.48L15.90 31.10L18.29 31.72L21.11 31.80L23.60 31.45L24.82 31.11L27.27 30.12L30.43 28.09L32.34 26.33L34.26 23.76L35.46 21.38L36.09 18.73L36.06 16.25L35.46 14.13L34.24 12.10L32.52 10.51L31.18 9.73L29.95 9.24L27.39 8.70L24.56 8.74ZM78.09 8.74L75.62 9.23L74.20 9.69L72.00 10.71L69.83 12.10L67.97 13.69L66.86 14.93L65.61 16.70L64.73 18.46L64.20 20.05L63.83 22.44L63.96 24.75L64.40 26.28L65.02 27.48L66.06 28.89L68.14 30.48L69.43 31.10L72.00 31.73L74.73 31.80L77.79 31.27L80.83 30.13L84.02 28.09L85.91 26.33L87.72 23.94L88.91 21.73L89.59 19.35L89.75 17.58L89.69 16.70L89.12 14.31L88.40 12.90L87.82 12.10L86.89 11.13L85.87 10.34L83.57 9.25L80.83 8.70L78.09 8.74Z" />
+      </svg>
+      <div class="wm"><b>COONEEN</b><span>GROUP</span></div>
+    </div>
+    <div class="topright">
+      <div class="tsub" id="edition"></div>
+    </div>
+  </header>
+
+  <section class="recog">
+    <div class="sechead">
+      <h2>Colleague <em>Recognition</em></h2>
+      <span class="lead" id="lead">Recent thanks from across the group</span>
+      <span class="now" id="clock"></span>
+      <span class="live" id="live" hidden><i></i><span id="livetext"></span></span>
+    </div>
+
+    <div class="recogbody">
+      <div class="cards">
+        <div class="slot slot--empty" id="slot0"></div>
+        <div class="slot slot--empty" id="slot1"></div>
+      </div>
+      <aside class="stats" id="stats"></aside>
+    </div>
+  </section>
+
+  
+  <section class="band" id="band" hidden>
+    <div class="vmain">
+      <div class="vmain-inner">
+        <img class="vbadge" id="vmain-badge" hidden alt="" aria-hidden="true">
+        <div class="vmain-body">
+          <div class="kicker" id="vmain-kicker">Our value of the month</div>
+          <div class="vmain-text" id="vmain-text">
+            <b class="vmain-lead" id="vmain-lead" hidden></b><span></span>
+          </div>
+        </div>
+      </div>
+      <div class="vcount" id="vcount" hidden>
+        <div class="sbig" id="vcount-big"><b id="vcount-n"></b><span id="vcount-label"></span></div>
+        <div class="vcount-ask" id="vcount-ask"></div>
+      </div>
+    </div>
+    <div class="vflip" id="vflip" hidden>
+      <div class="vstage" id="vstage">
+        <div class="vquote" id="vtext"><span></span></div>
+        <div class="vby" id="vby" hidden>
+          <div class="vby-name" id="vby-name"></div>
+          <div class="vby-role" id="vby-role"></div>
+        </div>
+      </div>
+      <div class="dots" id="dots"></div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span>Cooneen Group &middot; Internal Communications</span>
+    <span class="ask">Have you thanked a colleague today?</span>
+  </footer>
+
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="mark" id="ov-mark">&#9888;</div>
+  <div class="big" id="ov-big"></div>
+  <div class="small" id="ov-small"></div>
+</div>
+
+<div class="gate" id="gate" hidden>
+  <div class="mark">&#128274;</div>
+  <div class="big">Values in Action</div>
+  <div class="small">This board is sealed. Enter the key to open it on this screen.</div>
+  <form id="gate-form" autocomplete="off">
+    <input id="gate-key" type="password" placeholder="Key" aria-label="Key"
+           autocomplete="off" spellcheck="false" />
+    <button type="submit">Open</button>
+  </form>
+  <div class="err" id="gate-err"></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ------------------------------------------------------------------ config
+
+  var q = new URLSearchParams(location.search);
+
+  // ==================================================================
+  //  CONFIG  -  the only part of this file you need to edit
+  // ==================================================================
+  //
+  //  Paste the key between the quotes on the "key" line, save, and the
+  //  board runs on its own with no query string at all. That is what lets
+  //  it work as a Yodeck HTML App, where there is no URL to hang
+  //  parameters off.
+  //
+  //  Anything passed on the URL still wins over what is set here, so the
+  //  same file can also be dropped on a web host and tuned per screen
+  //  with ?scale=1.2, ?theme=dark and the rest, exactly as before.
+  //
+  var CONFIG = {
+
+    // The two sealed feeds. Published by someone else; this board only
+    // reads them, and reads nothing else.
+    api:  "https://cooneen-dev.github.io/thanks-board/thanks.json",
+    news: "https://cooneen-dev.github.io/thanks-board/newsletter.json",
+
+    // >>> PASTE THE KEY HERE, between the quotes <<<
+    key:  "",
+
+    // Keep the last good board on the player, so a reload or a dropped
+    // connection shows the last fortnight rather than an error.
+    cache: "on",
+
+    // Optional. Leave blank unless a particular screen needs it.
+    theme:   "",   // "dark" for a dim room
+    scale:   "",   // "1.2" moves the whole board up, for a set further away
+    refresh: "",   // seconds between polls        (blank = 60)
+    speed:   "",   // seconds between card changes  (blank = 14)
+    vspeed:  "",   // seconds a cycling value is held (blank = 40)
+    vbadge:  "",   // size of the value badge in rem (blank = 5.5, 0 hides it)
+    zeros:   ""    // "show" to keep unused values on the rail
+  };
+
+  // One reader for both. A query parameter, where one is actually given,
+  // beats the config above; an empty config entry falls through to the
+  // built-in default further down, so nothing here has to be filled in.
+  function cfg(name) {
+    var v = q.get(name);
+    if (v !== null && v !== "") return v;
+    v = CONFIG[name];
+    return (v === undefined || v === null || v === "") ? null : String(v);
+  }
+
+  var API      = cfg("api")  || "thanks.json";
+  var NEWS_API = cfg("news") || "newsletter.json";
+  var REFRESH  = Math.max(0, parseInt(cfg("refresh") || "60", 10) || 0);
+
+  // Seconds a thanks card is held. Each of the two runs on this, half a cycle
+  // apart, so something changes every SPEED seconds but never both at once.
+  // Seconds between changes, and now literally that: both cards turn over
+  // together on one timer, so this is no longer the half-cycle it was when
+  // they alternated and 14 does not have to be written as 7.
+  var SPEED  = Math.max(3, parseFloat(cfg("speed")  || "14") || 14);
+  var VSPEED = Math.max(4, parseFloat(cfg("vspeed") || "40") || 20);
+
+  // Whether a good board is kept on the player so it survives a reload. Off
+  // unless asked for: the data is sealed in the repo on purpose, and writing
+  // it back out in the clear on a player that sits on the guest wifi undoes
+  // some of that. ?cache=on turns it on. See recall() for what it will and
+  // will not put back.
+  var CACHE = (cfg("cache") || "off").toLowerCase() === "on";
+
+  // Nothing older than this is worth putting on a wall. Past it the board is
+  // no longer reporting a fortnight, it is reporting a fortnight that ended.
+  // Floored low rather than at an hour, so the cap can actually be tried on a
+  // desk without waiting a day for it to matter.
+  var CACHE_MAX_HOURS = Math.max(0.01, parseFloat(cfg("cachehours") || "24") || 24);
+  var CACHE_STORE = "thanks-wall-last";
+
+  // A value nobody happened to use this fortnight gets no row. Greyed out at
+  // zero it reads as a statement about the company rather than about the two
+  // weeks - an empty Wellbeing bar on a wall says there is no wellbeing here,
+  // which is not what an empty bar means. ?zeros=show puts them back.
+  var ZEROS = (cfg("zeros") || "hide").toLowerCase() === "show";
+
+  // Seconds a name is held where two or more people share the top of the rail.
+  // Slower than the cards beside it: a name that changes as often as a card
+  // reads as part of the same shuffle rather than as a standing between two.
+  var FSPEED = Math.max(3, parseFloat(cfg("fspeed") || "7") || 7);
+
+  // Everything is sized in rem against a viewport-scaled root, so one
+  // multiplier moves the whole board at once. Tune it from the screen's own
+  // URL rather than editing the file: ?scale=1.2 for a set further away. The
+  // base is recomputed rather than read back, so a resize does not compound
+  // what was already applied.
+  var SCALE = Math.min(3, Math.max(0.5, parseFloat(cfg("scale") || "1") || 1));
+
+  // How big the month's badge sits on the value panel. In rem like everything
+  // else, so it holds its proportion on a 1080p set and a 4K one alike. 0
+  // takes it off without touching anything else.
+  var VBADGE = Math.max(0, Math.min(20, parseFloat(cfg("vbadge") || "5.5")));
+  if (isNaN(VBADGE)) VBADGE = 5.5;
+  document.documentElement.style.setProperty("--vbadge", VBADGE + "rem");
+
+  // The segments under the passages fill over the time a passage is held, so
+  // the stylesheet is told what that time is rather than guessing at it.
+  document.documentElement.style.setProperty("--vspeed", VSPEED + "s");
+
+  function applyScale() {
+    if (SCALE === 1) return;
+    var base = Math.min(32, Math.max(15, 0.0105 * window.innerWidth + 5));
+    document.documentElement.style.fontSize = (base * SCALE).toFixed(2) + "px";
+  }
+  applyScale();
+
+  if (cfg("theme") === "dark") document.documentElement.dataset.theme = "dark";
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ------------------------------------------------------------- sealed data
+  //
+  // A published copy of this page sits beside two json files it cannot read.
+  // The publisher seals them with AES-GCM before committing, so the repository
+  // can be public while the board is not. The key opens them here, in the
+  // browser, and is never sent anywhere.
+  //
+  //     ?key=...     what an unattended screen is pointed at
+  //     typed once   kept in this browser afterwards, so a reload is silent
+  //
+  // Whether a file is sealed is decided by what came back, never by
+  // configuration. A plain json answer is passed through untouched, which is
+  // the case on the wall inside: that screen talks to the portal directly,
+  // sees none of this, and is never asked for anything.
+
+  var KEY_STORE = "thanks-wall-key";
+
+  function storedKey() {
+    try { return localStorage.getItem(KEY_STORE) || ""; } catch (e) { return ""; }
+  }
+
+  function rememberKey(key) {
+    // A screen in kiosk mode with storage disabled still works for as long as
+    // it stays open, and one driven by ?key= never needs this at all.
+    try { localStorage.setItem(KEY_STORE, key); } catch (e) {}
+  }
+
+  var KEY = cfg("key") || storedKey();
+
+  // A key in the URL is what this screen was deliberately sent with, so it
+  // beats anything the browser happened to be holding, and replaces it.
+  if (cfg("key")) rememberKey(KEY);
+
+  function isSealed(d) {
+    return !!(d && d.alg === "AES-GCM" && d.ct && d.salt && d.nonce);
+  }
+
+  function b64bytes(text) {
+    var bin = atob(text), out = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+    return out;
+  }
+
+  // Deriving the key is slow on purpose, that being the entire point of it, so
+  // it happens once and is kept rather than on every poll. The wrapper carries
+  // the salt and the iteration count, so if the publisher ever changes either
+  // this follows along without an edit here.
+  var derived = null;
+
+  function deriveKey(wrapper) {
+    var subtle = window.crypto && window.crypto.subtle;
+    if (!subtle) {
+      // Only available over https or on localhost. Worth saying plainly,
+      // because from the screen it otherwise looks like a rejected key.
+      var e = new Error("This page must be opened over https to unseal the board.");
+      e.fatal = true;
+      return Promise.reject(e);
+    }
+
+    var tag = wrapper.salt + "|" + wrapper.iter + "|" + KEY;
+    if (derived && derived.tag === tag) return derived.promise;
+
+    var promise = subtle
+      .importKey("raw", new TextEncoder().encode(KEY), "PBKDF2", false, ["deriveKey"])
+      .then(function (material) {
+        return subtle.deriveKey({
+          name:       "PBKDF2",
+          salt:       b64bytes(wrapper.salt),
+          iterations: wrapper.iter || 310000,
+          hash:       "SHA-256"
+        }, material, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+      });
+
+    derived = { tag: tag, promise: promise };
+    return promise;
+  }
+
+  function unseal(wrapper) {
+    return deriveKey(wrapper).then(function (key) {
+      return window.crypto.subtle.decrypt(
+        { name: "AES-GCM", iv: b64bytes(wrapper.nonce) }, key, b64bytes(wrapper.ct));
+    }).then(function (plain) {
+      return JSON.parse(new TextDecoder().decode(plain));
+    });
+  }
+
+  // Every read of a data file goes through here, so one file being sealed and
+  // the other not is a case nothing has to be told about.
+  function fetchJSON(url) {
+    return fetch(url, { cache: "no-store" })
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function (d) {
+        if (!isSealed(d)) return d;
+        if (!KEY) { gate(true, ""); throw new Error("no key"); }
+
+        return unseal(d).then(function (opened) {
+          gate(false);
+          return opened;
+        }, function (e) {
+          // A refused key is not a network fault and polling will not mend it.
+          // Ask for one and let the polls keep failing quietly behind the gate.
+          gate(true, e && e.fatal ? e.message : "That key does not open this board.");
+          throw e;
+        });
+      });
+  }
+
+  function gate(show, message) {
+    var el = $("gate");
+    if (!show) { el.hidden = true; return; }
+
+    $("gate-err").textContent = message || "";
+    if (el.hidden) {
+      el.hidden = false;
+      $("gate-key").value = "";
+      $("gate-key").focus();
+    }
+  }
+
+  $("gate-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var typed = $("gate-key").value.trim();
+    if (!typed) return;
+
+    KEY = typed;
+    derived = null;
+    rememberKey(KEY);
+    $("gate-err").textContent = "Opening...";
+
+    // The polls are what actually test a key. A good one takes the gate down
+    // from inside fetchJSON, a bad one puts the message back.
+    load();
+    loadNews();
+  });
+
+  // ------------------------------------------------------------------ badges
+
+  // Read off the badge artwork itself, so a value is the same colour on the
+  // rail, on a card and on the panel as it is on the badge people are given.
+  var BADGE_COLORS = {
+    Teamwork:   "#1a8692",
+    Results:    "#ee7730",
+    Ownership:  "#38a344",
+    Positivity: "#e3a309",
+    Wellbeing:  "#c25a9c",
+    Trust:      "#40b9c3"
+  };
+
+  var BADGE_FALLBACK = "#6b7280";
+
+  // The same six taken down until white type on them clears 4.5:1. A badge
+  // colour is pitched to be read small on a light rail; a whole panel of it
+  // with white type over the top is a different job.
+  var BAND_COLORS = {
+    Teamwork:   "#18808c",
+    Results:    "#b95c25",
+    Ownership:  "#2d8537",
+    Positivity: "#9a6e06",
+    Wellbeing:  "#b2528f",
+    Trust:      "#2c8188"
+  };
+
+  var BADGE_ICONS = {
+    Teamwork:   "M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3zm-8 0c1.66 0 3-1.34 3-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z",
+    Results:    "M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4-6.2-4.6-6.2 4.6 2.4-7.4L2 9.4h7.6z",
+    Ownership:  "M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1.2 15.2L7 12.4l1.4-1.4 2.4 2.4 5.2-5.2L17.4 9l-6.6 7.2z",
+    Positivity: "M12 2a10 10 0 100 20 10 10 0 000-20zM8.5 9a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zm4 0a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM12 18c-2.6 0-4.8-1.7-5.6-4h11.2c-.8 2.3-3 4-5.6 4z",
+    Wellbeing:  "M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z",
+    Trust:      "M11 2.5L4 6v5.5c0 4.6 3 8.8 7 10 4-1.2 7-5.4 7-10V6l-7-3.5zm5 9a5 5 0 01-10 0V7.2l5-2.5 5 2.5v4.3z"
+  };
+
+  // The company values, in the order the portal lists them. This is the rail's
+  // running order too, so a value keeps its place whether it was handed out
+  // fifty times this fortnight or not at all.
+  // The badge artwork, inlined. Kept in the page rather than beside it so the
+  // board is still one file to publish and cannot half-load on a slow player.
+  var BADGE_IMG = {
+    Teamwork: "data:image/png;base64,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",
+    Results: "data:image/png;base64,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",
+    Ownership: "data:image/png;base64,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",
+    Positivity: "data:image/png;base64,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",
+    Wellbeing: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAMAAAD04JH5AAAB/lBMVEXBWpsAAAD+/f2+U5bJZKTjtdHNeK28TpTIXqHSh7b15/DdpMjw1+aqVangrMzZm8LWkr3/AP/pxdzEW5zEXJ3EWp3/Vap/f3/HXaHIXqHDYJ/MWqP/f3/GXKDszeC/P3/HXaDGV5rEXJ3FXJ7/AADHXqDHXKG5WJXFXJ7JY5v/f/////9/AH+/f7/NYajJYKLIYaLKYKPIYKIAAP+/P7+0SZPJYKOZM5mqVVXGYZz/AH9VVVV/P3+qVX+/X5+2bZG/aqrMM5nISJHISKP/P38AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABpNJb9AAAAgHRSTlP9AP79/v7+/fr+//7/A//+/gH/SdAuAwJs0f4SAi7/BI4XcZEBrUsQrg0CAQIEF1Isba0BBAjOBQMoAgMEBiAHDAUODgQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAL9HIqcAAAs6SURBVHjatVtnY+OoFoWAJFQt2XLviUvKTqbPvt3Xy///TY8i26JKsh0+zDgOgcO95xbgAmCntkvXC/FpvlwOBl8/TyZfJ4fBcrsV39Jf77qNCDr0LdJX9t9/vgye9mUJACCsYUI/gbLcTwbLOQeRFh8CgM8+p3MDgLGYtdYoEIwBRcFBpOm9ARRsxO3jviTa1FKjIKabA9PHqLgjgHHK1r5nw7doFOLTgMph9HYnAGMq++VmSlrNfsJQPlIxpOM7AGDCX26AW/J6o3A3QwqhuBXACMLhvsvi62LYLCmEmwBQGc43101fQXiB48X1AEbw98n10wsIkwYhOABQ5INfN03PIUypHsbXABjBnxtCwM2NkK+/O4RgA7Abw+UUg7s0PB0yMncCMC7g5B7LPwnhwEbsACCFLxsM7tjwhHOqLYAUbr/ddX6KYH80E8EEYA2H0zvPz4hwNBIBGOe/n/obqQgM8y8/Yn5GxS8GBECff/Ah0/MA9YfOA6Dxb4jBRzVChhoCBcDrx+j/jGC63Y1dAAp4nJrmRwECYIZn9AP7ZG/896yj+BMDghfFI0kAitE/98QwKPDjfhKxlnixP7NhQMHMj72qYz/2gaEj3sN1YQWwhk8aARDyveih3iIvBIE+fQBCraOPkMEnrm0AXuGjPr/fF4Ml/b7XXyXV0DFWIAQ4rmZPVrQjFRj/oe9rCMhAImINwJgSUJ0ee3y+zMdUFAFdD/ZjDiLqgdrQCPT4hElc65jxrzysQiDvsDABKNKXUgEQhGyMJKwrkzOCf+2fhRD4CReLr3QM+dehIiz8nH4yAUh1AmR8ek2PqJJ3r/oF6lVa0ToiDiFTafBYUwK4JGAHVQFM+zEwUj7guvHE7/hHHBgNA8SMCaoSlvA3FUCRblUFUPCRH1gtPjyNzHCGVu8Q+FRYiQLgeb1QAfxFtQBE50+ww+vwkVcIrZw4GZHZSPJA+ABfZQBFMZfXjzyG2+31MEXg0X4RdvdjsvSQ7BDn450EQGUgoqqLZsjt2TkC0/wKbdGM9ouRwsN1HcCC5gCagn3UFFuQ/2Dqh3rKV7yfQpOXYicBeJYEwCCHQXN0C0JDP6q9SEHA+kUzowiAUIAiAKrYLGgTX1EoLYx5giA7qaWmCfalTAOwfXurAZAYwCQWtYzwdXUjP8aIa4+aB+VeGNc6RoquTt4I8CDwD3nQlcuwHQqhHtHjbok2TJ1gJLNqJY955CEBcAFIPoD17V8xPwhy7vpXbP6c4aiLEfWVVVERjASA78VRcoLMBfnXAEA5XzuLYD0RRRW9Su6IlHzTDJgApDyY9bxCAIhGYaH+JHxIeuITjctnkjARSOuiGeqCAxjLNhh41wgA+yFtQv29pEpOPJyHIa4tzKubFt4wHQC4g+9A8QFJ9/VzkYushIogFkhE7nJeTSL7AlLOuQoMFIyDzgD44rN+ZQGVJXBOnNUZxAoN6aZ9wQHcQQNcww+RYOGDMISHPhfEOVKYdJBCQOOgnAgkV2iAjcZl3q9IcDYHSZrK0KQsxhAoNsAG8loJQDm3FUoQaxfpaM7Q1J0PE678R0M4Bj8UN0zH6bWhAOrF6hfcDXkVAPEpUT2l7IvoHgFQIyRKp3YUiDOs+iG2cI/6wDhJ4pypwdOisrQ4/AQ/Afhf2Z1qYrJpgAJAaoIS0/1IkmOMfZYo9dWAghUWkvLf3wFcqmyWA7cVQObpkgrYXQZmUNh/Wj5PXYziY4fUDAdYiYStIjHdMdItYtemAiCfKYCn6wCEcdy7AoAckikLAdxfBQD0emF2O4AnCkB2Q4wDrcaKQ9/Dt6oAP0PwPr2KhNjzsdfVZWskJOULWIJrzJBy0Ade17xNNUMWEMFQARC3ckSIyT/OuwFgjkgJtGQIBnpe12JhKI9lZ4z9djE7V9z8EijHkpq7tBoBHe/CQpS3MAmTm1+CiQKgZTTMQoTqZtBrwUiWNqnue6ACaJkPcAuomQGO2/hFw9A6AGaHuJURcDGcfs7i2JgpS6gjPd3WAWiZm5lOPBafnTH92dd0gHAY+k3ZpkECvrqXN7U8vvwrIoNulH7meV5v5rZwAwdYWs43FLYGTmuvmUHcY3YgdcMeVUvs5XUK6E52ALTbAcbV0Lc2IVWufXQRexYGvif/Ve5lvEkbE020miMSqkqY9GwtPPMfV84Y8Z9juVtWtZPhmcm1VGOBIGuCrW0Wej5drRi20rvwCErH3IslCTAN6OY1B1vdYTm3Joj6HBxmQpmVM0biZ5kqOMsogjMHtG2JOC17B/OSGHTgBa5ssHeZGNeBKObE9JhL1NLOrcs1WJTE4LGcIRmfxj07Y3NcxJSKkmJN1xdqSnYKGq79KZ23Tj4AbKlJzRMyCupBjqdkE2yiodsd+2f7V8zRlY0ZhsSPWlp+huvcop+nUx2SNRKbR6QbdAC/mLQXtYhIBpdsp41lwC0FcCzNgL0WaUm19sYdArNskwDK8RtQzids54qusDzLGsKn7eSTb07XJhYKf9wiMcI1x+wAkJhDPD7AEVjod2Wn09K8hRKyXE7NbAeYKyPEIfwN7OC8NN4FPOgJnOmYgiWnWcO1gmUoUr7tKAlH0FguwrxR83kliwIMhLPPypJoUwqMKIA1PGCb4hrP67j4M+cGhVmUmU5kCV/5QeXWLjm/8dbG82fOLRq/LTHqkpTH01nxE7ZtZBrdETVBtxGweyUzQKqB1HRYLbuPVRMN4txpBIwANpe2rA6r4W5eEttOotEh5rHLEQfeg22fQ8rvpwuLkeHavtJw1EREagYOR8xMyXarSL3QugKwg0cXg5zXZ/ywyqamwHH7R8p/FYXl0kodwomA7gptHHT+cf3Sit1buoTo3qrFnkXGXHz2rf58V1wuLu0i4H7kwXE5jXJvZp/fSqBzDYEAUOz+IOA6BMjPLd9HThPaFoV8eW2vH+TXMWHHSxR+uW8/6bgUUVyu790nGx0RcP7Z5yflfKEUMKQ2X3DWQt4BAb/CdGzy8aWU51JD8mdJ3Aji1odyKH5wOjD8fKn/B44qInVJHmgFAfHrY9dRG5nrRSysimSCXUqNGmpKLv47aaAMHpjKeCgN/u5QgjArZ7VKjf6RM0A/16vJ3KVc8spWteIlp+d0SoqQbTE2F7Olpm2aao5OIgj1u7lCBvBPWznfD+guZxYFAnY1iJoy9xG2VMelVVS+mrdJygyW8i7ErS9x04RthlwlneP5lDSbWGIqHBPsbzBVvE/TnauodQwbEAgnS7mItKOjh2aO4umxeHOX9S4ay2oD3NclLXTTx24rJdOaB7IVNqfwS8OLGsRvietMEEV7uliUvyPTl3MNm6O0e9RcWiyEEFWljlXZYtPyqfxTQ4E9ML3taCyuR+KieuUHCAX+itcuINQ0/9ZU4A+Mr0uOjeX9wcwTZSrYM5euavN/OxqfOFgeOBz3uNnpJ6cC4qQ5RODNX81PLIDthc+kscS80r2p7FX3/xNYFF0euRQLumFshgDyKMqbswT8awBHu47vjEZw26wGVuLdnKnhb9vOz3w4EdZ3eenT8NrL8dSLRu3hHt8IgTD2u15fNjx2g59ve2+Df32GdvE3P/cbF/Dl6y3P/SY/4aK46cEjf295FQSCyWZ764NH/uoCwvmEdH7ySaaTeYP02z56faOjbCfTDs9OqcT2h5c2L05bPvstWBo9ZA9vSavZp+y9q/KW5NaX1yn1zsfDpgTYBYKw19ebw0/qzNu+vW7/9HvMxLAbTp6nbB4VhviqfPo85K9lFh/y+H0nEsq/bQ+Pm+eylHKt8nnzeHj/H2ftosOYnQBwOYwqYv+YD4fDAW/D5TytUr1Po3HHAf8PIMebGz1uhosAAAAASUVORK5CYII=",
+    Trust: "data:image/png;base64,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"
+  };
+
+  function badgeImg(name, cls) {
+    var src = BADGE_IMG[name];
+    if (!src) return null;
+    return '<img class="' + cls + '" src="' + src + '" alt="" aria-hidden="true">';
+  }
+
+  var VALUES = ["Teamwork", "Results", "Ownership", "Positivity", "Wellbeing", "Trust"];
+
+  var ICON_FALLBACK = BADGE_ICONS.Results;
+
+  function color(badge) { return BADGE_COLORS[badge] || BADGE_FALLBACK; }
+
+  // Tints worked out here rather than with CSS color-mix(), which the Yodeck
+  // player's older Chromium does not understand: it throws the rule away and
+  // the shading behind the cards and the value simply disappears.
+  function rgbOf(hex) {
+    var m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(hex || "").trim());
+    if (!m) return null;
+    var h = m[1].length === 3 ? m[1].replace(/./g, "$&$&") : m[1];
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+  }
+  function tint(hex, alpha) {
+    var c = rgbOf(hex);
+    return c ? "rgba(" + c.join(",") + "," + alpha + ")" : "rgba(0,0,0," + (alpha / 2) + ")";
+  }
+  function mixHex(a, b, wa) {
+    var x = rgbOf(a), y = rgbOf(b);
+    if (!x || !y) return a;
+    return "rgb(" + [0, 1, 2].map(function (i) { return Math.round(x[i] * wa + y[i] * (1 - wa)); }).join(",") + ")";
+  }
+  function icon(badge)  { return BADGE_ICONS[badge]  || ICON_FALLBACK; }
+
+  // ------------------------------------------------------------------- utils
+
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // ------------------------------------------------------------ plain words
+  //
+  // Nobody types into a recognition wall the way they would type onto a wall
+  // screen, and three kinds of thing arrive that a projector cannot show:
+  //
+  //     the emoji itself   drawn by the browser at whatever size the font
+  //                        feels like, in colours the board never chose
+  //     the shortcode      :thumbsup:, where the sender's client wrote one
+  //                        and the feed never turned it back into a glyph
+  //     the word           (fist bump), where something in between replaced
+  //                        a glyph it could not carry with its own name
+  //
+  // All three go, here, once, before anything is escaped or measured. Text is
+  // the only thing this board puts up.
+
+  var EMOJI_RE;
+  try {
+    // Pictographs, dingbats, symbols, flags, and the joiners and selectors
+    // that hold the compound ones together.
+    EMOJI_RE = new RegExp(
+      "[\\u{1F000}-\\u{1FAFF}\\u{2190}-\\u{2BFF}\\u{FE00}-\\u{FE0F}" +
+      "\\u{200D}\\u{20E3}\\u{2122}\\u{2139}\\u{3030}\\u{303D}]", "gu");
+  } catch (e) {
+    // An engine without unicode property escapes still reads the surrogate
+    // pairs the same characters are built from.
+    EMOJI_RE = /[\uD83C-\uD83E][\uDC00-\uDFFF]|[\u2190-\u2BFF\uFE00-\uFE0F\u200D\u20E3]/g;
+  }
+
+  // A letter after the opening colon, so 12:30:45 is a time and not a
+  // shortcode with a number in it.
+  var SHORTCODE_RE = /:[a-z][a-z0-9_+-]{1,30}:/gi;
+
+  // Only names a system would have put there in place of a glyph. Anything
+  // wider than a list would start eating real parentheses out of real
+  // sentences, which is a worse fault than leaving one word behind.
+  var EMOJI_WORDS = [
+    "fist ?bump", "fist ?bump ?emoji", "thumbs ?-?up", "thumbs ?down",
+    "clap(?:ping)?(?: hands)?", "high ?five", "raised hands", "raising hands",
+    "folded hands", "pray(?:ing)?", "handshake", "shaking hands",
+    "smil(?:e|ing)(?: face)?", "smiley", "grin(?:ning)?(?: face)?", "wink(?:ing)?",
+    "laugh(?:ing)?", "joy", "blush(?:ing)?", "heart(?:s| eyes)?", "red heart",
+    "star ?-?struck", "star", "glowing star", "sparkles?", "fire", "rocket",
+    "trophy", "medal", "party popper", "partying face", "tada", "confetti",
+    "flexed biceps", "muscle", "ok hand", "victory hand", "raised fist",
+    "hundred points", "sunglasses", "thinking face", "eyes", "crown", "bulb",
+    "light ?bulb", "check ?mark", "white check mark", "heavy check mark"
+  ].join("|");
+
+  var EMOJI_WORD_RE = new RegExp(
+    "[\\(\\[]\\s*(?:" + EMOJI_WORDS + ")\\s*[\\)\\]]", "gi");
+
+  function clean(s) {
+    if (s == null) return "";
+    return String(s)
+      .replace(EMOJI_WORD_RE, " ")
+      .replace(SHORTCODE_RE, " ")
+      .replace(EMOJI_RE, " ")
+      // Taking a glyph out of the middle of a sentence leaves the gap it sat
+      // in, and taking one off the end leaves the space before it.
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/[ \t]+([,.!?;:)\]}])/g, "$1")
+      .replace(/([([{])[ \t]+/g, "$1")
+      .replace(/^[\s\u00b7\u2022|]+/, "")
+      .replace(/[\s\u00b7\u2022|]+$/, "")
+      .replace(/\n[ \t]+/g, "\n");
+  }
+
+  // The backend stamps UTC but the ISO string can arrive without a zone marker.
+  // Left alone the browser reads a bare stamp as local time, shifting every
+  // date by the current offset.
+  function toDate(iso) {
+    if (!iso) return null;
+    var s = String(iso);
+    if (!/[zZ]|[+-]\d\d:?\d\d$/.test(s)) s += "Z";
+    var d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // A timestamp carrying no real time of day. The feed sends a date and pads
+  // the rest with zeros, so what arrives is a full-looking stamp that means
+  // nothing after the day: 2026-09-07T00:00:00. Read as a time it is midnight,
+  // and a thanks posted this morning came up as "14 hours ago" once the clock
+  // got past two. Matched here in every shape it turns up in - bare date, with
+  // or without a T, with or without seconds, milliseconds or a zone.
+  var DATE_ONLY =
+    /^\s*(\d{4})-(\d{2})-(\d{2})(?:[T ]0{2}:0{2}(?::0{2}(?:\.0+)?)?)?\s*(?:Z|[+-]0{2}:?0{2})?\s*$/;
+
+  // Compared as calendar days, straight off the string. Going through Date
+  // would drag a timezone into a value that never had a time in it, which is
+  // how a date can slide a day either way.
+  function daysSince(y, mo, dy) {
+    var then = Date.UTC(y, mo - 1, dy);
+    var n = new Date();
+    var now = Date.UTC(n.getFullYear(), n.getMonth(), n.getDate());
+    return Math.round((now - then) / 86400000);
+  }
+
+  function ago(iso) {
+    var m = DATE_ONLY.exec(String(iso == null ? "" : iso));
+    if (m) {
+      // Capitalised where the label opens with a word and lower where it opens
+      // with a numeral, so nothing reads as a sentence starting mid-thought.
+      var dd = daysSince(+m[1], +m[2], +m[3]);
+      if (dd <= 0)  return "Today";
+      if (dd === 1) return "Yesterday";
+      // Past five days "n days ago" stops being easier to picture than the
+      // date itself, so it hands over to the date.
+      if (dd <= 5)  return dd + " days ago";
+      return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]))
+             .toLocaleDateString(undefined,
+               { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+    }
+
+    var d = toDate(iso);
+    if (!d) return "";
+    var mins = Math.round((Date.now() - d.getTime()) / 60000);
+    if (mins < 1)  return "just now";
+    if (mins < 60) return mins + " min ago";
+    var hrs = Math.round(mins / 60);
+    if (hrs < 24)  return hrs === 1 ? "an hour ago" : hrs + " hours ago";
+    var days = Math.round(hrs / 24);
+    if (days === 1) return "yesterday";
+    if (days < 7)   return days + " days ago";
+    return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  }
+
+  // Restarts a CSS animation that is already on the element.
+  function replay(el, cls) {
+    el.classList.remove(cls);
+    void el.offsetWidth;
+    el.classList.add(cls);
+  }
+
+  // Some feeds store the line breaks in a message as markup rather than as
+  // newlines, so the escaped copy has to have those put back or the tags are
+  // read out on the wall as words.
+  var BR_TAG = /&lt;br\s*\/?&gt;/gi;
+
+  function message(text) {
+    return esc(clean(text))
+      .replace(BR_TAG, "<br>")
+      .replace(/\r?\n/g, "<br>")
+      .replace(/(?:<br>\s*){2,}/g, "<br>");
+  }
+
+  // Steps the size down until the text fits the box it has to live in. The
+  // character count says nothing about how wide a panel is or how tall the
+  // screen is, so the box itself is what gets asked.
+  // The height of everything the box is actually holding, gaps included.
+  // Reading the first child alone was fine while every fitted box had exactly
+  // one; a box with a heading above its body would have been measured on the
+  // heading and let the body run off the bottom.
+  function contentHeight(box) {
+    var kids = box.children, total = 0, shown = 0;
+    for (var i = 0; i < kids.length; i++) {
+      if (kids[i].hidden) continue;
+      // The border box, not the scroll height. The quote marks are absolutely
+      // positioned inside the text span, and scrollHeight counts them: the
+      // fitter was shrinking the words to make room for the decoration hung
+      // off them, which at high zoom left the passage clipped anyway.
+      total += kids[i].getBoundingClientRect().height;
+      shown++;
+    }
+    var gap = parseFloat(getComputedStyle(box).rowGap) || 0;
+    return total + (shown > 1 ? gap * (shown - 1) : 0);
+  }
+
+  function fitBox(box, max, min) {
+    if (!box || !box.firstElementChild) return;
+
+    // Measured against the room inside the padding, not the padding box, or
+    // the text is allowed to run into the edges before it starts shrinking.
+    var pad = getComputedStyle(box);
+    var room = box.clientHeight
+             - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom);
+    if (!(room > 0)) return;
+
+    var size = max;
+    box.style.fontSize = size + "rem";
+
+    // Enough to walk the full range in 0.05 steps, with the new ceiling.
+    var guard = 80;
+    while (guard-- && size > min && contentHeight(box) > room + 1) {
+      size -= 0.05;
+      box.style.fontSize = size.toFixed(2) + "rem";
+    }
+  }
+
+  // Steps the size down until the text fits the width it has. A colleague's
+  // name is the one thing on this board that should not be abbreviated, so
+  // where it will not fit the row it is set smaller; the ellipsis behind this
+  // is only there for a name no size would save.
+  function fitLine(el, max, min) {
+    if (!el) return;
+    var size = max, guard = 30;
+    el.style.fontSize = size + "rem";
+    while (guard-- && size > min && el.scrollWidth > el.clientWidth + 1) {
+      size -= 0.05;
+      el.style.fontSize = size.toFixed(2) + "rem";
+    }
+  }
+
+  // ------------------------------------------------------------- stats rail
+
+  function bar(name, count, max) {
+    return '<div class="sbar' + (count ? "" : " sbar--zero") +
+           '" data-count="' + count + '" style="--c:' + color(name) + '">' +
+             (badgeImg(name, "sbi") ||
+              '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + icon(name) + '"/></svg>') +
+             '<span class="sn">' + esc(name) + "</span>" +
+             '<span class="strk"><i style="width:' + Math.round((count / max) * 100) + '%"></i></span>' +
+             '<span class="sc">' + count + "</span>" +
+           "</div>";
+  }
+
+  // The endpoint only reports badges that were actually given, so on a quiet
+  // fortnight a value would silently disappear off a board whose whole job is
+  // to show the values. Merge the known six against what came back, keep the
+  // zeros, and append anything new so a seventh value appears here on its own.
+  // Where the count at the top of a list is shared, everybody holding it is at
+  // the top of it. Taking the first row and calling it the answer is a coin
+  // toss dressed up as a result, and the two people it is between both work
+  // in the building the screen is in.
+  function leaders(list) {
+    if (!list || !list.length) return [];
+    var top = list[0].count;
+    return list.filter(function (p) { return p.count === top; });
+  }
+
+  var flickT = null, flickS = "", flickI = 0;
+
+  // One timer, both standings. Run on two timers they drifted apart and read
+  // as two unrelated things twitching; the pair is one statement about the
+  // fortnight, so it turns over as one.
+  function runFlicks(groups) {
+    if (flickT) { clearInterval(flickT); flickT = null; }
+
+    var live = groups.filter(function (g) { return $(g.id) && g.list.length; });
+    if (!live.length) return;
+
+    // Position is held against the standings themselves, so a poll that comes
+    // back unchanged does not send every name back to the start of its tie.
+    var sig = live.map(function (g) {
+      return g.id + ":" + g.list.map(function (p) { return p.name + p.count; }).join(",");
+    }).join("|");
+    if (flickS !== sig) { flickS = sig; flickI = 0; }
+
+    function paint() {
+      live.forEach(function (g) {
+        var p = g.list[flickI % g.list.length];
+        var el = $(g.id);
+        el.innerHTML = esc(clean(p.name)) +
+                       ' <small>&times;' + esc(p.count) + "</small>";
+        replay(el, "flick");
+      });
+    }
+
+    paint();
+
+    // Only worth running if at least one of them has somewhere to go.
+    var longest = Math.max.apply(null, live.map(function (g) { return g.list.length; }));
+    if (longest < 2) return;
+
+    flickT = setInterval(function () { flickI++; paint(); }, FSPEED * 1000);
+  }
+
+  function pairBlock(drop, label, id, group) {
+    if (!group.length) return "";
+    return '<div data-drop="' + drop + '">' +
+             '<div class="skicker">' + label +
+               (group.length > 1
+                 ? '<span class="tie">' + group.length + " tied</span>" : "") +
+             "</div>" +
+             '<div class="sname" id="' + id + '"></div>' +
+           "</div>";
+  }
+
+  function renderStats(d) {
+    var counts = {}, names = VALUES.slice();
+    (d.badges || []).forEach(function (b) {
+      counts[b.badge] = b.count;
+      if (names.indexOf(b.badge) === -1) names.push(b.badge);
+    });
+
+    var max = 1;
+    names.forEach(function (n) { max = Math.max(max, counts[n] || 0); });
+
+    // Ranked, not in the order the values are always listed in. A row of bars
+    // is read as a ranking whether or not it is one, so it may as well be one,
+    // and it puts the unused values at the bottom where they cost least - which
+    // is also the end the rail gives up first when it runs out of room.
+    names.sort(function (a, b) {
+      return (counts[b] || 0) - (counts[a] || 0) || a.localeCompare(b);
+    });
+
+    var topG   = leaders(d.recipients);
+    var giverG = leaders(d.givers);
+    lastStats = d;
+
+    // data-drop is the order things are given up in if the rail still will not
+    // fit after being taken down as far as it goes. The timestamp is not on
+    // the list at all: it is one small line, so dropping it frees almost no
+    // room, and it is the only thing on the board that says whether any of
+    // the rest is current. A wall quietly showing a fortnight-old count with
+    // nothing to say so is worse than a wall missing a headcount.
+    $("stats").innerHTML =
+      '<div class="sbig"><b>' + esc(d.count) + "</b><span>thank yous</span></div>" +
+      '<div class="ssub" data-drop="1">' + esc(d.people_thanked) +
+        " colleagues thanked by " + esc(d.people_giving) + "</div>" +
+      '<div class="sbars">' + names.filter(function (n) {
+        return ZEROS || (counts[n] || 0) > 0;
+      }).map(function (n) {
+        return bar(n, counts[n] || 0, max);
+      }).join("") + "</div>" +
+      pairBlock(3, "Most thanked",      "s-top",   topG) +
+      pairBlock(2, "Most thanks given", "s-giver", giverG);
+
+    runFlicks([{ id: "s-top", list: topG }, { id: "s-giver", list: giverG }]);
+
+    trimRail();
+
+    // The band counts the month's value off this same payload, so the two
+    // numbers on the board can never disagree. Showing or hiding the count
+    // changes the room the value has, so the value is fitted again after it.
+    renderCount();
+    if (!$("band").hidden) fitBox($("vmain-text"), vmainMax, 0.45);
+  }
+
+  // Nothing on the rail may spill past it. The six values are the whole point
+  // of a board called Values in Action, so before anything is given up the
+  // rail is taken down a size at a time as one piece. Only a rail that will
+  // not fit even at the floor starts dropping rows, and the values go last.
+  var RAIL_FLOOR = 0.72;
+
+  function railFits() {
+    var rail = $("stats");
+    if (rail.scrollHeight > rail.clientHeight + 1) return false;
+
+    // Asking only the rail was not enough: a block inside it that clips its
+    // own rows leaves the rail measuring as though everything fitted. Whatever
+    // is set to hide its overflow gets asked separately.
+    var bars = rail.querySelector(".sbars");
+    return !bars || bars.scrollHeight <= bars.clientHeight + 1;
+  }
+
+  function fitRail() {
+    var rail = $("stats"), size = 1, guard = 24;
+    rail.style.fontSize = "";
+
+    while (guard-- && !railFits() && size > RAIL_FLOOR) {
+      size -= 0.025;
+      rail.style.fontSize = size.toFixed(3) + "rem";
+    }
+    return railFits();
+  }
+
+  function trimRail() {
+    if (fitRail()) return;
+
+    var rail = $("stats");
+    var blocks = Array.prototype.slice.call(rail.querySelectorAll("[data-drop]"))
+      .sort(function (a, b) { return +a.dataset.drop - +b.dataset.drop; });
+
+    for (var i = 0; i < blocks.length && !fitRail(); i++) blocks[i].hidden = true;
+
+    var bars = rail.querySelector(".sbars"), guard = 30;
+    while (guard-- && !fitRail() && bars && bars.children.length > 1) {
+      // The running order on screen stays as it is; what goes is whichever
+      // value was handed out least, wherever it happens to sit in that order.
+      var rows = bars.children, worst = 0;
+      for (var k = 1; k < rows.length; k++) {
+        if (+rows[k].dataset.count <= +rows[worst].dataset.count) worst = k;
+      }
+      bars.removeChild(rows[worst]);
+    }
+  }
+
+  // ------------------------------------------------------------------- cards
+
+  // Two cards side by side should be two different pieces of news. The same
+  // wording sent to two people is one piece; so is the same person thanked
+  // twice by different colleagues, which is what put one name up in both
+  // panels at once. Either is enough to keep an item out of the other slot.
+  function sameThanks(a, b) {
+    if (!a || !b) return false;
+    if (a.message === b.message && a.giver === b.giver) return true;
+    return !!a.recipient && norm(a.recipient) === norm(b.recipient);
+  }
+
+  function cardHTML(t) {
+    var c    = color(t.badge);
+    var when = t.date_iso ? ago(t.date_iso) : (t.date || "");
+    var msg  = t.message || "";
+
+    return '<div class="card" style="--c:' + c + ';--ct:' + tint(c, 0.09) + '">' +
+             '<div class="chead">' +
+               (badgeImg(t.badge, "cav cav--img") ||
+                '<div class="cav"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="' +
+                icon(t.badge) + '"/></svg></div>') +
+               '<div class="cnames">' +
+                 '<div class="cbadge">' + esc(clean(t.badge) || "Thanks") + "</div>" +
+                 '<div class="crecip">' + esc(clean(t.recipient)) + "</div>" +
+               "</div>" +
+             "</div>" +
+             '<div class="cmsg"><span>' + message(msg) + "</span></div>" +
+             '<div class="cfoot">' +
+               "<span>" + (t.giver ? "from <b>" + esc(clean(t.giver)) + "</b>" : "") + "</span>" +
+               '<span class="cdate">' + esc(when) + "</span>" +
+             "</div>" +
+           "</div>";
+  }
+
+  // Two slots drawing from one list, so the same thanks is never up twice, and
+  // two timers half a cycle apart, so they never turn over together.
+  // The last payload the rail was drawn from, so a resize can draw it again at
+  // the new size instead of living with what was trimmed off at the old one.
+  var lastStats = null;
+
+  var items = [], timers = [], itemSig = "";
+  // What each slot is holding, so the other one can step over a thank you that
+  // went to two people at once rather than showing it twice side by side.
+  var shown = [null, null];
+
+  // The deck is what is left to be dealt. It is cut fresh from the whole list
+  // each time it runs out, so every thanks in the window is up once before any
+  // of them is up twice, and no two rounds come in the same order.
+  var deck = [];
+
+  // Normalised messages of the last few cards dealt. A note copy-pasted to ten
+  // people is ten entries in the feed with one piece of text between them, and
+  // in list order that is ten cards in a row saying the same thing. The text
+  // is what is blocked rather than the entry, so all ten still get their turn,
+  // just never one after another.
+  var recent = [], recentCap = 1;
+  var RECENT_MAX = 8;
+
+  function stopRotation() {
+    timers.forEach(clearTimeout);
+    timers.forEach(clearInterval);
+    timers = [];
+  }
+
+  function norm(s) {
+    return clean(s).toLowerCase().replace(/\s+/g, " ").trim();
+  }
+
+  // Fisher-Yates on a copy. The list itself is left as the portal sent it.
+  function shuffle(list) {
+    var a = list.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  function blocked(item, other) {
+    if (sameThanks(item, other)) return true;
+    var m = norm(item.message);
+    if (!m) return false;
+    if (other && norm(other.message) === m) return true;
+    return recent.indexOf(m) !== -1;
+  }
+
+  // Takes the first card in the deck that passes, rather than the first card
+  // full stop, so a blocked one keeps its place instead of being burnt.
+  function deal(test) {
+    for (var i = 0; i < deck.length; i++) {
+      if (test(deck[i])) return deck.splice(i, 1)[0];
+    }
+    return null;
+  }
+
+  function nextItem(idx) {
+    if (!items.length) return null;
+    var other = shown[1 - idx];
+
+    var item = deal(function (t) { return !blocked(t, other); });
+
+    if (!item) {
+      deck = shuffle(items);
+      item = deal(function (t) { return !blocked(t, other); })
+          // A fortnight where every thanks says the same thing still has to
+          // put something up. The content block is given up before the board
+          // is, and only the card beside it is honoured.
+          || deal(function (t) { return !sameThanks(t, other); })
+          || deck.shift()
+          || items[0];
+    }
+
+    var m = norm(item.message);
+    if (m) {
+      recent.push(m);
+      while (recent.length > recentCap) recent.shift();
+    }
+    return item;
+  }
+
+  // Both slots, in order, on one beat. Filling the left one first is what lets
+  // the right one see it: nextItem reads the other slot before it draws, so by
+  // the time the second card is picked the first is already standing there to
+  // be avoided.
+  function fillPair() {
+    fillSlot(0);
+    fillSlot(1);
+  }
+
+  function fillSlot(idx) {
+    var el = $("slot" + idx);
+    if (!items.length) {
+      el.innerHTML = "";
+      el.classList.add("slot--empty");
+      shown[idx] = null;
+      return;
+    }
+
+    var item = nextItem(idx);
+    shown[idx] = item;
+    el.classList.remove("slot--empty");
+    el.innerHTML = cardHTML(item);
+
+    var card = el.firstElementChild;
+    replay(card, "in");
+    fitLine(card.querySelector(".crecip"), 1.5, 0.95);
+    fitBox(card.querySelector(".cmsg"), 1.35, 0.72);
+  }
+
+  function renderWall(list) {
+    var sig = list.map(function (t) {
+      return [t.recipient, t.giver, t.badge, t.message, t.date_iso || t.date].join("|");
+    }).join("~");
+
+    // A poll that brings back the same thanks must not send both slots back to
+    // the top of the list every minute.
+    if (sig === itemSig) return;
+    itemSig = sig;
+    items   = list;
+    shown   = [null, null];
+    deck    = shuffle(items);
+    recent  = [];
+
+    // The block can only ever hold back less than there is distinct text to
+    // draw from, or a fortnight of near-identical thanks blocks everything and
+    // the wall has nothing left it is allowed to show.
+    var seen = {}, distinct = 0;
+    items.forEach(function (t) {
+      var m = norm(t.message);
+      if (m && !seen[m]) { seen[m] = 1; distinct++; }
+    });
+    recentCap = Math.max(1, Math.min(RECENT_MAX, distinct - 1));
+
+    stopRotation();
+    fillPair();
+    if (items.length <= 2) return;
+
+    timers.push(setInterval(fillPair, SPEED * 1000));
+  }
+
+  // ------------------------------------------------------------------ values
+  //
+  // The main value is held for as long as the issue stands. The rest take
+  // turns beside it, one at a time.
+
+  var rest = [], vIdx = 0, vTimer = null, valueSig = "";
+
+  // The value this month's issue names, if it names one: what the band's
+  // count is counted against.
+  var valueName = null;
+
+  // Held so a refit uses the ceiling this issue was sized with, rather than
+  // one fixed in the resize handler that knows nothing about the text.
+  var vmainMax = 1.6;
+  var VQUOTE_MAX = 1.6;
+
+  // The whole board wears the month's value. A Teamwork month is orange on the
+  // panel and orange on the rail beside it, so the colour on screen is telling
+  // somebody something rather than being whatever the issue was styled in.
+  // What the newsletter editor picked is the fallback, for a month that names
+  // no value at all.
+  function applyAccent(n, mainText) {
+    var hay = [n && n.value, n && n.title, n && n.edition, mainText]
+      .map(function (s) { return clean(s || "").toLowerCase(); }).join(" ");
+
+    var name = null;
+    for (var i = 0; i < VALUES.length; i++) {
+      if (hay.indexOf(VALUES[i].toLowerCase()) !== -1) { name = VALUES[i]; break; }
+    }
+
+    var root = document.documentElement.style;
+    if (name) {
+      root.setProperty("--accent", BADGE_COLORS[name]);
+      root.setProperty("--band",   BAND_COLORS[name] || BADGE_COLORS[name]);
+    } else if (n && n.accent) {
+      root.setProperty("--accent", n.accent);
+      root.setProperty("--band",   n.accent);
+    } else {
+      root.removeProperty("--accent");
+      root.removeProperty("--band");
+    }
+
+    var cs = getComputedStyle(document.documentElement);
+    var accent = cs.getPropertyValue("--accent").trim();
+    var band   = cs.getPropertyValue("--band").trim();
+    root.setProperty("--accent-tint",  tint(accent, 0.09));
+    root.setProperty("--accent-track", tint(accent, 0.22));
+    root.setProperty("--accent-ink",   mixHex(band, accent, 0.6));
+
+    // The caller wants this too: the panel's badge is the same decision as
+    // the panel's colour, and working it out twice invites the two to differ.
+    return name;
+  }
+
+  // A highlighted passage usually opens with who said it, on its own line:
+  //
+  //     A. Name, Site - Job Title
+  //     The passage they wrote, which runs on from there...
+  //
+  // Set as one block those are the same sentence to anybody reading it from
+  // across a room, so the first line is lifted out and given its own place
+  // under the quote. A feed that sends the speaker as a field is believed
+  // ahead of anything read off the text.
+  var ATTR_MAX = 90;
+
+  var VTAG = /(?:&lt;|<)\s*\/?\s*(?:br|p)(?:\s[^>]*)?\s*\/?\s*(?:&gt;|>)/gi;
+
+  function deTag(s) {
+    return String(s == null ? "" : s)
+      .replace(VTAG, "\n")
+      .replace(/[ \t]+/g, " ")
+      .replace(/[ \t]*\n[ \t]*/g, "\n")
+      .replace(/\n{2,}/g, "\n")
+      .replace(/^\n+|\n+$/g, "");
+  }
+
+  function flowBody(s) {
+    return deTag(s)
+      .replace(/([^\n.!?:;\u2026)"'\u201d\u2019])\n(?=[a-z0-9\u00df-\u00ff])/g, "$1 ")
+      .replace(/\n{2,}/g, "\n")
+      .replace(/^\n+|\n+$/g, "");
+  }
+
+  function paras(text) {
+    return String(text == null ? "" : text)
+      .split(/\n/)
+      .map(function (p) { return p.trim(); })
+      .filter(Boolean)
+      .map(function (p) { return '<span class="vln">' + esc(p) + "</span>"; })
+      .join("");
+  }
+
+  function splitQuote(v) {
+    var name = clean((v && (v.author || v.name || v.by)) || "");
+    var role = clean((v && (v.role || v.job || v.team)) || "");
+    var text = deTag(clean((v && v.text) || ""));
+
+    if (name) return { name: name, role: role, text: flowBody(text) };
+
+    var lines = text.split(/\r?\n/);
+    var head  = (lines[0] || "").trim();
+    var body  = lines.slice(1).join("\n").trim();
+
+    // Every one of these has to hold, or it is a sentence and not a byline:
+    // two capitalised words to open it, nothing after it that ends a sentence,
+    // a separator inside it, short, and a real passage left underneath.
+    var looksLikeName =
+      /^[A-Z][\w'\u2019.-]*\s+[A-Z][\w'\u2019.-]*/.test(head) &&
+      !/[.!?]$/.test(head) &&
+      /[,\u2013\u2014]|\s-\s/.test(head) &&
+      head.length <= ATTR_MAX &&
+      head.split(/\s+/).length <= 12 &&
+      body.length >= 40;
+
+    if (!looksLikeName) return { name: "", role: "", text: flowBody(text) };
+
+    var parts = head.split(/\s*(?:,|\u2013|\u2014|\s-\s)\s*/).filter(Boolean);
+    return {
+      name: parts.shift(),
+      role: parts.join("  \u00b7  "),
+      text: flowBody(body)
+    };
+  }
+
+  // The speaker is a caption, not the passage. On a screen that has been
+  // zoomed in it was taking half the panel and squeezing the quote it belongs
+  // to into three clipped lines, so it is held to a share of the panel rather
+  // than to a size.
+  var BY_SHARE = 0.3;
+
+  // The two panel labels are fixed text in a box whose width moves with the
+  // screen, so they are scaled to it rather than left to wrap or to sit
+  // oversized. Capped at their design size so they never grow past it.
+  function fitKickers() {
+    var k = document.querySelectorAll(".kicker");
+    for (var i = 0; i < k.length; i++) fitLine(k[i], 0.68, 0.42);
+  }
+
+  function fitBy() {
+    var by = $("vby"), stage = $("vstage");
+    by.style.fontSize = "";
+    if (by.hidden) return;
+
+    // Floored low. At 0.55 the caption could not shrink past a point where it
+    // was taking half the panel on a heavily zoomed screen, and the share it
+    // is supposed to be held to stopped meaning anything.
+    var room = stage.clientHeight * BY_SHARE;
+    var size = 1, guard = 30;
+    while (guard-- && size > 0.34 && by.offsetHeight > room) {
+      size -= 0.05;
+      by.style.fontSize = size.toFixed(2) + "rem";
+    }
+  }
+
+  // The month's value tends to arrive as a line and then a paragraph, the
+  // same shape a quote arrives in. Set as one block at one weight it reads as
+  // a slab; split, the first line does the work of a heading and the rest can
+  // sit quiet underneath it. A single line with nothing after it is left
+  // alone - there is nothing to head.
+  var LEAD_MAX = 60;
+
+  function splitLead(text) {
+    var src   = deTag(text);
+    var lines = src.split(/\r?\n/);
+    var head  = (lines[0] || "").trim();
+    var body  = lines.slice(1).join("\n").trim();
+
+    var looksLikeHeading =
+      body.length >= 40 &&
+      head.length <= LEAD_MAX &&
+      !/[.!?,;:]$/.test(head) &&
+      head.split(/\s+/).length <= 9;
+
+    return looksLikeHeading ? { head: head, body: flowBody(body) }
+                            : { head: "", body: flowBody(src) };
+  }
+
+  // The same tests splitLead puts a heading through, applied to the whole of
+  // the text: short, one line, not ending like a sentence. A value that passes
+  // is a name to be read at a glance, not a passage to be read through.
+  var TITLE_MAX = 2.6;
+
+  function looksLikeTitle(s) {
+    s = String(s || "").trim();
+    return !!s &&
+      s.length <= LEAD_MAX &&
+      s.indexOf("\n") === -1 &&
+      !/[.!?,;:]$/.test(s) &&
+      s.split(/\s+/).length <= 9;
+  }
+
+  // Counted from the rail's payload and drawn from both sides: the thanks
+  // arrive every minute and the issue every ten, and either can land first.
+  function renderCount() {
+    var box = $("vcount");
+    if (!valueName || !lastStats || $("band").hidden) { box.hidden = true; return; }
+
+    var count = 0;
+    (lastStats.badges || []).forEach(function (b) {
+      if (b.badge === valueName) count = parseInt(b.count, 10) || 0;
+    });
+
+    // Nobody has used it yet this fortnight. The rail leaves a value like that
+    // off rather than draw an empty bar, because on a wall a nought reads as a
+    // verdict on the company; here it is put as an invitation instead.
+    $("vcount-n").textContent = count;
+    $("vcount-n").hidden = !count;
+    $("vcount-label").textContent = count
+      ? (count === 1 ? "thank you" : "thank yous") + " for " + valueName
+      : "Seen " + valueName + " in action?";
+    $("vcount-ask").textContent = count
+      ? "Seen " + valueName + " in action? Say thanks in PeopleHR."
+      : "Be the first to say thanks for it in PeopleHR.";
+
+    box.hidden = false;
+    fitLine($("vcount-big"), 1, 0.5);
+    fitLine($("vcount-ask"), 0.85, 0.45);
+  }
+
+  function showValue(i) {
+    var v = rest[i];
+    if (!v) return;
+
+    var q = splitQuote(v);
+
+    var by = $("vby");
+    if (q.name) {
+      $("vby-name").textContent = q.name;
+      $("vby-role").textContent = q.role;
+      $("vby-role").hidden = !q.role;
+      by.hidden = false;
+    } else {
+      by.hidden = true;
+    }
+
+    // In this order, and not the other way round: the quote is measured
+    // against the room the speaker leaves it, so the speaker has to be sized
+    // and in place first.
+    fitBy();
+
+    var box = $("vtext");
+    box.firstElementChild.innerHTML = paras(q.text);
+    // A long passage on a screen that has been zoomed in has to be allowed
+    // all the way down: clipped words are worse than small ones, and the
+    // floor is the only thing standing between the two.
+    // Ceiling raised well above what a long passage will ever reach, so the
+    // size is decided by the room the quote has rather than by a number: a
+    // short one now fills the panel instead of stopping at 1.6 with a quarter
+    // of the box empty under it. A long one still shrinks exactly as before.
+    fitBox(box, VQUOTE_MAX, 0.34);
+
+    // Full behind, filling on the one now showing, empty ahead.
+    var dots = $("dots").children;
+    for (var k = 0; k < dots.length; k++) {
+      dots[k].classList.toggle("done", k < i);
+      dots[k].classList.remove("on");
+    }
+    if (dots[i]) replay(dots[i], "on");
+
+    replay($("vstage"), "in");
+  }
+
+  function renderValues(n) {
+    var all  = (n && n.values) || [];
+    var main = null;
+    var others = [];
+
+    all.forEach(function (v) {
+      if (v.main && !main) main = v;
+      else others.push(v);
+    });
+
+    // An issue published before values existed, or one whose author marked
+    // none, still has something worth putting up.
+    if (!main && n) main = { text: n.summary || n.title || "" };
+    if (!main || !main.text) {
+      $("band").hidden = true;
+      valueSig = "";
+      valueName = null;
+      if (vTimer) { clearInterval(vTimer); vTimer = null; }
+      return;
+    }
+
+    // The title is in the signature because the colour is read out of it, so
+    // an issue retitled between polls repaints rather than keeping the old one.
+    var sig = (n.id || "") + "|" + (n.title || "") + "|" +
+              all.map(function (v) { return v.n + ":" + v.text; }).join("~");
+    if (sig === valueSig) return;
+    valueSig = sig;
+
+    $("band").hidden = false;
+    var vname = applyAccent(n, main.text);
+    valueName = vname;
+
+    // Only ever the artwork for a value actually named this month. Where the
+    // issue names none, the panel goes back to being wording alone rather
+    // than showing a badge that stands for nothing.
+    var vb  = $("vmain-badge");
+    var src = (VBADGE > 0 && vname) ? BADGE_IMG[vname] : null;
+    if (src) { vb.src = src; vb.hidden = false; }
+    else { vb.hidden = true; vb.removeAttribute("src"); }
+
+    $("vmain-kicker").textContent = n.edition ? "Our value of the month" : "Our values";
+    var lead = splitLead(clean(main.text));
+    var title = !lead.head && looksLikeTitle(lead.body);
+    // Keyed on whether a heading was found, not on whether there is body text:
+    // there is always body text, so the old test picked the small size every
+    // time and a one-word value came out set like a paragraph.
+    vmainMax = lead.head ? 1.05 : (title ? TITLE_MAX : 1.6);
+    var mt = $("vmain-text");
+    mt.classList.toggle("vmain-text--title", title);
+    $("vmain-lead").textContent = lead.head;
+    $("vmain-lead").hidden = !lead.head;
+    mt.querySelector("span").innerHTML = paras(lead.body);
+
+    rest = others;
+    if (vTimer) { clearInterval(vTimer); vTimer = null; }
+
+    // Everything that changes the band's proportions is settled first - solo
+    // or not, a name or a paragraph, a count under it or not - and only then
+    // is anything fitted to them. The other way round, the value was measured
+    // against a panel that was about to change size.
+    $("band").classList.toggle("band--solo", !rest.length);
+    $("band").classList.toggle("band--title", title && rest.length > 0);
+    $("vflip").hidden = !rest.length;
+    renderCount();
+
+    // A month whose value is a phrase gets the room a phrase can use; a month
+    // whose value is three paragraphs does not get to set them at the same
+    // size. Floored low either way - an issue running off the panel is worse
+    // than one set small.
+    fitBox(mt, vmainMax, 0.45);
+    fitKickers();
+
+    if (!rest.length) return;
+
+    $("dots").innerHTML = rest.map(function () { return "<i></i>"; }).join("");
+    // A single passage is not cycling, so there is nothing to count down.
+    $("dots").hidden = rest.length < 2;
+
+    vIdx = 0;
+    showValue(0);
+    if (rest.length > 1) {
+      vTimer = setInterval(function () {
+        vIdx = (vIdx + 1) % rest.length;
+        showValue(vIdx);
+      }, VSPEED * 1000);
+    }
+  }
+
+  // ------------------------------------------------------------------ states
+
+  function overlay(mark, big, small) {
+    if (!big) { $("overlay").hidden = true; return; }
+    $("ov-mark").innerHTML  = mark;
+    $("ov-big").textContent = big;
+    $("ov-small").textContent = small || "";
+    $("overlay").hidden = false;
+  }
+
+  // Healthy is silent. The pill only appears for a problem.
+  function live(cls, text) {
+    var pill = $("live");
+    if (!cls) { pill.hidden = true; return; }
+    pill.className = "live " + cls;
+    $("livetext").textContent = text;
+    pill.hidden = false;
+  }
+
+  var REASONS = {
+    "no-file":    "The thanks file has not been written yet.",
+    "unreadable": "The thanks file could not be read.",
+    "empty":      "There are no thanks in the current window.",
+    "error":      "The list of thanks could not be built."
+  };
+
+  // -------------------------------------------------------------------- poll
+
+  // A screen that has never loaded is being set up, not watched, and "waiting
+  // for an answer" is no help to whoever is stood in front of it. The three
+  // failures here need three different people to fix them, so the screen says
+  // which one it is and which host it asked. The path is left off: the host
+  // is the part that tells you whether it reached the right place at all.
+  function remember(d) {
+    if (!CACHE) return;
+    try {
+      localStorage.setItem(CACHE_STORE, JSON.stringify({ at: Date.now(), d: d }));
+    } catch (e) {}
+  }
+
+  // Only ever called when the screen would otherwise be showing an error, and
+  // it never pretends to be live: the pill stays up and says how old this is,
+  // and the rail's own "Updated" line still reads from the payload, so a
+  // restored board announces its age in two places without being asked.
+  function recall() {
+    if (!CACHE) return null;
+    try {
+      var raw = localStorage.getItem(CACHE_STORE);
+      if (!raw) return null;
+      var box = JSON.parse(raw);
+      var hours = (Date.now() - box.at) / 3600000;
+      if (!box.d || hours > CACHE_MAX_HOURS) return null;
+      return { d: box.d, when: ago(new Date(box.at).toISOString()) };
+    } catch (e) { return null; }
+  }
+
+  function why(err, url) {
+    var host = url;
+    try { host = new URL(url, location.href).host; } catch (e) {}
+
+    var msg = (err && err.message) || "";
+
+    if (location.protocol === "file:") {
+      return "Opened as a file. It has to be served over http or https.";
+    }
+    if (/^HTTP 40[134]/.test(msg)) {
+      return msg + " from " + host + ". The address is wrong, or the file is " +
+             "not readable without signing in.";
+    }
+    if (/^HTTP /.test(msg)) {
+      return msg + " from " + host + ".";
+    }
+    return "No answer from " + host + ". Either nothing there is reachable " +
+           "from this screen, or it is not sending the header that allows " +
+           "another site to read it.";
+  }
+
+  function load() {
+    // The endpoint sends a 60 second public Cache-Control, which is right for
+    // the network but would otherwise hand a refresh the same bytes back.
+    var url = API + (API.indexOf("?") === -1 ? "?" : "&") + "_=" + Date.now();
+
+    fetchJSON(url)
+      .then(function (d) {
+        if (!d || d.available === false) {
+          overlay("&#9749;", "No thanks to show yet",
+                  REASONS[(d && d.reason) || ""] || "Nothing is available right now.");
+          live("stale", "Waiting for data");
+          return;
+        }
+
+        overlay(null);
+        live("");
+        renderStats(d);
+        renderWall(d.thanks || []);
+        remember(d);
+      })
+      .catch(function (e) {
+        // A dropped poll is not worth blanking a wall screen over. Keep the
+        // last good board up and mark it, and only take over the screen if
+        // there was never anything there to begin with.
+        if (!$("stats").children.length) {
+          // Nothing has ever been on this screen, so there is nothing to keep
+          // up. Put back the last good board if one was kept and is still
+          // recent enough to mean anything; otherwise say what went wrong.
+          var back = recall();
+          if (back) {
+            overlay(null);
+            renderStats(back.d);
+            renderWall(back.d.thanks || []);
+            live("stale", "Last board, " + back.when);
+            return;
+          }
+          live("down", "Reconnecting");
+          overlay("&#128246;", "Board is offline", why(e, API));
+          return;
+        }
+        live("down", "Reconnecting");
+      });
+  }
+
+  function loadNews() {
+    var url = NEWS_API + (NEWS_API.indexOf("?") === -1 ? "?" : "&") + "_=" + Date.now();
+
+    fetchJSON(url)
+      .then(function (d) {
+        var n = (d && d.available && d.current) ? d.current : null;
+        // An issue titled for the month it is in tends to arrive dressed for
+        // an email, stars and all. None of that survives a projector, and the
+        // parts are cleaned before they are joined so a title that was nothing
+        // but decoration does not leave its separator behind.
+        $("edition").textContent = n
+          ? [clean(n.title), clean(n.edition)].filter(Boolean).join("  \u00b7  ")
+          : "";
+        renderValues(n);
+      })
+      .catch(function () {
+        // A dropped poll leaves whatever is already up there.
+      });
+  }
+
+  // ------------------------------------------------------------------- clock
+
+  function tick() {
+    $("clock").textContent = new Date().toLocaleTimeString(undefined, {
+      hour: "2-digit", minute: "2-digit"
+    });
+  }
+  tick();
+  setInterval(tick, 15000);
+
+  // -------------------------------------------------------------------- boot
+
+  load();
+  loadNews();
+  if (REFRESH) {
+    setInterval(load, REFRESH * 1000);
+    // An issue is published every few weeks, so there is nothing to gain from
+    // asking as often as the thanks. Every tenth poll, and never under 5 min.
+    setInterval(loadNews, Math.max(300, REFRESH * 10) * 1000);
+  }
+
+  // A resize changes the rem scale. Nothing here is measured in JS, so the
+  // layout follows on its own once the root has moved.
+  // A resize changes the rem scale and every box with it, so everything that
+  // was fitted to a box has to be fitted again.
+  function refit() {
+    if (lastStats) renderStats(lastStats);
+    fitKickers();
+    if (rest.length) { fitBy(); fitBox($("vtext"), VQUOTE_MAX, 0.34); }
+    if (!$("band").hidden) fitBox($("vmain-text"), vmainMax, 0.45);
+    var msgs = document.querySelectorAll(".cmsg");
+    for (var i = 0; i < msgs.length; i++) fitBox(msgs[i], 1.35, 0.72);
+    var whos = document.querySelectorAll(".crecip");
+    for (var j = 0; j < whos.length; j++) fitLine(whos[j], 1.5, 0.95);
+  }
+
+  var resizing;
+  window.addEventListener("resize", function () {
+    clearTimeout(resizing);
+    resizing = setTimeout(function () { applyScale(); refit(); }, 300);
+  });
+
+  // The web font lands after first paint and changes every measurement under
+  // it, so what was fitted against the fallback is fitted again against the
+  // real thing.
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(refit);
+  setTimeout(refit, 1500);
+
+  // Nothing on a wall screen should sleep, but a browser tab that has been
+  // backgrounded comes back stale. Catch up on the way in.
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) { load(); loadNews(); }
+  });
+})();
+</script>
+
+</body>
+</html>
