@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>電話推廣名單系統</title>
+<meta name="description" content="把電話推廣名單 PDF 轉成可搜尋、可撥號、可追蹤的工作台。資料只存在本機瀏覽器。">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📞</text></svg>">
+<!-- 加到主畫面（PWA）：圖示、App 名稱、離線快取在 sw.js -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="電推名單">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="assets/css/app.css?v=20261005-293">
+<!-- 密碼鎖要在畫面畫出來之前就生效，不然會先閃一下內容 -->
+<style>html[data-locked] body > *:not(.lock-gate) { display: none !important; }</style>
+<script src="assets/js/lock.js?v=20261005-293"></script>
+</head>
+<body data-theme="auto">
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">📞</span>
+    <div>
+      <h1>電話推廣名單系統</h1>
+      <p class="brand-sub" id="brandSub">尚未匯入名單</p>
+    </div>
+  </div>
+
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="搜尋公司、統編、負責人、電話、地址、訪談內容…" autocomplete="off">
+    <kbd>/</kbd>
+  </div>
+
+  <div class="topbar-actions">
+    <button id="btnSync" class="btn btn-ghost" title="與雲端硬碟同步" hidden>⟳</button>
+    <button id="btnImport" class="btn btn-primary">新增客戶</button>
+    <button id="btnMenu" class="btn btn-ghost" aria-haspopup="true" title="更多">⋯</button>
+    <!-- 選單分四組、名字縮短、靠左；手機上是從底下滑出來的兩欄面板（使用者：這個畫面裡有點太多功能） -->
+    <div id="menu" class="menu" hidden>
+      <div class="menu-group">
+        <div class="menu-cap">每天</div>
+        <button data-act="twin-plan">今日撥打戰略</button>
+        <button data-act="review">今日覆盤</button>
+        <button data-act="weekly">每週覆盤</button>
+        <button data-act="day-load">每天打得完幾家</button>
+        <button data-act="feed-more">再補一批新名單</button>
+        <button data-act="spread-undo" hidden>復原剛才的重排</button>
+        <button data-act="stats">統計</button>
+        <button data-act="rules">規則</button>
+      </div>
+      <div class="menu-group">
+        <div class="menu-cap">整理名單</div>
+        <button data-act="registry">商工登記更新</button>
+        <button data-act="trade-phones">補電話：出進口登記</button>
+        <button data-act="phone-hunt">找電話：Google 地圖</button>
+        <button data-act="check-names">檢查公司名稱</button>
+        <button data-act="prune-unscheduled">整理未排定的名單</button>
+        <button data-act="manage">管理已匯入名單</button>
+        <button data-act="excluded">管理已排除的公司</button>
+      </div>
+      <div class="menu-group">
+        <div class="menu-cap">備份與同步</div>
+        <button data-act="export-xlsx">匯出 Excel</button>
+        <button data-act="export-json">下載備份 JSON</button>
+        <button data-act="import-json">還原備份 JSON</button>
+        <button data-act="sync-now">立即同步雲端硬碟</button>
+        <button data-act="sync-setup">雲端同步設定</button>
+        <button data-act="backups">雲端備份（找回某天）</button>
+      </div>
+      <div class="menu-group">
+        <div class="menu-cap">其他</div>
+        <button data-act="twin">Claude 分身</button>
+        <button data-act="data-status">資料狀態</button>
+        <button data-act="check-update">檢查更新</button>
+        <button data-act="wipe" class="danger">清除所有資料</button>
+        <div class="menu-version" id="menuVersion"></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- 分頁列只留三個：每天待的名單、找名單（七個來源收在第二排）、篩選。統計、規則搬到右上選單（使用者：分頁在版面上有點多） -->
+<nav class="tabs" id="tabs">
+  <button class="tab is-active" data-tab="all">重點推廣名單 <span class="pill" id="countAll">0</span></button>
+  <!-- 行事曆：哪天要拜訪誰、打給誰（下次聯絡日攤開來看）；數字是今天還沒做的家數 -->
+  <button class="tab" data-tab="cal">行事曆 <span class="pill" id="countCal" hidden></span></button>
+  <button class="tab" data-tab="sources">找名單</button>
+  <button id="btnFilters" class="tab tab-filters" aria-expanded="false">篩選 ▾</button>
+</nav>
+<nav class="subtabs" id="subtabs" hidden>
+  <!-- 使用者：「把商行也合併在其他分頁裡，獨立分頁僅上市櫃而已」：七份新名單收在「新名單」底下（第三排），只有上市櫃獨立 -->
+  <button class="subtab" data-tab="mix" data-group="mix">新名單 <span class="pill" id="countMix"></span></button>
+  <button class="subtab" data-tab="listed">上市櫃 <span class="pill" id="countListed"></span></button>
+</nav>
+<nav class="subtabs mixtabs" id="mixtabs" hidden>
+  <button class="subtab" data-tab="mix">全部（合併）</button>
+  <button class="subtab" data-tab="leads">登記清冊 <span class="pill" id="countLeads"></span></button>
+  <button class="subtab" data-tab="chattel">動產擔保 <span class="pill" id="countChattel"></span></button>
+  <button class="subtab" data-tab="biz">商行／企業社 <span class="pill" id="countBiz"></span></button>
+  <button class="subtab" data-tab="trade">出進口廠商 <span class="pill" id="countTrade"></span></button>
+  <button class="subtab" data-tab="nhi">剛開始請人 <span class="pill" id="countNhi"></span></button>
+  <button class="subtab" data-tab="einv">剛開電子發票 <span class="pill" id="countEinv"></span></button>
+  <button class="subtab" data-tab="factory">新設工廠 <span class="pill" id="countFactory"></span></button>
+</nav>
+
+<main class="layout">
+  <aside class="filters" id="filters">
+    <div class="filter-head">
+      <h2>篩選</h2>
+      <button id="btnResetFilters" class="btn btn-tiny">清除</button>
+    </div>
+    <div class="filter-group" data-group="due">
+      <label>聯絡時程（下次聯絡日）</label>
+      <div class="chips" id="fltDue"></div>
+    </div>
+    <div class="filter-group" data-group="added">
+      <label>名單新增</label>
+      <div class="chips" id="fltAdded"></div>
+    </div>
+    <div class="filter-group" data-group="sort">
+      <label>排序</label>
+      <select id="sortBy">
+        <option value="next">依下次聯絡日</option>
+        <option value="last">依最近聯絡日（新到舊）</option>
+        <option value="regchanged" selected>依最近異動日期（新到舊）</option>
+        <option value="capital">依資本總額（高到低）</option>
+        <option value="company">依公司名稱</option>
+        <option value="territory">依服務區域（優先區域在前）</option>
+        <option value="twin">依分身建議順序（今天）</option>
+      </select>
+    </div>
+    <div class="filter-group" data-group="outcome">
+      <label>洽談狀態</label>
+      <div class="chips" id="fltOutcome"></div>
+    </div>
+    <div class="filter-group" data-group="chance">
+      <label>有沒有機會（自己標的，關係企業算一家）</label>
+      <div class="chips" id="fltChance"></div>
+    </div>
+    <div class="filter-group" data-group="opp">
+      <label>重新聯絡的時機</label>
+      <div class="chips" id="fltOpp"></div>
+    </div>
+    <div class="filter-group" data-group="cold">
+      <label>冷名單（連續未接太多次自動移出）</label>
+      <div class="chips" id="fltCold"></div>
+    </div>
+    <div class="filter-group" data-group="city">
+      <label>縣市</label>
+      <div class="chips" id="fltCity"></div>
+    </div>
+    <div class="filter-group" data-group="scale">
+      <label>客戶規模（依資本總額）</label>
+      <div class="chips" id="fltScale"></div>
+    </div>
+    <div class="filter-group" data-group="relation">
+      <label>往來情形</label>
+      <div class="chips" id="fltRelation"></div>
+    </div>
+    <div class="filter-group" data-group="visit">
+      <label>拜訪</label>
+      <div class="chips" id="fltVisit"></div>
+    </div>
+    <div class="filter-group" data-group="tax">
+      <label>資料完整度</label>
+      <div class="chips" id="fltTax"></div>
+      <div class="chips chips-row2" id="fltPhone"></div>
+    </div>
+    <div class="filter-group" data-group="regchange">
+      <label>變更登記</label>
+      <div class="chips" id="fltRegChange"></div>
+    </div>
+    <div class="filter-group" data-group="chattel">
+      <label>動產擔保（跟同業借錢、到期）</label>
+      <div class="chips" id="fltChattel"></div>
+    </div>
+    <div class="filter-group" data-group="branch">
+      <label>歸屬分公司（依登記地址）</label>
+      <select id="fltBranch"></select>
+    </div>
+    <div class="filter-group" data-group="industry">
+      <label>產業別</label>
+      <input id="fltIndustry" type="search" list="industryList" placeholder="輸入產業關鍵字">
+      <datalist id="industryList"></datalist>
+    </div>
+    <div class="filter-group" data-group="source">
+      <label>名單來源</label>
+      <div class="chips" id="fltSource"></div>
+    </div>
+  </aside>
+
+  <section class="content">
+    <div id="paneList">
+      <div id="feedBar" class="feed-bar" hidden></div>
+      <div id="remindBar" class="remind-bar" hidden></div>
+      <div id="oppBar" class="opp-bar" hidden></div>
+      <div class="list-head">
+        <span id="listSummary">—</span>
+        <label class="only-open"><input type="checkbox" id="hideBlocked" checked> 隱藏「禁止推廣」</label>
+        <label class="only-open"><input type="checkbox" id="hideDealing" checked> 隱藏「中租往來」</label>
+      </div>
+      <div id="cards" class="cards"></div>
+      <div id="emptyState" class="empty" hidden></div>
+      <button id="btnMore" class="btn btn-block" hidden>載入更多</button>
+    </div>
+
+    <!-- 行事曆：畫面由 app.js renderCal 長出來 -->
+    <div id="paneCal" class="cal" hidden></div>
+    <div id="paneStats" class="stats" hidden></div>
+    <div id="paneRules" class="rules" hidden></div>
+    <!-- 新公司：經濟部每月登記清冊，畫面由 leads.js 長出來；客戶名單的邏輯完全不碰 -->
+    <div id="paneLeads" class="leads" hidden></div>
+    <!-- 動產擔保名單：新北市動產擔保登記清冊，同業客戶的契約什麼時候到期，畫面由 chattel.js 長出來 -->
+    <div id="paneChattel" class="leads chattel" hidden></div>
+    <!-- 上市櫃公司：三個市場的基本資料與董事長名下的投資公司，畫面由 listed.js 長出來 -->
+    <div id="paneListed" class="leads listed" hidden></div>
+    <!-- 商行／企業社：財政部稅籍登記裡的獨資、合夥，畫面由 biz.js 長出來 -->
+    <div id="paneBiz" class="leads biz" hidden></div>
+    <!-- 出進口廠商：貿易署的出進口廠商登記（有電話），畫面由 trade.js 長出來 -->
+    <div id="paneTrade" class="leads trade" hidden></div>
+    <!-- 剛開始請人：健保署的新成立投保單位（剛開始幫員工投保），畫面由 nhi.js 長出來 -->
+    <div id="paneNhi" class="leads nhi" hidden></div>
+    <!-- 剛開電子發票：財政部的導入電子發票營業人清單（剛開始開電子發票），畫面由 einv.js 長出來 -->
+    <div id="paneEinv" class="leads einv" hidden></div>
+    <!-- 新名單（合併）：六份名單依統編合成一家，畫面由 mix.js 長出來 -->
+    <div id="paneMix" class="leads mix" hidden></div>
+    <!-- 新設工廠：經濟部生產中工廠清冊裡最近登記的工廠，畫面由 factory.js 長出來 -->
+    <div id="paneFactory" class="leads factory" hidden></div>
+  </section>
+</main>
+
+<!-- 詳細資料抽屜 -->
+<div id="drawer" class="drawer" hidden>
+  <div class="drawer-backdrop" data-close></div>
+  <div class="drawer-panel" role="dialog" aria-modal="true" aria-label="客戶詳細資料">
+    <button class="drawer-close" data-close aria-label="關閉">✕</button>
+    <div id="drawerBody"></div>
+  </div>
+</div>
+
+<!-- 匯入對話框 -->
+<div id="importer" class="drawer" hidden>
+  <div class="drawer-backdrop" data-close></div>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="匯入名單">
+    <button class="drawer-close" data-close aria-label="關閉">✕</button>
+    <h2>新增客戶名單</h2>
+    <p class="muted">四種方式都從這裡進來。資料只留在這台裝置，開了雲端同步才會複製到你自己的雲端硬碟。</p>
+    <div class="import-ways">
+      <button id="btnPick" class="way" type="button">
+        <strong>📄 檔案：PDF、Excel、CSV</strong>
+        <small>公司名單匯出檔、經濟部設立登記清冊，可一次多選</small>
+      </button>
+      <button id="btnShotPick" class="way" type="button">
+        <strong>📷 104 截圖</strong>
+        <small>手機相簿或電腦裡的「公司簡介」頁截圖，在本機辨識後可查商工登記補資料</small>
+      </button>
+      <button class="way" type="button" data-act="paste-customer">
+        <strong>📋 貼上試算表整列</strong>
+        <small>從 Excel 或 Google 試算表複製一列或多列直接貼上</small>
+      </button>
+      <button class="way" type="button" data-act="new-customer">
+        <strong>✍️ 手動輸入一筆</strong>
+        <small>名片或轉介的客戶；可貼上商工登記資料、或拍名片給分身讀，自動填表</small>
+      </button>
+    </div>
+    <div id="dropzone" class="dropzone">
+      <strong>也可以直接把檔案或截圖拖到這裡</strong>
+    </div>
+    <input id="filePick" type="file" accept="application/pdf,.pdf,text/csv,.csv,.xlsx,.xls,image/*,.png,.jpg,.jpeg" multiple hidden>
+    <input id="shotPick" type="file" accept="image/*" multiple hidden>
+    <div id="importLog" class="import-log"></div>
+  </div>
+</div>
+
+<!-- 雲端同步設定 -->
+<div id="syncSetup" class="drawer" hidden>
+  <div class="drawer-backdrop" data-close></div>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="雲端同步設定">
+    <button class="drawer-close" data-close aria-label="關閉">✕</button>
+    <h2>雲端同步設定</h2>
+    <p class="muted">
+      同步檔會存在<strong>你自己的 Google 雲端硬碟</strong>，檔名「電話推廣名單-同步資料.json」。
+      資料不會經過任何第三方伺服器。每台裝置登入同一個 Google 帳號就會互相同步，
+      通話紀錄是<strong>合併</strong>的，不會互相覆蓋。
+    </p>
+    <div class="filter-group">
+      <label for="clientId">Google 用戶端 ID（OAuth Client ID）</label>
+      <input id="clientId" type="text" placeholder="例如 1234567890-abcdef.apps.googleusercontent.com" autocomplete="off">
+    </div>
+    <div class="card-actions">
+      <button id="btnSaveClientId" class="btn btn-primary">儲存並立即同步</button>
+      <button id="btnSyncSignOut" class="btn">登出 Google</button>
+    </div>
+    <p id="syncStatus" class="muted"></p>
+    <details class="sync-help">
+      <summary>還沒有用戶端 ID？點這裡看設定步驟</summary>
+      <ol>
+        <li>到 <a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud 主控台</a> 建一個專案（名稱隨意）。</li>
+        <li>左側「API 和服務 → 程式庫」，搜尋 <strong>Google Drive API</strong>，按啟用。</li>
+        <li>左側「OAuth 同意畫面」：User Type 選 <strong>外部</strong>，填應用程式名稱與你的信箱。</li>
+        <li><strong>最容易漏掉的一步</strong>：在同一區找到「測試使用者」，
+            把<strong>你要用來登入的那個 Gmail</strong> 加進去。沒加的話登入會出現
+            「403 access_denied：只有測試人員可以存取」。</li>
+        <li>左側「憑證 → 建立憑證 → OAuth 用戶端 ID」，應用程式類型選 <strong>網頁應用程式</strong>。</li>
+        <li>「已授權的 JavaScript 來源」加入這個網站的網址，<strong>只到網域為止</strong>
+            （例如 <code>https://你的帳號.github.io</code>，後面的路徑不要加）。</li>
+        <li>建立後把「用戶端 ID」複製貼到上面的欄位。</li>
+      </ol>
+      <p class="muted">
+        同意畫面停在「測試」狀態就夠自己用，只是登入時會出現「這個應用程式未經驗證」的提醒，選「繼續」即可；
+        但<strong>每個要用的 Google 帳號都必須列在測試使用者裡</strong>。
+        不想維護名單的話，也可以在同意畫面按「發布應用程式」——這個網站只要
+        <code>drive.file</code> 權限（僅能存取自己建立的檔案），屬於不需送審的範圍。
+      </p>
+    </details>
+  </div>
+</div>
+
+<!-- 編輯／新增客戶 -->
+<div id="editor" class="drawer" hidden>
+  <div class="drawer-backdrop" data-close></div>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="編輯客戶資料">
+    <button class="drawer-close" data-close aria-label="關閉">✕</button>
+    <div id="editorBody"></div>
+  </div>
+</div>
+
+<input id="jsonPick" type="file" accept="application/json,.json" hidden>
+<div id="registryBar" class="registry-bar" hidden>
+  <strong id="registryBarTitle"></strong>
+  <span id="registryBarNote" class="muted"></span>
+  <button id="btnRegistryStop" class="btn btn-tiny" type="button">停止</button>
+  <button id="btnRegistryClose" class="btn btn-tiny" type="button" hidden>關閉</button>
+  <div class="registry-track"><div id="registryFill" class="registry-fill"></div></div>
+</div>
+
+<div id="updateBar" class="update-bar" hidden>
+  <span>網站有新版本可用</span>
+  <button id="btnUpdate" class="btn btn-primary">立即更新</button>
+  <button id="btnUpdateLater" class="btn btn-ghost">稍後</button>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="assets/vendor/pdfjs/pdf.min.js?v=20261005-293"></script>
+<script src="assets/vendor/xlsx/xlsx.min.js?v=20261005-293"></script>
+<script src="assets/vendor/tesseract/tesseract.min.js"></script>
+<script src="assets/js/pdf-table.js?v=20261005-293"></script>
+<script src="assets/js/normalize.js?v=20261005-293"></script>
+<script src="assets/js/holidays.js?v=20261005-293"></script>
+<script src="assets/js/registry.js?v=20261005-293"></script>
+<script src="assets/js/ocr.js?v=20261005-293"></script>
+<script src="assets/js/rules.js?v=20261005-293"></script>
+<script src="assets/js/store.js?v=20261005-293"></script>
+<script src="assets/js/sync.js?v=20261005-293"></script>
+<script src="assets/js/leads.js?v=20261005-293"></script>
+<script src="assets/js/chattel.js?v=20261005-293"></script>
+<script src="assets/js/listed.js?v=20261005-293"></script>
+<script src="assets/js/biz.js?v=20261005-293"></script>
+<script src="assets/js/trade.js?v=20261005-293"></script>
+<script src="assets/js/nhi.js?v=20261005-293"></script>
+<script src="assets/js/einv.js?v=20261005-293"></script>
+<script src="assets/js/factory.js?v=20261005-293"></script>
+<script src="assets/js/mix.js?v=20261005-293"></script>
+<script src="assets/js/app.js?v=20261005-293"></script>
+</body>
+</html>
