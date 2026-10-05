@@ -1,0 +1,304 @@
+const STORAGE_KEY = 'rutina-fuerza:v1';
+const PROGRAM_WEEKS = 12;
+const TRAINING_DAYS = [1, 3, 5];
+const DEFAULT_START = '2026-01-05';
+
+const state = {
+  startDate: DEFAULT_START,
+  selectedDate: null,
+  sessions: {},
+};
+
+const calendarBody = document.getElementById('calendarBody');
+const weekBadge = document.getElementById('weekBadge');
+const sessionInfo = document.getElementById('sessionInfo');
+const sessionForm = document.getElementById('sessionForm');
+const selectedDateLabel = document.getElementById('selectedDateLabel');
+const weightInput = document.getElementById('weightInput');
+const feelInput = document.getElementById('feelInput');
+const noteInput = document.getElementById('noteInput');
+const importInput = document.getElementById('importInput');
+
+function parseDateKey(value) {
+  if (typeof value !== 'string') return null;
+  const match = /^\d{4}-\d{2}-\d{2}$/.exec(value.trim());
+  if (!match) return null;
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+}
+
+function toDateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function getProgramDates(startDate = state.startDate) {
+  const start = parseDateKey(startDate);
+  if (!start) return [];
+
+  const dates = [];
+  let current = new Date(start);
+  for (let i = 0; i < PROGRAM_WEEKS * 3; i++) {
+    dates.push(new Date(current));
+    current.setDate(current.getDate() + 1);
+  }
+
+  return dates.filter((date) => TRAINING_DAYS.includes(date.getDay()));
+}
+
+function isTrainingDay(date) {
+  const value = date instanceof Date ? date : parseDateKey(date);
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return false;
+  return TRAINING_DAYS.includes(value.getDay());
+}
+
+function weekForDate(dateValue) {
+  const date = dateValue instanceof Date ? dateValue : parseDateKey(dateValue);
+  if (!date) return 1;
+  const start = parseDateKey(state.startDate);
+  if (!start) return 1;
+  const diffDays = Math.floor((date - start) / 86400000);
+  if (diffDays < 0) return 1;
+  return Math.min(PROGRAM_WEEKS, Math.floor(diffDays / 7) + 1);
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      state.sessions = {};
+      return;
+    }
+    const parsed = JSON.parse(raw);
+    state.startDate = parsed.startDate || DEFAULT_START;
+    state.sessions = parsed.sessions || {};
+  } catch {
+    state.sessions = {};
+  }
+}
+
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    startDate: state.startDate,
+    sessions: state.sessions,
+  }));
+}
+
+function getSession(dateKey) {
+  return state.sessions[dateKey] || null;
+}
+
+function setSession(dateKey, session) {
+  state.sessions[dateKey] = session;
+  saveState();
+}
+
+function deleteSession(dateKey) {
+  delete state.sessions[dateKey];
+  saveState();
+}
+
+function renderCalendar() {
+  const dates = getProgramDates();
+  const rows = [];
+  for (let week = 1; week <= PROGRAM_WEEKS; week++) {
+    const cells = [];
+    dates.filter((date) => weekForDate(date) === week).forEach((date) => {
+      const key = toDateKey(date);
+      const session = getSession(key);
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'cell';
+
+      if (session && session.status === 'done') cell.classList.add('done');
+      if (session && session.status === 'skipped') cell.classList.add('skipped');
+      if (isSameDay(date, new Date())) cell.classList.add('today');
+      if (state.selectedDate === key) cell.classList.add('selected');
+
+      cell.innerHTML = `
+        <strong>${date.getDate()}</strong>
+        <small>${session ? (session.status === 'done' ? 'Hecha' : 'Omitida') : 'Pendiente'}</small>
+      `;
+
+      cell.addEventListener('click', () => {
+        state.selectedDate = key;
+        renderCalendar();
+        renderSession();
+      });
+      cells.push(cell);
+    });
+
+    const row = document.createElement('tr');
+    const weekCell = document.createElement('td');
+    weekCell.innerHTML = `<strong>W${week}</strong>`;
+    row.appendChild(weekCell);
+    cells.forEach((cell) => {
+      const td = document.createElement('td');
+      td.appendChild(cell);
+      row.appendChild(td);
+    });
+    rows.push(row);
+  }
+
+  calendarBody.innerHTML = '';
+  rows.forEach((row) => calendarBody.appendChild(row));
+  weekBadge.textContent = `Semana ${currentWeek()}`;
+}
+
+function currentWeek() {
+  return weekForDate(new Date());
+}
+
+function renderSession() {
+  if (!state.selectedDate) {
+    sessionInfo.classList.remove('hidden');
+    sessionForm.classList.add('hidden');
+    sessionInfo.textContent = 'Seleccioná una fecha del calendario.';
+    return;
+  }
+
+  const session = getSession(state.selectedDate) || {
+    date: state.selectedDate,
+    status: 'pending',
+    weight: 0,
+    sets: [0, 0, 0],
+    feel: '',
+    note: '',
+  };
+
+  sessionInfo.classList.add('hidden');
+  sessionForm.classList.remove('hidden');
+  selectedDateLabel.textContent = state.selectedDate;
+
+  weightInput.value = session.weight ?? 0;
+  feelInput.value = session.feel || '';
+  noteInput.value = session.note || '';
+
+  document.querySelectorAll('[data-set]').forEach((input) => {
+    const index = Number(input.dataset.set);
+    input.value = session.sets?.[index] ?? 0;
+  });
+
+  document.querySelectorAll('[data-status]').forEach((button) => {
+    button.classList.remove('active');
+  });
+}
+
+function isSameDay(a, b) {
+  return a && b && toDateKey(a) === toDateKey(b);
+}
+
+function updateSelectedSession(status) {
+  if (!state.selectedDate) return;
+
+  const current = getSession(state.selectedDate) || {
+    date: state.selectedDate,
+    status: 'pending',
+    weight: 0,
+    sets: [0, 0, 0],
+    feel: '',
+    note: '',
+  };
+
+  current.status = status;
+  current.weight = Number(weightInput.value || 0);
+  current.sets = Array.from(document.querySelectorAll('[data-set]')).map((input) => Number(input.value || 0));
+  current.feel = feelInput.value.trim();
+  current.note = noteInput.value.trim();
+
+  if (status === 'clear') {
+    deleteSession(state.selectedDate);
+  } else {
+    setSession(state.selectedDate, current);
+  }
+
+  renderCalendar();
+  renderSession();
+}
+
+function exportData() {
+  const blob = new Blob([JSON.stringify({ startDate: state.startDate, sessions: state.sessions }, null, 2)], {
+    type: 'application/json',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `rutina-fuerza-${toDateKey(new Date())}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importData(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(String(reader.result));
+      if (!parsed || typeof parsed !== 'object') throw new Error('JSON invalido');
+      state.startDate = parsed.startDate || DEFAULT_START;
+      state.sessions = parsed.sessions || {};
+      saveState();
+      renderCalendar();
+      state.selectedDate = null;
+      renderSession();
+    } catch {
+      alert('El archivo no es válido para esta app.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function bindEvents() {
+  document.getElementById('todayBtn').addEventListener('click', () => {
+    const today = toDateKey(new Date());
+    state.selectedDate = today;
+    renderCalendar();
+    renderSession();
+  });
+
+  document.getElementById('exportBtn').addEventListener('click', exportData);
+  importInput.addEventListener('change', (e) => importData(e.target.files?.[0]));
+
+  document.querySelectorAll('[data-status]').forEach((button) => {
+    button.addEventListener('click', () => updateSelectedSession(button.dataset.status));
+  });
+
+  weightInput.addEventListener('input', () => {
+    if (!state.selectedDate) return;
+    const current = getSession(state.selectedDate) || { sets: [0, 0, 0] };
+    current.weight = Number(weightInput.value || 0);
+    setSession(state.selectedDate, { ...current, date: state.selectedDate });
+  });
+
+  feelInput.addEventListener('input', () => {
+    if (!state.selectedDate) return;
+    const current = getSession(state.selectedDate) || { sets: [0, 0, 0] };
+    current.feel = feelInput.value;
+    setSession(state.selectedDate, { ...current, date: state.selectedDate });
+  });
+
+  noteInput.addEventListener('input', () => {
+    if (!state.selectedDate) return;
+    const current = getSession(state.selectedDate) || { sets: [0, 0, 0] };
+    current.note = noteInput.value;
+    setSession(state.selectedDate, { ...current, date: state.selectedDate });
+  });
+
+  document.querySelectorAll('[data-set]').forEach((input) => {
+    input.addEventListener('input', () => {
+      if (!state.selectedDate) return;
+      const current = getSession(state.selectedDate) || { sets: [0, 0, 0], weight: 0 };
+      current.sets = Array.from(document.querySelectorAll('[data-set]')).map((field) => Number(field.value || 0));
+      const session = { ...current, date: state.selectedDate };
+      setSession(state.selectedDate, session);
+    });
+  });
+}
+
+loadState();
+bindEvents();
+renderCalendar();
+renderSession();
