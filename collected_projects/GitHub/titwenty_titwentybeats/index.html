@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>titwenty-Beats</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#070707;color:#fff;font-family:Inter,Arial,sans-serif}
+header{height:72px;border-bottom:1px solid #202020;display:flex;align-items:center;justify-content:space-between;padding:0 5%;position:sticky;top:0;background:#070707eF;backdrop-filter:blur(14px);z-index:5}
+.logo{font-size:23px;font-weight:900;letter-spacing:-1px}.logo span{color:#a8ff00}button{border:0;border-radius:10px;padding:11px 16px;font-weight:800;cursor:pointer}.green{background:#a8ff00;color:#000}
+main{max-width:1180px;margin:auto;padding:55px 5% 120px}.hero{padding:20px 0 42px}.tag{color:#a8ff00;font-size:12px;font-weight:900;letter-spacing:2px}.hero h1{font-size:clamp(46px,8vw,88px);line-height:.9;margin:13px 0}.hero p{color:#888;max-width:590px;font-size:17px;line-height:1.55}
+.tools{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:24px}.search{flex:1;min-width:230px;background:#111;color:#fff;border:1px solid #292929;padding:13px 15px;border-radius:10px;outline:none}.filter{background:#111;color:#888;border:1px solid #292929}.filter.active{background:#a8ff00;color:#000}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px}.card{background:#101010;border:1px solid #222;border-radius:16px;overflow:hidden}.cover{height:190px;background:radial-gradient(circle at 30% 20%,#333,#111 60%);display:flex;align-items:center;justify-content:center;font-size:58px;position:relative}.genre{position:absolute;left:13px;top:13px;background:#000b;padding:6px 8px;border-radius:6px;font-size:10px;font-weight:900}.info{padding:16px}.title{font-weight:900;font-size:18px}.meta{color:#777;font-size:12px;margin:6px 0 14px}.controls{display:flex;align-items:center;gap:10px}.play{width:42px;height:42px;border-radius:50%;padding:0;background:#a8ff00;color:#000}.line{height:4px;background:#303030;border-radius:5px;flex:1}.admin{color:#777;background:#181818}.empty{grid-column:1/-1;text-align:center;color:#666;padding:50px}
+.modal{position:fixed;inset:0;background:#000c;display:none;align-items:center;justify-content:center;padding:18px;z-index:20}.modal.show{display:flex}.box{background:#111;border:1px solid #2a2a2a;border-radius:18px;padding:24px;width:min(500px,100%)}.box h2{margin-top:0}.box input,.box select{width:100%;padding:12px;margin:6px 0;background:#080808;border:1px solid #292929;border-radius:9px;color:#fff}.box small{color:#777}.actions{display:flex;gap:8px;margin-top:12px}.actions button{flex:1}.close{background:#222;color:#fff}.status{margin-top:10px;color:#888;font-size:13px;min-height:18px}.adminlist{margin-top:25px}.adminitem{display:flex;justify-content:space-between;gap:10px;padding:12px;border-bottom:1px solid #222}.danger{background:#3a1111;color:#ff7777}
+footer{border-top:1px solid #202020;color:#555;text-align:center;padding:24px}
+</style>
+</head>
+<body>
+<header><div class="logo">titwenty<span>-Beats</span></div><button class="green" id="adminBtn">Admin</button></header>
+<main>
+<section class="hero"><div class="tag">BEATS FOR ARTISTS</div><h1>Find your<br>sound.</h1><p>Биты titwenty для артистов. Слушай инструменталы прямо в браузере и выбирай звук для следующего трека.</p></section>
+<div class="tools"><input class="search" id="search" placeholder="Поиск бита..."><button class="filter active" data-f="all">Все</button><button class="filter" data-f="Trap">Trap</button><button class="filter" data-f="Drill">Drill</button><button class="filter" data-f="R&B">R&B</button></div>
+<div id="grid" class="grid"><div class="empty">Загрузка битов...</div></div>
+</main>
+<footer>© 2026 titwenty-Beats</footer>
+
+<div class="modal" id="loginModal"><div class="box"><h2>Админка</h2><input id="password" type="password" placeholder="Пароль администратора"><div class="actions"><button class="close" onclick="closeModal('loginModal')">Отмена</button><button class="green" id="login">Войти</button></div><div class="status" id="loginStatus"></div></div></div>
+
+<div class="modal" id="adminModal"><div class="box"><button class="close" style="float:right" onclick="closeModal('adminModal')">✕</button><h2>Загрузить бит</h2>
+<input id="name" placeholder="Название бита"><select id="genre"><option>Trap</option><option>Drill</option><option>R&B</option><option>Hip-Hop</option></select><input id="bpm" type="number" placeholder="BPM"><input id="key" placeholder="Тональность, например C# Minor"><input id="file" type="file" accept="audio/mpeg,audio/wav,audio/x-wav,audio/*"><div class="actions"><button class="green" id="upload">Загрузить</button><button class="close" id="logout">Выйти</button></div><div class="status" id="uploadStatus"></div><div class="adminlist" id="adminList"></div></div></div>
+
+<script>
+let beats=[],filter="all",audio=null,token=localStorage.getItem("titwenty_admin")||"";
+const $=id=>document.getElementById(id);
+function closeModal(id){$(id).classList.remove("show")}
+function esc(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+async function load(){
+ try{let r=await fetch("/api/beats");let d=await r.json();beats=d.beats||[];render()}catch(e){$("grid").innerHTML='<div class="empty">Не удалось загрузить каталог.</div>'}
+}
+function render(){
+ let q=$("search").value.toLowerCase();
+ let a=beats.filter(b=>(filter==="all"||b.genre===filter)&&b.name.toLowerCase().includes(q));
+ $("grid").innerHTML=a.length?a.map((b,i)=>`<article class="card"><div class="cover"><span class="genre">${esc(b.genre)}</span>♪</div><div class="info"><div class="title">${esc(b.name)}</div><div class="meta">${esc(b.genre)} • ${esc(b.bpm)} BPM • ${esc(b.key)}</div><div class="controls"><button class="play" onclick="play('${encodeURIComponent(b.url)}')">▶</button><div class="line"></div></div></div></article>`).join(""):'<div class="empty">Битов не найдено.</div>';
+}
+function play(u){if(audio)audio.pause();audio=new Audio(decodeURIComponent(u));audio.play().catch(()=>{})}
+$("search").oninput=render;
+document.querySelectorAll(".filter").forEach(x=>x.onclick=()=>{filter=x.dataset.f;document.querySelectorAll(".filter").forEach(y=>y.classList.remove("active"));x.classList.add("active");render()});
+$("adminBtn").onclick=()=>{if(token){openAdmin()}else $("loginModal").classList.add("show")};
+$("login").onclick=async()=>{token=$("password").value;localStorage.setItem("titwenty_admin",token);let r=await fetch("/api/upload?name=x",{method:"POST",headers:{Authorization:"Bearer "+token},body:new Blob(["test"],{type:"text/plain"})});if(r.status===401){token="";localStorage.removeItem("titwenty_admin");$("loginStatus").textContent="Неверный пароль."}else{closeModal("loginModal");openAdmin()}};
+function openAdmin(){ $("adminModal").classList.add("show"); renderAdmin() }
+async function renderAdmin(){ $("adminList").innerHTML=beats.map(b=>`<div class="adminitem"><span>${esc(b.name)}</span><button class="danger" onclick="delBeat('${encodeURIComponent(b.id)}')">Удалить</button></div>`).join("")||'<small>Пока нет битов.</small>'}
+$("upload").onclick=async()=>{
+ let f=$("file").files[0];if(!f){$("uploadStatus").textContent="Выбери аудиофайл.";return}
+ $("uploadStatus").textContent="Загрузка...";
+ let p=new URLSearchParams({name:$("name").value,genre:$("genre").value,bpm:$("bpm").value,key:$("key").value,filename:f.name});
+ let r=await fetch("/api/upload?"+p,{method:"POST",headers:{Authorization:"Bearer "+token,"Content-Type":f.type||"audio/mpeg"},body:f});
+ if(r.status===401){token="";localStorage.removeItem("titwenty_admin");$("uploadStatus").textContent="Пароль больше не действителен.";return}
+ let d=await r.json();if(!r.ok){$("uploadStatus").textContent=d.error||"Ошибка загрузки.";return}
+ $("uploadStatus").textContent="Готово!";$("name").value="";$("bpm").value="";$("key").value="";$("file").value="";await load();renderAdmin()
+};
+async function delBeat(id){if(!confirm("Удалить этот бит?"))return;let r=await fetch("/api/beats/"+id,{method:"DELETE",headers:{Authorization:"Bearer "+token}});if(r.ok){await load();renderAdmin()}else alert("Не удалось удалить.")}
+$("logout").onclick=()=>{token="";localStorage.removeItem("titwenty_admin");closeModal("adminModal")}
+load();
+</script>
+</body></html>

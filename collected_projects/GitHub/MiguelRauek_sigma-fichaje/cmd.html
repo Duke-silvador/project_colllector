@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Copiar comando</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:#0f1115;color:#e8eaf0;
+     font-family:system-ui,-apple-system,Roboto,sans-serif;min-height:100vh}
+pre{background:#0b0e13;border:1px solid #272b35;border-radius:10px;padding:12px;
+    font:13px/1.5 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap;
+    word-break:break-word;user-select:text;-webkit-user-select:text;margin:0 0 14px}
+.st{font-size:17px;font-weight:700;text-align:center;padding:14px 8px;
+    border-radius:12px;background:#0d2b1a;color:#4ade80;margin:0 0 14px}
+.st.no{background:#2b1f0d;color:#fbbf24}
+button{width:100%;min-height:56px;border:0;border-radius:12px;font:inherit;
+       font-size:17px;font-weight:700;cursor:pointer;background:#3b82f6;color:#fff}
+b{color:#4ade80}
+</style>
+</head>
+<body>
+<pre id="txt">…</pre>
+<div class="st" id="st">Cargando…</div>
+<button id="c">Copiar</button>
+<script>
+var txt = '';
+try { var h = location.hash.replace(/^#/, ''); if (h) txt = decodeURIComponent(h); } catch (e) {}
+var st = document.getElementById('st');
+document.getElementById('txt').textContent = txt || '(vacio)';
+document.getElementById('c').onclick = function () { copiar(); };
+
+function exito() { st.className = 'st'; st.innerHTML = '&#10003; COPIADO<br><span style="font-weight:400;font-size:14px">Abre Termux y pega</span>'; }
+function fallo()  { st.className = 'st no'; st.innerHTML = 'Toca <b>Copiar</b><br><span style="font-weight:400;font-size:14px">y luego pega en Termux</span>'; }
+function manual() {
+  var box = document.getElementById('txt');
+  var r = document.createRange(); r.selectNodeContents(box);
+  var s = getSelection(); s.removeAllRanges(); s.addRange(r);
+  try { if (document.execCommand('copy')) { exito(); return; } } catch (e) {}
+  fallo();
+}
+function copiar() {
+  if (!txt) { st.className = 'st no'; st.textContent = 'Sin comando'; return; }
+  if (!navigator.clipboard || !navigator.clipboard.writeText) { manual(); return; }
+  navigator.clipboard.writeText(txt).then(exito, manual);
+}
+
+copiar();
+window.addEventListener('load', function () { setTimeout(copiar, 300); });
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden) { setTimeout(copiar, 200); }
+});
+document.addEventListener('touchstart', function () { setTimeout(copiar, 100); }, {passive:true});
+</script>
+</body>
+</html>
