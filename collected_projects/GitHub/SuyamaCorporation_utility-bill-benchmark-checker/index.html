@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Utility Bill Benchmarking & Overpay Alert</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%); min-height: 100vh; }
+  .card { background: rgba(255,255,255,0.97); }
+  .badge-over { background: #fee2e2; color: #dc2626; }
+  .badge-under { background: #dcfce7; color: #16a34a; }
+  .badge-ok { background: #fef9c3; color: #ca8a04; }
+</style>
+</head>
+<body class="p-4 md:p-8">
+  <div class="max-w-3xl mx-auto">
+    <div class="card rounded-2xl shadow-2xl p-6 mb-6">
+      <h1 class="text-2xl font-bold text-sky-800 mb-1">Utility Bill Benchmarking &amp; Overpay Alert</h1>
+      <p class="text-gray-500 text-sm mb-5">Compare your monthly bills against US national averages</p>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="householdSize">Household size (people)</label>
+          <input id="householdSize" type="number" min="1" max="8" value="2"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-400"
+            aria-label="Household size (1 to 8 people)">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="billElectricity">Electricity ($/month)</label>
+          <input id="billElectricity" type="number" min="0" placeholder="e.g. 130"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-400">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="billGas">Natural Gas ($/month)</label>
+          <input id="billGas" type="number" min="0" placeholder="e.g. 70"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-400">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="billWater">Water ($/month)</label>
+          <input id="billWater" type="number" min="0" placeholder="e.g. 50"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-400">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1" for="billInternet">Internet ($/month)</label>
+          <input id="billInternet" type="number" min="0" placeholder="e.g. 75"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sky-400">
+        </div>
+      </div>
+
+      <button onclick="analyze()"
+        class="mt-5 w-full bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2 rounded-lg transition">
+        Analyze Bills
+      </button>
+    </div>
+
+    <div id="results" class="hidden card rounded-2xl shadow-2xl p-6 mb-6">
+      <h2 class="text-xl font-bold text-sky-800 mb-4">Your Bill Report</h2>
+      <div id="resultsTable"></div>
+
+      <div class="mt-6 grid grid-cols-2 gap-4">
+        <div class="bg-sky-50 rounded-xl p-4 text-center">
+          <div class="text-xs text-sky-600 font-medium uppercase mb-1">Monthly Total</div>
+          <div id="monthlyTotal" class="text-2xl font-bold text-sky-800"></div>
+        </div>
+        <div class="bg-blue-50 rounded-xl p-4 text-center">
+          <div class="text-xs text-blue-600 font-medium uppercase mb-1">Annual Projection</div>
+          <div id="annualTotal" class="text-2xl font-bold text-blue-800"></div>
+        </div>
+      </div>
+
+      <div id="tipsPanel" class="mt-6"></div>
+
+      <button onclick="exportSummary()"
+        class="mt-5 w-full border-2 border-sky-600 text-sky-700 font-semibold py-2 rounded-lg hover:bg-sky-50 transition">
+        Export Summary as Text
+      </button>
+    </div>
+
+    <div id="exportBox" class="hidden card rounded-2xl shadow-2xl p-6">
+      <div class="flex justify-between items-center mb-2">
+        <h3 class="font-bold text-gray-700">Text Export</h3>
+        <button onclick="document.getElementById('exportBox').classList.add('hidden')" class="text-gray-400 hover:text-gray-600 text-xl" aria-label="Close export box">&times;</button>
+      </div>
+      <textarea id="exportText" readonly class="w-full h-48 border border-gray-200 rounded-lg p-3 text-sm font-mono bg-gray-50 resize-none focus:outline-none"></textarea>
+      <button onclick="copyExport()" class="mt-2 bg-gray-700 text-white px-4 py-1.5 rounded-lg text-sm hover:bg-gray-800 transition">Copy to Clipboard</button>
+    </div>
+  </div>
+
+<script>
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+const BASE_AVGS = { electricity: 117, gas: 63, water: 45, internet: 64 };
+const SCALE = { electricity: 0.6, gas: 0.5, water: 0.55, internet: 0.0 };
+const TIPS = {
+  electricity: [
+    'Switch to LED bulbs throughout your home.',
+    'Use a programmable or smart thermostat.',
+    'Unplug vampire appliances when not in use.',
+    'Seal drafts around windows and doors.',
+    'Run dishwasher and laundry during off-peak hours.'
+  ],
+  gas: [
+    'Lower your water heater to 120°F.',
+    'Insulate your water heater and pipes.',
+    'Service your furnace annually.',
+    'Use a programmable thermostat and lower heat at night.',
+    'Add weatherstripping to doors.'
+  ],
+  water: [
+    'Fix leaky faucets and running toilets immediately.',
+    'Install low-flow showerheads and faucet aerators.',
+    'Run full loads in dishwasher and washing machine.',
+    'Water lawn in the early morning to reduce evaporation.',
+    'Collect rainwater for outdoor plants.'
+  ],
+  internet: [
+    'Negotiate with your provider annually.',
+    'Compare local ISP rates on BroadbandNow.',
+    'Remove unnecessary add-ons from your plan.',
+    'Check if you qualify for ACP (Affordable Connectivity Program).',
+    'Consider bundling services for discounts.'
+  ]
+};
+
+const LABELS = { electricity: 'Electricity', gas: 'Natural Gas', water: 'Water', internet: 'Internet' };
+let lastResults = null;
+
+function getAdjustedAvg(cat, size) {
+  const s = Math.max(1, Math.min(8, size));
+  const scale = SCALE[cat];
+  return BASE_AVGS[cat] * (1 + scale * (s - 2) / 2);
+}
+
+function loadStorage() {
+  const d = JSON.parse(localStorage.getItem('utilityBenchmark') || '{}');
+  if (d.householdSize) document.getElementById('householdSize').value = d.householdSize;
+  if (d.electricity) document.getElementById('billElectricity').value = d.electricity;
+  if (d.gas) document.getElementById('billGas').value = d.gas;
+  if (d.water) document.getElementById('billWater').value = d.water;
+  if (d.internet) document.getElementById('billInternet').value = d.internet;
+}
+
+function saveStorage(data) {
+  localStorage.setItem('utilityBenchmark', JSON.stringify(data));
+}
+
+function analyze() {
+  const size = parseInt(document.getElementById('householdSize').value) || 2;
+  const bills = {
+    electricity: parseFloat(document.getElementById('billElectricity').value) || 0,
+    gas: parseFloat(document.getElementById('billGas').value) || 0,
+    water: parseFloat(document.getElementById('billWater').value) || 0,
+    internet: parseFloat(document.getElementById('billInternet').value) || 0
+  };
+
+  saveStorage({ householdSize: size, ...bills });
+
+  const categories = ['electricity', 'gas', 'water', 'internet'];
+  let rows = '';
+  let totalMonthly = 0;
+  let overpayingCats = [];
+  lastResults = { size, bills, avgs: {} };
+
+  categories.forEach(cat => {
+    const amt = bills[cat];
+    const avg = getAdjustedAvg(cat, size);
+    lastResults.avgs[cat] = avg;
+    const diff = amt - avg;
+    const pct = avg > 0 ? ((diff / avg) * 100) : 0;
+    totalMonthly += amt;
+
+    let badgeClass, badgeLabel;
+    if (pct > 15) { badgeClass = 'badge-over'; badgeLabel = `+${pct.toFixed(0)}% overpay`; overpayingCats.push(cat); }
+    else if (pct < -10) { badgeClass = 'badge-under'; badgeLabel = `${pct.toFixed(0)}% underpay`; }
+    else { badgeClass = 'badge-ok'; badgeLabel = `~avg (${pct > 0 ? '+' : ''}${pct.toFixed(0)}%)`; }
+
+    rows += `<tr class="border-b border-gray-100">
+      <td class="py-2 pr-3 font-medium text-gray-700">${escapeHtml(LABELS[cat])}</td>
+      <td class="py-2 pr-3 text-gray-600">$${amt.toFixed(2)}</td>
+      <td class="py-2 pr-3 text-gray-400 text-sm">$${avg.toFixed(2)}</td>
+      <td class="py-2 pr-3 text-gray-600">$${diff >= 0 ? '+' : ''}${diff.toFixed(2)}</td>
+      <td class="py-2"><span class="px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClass}">${escapeHtml(badgeLabel)}</span></td>
+    </tr>`;
+  });
+
+  const tableHtml = `<div class="overflow-x-auto"><table class="w-full text-sm">
+    <thead><tr class="border-b-2 border-sky-200 text-sky-700 text-xs uppercase">
+      <th class="py-2 pr-3 text-left">Category</th>
+      <th class="py-2 pr-3 text-left">Your Bill</th>
+      <th class="py-2 pr-3 text-left">Avg (${size}p)</th>
+      <th class="py-2 pr-3 text-left">Diff</th>
+      <th class="py-2 text-left">Status</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table></div>`;
+
+  document.getElementById('resultsTable').innerHTML = tableHtml;
+  document.getElementById('monthlyTotal').textContent = '$' + totalMonthly.toFixed(2);
+  document.getElementById('annualTotal').textContent = '$' + (totalMonthly * 12).toFixed(2);
+
+  let tipsHtml = '';
+  if (overpayingCats.length > 0) {
+    tipsHtml = '<h3 class="font-bold text-gray-700 mb-3">Reduction Tips</h3>';
+    overpayingCats.forEach(cat => {
+      tipsHtml += `<div class="mb-4 bg-red-50 rounded-xl p-4">
+        <div class="font-semibold text-red-700 mb-2">${escapeHtml(LABELS[cat])}</div>
+        <ul class="space-y-1">`;
+      TIPS[cat].forEach(tip => {
+        tipsHtml += `<li class="text-sm text-gray-600 flex gap-2"><span class="text-red-400 mt-0.5">•</span><span>${escapeHtml(tip)}</span></li>`;
+      });
+      tipsHtml += '</ul></div>';
+    });
+  } else {
+    tipsHtml = '<div class="bg-green-50 rounded-xl p-4 text-green-700 font-medium">Great job! All bills are within or below average. Keep it up!</div>';
+  }
+  document.getElementById('tipsPanel').innerHTML = tipsHtml;
+  document.getElementById('results').classList.remove('hidden');
+}
+
+function exportSummary() {
+  if (!lastResults) return;
+  const { size, bills, avgs } = lastResults;
+  const cats = ['electricity', 'gas', 'water', 'internet'];
+  let lines = [
+    'Utility Bill Benchmark Report',
+    `Date: ${new Date().toLocaleDateString()}`,
+    `Household Size: ${size} people`,
+    '',
+    'Category        Your Bill   Avg (adj)   Diff        Status',
+    '─'.repeat(58)
+  ];
+  let total = 0;
+  cats.forEach(cat => {
+    const amt = bills[cat];
+    const avg = avgs[cat];
+    const diff = amt - avg;
+    const pct = avg > 0 ? ((diff / avg) * 100) : 0;
+    let status = pct > 15 ? `+${pct.toFixed(0)}% OVER` : pct < -10 ? `${pct.toFixed(0)}% UNDER` : `~avg`;
+    total += amt;
+    lines.push(`${LABELS[cat].padEnd(16)}$${amt.toFixed(2).padEnd(12)}$${avg.toFixed(2).padEnd(12)}$${(diff >= 0 ? '+' : '') + diff.toFixed(2).padEnd(12)}${status}`);
+  });
+  lines.push('─'.repeat(58));
+  lines.push(`Monthly Total   $${total.toFixed(2)}`);
+  lines.push(`Annual Proj.    $${(total * 12).toFixed(2)}`);
+
+  document.getElementById('exportText').value = lines.join('\n');
+  document.getElementById('exportBox').classList.remove('hidden');
+}
+
+function copyExport() {
+  const ta = document.getElementById('exportText');
+  ta.select();
+  document.execCommand('copy');
+  const btn = event.target;
+  btn.textContent = 'Copied!';
+  setTimeout(() => { btn.textContent = 'Copy to Clipboard'; }, 2000);
+}
+
+loadStorage();
+</script>
+</body>
+</html>
