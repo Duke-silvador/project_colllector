@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="bn">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0c10">
+<title>Siam Network Map — Web</title>
+<style>
+:root{--bg:#0b0c10;--card:#15171d;--card2:#1c1f27;--line:#30343e;--text:#f4f5f7;--muted:#a7acb7;--ok:#4ade80;--warn:#fbbf24;--bad:#fb7185}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+button,input,select{font:inherit}button{cursor:pointer}.app{max-width:1100px;margin:auto;padding:12px 12px 90px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 4px 14px;position:sticky;top:0;background:linear-gradient(var(--bg) 80%,transparent);z-index:5}
+.brand{font-size:24px;font-weight:800}.brand small{display:block;font-size:12px;color:var(--muted);font-weight:500}
+.btn{border:1px solid var(--line);background:var(--card2);color:var(--text);border-radius:12px;padding:10px 14px}.btn.primary{background:#f5f5f5;color:#111;border-color:#f5f5f5}.btn.danger{color:#fecdd3}.btn:disabled{opacity:.45;cursor:not-allowed}
+.nav{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:12px}.nav button{padding:10px 5px;border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:12px}.nav button.active{color:#fff;background:var(--card2)}
+.page{display:none}.page.active{display:block}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.card{background:var(--card);border:1px solid var(--line);border-radius:17px;padding:15px;margin:10px 0}.stat{min-height:100px}.stat .n{font-size:30px;font-weight:800;margin-top:5px}.muted{color:var(--muted)}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.formgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.field label{display:block;color:var(--muted);font-size:12px;margin-bottom:4px}.field input,.field select{width:100%;background:#0f1116;color:#fff;border:1px solid var(--line);border-radius:10px;padding:10px}.actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.tablewrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:680px}th,td{text-align:left;padding:10px;border-bottom:1px solid #292d35}th{color:var(--muted);font-size:12px}
+.badge{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:3px 8px;font-size:11px}.search{width:100%;padding:11px;background:#0f1116;color:#fff;border:1px solid var(--line);border-radius:11px;margin-bottom:9px}
+#map{height:480px;border:1px solid var(--line);border-radius:16px;background:#0d0f14;overflow:hidden;position:relative}
+#svg{width:100%;height:100%;touch-action:none}.mapline{stroke:#8b93a3;stroke-width:3}.mapline.used{stroke:#4ade80}.node circle{stroke:#fff;stroke-width:2;cursor:pointer}.node text{fill:#fff;font-size:12px;pointer-events:none}.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+.login{max-width:430px;margin:8vh auto}.login h1{font-size:34px;margin-bottom:4px}.login input{width:100%;margin:5px 0;padding:13px;border-radius:12px;background:#0f1116;color:#fff;border:1px solid var(--line)}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#f5f5f5;color:#111;padding:10px 15px;border-radius:999px;display:none;z-index:20}
+.modal{position:fixed;inset:0;background:#0009;display:none;align-items:flex-end;justify-content:center;z-index:15}.modalbox{width:min(600px,100%);background:var(--card);border:1px solid var(--line);border-radius:20px 20px 0 0;padding:18px;max-height:90vh;overflow:auto}
+@media(min-width:700px){.modal{align-items:center}.modalbox{border-radius:20px}}
+@media(max-width:650px){.grid{grid-template-columns:repeat(2,1fr)}.formgrid{grid-template-columns:1fr}.nav{grid-template-columns:repeat(4,1fr)}#map{height:390px}.brand{font-size:20px}}
+</style>
+<meta name="description" content="Siam Network Map — ISP network management web app"><meta name="apple-mobile-web-app-capable" content="yes">
+</head>
+<body>
+
+<div id="loginScreen" class="app">
+  <div class="card login">
+    <div class="brand">📡 Siam Network Map <small>Web Edition • Mobile & Desktop</small></div>
+    <h1>Login</h1>
+    <input id="loginUser" placeholder="Username" autocomplete="username">
+    <input id="loginPass" placeholder="Password" type="password" autocomplete="current-password">
+    <button class="btn primary" style="width:100%;margin-top:6px" onclick="doLogin()">Login</button>
+    <p class="muted">Demo: admin / admin123 অথবা staff / staff123</p>
+    <p id="loginErr" class="bad"></p>
+  </div>
+</div>
+
+<div id="main" class="app" style="display:none">
+  <header class="top">
+    <div class="brand">📡 Siam Network Map <small id="roleText"></small></div>
+    <button class="btn" onclick="logout()">Logout</button>
+  </header>
+
+  <nav class="nav">
+    <button class="active" data-page="dash">🏠 Dashboard</button>
+    <button data-page="mapPage">🗺️ Map</button>
+    <button data-page="fiberPage">🧵 Fiber</button>
+    <button data-page="customerPage">👤 Customer</button><button data-page="toolsPage">🛠️ Tools</button>
+  </nav>
+
+  <section id="dash" class="page active">
+    <div class="grid">
+      <div class="card stat"><div class="muted">Total Core</div><div class="n" id="sTotal">0</div></div>
+      <div class="card stat"><div class="muted">Used Core</div><div class="n ok" id="sUsed">0</div></div>
+      <div class="card stat"><div class="muted">Free Core</div><div class="n warn" id="sFree">0</div></div>
+      <div class="card stat"><div class="muted">Customers</div><div class="n" id="sCustomers">0</div></div>
+    </div>
+    <div class="card">
+      <h2>📊 Network Summary</h2>
+      <div id="summary"></div>
+    </div>
+    <div class="card">
+      <h2>⚠️ Important</h2>
+      <p class="muted">এটি local/offline prototype। Data আপনার browser-এর localStorage-এ থাকে। Production-এ যাওয়ার আগে real database, secure authentication, server-side permission এবং backup যোগ করতে হবে।</p>
+    </div>
+  </section>
+
+  <section id="mapPage" class="page">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+        <div><h2 style="margin:0">🗺️ Fiber Map</h2><div class="muted">Node চাপুন • Admin হলে node drag করা যাবে</div></div>
+        <button class="btn primary adminOnly" onclick="openNodeModal()">＋ Node</button>
+      </div>
+      <div id="map" style="margin-top:10px">
+        <svg id="svg" viewBox="0 0 1000 560" preserveAspectRatio="none"></svg>
+      </div>
+      <div class="legend"><span>● POP</span><span>● Box</span><span>● Joint</span><span>● Customer</span><span>━ Fiber</span></div>
+    </div>
+    <div class="card">
+      <h3>🔗 Create Fiber</h3>
+      <p class="muted">Admin mode-এ দুইটি node নির্বাচন করে Fiber তৈরি করুন।</p>
+      <div id="selectedNodes">কোনো node selected নয়</div>
+      <div class="actions"><button class="btn primary adminOnly" onclick="connectSelected()">Connect Selected Nodes</button><button class="btn adminOnly" onclick="clearSelection()">Clear</button></div>
+    </div>
+  </section>
+
+  <section id="fiberPage" class="page">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h2>🧵 Fiber & Core</h2><button class="btn primary adminOnly" onclick="openFiberModal()">＋ Fiber</button></div>
+      <input class="search" placeholder="Search fiber..." oninput="renderFibers(this.value)">
+      <div class="tablewrap"><table><thead><tr><th>Fiber</th><th>From</th><th>To</th><th>Core</th><th>Used</th><th>Free</th><th>Action</th></tr></thead><tbody id="fiberRows"></tbody></table></div>
+    </div>
+  </section>
+
+  <section id="customerPage" class="page">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><h2>👤 Customers</h2><button class="btn primary adminOnly" onclick="openCustomerModal()">＋ Customer</button></div>
+      <input class="search" placeholder="Search customer/name..." oninput="renderCustomers(this.value)">
+      <div class="tablewrap"><table><thead><tr><th>ID</th><th>Name</th><th>Phone</th><th>Node</th><th>Fiber/Core</th><th>Status</th><th>Action</th></tr></thead><tbody id="customerRows"></tbody></table></div>
+    </div>
+  </section>
+
+<section id="toolsPage" class="page">
+  <div class="card">
+    <h2>🛠️ Network Tools</h2>
+    <p class="muted">Backup, restore, sample data এবং network health check.</p>
+    <div class="actions">
+      <button class="btn primary adminOnly" onclick="downloadBackup()">⬇️ Export Backup</button>
+      <button class="btn adminOnly" onclick="document.getElementById('restoreFile').click()">⬆️ Restore Backup</button>
+      <input id="restoreFile" type="file" accept=".json,application/json" style="display:none" onchange="restoreBackup(this.files[0])">
+      <button class="btn" onclick="healthCheck()">🩺 Health Check</button>
+      <button class="btn danger adminOnly" onclick="resetDemo()">♻️ Reset Demo Data</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>🩺 Network Health</h2>
+    <div id="health">Health check চালু করতে উপরের button চাপুন।</div>
+  </div>
+  <div class="card">
+    <h2>🔐 Production Checklist</h2>
+    <div class="muted">
+      <p>☐ Real database (PostgreSQL/MySQL)</p>
+      <p>☐ Server-side authentication + hashed passwords</p>
+      <p>☐ Role/permission enforcement on server</p>
+      <p>☐ Automatic backup + restore</p>
+      <p>☐ GPS/map provider integration</p>
+      <p>☐ Audit log for edit/delete actions</p>
+    </div>
+  </div>
+</section>
+</div>
+
+<div id="modal" class="modal" onclick="if(event.target===this)closeModal()"><div class="modalbox" id="modalBox"></div></div>
+<div id="toast" class="toast"></div>
+
+<script>
+const KEY="siam_network_map_web_v1";
+let state=JSON.parse(localStorage.getItem(KEY)||"null")||{
+ nodes:[
+  {id:"N1",name:"POP-01",type:"POP",x:180,y:260},
+  {id:"N2",name:"BOX-01",type:"Box",x:470,y:160},
+  {id:"N3",name:"JOINT-01",type:"Joint",x:700,y:330},
+  {id:"N4",name:"BOX-02",type:"Box",x:500,y:430}
+ ],
+ fibers:[
+  {id:"F001",from:"N1",to:"N2",cores:24,used:8},
+  {id:"F002",from:"N2",to:"N3",cores:12,used:5},
+  {id:"F003",from:"N2",to:"N4",cores:24,used:2}
+ ],
+ customers:[
+  {id:"CU1001",name:"Demo Customer 1",phone:"01700000001",node:"N3",fiber:"F002",core:1,status:"Active"},
+  {id:"CU1002",name:"Demo Customer 2",phone:"01700000002",node:"N4",fiber:"F003",core:2,status:"Active"}
+ ]
+};
+let role=null, selected=[];
+
+function save(){localStorage.setItem(KEY,JSON.stringify(state));}
+function toast(s){let t=document.getElementById("toast");t.textContent=s;t.style.display="block";clearTimeout(window.tt);window.tt=setTimeout(()=>t.style.display="none",1800)}
+function doLogin(){
+ let u=loginUser.value.trim(),p=loginPass.value;
+ if((u==="admin"&&p==="admin123")||(u==="staff"&&p==="staff123")){
+  role=u==="admin"?"Admin":"Staff"; sessionStorage.role=role; start();
+ }else loginErr.textContent="ভুল username/password";
+}
+function start(){
+ role=sessionStorage.role;if(!role)return;
+ loginScreen.style.display="none";main.style.display="block";roleText.textContent="• "+role+(role==="Staff"?" • View only":"");
+ document.querySelectorAll(".adminOnly").forEach(x=>x.style.display=role==="Admin"?"":"none");
+ renderAll();
+}
+function logout(){sessionStorage.removeItem("role");location.reload()}
+if(sessionStorage.role)start();
+
+document.querySelectorAll(".nav button").forEach(b=>b.onclick=()=>{
+ document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("active"));b.classList.add("active");
+ document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));document.getElementById(b.dataset.page).classList.add("active");
+ renderAll();
+});
+
+function renderAll(){renderStats();renderMap();renderFibers();renderCustomers()}
+function renderStats(){
+ let total=state.fibers.reduce((a,f)=>a+Number(f.cores),0),used=state.fibers.reduce((a,f)=>a+Number(f.used),0);
+ sTotal.textContent=total;sUsed.textContent=used;sFree.textContent=total-used;sCustomers.textContent=state.customers.length;
+ summary.innerHTML=`<p>📡 Nodes: <b>${state.nodes.length}</b> &nbsp; • &nbsp; 🧵 Fibers: <b>${state.fibers.length}</b> &nbsp; • &nbsp; 👤 Customers: <b>${state.customers.length}</b></p>
+ <p class="muted">Core utilization: ${total?Math.round(used/total*100):0}%</p>`;
+}
+function nodeColor(t){return t==="POP"?"#f59e0b":t==="Box"?"#60a5fa":t==="Joint"?"#a78bfa":"#4ade80"}
+function renderMap(){
+ let svg=document.getElementById("svg");svg.innerHTML="";
+ state.fibers.forEach(f=>{
+  let a=state.nodes.find(n=>n.id===f.from),b=state.nodes.find(n=>n.id===f.to);if(!a||!b)return;
+  let l=document.createElementNS("http://www.w3.org/2000/svg","line");l.setAttribute("x1",a.x);l.setAttribute("y1",a.y);l.setAttribute("x2",b.x);l.setAttribute("y2",b.y);l.classList.add("mapline");if(f.used)l.classList.add("used");l.setAttribute("title",f.id);svg.appendChild(l);
+ });
+ state.nodes.forEach(n=>{
+  let g=document.createElementNS("http://www.w3.org/2000/svg","g");g.classList.add("node");g.dataset.id=n.id;
+  let c=document.createElementNS("http://www.w3.org/2000/svg","circle");c.setAttribute("cx",n.x);c.setAttribute("cy",n.y);c.setAttribute("r",selected.includes(n.id)?18:14);c.setAttribute("fill",nodeColor(n.type));g.appendChild(c);
+  let tx=document.createElementNS("http://www.w3.org/2000/svg","text");tx.setAttribute("x",n.x+20);tx.setAttribute("y",n.y+4);tx.textContent=n.name;g.appendChild(tx);
+  g.onclick=(e)=>{e.stopPropagation();selectNode(n.id)};
+  if(role==="Admin"){
+   let dragging=false,ox=0,oy=0;
+   g.onpointerdown=(e)=>{dragging=true;g.setPointerCapture(e.pointerId);ox=e.offsetX||0;oy=e.offsetY||0};
+   g.onpointermove=(e)=>{if(!dragging)return;let r=svg.getBoundingClientRect();n.x=Math.max(25,Math.min(975,(e.clientX-r.left)/r.width*1000));n.y=Math.max(25,Math.min(535,(e.clientY-r.top)/r.height*560));save();renderMap()};
+   g.onpointerup=()=>{dragging=false;save()};
+  }
+  svg.appendChild(g);
+ });
+ selectedNodes.textContent=selected.length?selected.map(id=>state.nodes.find(n=>n.id===id)?.name).join(" → "):"কোনো node selected নয়";
+}
+function selectNode(id){
+ if(role!=="Admin"){toast(state.nodes.find(n=>n.id===id)?.name||"Node");return}
+ if(selected.includes(id))selected=selected.filter(x=>x!==id);else{if(selected.length>=2)selected=[];selected.push(id)}
+ renderMap();
+}
+function clearSelection(){selected=[];renderMap()}
+function connectSelected(){
+ if(role!=="Admin"||selected.length!==2){toast("২টি node select করুন");return}
+ let id="F"+String(Date.now()).slice(-6);
+ state.fibers.push({id,from:selected[0],to:selected[1],cores:12,used:0});save();selected=[];renderAll();toast("Fiber connected");
+}
+function renderFibers(q=""){
+ q=q.toLowerCase();fiberRows.innerHTML=state.fibers.filter(f=>(f.id+nodeName(f.from)+nodeName(f.to)).toLowerCase().includes(q)).map(f=>
+ `<tr><td>${f.id}</td><td>${nodeName(f.from)}</td><td>${nodeName(f.to)}</td><td>${f.cores}</td><td>${f.used}</td><td>${f.cores-f.used}</td><td>${role==="Admin"?`<button class="btn" onclick="editFiber('${f.id}')">Edit</button> <button class="btn danger" onclick="delFiber('${f.id}')">Delete</button>`:"<span class='muted'>View</span>"}</td></tr>`).join("");
+}
+function nodeName(id){return state.nodes.find(n=>n.id===id)?.name||id}
+function renderCustomers(q=""){
+ q=q.toLowerCase();customerRows.innerHTML=state.customers.filter(c=>(c.id+c.name+c.phone).toLowerCase().includes(q)).map(c=>
+ `<tr><td>${c.id}</td><td>${c.name}</td><td>${c.phone}</td><td>${nodeName(c.node)}</td><td>${c.fiber||"-"} / ${c.core||"-"}</td><td><span class="badge">${c.status}</span></td><td>${role==="Admin"?`<button class="btn" onclick="editCustomer('${c.id}')">Edit</button> <button class="btn danger" onclick="delCustomer('${c.id}')">Delete</button>`:"<span class='muted'>View</span>"}</td></tr>`).join("");
+}
+function openModal(content){modalBox.innerHTML=content;modal.style.display="flex"}function closeModal(){modal.style.display="none"}
+function openNodeModal(){
+ openModal(`<h2>＋ Add Node</h2><div class="formgrid">
+ <div class="field"><label>Name</label><input id="mName" placeholder="BOX-03"></div>
+ <div class="field"><label>Type</label><select id="mType"><option>POP</option><option>Box</option><option>Joint</option><option>Customer</option></select></div></div>
+ <div class="actions"><button class="btn primary" onclick="addNode()">Save</button><button class="btn" onclick="closeModal()">Cancel</button></div>`);
+}
+function addNode(){let name=mName.value.trim();if(!name)return;let id="N"+Date.now().toString().slice(-7);state.nodes.push({id,name,type:mType.value,x:500,y:280});save();closeModal();renderAll();toast("Node added")}
+function openFiberModal(edit){
+ let f=edit||{id:"",from:state.nodes[0]?.id||"",to:state.nodes[1]?.id||"",cores:12,used:0};
+ openModal(`<h2>${edit?"✏️ Edit":"＋ Add"} Fiber</h2><div class="formgrid">
+ <div class="field"><label>Fiber ID</label><input id="mFid" value="${f.id}" ${edit?"readonly":""}></div>
+ <div class="field"><label>Total Core</label><input id="mCores" type="number" min="1" value="${f.cores}"></div>
+ <div class="field"><label>From</label><select id="mFrom">${state.nodes.map(n=>`<option value="${n.id}" ${n.id===f.from?"selected":""}>${n.name}</option>`).join("")}</select></div>
+ <div class="field"><label>To</label><select id="mTo">${state.nodes.map(n=>`<option value="${n.id}" ${n.id===f.to?"selected":""}>${n.name}</option>`).join("")}</select></div>
+ <div class="field"><label>Used Core</label><input id="mUsed" type="number" min="0" value="${f.used}"></div></div>
+ <div class="actions"><button class="btn primary" onclick="saveFiber('${edit?f.id:""}')">Save</button><button class="btn" onclick="closeModal()">Cancel</button></div>`);
+}
+function saveFiber(oldId){let id=mFid.value.trim();let cores=Math.max(1,+mCores.value||1),used=Math.max(0,Math.min(cores,+mUsed.value||0));if(!id)return;let f=state.fibers.find(x=>x.id===oldId);if(f)Object.assign(f,{from:mFrom.value,to:mTo.value,cores,used});else state.fibers.push({id,from:mFrom.value,to:mTo.value,cores,used});save();closeModal();renderAll();toast("Fiber saved")}
+function editFiber(id){openFiberModal(state.fibers.find(f=>f.id===id))}
+function delFiber(id){if(!confirm("Fiber delete করবেন?"))return;state.fibers=state.fibers.filter(f=>f.id!==id);state.customers.forEach(c=>{if(c.fiber===id)c.fiber=""});save();renderAll();toast("Fiber deleted")}
+function openCustomerModal(edit){
+ let c=edit||{id:"",name:"",phone:"",node:state.nodes[0]?.id||"",fiber:"",core:"",status:"Active"};
+ openModal(`<h2>${edit?"✏️ Edit":"＋ Add"} Customer</h2><div class="formgrid">
+ <div class="field"><label>Customer ID</label><input id="mCid" value="${c.id}" ${edit?"readonly":""}></div>
+ <div class="field"><label>Name</label><input id="mCname" value="${c.name}"></div>
+ <div class="field"><label>Phone</label><input id="mPhone" value="${c.phone}"></div>
+ <div class="field"><label>Node</label><select id="mNode">${state.nodes.map(n=>`<option value="${n.id}" ${n.id===c.node?"selected":""}>${n.name}</option>`).join("")}</select></div>
+ <div class="field"><label>Fiber</label><select id="mFiber"><option value="">-- None --</option>${state.fibers.map(f=>`<option value="${f.id}" ${f.id===c.fiber?"selected":""}>${f.id} (${f.cores-f.used} free)</option>`).join("")}</select></div>
+ <div class="field"><label>Core</label><input id="mCore" type="number" min="1" value="${c.core||""}"></div>
+ <div class="field"><label>Status</label><select id="mStatus">${["Active","Pending","Inactive"].map(x=>`<option ${x===c.status?"selected":""}>${x}</option>`).join("")}</select></div></div>
+ <div class="actions"><button class="btn primary" onclick="saveCustomer('${edit?c.id:""}')">Save</button><button class="btn" onclick="closeModal()">Cancel</button></div>`);
+}
+function saveCustomer(oldId){
+ let id=mCid.value.trim(),name=mCname.value.trim();if(!id||!name)return;
+ let c=state.customers.find(x=>x.id===oldId),fiber=mFiber.value,core=mCore.value?+mCore.value:"";
+ if(c)Object.assign(c,{name,phone:mPhone.value,node:mNode.value,fiber,core,status:mStatus.value});
+ else state.customers.push({id,name,phone:mPhone.value,node:mNode.value,fiber,core,status:mStatus.value});
+ if(fiber){let f=state.fibers.find(x=>x.id===fiber);if(f&&core>f.used)f.used=Math.min(f.cores,f.used+1)}
+ save();closeModal();renderAll();toast("Customer saved");
+}
+function editCustomer(id){openCustomerModal(state.customers.find(c=>c.id===id))}
+function delCustomer(id){if(!confirm("Customer delete করবেন?"))return;state.customers=state.customers.filter(c=>c.id!==id);save();renderAll();toast("Customer deleted")}
+
+function downloadBackup(){
+ if(role!=="Admin"){toast("Admin only");return}
+ const payload={app:"Siam Network Map",version:"Web-v1",exportedAt:new Date().toISOString(),state};
+ const blob=new Blob([JSON.stringify(payload,null,2)],{type:"application/json"});
+ const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="siam-network-backup-"+new Date().toISOString().slice(0,10)+".json";a.click();
+ URL.revokeObjectURL(a.href);toast("Backup downloaded");
+}
+async function restoreBackup(file){
+ if(role!=="Admin"||!file)return;
+ try{
+  const txt=await file.text(), data=JSON.parse(txt);
+  if(!data.state||!Array.isArray(data.state.nodes)||!Array.isArray(data.state.fibers)||!Array.isArray(data.state.customers))throw new Error();
+  if(!confirm("বর্তমান data replace করে backup restore করবেন?"))return;
+  state=data.state;save();renderAll();toast("Backup restored");
+ }catch(e){toast("Invalid backup file")}
+}
+function healthCheck(){
+ const issues=[], nodeIds=new Set(state.nodes.map(n=>n.id)), fiberIds=new Set(state.fibers.map(f=>f.id));
+ state.fibers.forEach(f=>{
+  if(!nodeIds.has(f.from)||!nodeIds.has(f.to))issues.push(f.id+": missing node");
+  if(+f.used>+f.cores)issues.push(f.id+": used core > total core");
+ });
+ state.customers.forEach(c=>{
+  if(c.node&&!nodeIds.has(c.node))issues.push(c.id+": missing node");
+  if(c.fiber&&!fiberIds.has(c.fiber))issues.push(c.id+": missing fiber");
+ });
+ const el=document.getElementById("health");
+ el.innerHTML=issues.length?`<p class="bad">❌ ${issues.length} problem(s) found</p><ul>${issues.map(x=>`<li>${x}</li>`).join("")}</ul>`:`<p class="ok">✅ Network data looks consistent.</p><p class="muted">${state.nodes.length} nodes • ${state.fibers.length} fibers • ${state.customers.length} customers</p>`;
+}
+function resetDemo(){
+ if(role!=="Admin"||!confirm("সব data demo data-তে reset করবেন?"))return;
+ localStorage.removeItem(KEY);location.reload();
+}
+
+</script>
+</body>
+</html>
