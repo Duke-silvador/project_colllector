@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rumi Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f1eeff;--panel:#fff;--soft:#f7f5ff;--ink:#1d1a3a;--mute:#625f8c;--acc:#d92a6d;--on-acc:#fff;--line:#e0dbfb;--chk1:#f6f4ff;--chk2:#e2defa;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12102a;--panel:#1d1a3c;--soft:#26224d;--ink:#f0eeff;--mute:#a29fd0;--acc:#ff6fa3;--on-acc:#2a0b19;--line:#353168;--chk1:#2a2650;--chk2:#231f46}}
+:root[data-theme="dark"]{--bg:#12102a;--panel:#1d1a3c;--soft:#26224d;--ink:#f0eeff;--mute:#a29fd0;--acc:#ff6fa3;--on-acc:#2a0b19;--line:#353168;--chk1:#2a2650;--chk2:#231f46}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Bricolage Grotesque",system-ui,sans-serif;line-height:1.4}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:1120px;margin:0 auto;padding:16px 18px 0}
+h1{margin:0;font-size:28px;font-weight:800;letter-spacing:-.02em}
+header p{margin:0;color:var(--mute);font-size:14px}
+main{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:16px;max-width:1120px;margin:0 auto;padding:14px 18px 40px}
+.stage{background:var(--panel);border:2px solid var(--line);border-radius:20px;padding:12px;align-self:start;position:sticky;top:calc(env(safe-area-inset-top,0px) + 8px);z-index:2}
+.board{--h:min(70vh,820px);--ar:.57;width:min(100%,calc(var(--h) * var(--ar)));margin:0 auto;position:relative;border-radius:12px;overflow:hidden;line-height:0;background:repeating-conic-gradient(var(--chk1) 0 25%,var(--chk2) 0 50%) 0 0/24px 24px}
+canvas{display:block;width:100%;height:auto}
+.load{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--panel);color:var(--mute);font-size:14px;line-height:1.4}
+.load.hide{display:none}
+.bar{display:flex;gap:8px;margin-top:10px}
+.bar input{flex:1;min-width:0}
+input[type=text]{font:inherit;color:var(--ink);background:var(--soft);border:2px solid var(--line);border-radius:12px;padding:8px 12px}
+.btn{font:inherit;font-weight:600;color:var(--ink);background:transparent;border:2px solid var(--line);border-radius:12px;padding:8px 14px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.btn:hover{border-color:var(--mute)}
+.btn:disabled{opacity:.55;cursor:wait}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:var(--on-acc)}
+.btn.pri:hover{filter:brightness(1.06)}
+.btn.sm{padding:5px 12px;font-size:14px}
+.btn.on{border-color:var(--acc);background:color-mix(in srgb,var(--acc) 16%,transparent)}
+button:focus-visible,input:focus-visible,a:focus-visible,label:focus-within{outline:3px solid var(--acc);outline-offset:2px}
+.panel{display:flex;flex-direction:column;gap:12px}
+.card{background:var(--panel);border:2px solid var(--line);border-radius:20px;padding:14px}
+h2{margin:0 0 10px;font-size:16px;font-weight:800;display:flex;align-items:center;gap:8px}
+h2 i{font-style:normal;font-size:12px;width:22px;height:22px;border-radius:50%;background:var(--acc);color:var(--on-acc);display:inline-flex;align-items:center;justify-content:center}
+h2 small{font-weight:400;color:var(--mute);font-size:13px}
+.poses{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px}
+.grp{grid-column:1/-1;font-size:12px;font-weight:600;color:var(--mute);text-transform:uppercase;letter-spacing:.07em;margin-top:2px}
+.skins{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.faces{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:10px}
+.aromas{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px}
+.opt{font:inherit;font-size:12.5px;font-weight:600;color:var(--ink);background:var(--soft);border:2px solid var(--line);border-radius:14px;padding:6px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;text-align:center}
+.opt:hover{border-color:var(--mute)}
+.opt.on{border-color:var(--acc);box-shadow:0 0 0 3px color-mix(in srgb,var(--acc) 28%,transparent)}
+.opt img{width:100%;display:block;border-radius:8px;object-fit:contain;background:repeating-conic-gradient(var(--chk1) 0 25%,var(--chk2) 0 50%) 0 0/12px 12px}
+.poses img,.skins img{aspect-ratio:1}
+.faces img,.aromas img{aspect-ratio:4/3}
+.opt.none{justify-content:center;min-height:60px;color:var(--mute)}
+.lbl{font-size:13px;color:var(--mute);margin:12px 0 6px}
+.sws{display:flex;flex-wrap:wrap;gap:10px;padding:3px}
+.sw{width:30px;height:30px;border-radius:50%;border:2px solid var(--line);background:var(--c);cursor:pointer;padding:0;position:relative;display:inline-block}
+.sw.none{background:repeating-conic-gradient(var(--chk1) 0 25%,var(--chk2) 0 50%) 0 0/10px 10px}
+.sw.none::after{content:"";position:absolute;left:50%;top:3px;bottom:3px;width:2px;background:var(--mute);transform:rotate(45deg)}
+.sw.on{outline:3px solid var(--acc);outline-offset:2px}
+.sw.cust{background:conic-gradient(#f44,#fd4,#4d6,#4df,#64f,#f4d,#f44)}
+.sw.cust input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.seg{display:flex;gap:6px;flex-wrap:wrap}
+.chk{display:flex;align-items:center;gap:8px;margin:12px 0;font-size:14px;cursor:pointer}
+.chk input{width:18px;height:18px;accent-color:var(--acc)}
+.hint{font-size:13px;color:var(--mute);margin:6px 0 0;min-height:18px}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px}
+.gc{position:relative}
+.gc>button:first-child{width:100%;font:inherit;font-size:12px;font-weight:600;color:var(--ink);background:var(--soft);border:2px solid var(--line);border-radius:14px;padding:5px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px}
+.gc>button:first-child:hover{border-color:var(--acc)}
+.gc img{width:100%;aspect-ratio:4/7;object-fit:contain;border-radius:8px;background:repeating-conic-gradient(var(--chk1) 0 25%,var(--chk2) 0 50%) 0 0/10px 10px}
+.gc span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gc .x{position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;border:2px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;font-size:15px;line-height:1;padding:0}
+.gc .x:hover{background:var(--acc);color:var(--on-acc);border-color:var(--acc)}
+.empty{grid-column:1/-1;margin:0;color:var(--mute);font-size:14px}
+.code{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.code input{flex:1;min-width:130px}
+.modal{position:fixed;inset:0;background:rgba(10,8,30,.78);display:none;align-items:center;justify-content:center;padding:20px;z-index:9}
+.modal.show{display:flex}
+.mbox{background:var(--panel);border-radius:20px;padding:16px;width:min(420px,100%);max-height:100%;overflow:auto;text-align:center}
+.mbox h3{margin:0 0 4px;font-size:18px}
+.mbox p{margin:0 0 10px;color:var(--mute);font-size:13px}
+.mbox img{max-width:100%;max-height:48vh;border-radius:10px;background:repeating-conic-gradient(var(--chk1) 0 25%,var(--chk2) 0 50%) 0 0/16px 16px}
+.mrow{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
+#toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:14px;font-weight:600;opacity:0;pointer-events:none;transition:.2s;z-index:10;max-width:90vw;text-align:center}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+@media(max-width:820px){main{grid-template-columns:1fr;padding:10px 12px 40px}header{padding:12px 12px 0}.board{--h:38vh}.skins{gap:8px}}
+@media(prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Rumi Generator</h1><p>Pick a pose, a body, an expression and an aroma.</p></div>
+  <button class="btn" id="rnd" title="Random combo">🎲 Randomize</button>
+</header>
+<main>
+  <section class="stage" aria-label="Preview">
+    <div class="board" id="board"><canvas id="cv" aria-label="Character preview"></canvas><div class="load" id="load">Loading sprites…</div></div>
+    <div class="bar">
+      <input type="text" id="nm" maxlength="32" placeholder="Name your OC" aria-label="Character name">
+      <button class="btn pri" id="exp">Export PNG</button>
+      <button class="btn" id="sv">Save</button>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="card"><h2><i>1</i>Pose</h2><div class="poses" id="poses"></div></div>
+    <div class="card"><h2><i>2</i>Body</h2><div class="skins" id="skins"></div></div>
+    <div class="card"><h2><i>3</i>Expression <small id="fl"></small></h2><div class="faces" id="faces"></div></div>
+    <div class="card"><h2><i>4</i>Aroma</h2><div class="aromas" id="aromas"></div>
+      <div class="lbl">Aroma color</div><div class="sws" id="acs"></div></div>
+    <div class="card"><h2><i>5</i>Background</h2><div class="sws" id="bgs"></div></div>
+    <div class="card"><h2><i>6</i>Export</h2>
+      <div class="lbl" style="margin-top:0">Format</div>
+      <div class="seg" id="fmt"><button class="btn sm" data-fmt="png">PNG</button><button class="btn sm" data-fmt="webp">WebP</button><button class="btn sm" data-fmt="jpg">JPG</button></div>
+      <div class="lbl">Size <span id="sz"></span></div>
+      <div class="seg" id="scl"><button class="btn sm" data-scale="1">Full</button><button class="btn sm" data-scale=".5">Half</button><button class="btn sm" data-scale=".25">Quarter</button></div>
+      <label class="chk"><input type="checkbox" id="trim"> Trim empty space around the character</label>
+      <div class="hint" id="fh"></div>
+      <div class="row"><button class="btn pri" id="exp2">Export image</button><button class="btn" id="zip">All expressions (ZIP)</button></div>
+    </div>
+    <div class="card"><h2>My OCs</h2><div class="gal" id="gal"></div>
+      <div class="code"><button class="btn" id="cc">Copy share code</button><input type="text" id="ci" placeholder="Paste a share code…" aria-label="Share code"><button class="btn" id="lc">Load</button></div></div>
+  </section>
+</main>
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="mt"><div class="mbox">
+  <h3 id="mt">Your OC is ready</h3><p id="mp"></p>
+  <img id="mimg" alt="Exported character">
+  <div class="mrow"><a class="btn pri" id="mdl" download="my-oc.png">Download</a><button class="btn" id="mcopy">Copy image</button><button class="btn" id="mclose">Close</button></div>
+</div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+var LIB=null;
+function $(i){return document.getElementById(i)}
+var cv=$('cv'),ctx=cv.getContext('2d');
+var S={pose:0,skin:0,face:0,aroma:-1,ac:'',bg:'',name:''};
+var O={fmt:'png',scale:1,trim:true};
+var CUR='ocmaker2.current',GAL='ocmaker2.gallery',OPT='ocmaker3.opts',MAXG=24;
+var dl=null,toastT,murl=null,ready=false,want=0,busy=false,cache={};
+var ACOL=['','#ffffff','#ff6fa3','#8b6cff','#2ad4ff','#ffd23f'];
+var BGC=['','#ffffff','#15132b','#ffd9e6','#d9e8ff','#dcf5e6','#fff3c4'];
+
+function sget(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function sset(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}}
+function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(function(){t.classList.remove('show')},2800)}
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function loadImg(u){return new Promise(function(ok,no){var i=new Image();i.onload=function(){ok(i)};i.onerror=no;i.src=u})}
+function ri(n){return Math.floor(Math.random()*n)}
+function colorOK(c){return /^#[0-9a-f]{6}$/i.test(c||'')?c:''}
+function slugOf(s){return String(s).trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')}
+
+/* ---------- geometry: every sprite has its own x/y from the PSD; aromas follow the head of each pose ---------- */
+function rect(o,dx,dy){dx=dx||0;dy=dy||0;return [o.x+dx,o.y+dy,o.x+o.w+dx,o.y+o.h+dy]}
+function uni(rs){var u=rs[0].slice();rs.forEach(function(r){u[0]=Math.min(u[0],r[0]);u[1]=Math.min(u[1],r[1]);u[2]=Math.max(u[2],r[2]);u[3]=Math.max(u[3],r[3])});return u}
+function pad(r,p){return [Math.floor(r[0]-p),Math.floor(r[1]-p),Math.ceil(r[2]+p),Math.ceil(r[3]+p)]}
+function aR(pi,a){var o=LIB.poses[pi].ao;return rect(a,o[0],o[1])}
+function viewBox(pi){var P=LIB.poses[pi];if(!P.vb){var rs=P.skins.map(function(s){return rect(s.body)});LIB.aromas.forEach(function(a){rs.push(aR(pi,a))});P.vb=pad(uni(rs),24)}return P.vb}
+function faceBox(pi){var P=LIB.poses[pi];if(!P.fb)P.fb=pad(uni(P.skins[0].faces.map(function(f){return rect(f)})),28);return P.fb}
+function contentBox(st){var s=LIB.poses[st.pose].skins[st.skin],rs=[rect(s.body)],a=LIB.aromas[st.aroma];if(a)rs.push(aR(st.pose,a));return pad(uni(rs),24)}
+
+function tint(a,c){
+  if(!c)return a.img; a.t=a.t||{}; if(a.t[c])return a.t[c];
+  var k=document.createElement('canvas');k.width=a.w;k.height=a.h;var x=k.getContext('2d');
+  x.drawImage(a.img,0,0);x.globalCompositeOperation='source-in';x.fillStyle=c;x.fillRect(0,0,a.w,a.h);
+  return (a.t[c]=k);
+}
+function paint(x,st,box,sc,ox,oy){
+  var P=LIB.poses[st.pose],s=P.skins[st.skin],ao=P.ao;
+  x.setTransform(1,0,0,1,0,0);x.clearRect(0,0,x.canvas.width,x.canvas.height);
+  x.setTransform(sc,0,0,sc,(ox||0)-box[0]*sc,(oy||0)-box[1]*sc);
+  x.imageSmoothingEnabled=true;x.imageSmoothingQuality='high';
+  if(st.bg){x.fillStyle=st.bg;x.fillRect(box[0],box[1],box[2]-box[0],box[3]-box[1])}
+  var b=s.body;x.drawImage(b.img,b.x,b.y,b.w,b.h);
+  var f=s.faces[st.face];if(f)x.drawImage(f.img,f.x,f.y,f.w,f.h);
+  var a=LIB.aromas[st.aroma];if(a)x.drawImage(tint(a,st.ac),a.x+ao[0],a.y+ao[1],a.w,a.h);
+}
+function draw(){
+  var b=viewBox(S.pose),w=b[2]-b[0],h=b[3]-b[1];
+  if(cv.width!==w||cv.height!==h){cv.width=w;cv.height=h;$('board').style.setProperty('--ar',w/h)}
+  paint(ctx,S,b,1);
+}
+function thumb(st,box,ow){
+  var sc=ow/(box[2]-box[0]),k=document.createElement('canvas');k.width=ow;k.height=Math.round((box[3]-box[1])*sc);
+  paint(k.getContext('2d'),st,box,sc);return k.toDataURL('image/png');
+}
+
+/* ---------- loading: only the current pose + body is kept decoded ---------- */
+function ensure(pi,si){
+  var k=LIB.poses[pi].skins[si];if(k.body.img)return Promise.resolve();
+  var j=[loadImg(k.body.u).then(function(i){k.body.img=i})];
+  k.faces.forEach(function(f){j.push(loadImg(f.u).then(function(i){f.img=i}))});
+  return Promise.all(j);
+}
+function unloadExcept(pi,si){LIB.poses.forEach(function(P,i){P.skins.forEach(function(k,j){if(i===pi&&j===si)return;k.body.img=null;k.faces.forEach(function(f){f.img=null})})})}
+function apply(ns){
+  var t=++want;
+  return ensure(ns.pose,ns.skin).then(function(){if(t!==want)return;unloadExcept(ns.pose,ns.skin);S=ns;sync()},function(){toast("Couldn't load that sprite.")});
+}
+function set(patch){S=Object.assign({},S,patch);sync()}
+
+/* ---------- save codes ---------- */
+function pack(st){
+  var P=LIB.poses[st.pose],s=P.skins[st.skin];
+  return 'OC2:'+btoa(unescape(encodeURIComponent(JSON.stringify([P.id,s.name,s.faces[st.face].name,(LIB.aromas[st.aroma]||{}).name||'',st.ac,st.bg,st.name]))));
+}
+var ALIAS={'stand-normal':'standing-normal','stand-hold':'standing-holding-something','lay-belly':'laying-on-belly','sit-tucked':'sitting-hands-tucked','extra-typing':'extras-typing'};
+function unpack(c){
+  try{
+    c=String(c).trim();var v=c.slice(0,4),a=JSON.parse(decodeURIComponent(escape(atob(c.slice(4)))));
+    if(v==='OC1:')a.unshift('standing-normal'); else if(v!=='OC2:')return null;
+    a[0]=ALIAS[a[0]]||a[0];
+    var pi=LIB.poses.findIndex(function(p){return p.id===a[0]});if(pi<0)return null;
+    var P=LIB.poses[pi],si=Math.max(0,P.skins.findIndex(function(s){return s.name===a[1]}));
+    return {pose:pi,skin:si,face:Math.max(0,P.skins[si].faces.findIndex(function(f){return f.name===a[2]})),
+      aroma:LIB.aromas.findIndex(function(x){return x.name===a[3]}),ac:colorOK(a[4]),bg:colorOK(a[5]),name:String(a[6]||'').slice(0,32)};
+  }catch(e){return null}
+}
+function persist(){sset(CUR,pack(S))}
+
+/* ---------- UI ---------- */
+function opt(cls,on,data,img,label){
+  return '<button class="opt '+cls+(on?' on':'')+'" '+data+' aria-pressed="'+on+'">'+(img?'<img src="'+img+'" alt="">':'')+'<span>'+esc(label)+'</span></button>';
+}
+function swatches(el,list,cur,key,what){
+  el.innerHTML=list.map(function(c){
+    var nm=c||'None / original';
+    return '<button class="sw'+(c?'':' none')+(c===cur?' on':'')+'" data-k="'+key+'" data-v="'+c+'" style="--c:'+(c||'transparent')+'" title="'+nm+'" aria-label="'+what+' '+nm+'" aria-pressed="'+(c===cur)+'"></button>';
+  }).join('')+'<label class="sw cust'+(cur&&list.indexOf(cur)<0?' on':'')+'" title="Custom color"><input type="color" data-k="'+key+'" value="'+(cur||'#ff4f8b')+'" aria-label="Custom '+what+'"></label>';
+}
+function build(){
+  var P=LIB.poses[S.pose],cats=[],h='';
+  LIB.poses.forEach(function(p,i){
+    if(cats.indexOf(p.cat)<0){cats.push(p.cat);h+='<div class="grp">'+p.cat+'</div>'}
+    h+=opt('',i===S.pose,'data-pose="'+i+'"',p.skins[S.skin].th,p.name);
+  });
+  $('poses').innerHTML=h;
+  $('skins').innerHTML=P.skins.map(function(k,j){return opt('',j===S.skin,'data-skin="'+j+'"',k.th,k.name)}).join('');
+  $('fl').textContent=P.name+' · '+P.skins[S.skin].name;
+  $('faces').innerHTML=P.skins[S.skin].faces.map(function(f,j){
+    var k='f'+S.pose+'_'+S.skin+'_'+j;cache[k]=cache[k]||thumb({pose:S.pose,skin:S.skin,face:j,aroma:-1,ac:'',bg:''},faceBox(S.pose),300);
+    return opt('',j===S.face,'data-face="'+j+'"',cache[k],f.name);
+  }).join('');
+  $('aromas').innerHTML=opt('none',S.aroma<0,'data-aroma="-1"','','None')+LIB.aromas.map(function(a,j){
+    var box=pad(uni([faceBox(S.pose),aR(S.pose,a)]),10);
+    var k='a'+S.pose+'_'+S.skin+'_'+S.face+'_'+j+'_'+S.ac;cache[k]=cache[k]||thumb({pose:S.pose,skin:S.skin,face:S.face,aroma:j,ac:S.ac,bg:''},box,260);
+    return opt('',j===S.aroma,'data-aroma="'+j+'"',cache[k],a.name);
+  }).join('');
+  swatches($('acs'),ACOL,S.ac,'ac','Aroma color');
+  swatches($('bgs'),BGC,S.bg,'bg','Background');
+  $('nm').value=S.name;
+  expUI();
+}
+function expUI(){
+  document.querySelectorAll('#fmt [data-fmt]').forEach(function(b){var on=b.dataset.fmt===O.fmt;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
+  document.querySelectorAll('#scl [data-scale]').forEach(function(b){var on=+b.dataset.scale===O.scale;b.classList.toggle('on',on);b.setAttribute('aria-pressed',on)});
+  $('trim').checked=O.trim;
+  var bx=O.trim?contentBox(S):viewBox(S.pose);
+  $('sz').textContent='('+Math.round((bx[2]-bx[0])*O.scale)+' × '+Math.round((bx[3]-bx[1])*O.scale)+' px)';
+  $('fh').textContent=O.fmt==='jpg'?'JPG has no transparency, so empty areas become white unless you pick a background.':(O.fmt==='png'?'PNG keeps the transparent background.':'WebP keeps transparency and makes smaller files.');
+  $('exp').textContent='Export '+(O.fmt==='jpg'?'JPG':O.fmt==='webp'?'WebP':'PNG');
+}
+function sync(){build();draw();persist()}
+
+function renderGal(){
+  var g=sget(GAL,[]);
+  $('gal').innerHTML=g.length?g.map(function(e,i){
+    return '<div class="gc"><button data-load="'+i+'" title="Load '+esc(e.n)+'"><img src="'+e.t+'" alt=""><span>'+esc(e.n)+'</span></button><button class="x" data-del="'+i+'" aria-label="Delete '+esc(e.n)+'">×</button></div>';
+  }).join(''):'<p class="empty">Nothing saved yet. Press <b>Save</b> to keep an OC here.</p>';
+}
+
+/* ---------- events ---------- */
+$('poses').addEventListener('click',function(e){var b=e.target.closest('[data-pose]');if(b)apply(Object.assign({},S,{pose:+b.dataset.pose}))});
+$('skins').addEventListener('click',function(e){var b=e.target.closest('[data-skin]');if(b)apply(Object.assign({},S,{skin:+b.dataset.skin}))});
+$('faces').addEventListener('click',function(e){var b=e.target.closest('[data-face]');if(b)set({face:+b.dataset.face})});
+$('aromas').addEventListener('click',function(e){var b=e.target.closest('[data-aroma]');if(b)set({aroma:+b.dataset.aroma})});
+['acs','bgs'].forEach(function(id){
+  var el=$(id);
+  el.addEventListener('click',function(e){var b=e.target.closest('button.sw');if(!b)return;var p={};p[b.dataset.k]=b.dataset.v;set(p)});
+  el.addEventListener('input',function(e){if(e.target.type!=='color')return;S[e.target.dataset.k]=e.target.value;draw();persist()});
+  el.addEventListener('change',function(e){if(e.target.type==='color')sync()});
+});
+$('nm').addEventListener('input',function(e){S.name=e.target.value;persist()});
+$('rnd').onclick=function(){var pi=ri(LIB.poses.length);apply({pose:pi,skin:ri(4),face:ri(LIB.poses[pi].skins[0].faces.length),aroma:Math.random()<.3?-1:ri(LIB.aromas.length),ac:S.ac,bg:S.bg,name:S.name})};
+
+/* save to My OCs */
+$('sv').onclick=function(){
+  if(!ready)return;
+  var g=sget(GAL,[]),n=(S.name||'').trim()||'Untitled OC',i=g.findIndex(function(e){return e.n.toLowerCase()===n.toLowerCase()});
+  var b=viewBox(S.pose),sc=Math.min(160/(b[2]-b[0]),280/(b[3]-b[1])),th=document.createElement('canvas');th.width=160;th.height=280;
+  paint(th.getContext('2d'),S,b,sc,(160-(b[2]-b[0])*sc)/2,(280-(b[3]-b[1])*sc)/2);
+  var item={n:n,c:pack(S),t:th.toDataURL('image/png')};
+  if(i>=0)g[i]=item; else{if(g.length>=MAXG){toast('Gallery is full ('+MAXG+'). Delete one first.');return}g.unshift(item)}
+  if(!sset(GAL,g)){toast("Couldn't save: browser storage is blocked here. Use Copy share code instead.");return}
+  renderGal();toast(i>=0?'Updated "'+n+'"':'Saved "'+n+'" to My OCs');
+};
+$('gal').addEventListener('click',function(e){
+  var g=sget(GAL,[]),l=e.target.closest('[data-load]'),d=e.target.closest('[data-del]');
+  if(l){var s=unpack(g[+l.dataset.load].c);if(s)apply(s).then(function(){toast('Loaded "'+(S.name||'Untitled OC')+'"')})}
+  else if(d){var it=g.splice(+d.dataset.del,1)[0];sset(GAL,g);renderGal();toast('Deleted "'+it.n+'"')}
+});
+$('cc').onclick=function(){
+  var c=pack(S);function fb(){$('ci').value=c;$('ci').select();toast('Copy the code from the box')}
+  if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(c).then(function(){toast('Share code copied')},fb);else fb();
+};
+$('lc').onclick=function(){var s=unpack($('ci').value);if(!s){toast("That code doesn't look right.");return}$('ci').value='';apply(s).then(function(){toast('Loaded from code')})};
+
+/* ---------- export ---------- */
+function mime(){return O.fmt==='jpg'?'image/jpeg':O.fmt==='webp'?'image/webp':'image/png'}
+function ext(b){return b.type==='image/jpeg'?'jpg':b.type==='image/webp'?'webp':'png'}
+function toBlobP(c){return new Promise(function(ok){c.toBlob(ok,mime(),.95)})}
+function outCanvas(st){
+  var b=O.trim?contentBox(st):viewBox(st.pose),sc=O.scale,c=document.createElement('canvas');
+  c.width=Math.max(1,Math.round((b[2]-b[0])*sc));c.height=Math.max(1,Math.round((b[3]-b[1])*sc));
+  paint(c.getContext('2d'),Object.assign({},st,{bg:st.bg||(O.fmt==='jpg'?'#ffffff':'')}),b,sc);return c;
+}
+function slug(){return slugOf(S.name)||'my-oc'}
+function closeModal(){$('modal').classList.remove('show');if(murl){URL.revokeObjectURL(murl);murl=null}}
+function openModal(blob,fn){
+  if(murl)URL.revokeObjectURL(murl);
+  var img=blob.type.indexOf('image/')===0;murl=URL.createObjectURL(blob);
+  $('mt').textContent=img?'Your OC is ready':'Your ZIP is ready';
+  $('mp').textContent=img?'Tap Download. If nothing happens, press and hold (or right-click) the image to save it.':'Tap Download to save the ZIP ('+Math.max(1,Math.round(blob.size/1024))+' KB).';
+  $('mimg').style.display=img?'':'none';if(img)$('mimg').src=murl;
+  $('mdl').href=murl;$('mdl').download=fn;
+  $('mcopy').style.display=(blob.type==='image/png'&&navigator.clipboard&&window.ClipboardItem)?'':'none';
+  $('mcopy').onclick=function(){navigator.clipboard.write([new ClipboardItem({'image/png':blob})]).then(function(){toast('Image copied')},function(){toast("Couldn't copy. Use Download instead.")})};
+  $('modal').classList.add('show');$('mdl').focus();
+}
+function deliver(blob,fn){
+  if(!dl){openModal(blob,fn);return Promise.resolve()}
+  return dl.save({filename:fn,data:blob}).then(function(){toast('Saved '+fn)},function(err){if(err&&err.code==='declined')toast('Save cancelled.');else openModal(blob,fn)});
+}
+function doExport(){
+  if(!ready||busy)return;
+  toBlobP(outCanvas(S)).then(function(b){if(!b){toast("Couldn't create the image.");return}deliver(b,slug()+'.'+ext(b))});
+}
+function crc32(u){var t=crc32.t;if(!t){t=crc32.t=[];for(var n=0;n<256;n++){var c=n;for(var k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}}var r=0xFFFFFFFF;for(var i=0;i<u.length;i++)r=t[(r^u[i])&255]^(r>>>8);return(r^0xFFFFFFFF)>>>0}
+function zip(files){
+  var parts=[],cd=[],off=0,enc=new TextEncoder();
+  files.forEach(function(f){
+    var nm=enc.encode(f.name),crc=crc32(f.data),n=f.data.length;
+    var h=new DataView(new ArrayBuffer(30));h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint16(6,0x0800,true);h.setUint16(12,0x21,true);h.setUint32(14,crc,true);h.setUint32(18,n,true);h.setUint32(22,n,true);h.setUint16(26,nm.length,true);
+    parts.push(h.buffer,nm,f.data);
+    var c=new DataView(new ArrayBuffer(46));c.setUint32(0,0x02014b50,true);c.setUint16(4,20,true);c.setUint16(6,20,true);c.setUint16(8,0x0800,true);c.setUint16(14,0x21,true);c.setUint32(16,crc,true);c.setUint32(20,n,true);c.setUint32(24,n,true);c.setUint16(28,nm.length,true);c.setUint32(42,off,true);
+    cd.push(c.buffer,nm);off+=30+nm.length+n;
+  });
+  var sz=0;cd.forEach(function(x){sz+=x.byteLength});
+  var e=new DataView(new ArrayBuffer(22));e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,sz,true);e.setUint32(16,off,true);
+  return new Blob(parts.concat(cd,[e.buffer]),{type:'application/zip'});
+}
+function doZip(){
+  if(!ready||busy)return;busy=true;$('zip').disabled=true;toast('Building ZIP…');
+  var faces=LIB.poses[S.pose].skins[S.skin].faces,files=[],base=slug(),st=S;
+  faces.reduce(function(pr,f,j){return pr.then(function(){
+    return toBlobP(outCanvas(Object.assign({},st,{face:j}))).then(function(b){return b.arrayBuffer().then(function(ab){
+      files.push({name:base+'_'+String(j+1).padStart(2,'0')+'-'+(slugOf(f.name)||'face')+'.'+ext(b),data:new Uint8Array(ab)})})})});
+  },Promise.resolve()).then(function(){return deliver(zip(files),base+'-expressions.zip')})
+   .catch(function(){toast("Couldn't build the ZIP.")}).then(function(){busy=false;$('zip').disabled=false});
+}
+$('exp').onclick=doExport;$('exp2').onclick=doExport;$('zip').onclick=doZip;
+$('fmt').addEventListener('click',function(e){var b=e.target.closest('[data-fmt]');if(!b)return;O.fmt=b.dataset.fmt;sset(OPT,O);expUI()});
+$('scl').addEventListener('click',function(e){var b=e.target.closest('[data-scale]');if(!b)return;O.scale=+b.dataset.scale;sset(OPT,O);expUI()});
+$('trim').addEventListener('change',function(e){O.trim=e.target.checked;sset(OPT,O);expUI()});
+$('mclose').onclick=closeModal;
+$('modal').addEventListener('click',function(e){if(e.target===$('modal'))closeModal()});
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeModal()});
+if(window.claude&&claude.use){claude.use('downloads').then(function(d){dl=d}).catch(function(){})}
+
+/* ---------- boot: everything comes from manifest.json + the sprite folders ---------- */
+function fromManifest(m){
+  return {W:m.canvas.width,H:m.canvas.height,
+    aromas:m.aromas.map(function(a){return {name:a.name,x:a.x,y:a.y,w:a.w,h:a.h,u:a.file}}),
+    poses:m.poses.map(function(p){return {id:p.id,cat:p.group,name:p.name,ao:p.aromaOffset,
+      skins:p.bodies.map(function(b){return {name:b.name,th:b.thumb,
+        body:{x:b.body.x,y:b.body.y,w:b.body.w,h:b.body.h,u:b.body.file},
+        faces:b.expressions.map(function(f){return {name:f.name,x:f.x,y:f.y,w:f.w,h:f.h,u:f.file}})}})}})};
+}
+function fail(html){$('load').innerHTML=html}
+var o=sget(OPT,null);if(o){O.fmt=['png','webp','jpg'].indexOf(o.fmt)>=0?o.fmt:'png';O.scale=[1,.5,.25].indexOf(+o.scale)>=0?+o.scale:1;O.trim=o.trim!==false}
+if(location.protocol==='file:'){
+  fail('<div style="max-width:380px;padding:16px;text-align:center"><b>Open this through a local server</b><br>Browsers block loading sprites (and saving images) from a double-clicked file.<br><br>In this folder run:<br><code>python -m http.server 8000</code><br>then open <code>http://localhost:8000</code></div>');
+}else{
+  fetch('manifest.json').then(function(r){if(!r.ok)throw new Error('manifest');return r.json()}).then(function(m){
+    LIB=fromManifest(m);
+    return Promise.all(LIB.aromas.map(function(a){return loadImg(a.u).then(function(i){a.img=i})}));
+  }).then(function(){return apply(unpack(sget(CUR,''))||S)})
+  .then(function(){ready=true;renderGal();$('load').classList.add('hide')})
+  .catch(function(){fail('<div style="padding:16px;text-align:center">Couldn\'t load <code>manifest.json</code> or the sprite folders.<br>Keep <code>index.html</code> next to <code>manifest.json</code>, <code>poses/</code> and <code>aromas/</code>.</div>')});
+}
+})();
+</script>
+</body>
+</html>
