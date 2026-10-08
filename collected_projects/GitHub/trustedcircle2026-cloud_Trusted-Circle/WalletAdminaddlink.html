@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trusted Circle — Wallet Admin Add Link</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f8f5;color:#173b2a;font-family:Inter,Arial,sans-serif}.wrap{max-width:1120px;margin:24px auto;padding:16px}.top,.card{background:#fff;border:1px solid #dfe9e3;border-radius:20px;box-shadow:0 12px 35px rgba(20,54,40,.07)}.top{padding:20px 22px;display:flex;align-items:center;gap:13px;margin-bottom:16px}.top img{width:50px;height:50px;object-fit:contain;border-radius:13px}.top h1{margin:0;font-size:25px}.top p{margin:4px 0 0;color:#74817a;font-size:12px}.card{padding:22px;margin-bottom:16px}h2{margin:0 0 15px;font-size:19px}label{display:block;font-size:12px;font-weight:900;margin-bottom:7px;color:#34463d}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}input,select,textarea{width:100%;padding:12px;border:1px solid #ccd9d2;border-radius:11px;font:inherit;background:#fff}textarea{min-height:145px;resize:vertical}.full{grid-column:1/-1}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:2px}button{border:0;border-radius:11px;padding:11px 16px;background:#0f5132;color:white;font-weight:800;cursor:pointer}button.alt{background:#e8f0eb;color:#173b2a}button.danger{background:#b42318}.msg{margin-top:12px;padding:11px 13px;border-radius:10px;background:#eef7f0;font-size:13px}.bad{background:#fff0ee;color:#a52217}.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.summary div{padding:13px;border:1px solid #e0e9e4;border-radius:12px;background:#f9fbfa}.summary b{display:block;font-size:19px}.summary span{font-size:11px;color:#74817a}.table-wrap{overflow:auto;margin-top:15px;border:1px solid #e3ebe6;border-radius:13px}table{width:100%;border-collapse:collapse;min-width:800px}th,td{padding:10px;border-bottom:1px solid #e8ece9;text-align:left;font-size:12px}th{background:#f6f9f7;color:#617069}tr:last-child td{border-bottom:0}.status{font-weight:900}.available{color:#14734d}.reserved{color:#a66a00}.used{color:#6e7773}.removed{color:#b42318}@media(max-width:700px){.grid{grid-template-columns:1fr}.full{grid-column:auto}.summary{grid-template-columns:1fr 1fr}.top{align-items:flex-start}}
+</style></head>
+<body><div class="wrap">
+<div class="top"><img src="https://raw.githubusercontent.com/trustedcircle2026-cloud/Trusted-Circle/main/Logo%20new.jpg" alt="Trusted Circle"><div><h1>Wallet Payment Gateway</h1><p>Wallet Services payment-link stock · completely separate from Shopping.</p></div></div>
+<div class="card"><h2>Add Payment Link Stock</h2><div class="grid">
+<div><label>Wallet Admin Key</label><input id="key" type="password" placeholder="Private admin key"></div>
+<div><label>Denomination</label><select id="amount"><option value="500">₹500</option><option value="1000">₹1,000</option><option value="1500">₹1,500</option><option value="2000">₹2,000</option></select></div>
+<div><label>Payment Link Label</label><input id="label" placeholder="Wallet Payment ₹500"></div>
+<div><label>Single Payment Gateway Link</label><input id="link" placeholder="https://..."></div>
+<div class="full"><label>Bulk Payment Gateway Links — one link per line</label><textarea id="links" placeholder="https://payment-link-1&#10;https://payment-link-2"></textarea></div>
+<div class="full actions"><button onclick="single()">Add Single Link</button><button onclick="bulk()">Add Bulk Links</button><button class="alt" onclick="stock()">Refresh Stock</button></div>
+</div><div id="msg"></div></div>
+<div class="card"><h2>Stock Summary</h2><div id="summary" class="summary"></div><div class="table-wrap"><table><thead><tr><th>Denomination</th><th>Status</th><th>Transaction</th><th>Expires</th><th>Payment Link</th><th>Action</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+</div>
+<script>
+const API='https://script.google.com/macros/s/AKfycbwQ11gxZCWCwT0_MGmBErUKmqdNVBUToVMo7IZ2nt2wtzUK2tyT4iHNf4Q2L8ZcLXwC/exec';
+const $=x=>document.getElementById(x);
+function msg(t,b=false){$('msg').className='msg'+(b?' bad':'');$('msg').textContent=t}
+async function api(action,extra={}){const r=await fetch(API,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,adminKey:$('key').value,...extra})});const j=await r.json();if(!j.ok)throw Error(j.error||'Request failed');return j.data}
+async function single(){try{const d=await api('adminAddPaymentLink',{denomination:+$('amount').value,link:$('link').value,label:$('label').value});msg('Added payment link: '+d.paymentLinkStockId);$('link').value='';stock()}catch(e){msg(e.message,true)}}
+async function bulk(){try{const d=await api('adminAddPaymentLinkBulk',{denomination:+$('amount').value,links:$('links').value,label:$('label').value});msg((d.added||0)+' links added successfully.');$('links').value='';stock()}catch(e){msg(e.message,true)}}
+async function stock(){try{const d=await api('adminPaymentStock');$('summary').innerHTML=d.summary.map(x=>'<div><b>'+x.available+'</b><span>₹'+x.denomination+' available · '+x.reserved+' reserved · '+x.used+' used</span></div>').join('');$('rows').innerHTML=d.links.slice().reverse().map(x=>'<tr><td>₹'+x.denomination+'</td><td class="status '+String(x.status).toLowerCase()+'">'+esc(x.status)+'</td><td>'+esc(x.walletTransactionId||'—')+'</td><td>'+esc(x.expiresAt?new Date(x.expiresAt).toLocaleString('en-IN'):'—')+'</td><td style="max-width:320px;word-break:break-all">'+esc(x.link)+'</td><td>'+(x.status==='AVAILABLE'?'<button class="danger" onclick="removeLink(\''+x.paymentLinkStockId+'\')">Remove</button>':'—')+'</td></tr>').join('')}catch(e){msg(e.message,true)}}
+async function removeLink(id){if(!confirm('Remove this available payment link from Wallet stock?'))return;try{await api('adminRemovePaymentLink',{paymentLinkStockId:id});msg('Payment link removed.');stock()}catch(e){msg(e.message,true)}}
+function esc(s){return String(s||'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]))}
+</script></body></html>
