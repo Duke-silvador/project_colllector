@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kiểm Tra Trùng Tiết Thời Khóa Biểu</title>
+    <!-- Thư viện đọc file Word (.docx) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .upload-section {
+            border: 2px dashed #3498db;
+            padding: 20px;
+            text-align: center;
+            border-radius: 8px;
+            background: #ecf0f1;
+            margin-bottom: 20px;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .custom-file-upload {
+            background: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            display: inline-block;
+            transition: 0.2s;
+        }
+        .custom-file-upload:hover {
+            background: #2980b9;
+        }
+        .status {
+            text-align: center;
+            font-weight: bold;
+            margin: 15px 0;
+            font-size: 15px;
+        }
+        #output-preview {
+            overflow-x: auto;
+            margin-top: 15px;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        #output-preview table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 15px;
+        }
+        #output-preview th, #output-preview td {
+            border: 1px solid #ccc;
+            padding: 8px;
+            text-align: center;
+            font-size: 13px;
+        }
+        #output-preview th {
+            background-color: #34495e;
+            color: white;
+        }
+        /* Style highlight ô trùng tiết chính xác */
+        .highlight-conflict {
+            background-color: #ffcccc !important;
+            border: 2px solid #e74c3c !important;
+            color: #c0392b !important;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Kiểm Tra Trùng Tiết Giáo Viên - Thời Khóa Biểu</h1>
+    
+    <div class="upload-section">
+        <label for="wordFile" class="custom-file-upload">
+            📁 Tải lên file Thời khóa biểu (.docx)
+        </label>
+        <input type="file" id="wordFile" accept=".docx">
+        <p id="file-name" style="margin-top: 10px; font-style: italic; color: #555;"></p>
+    </div>
+
+    <div id="status" class="status" style="color: #555;">Chưa tải file lên.</div>
+
+    <!-- Bảng TKB hiển thị trực tiếp với các tiết trùng được bôi đỏ -->
+    <div id="output-preview">
+        <p style="color: #777; text-align: center;">Thời khóa biểu sẽ hiển thị ở đây sau khi tải lên.</p>
+    </div>
+</div>
+
+<script>
+    document.getElementById('wordFile').addEventListener('change', function(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        document.getElementById('file-name').innerText = "File đã chọn: " + file.name;
+        document.getElementById('status').innerText = "Đang đọc file Word...";
+
+        const reader = new FileReader();
+        reader.onload = function(loadEvent) {
+            const arrayBuffer = loadEvent.target.result;
+            mammoth.convertToHtml({ arrayBuffer: arrayBuffer })
+                .then(result => {
+                    document.getElementById('output-preview').innerHTML = result.value;
+                    document.getElementById('status').innerText = "Đang phân tích lịch dạy và kiểm tra trùng tiết...";
+                    processTimetableAccurate();
+                })
+                .catch(err => {
+                    console.error(err);
+                    document.getElementById('status').innerText = "Lỗi khi đọc file: " + err.message;
+                });
+        };
+        reader.readAsArrayBuffer(file);
+    });
+
+    function processTimetableAccurate() {
+        const previewDiv = document.getElementById('output-preview');
+        const tables = previewDiv.querySelectorAll('table');
+
+        if (tables.length === 0) {
+            document.getElementById('status').innerHTML = '<span style="color: #e67e22;">Không tìm thấy bảng TKB trong file.</span>';
+            return;
+        }
+
+        let totalConflictsFound = 0;
+
+        tables.forEach((table) => {
+            const rows = table.querySelectorAll('tr');
+            if (rows.length < 2) return;
+
+            let headerCells = rows[0].querySelectorAll('td, th');
+            let columnClassNames = Array.from(headerCells).map(c => c.innerText.trim());
+
+            for (let rIdx = 1; rIdx < rows.length; rIdx++) {
+                let row = rows[rIdx];
+                let cols = row.querySelectorAll('td, th');
+                if (cols.length < 2) continue;
+
+                let periodName = cols[0].innerText.trim();
+                if (!periodName || /sáng|chiều/i.test(periodName) && cols.length <= 2) continue;
+
+                let teachersInThisPeriod = {};
+
+                for (let cIdx = 1; cIdx < cols.length; cIdx++) {
+                    let col = cols[cIdx];
+                    let cellText = col.innerText.trim();
+
+                    if (!cellText || cellText.toLowerCase() === 'trống' || cellText.toLowerCase() === 't') continue;
+
+                    let upperText = cellText.toUpperCase().replace(/\s+/g, '');
+
+                    // Bỏ qua TN,HN(ND1) [Chào cờ] và TN,HN(ND3) [Sinh hoạt lớp] hoặc các từ khóa tương đương
+                    if (upperText.includes('TN,HN(ND1)') || upperText.includes('TN,HN(ND3)') || 
+                        upperText.includes('CHÀOCỜ') || upperText.includes('SINHHOẠTLỚP')) {
+                        continue; 
+                    }
+
+                    // Trích xuất tên giáo viên thông minh (xử lý cả trường hợp dính liền chữ)
+                    let teacherName = extractTeacherNameAdvanced(cellText);
+
+                    if (teacherName && teacherName.length > 1) {
+                        let cleanTeacher = teacherName.toUpperCase().replace(/\s+/g, ' ').trim();
+
+                        if (['TRỐNG', 'N/A', 'NỘI DUNG'].includes(cleanTeacher)) continue;
+
+                        if (!teachersInThisPeriod[cleanTeacher]) {
+                            teachersInThisPeriod[cleanTeacher] = [];
+                        }
+                        teachersInThisPeriod[cleanTeacher].push({
+                            cell: col,
+                            className: columnClassNames[cIdx] || `Cột ${cIdx}`,
+                            text: cellText
+                        });
+                    }
+                }
+
+                // Kiểm tra xem giáo viên nào dạy từ 2 lớp trở lên trong cùng một tiết
+                for (let [teacher, assignments] of Object.entries(teachersInThisPeriod)) {
+                    if (assignments.length > 1) {
+                        assignments.forEach(item => {
+                            item.cell.classList.add('highlight-conflict');
+                            totalConflictsFound++;
+                        });
+                    }
+                }
+            }
+        });
+
+        if (totalConflictsFound === 0) {
+            document.getElementById('status').innerHTML = '<span style="color: #27ae60;">🎉 Hoàn tất! Không phát hiện giáo viên nào bị trùng tiết (Đã bỏ qua Chào cờ & Sinh hoạt lớp).</span>';
+        } else {
+            document.getElementById('status').innerHTML = `<span style="color: #e74c3c;">⚠️ Phát hiện tổng cộng ${totalConflictsFound} ô bị trùng lịch (đã được bôi đỏ trực tiếp trên bảng).</span>`;
+        }
+    }
+
+    // Hàm nâng cao xử lý cả các ô bị dính liền chữ
+    function extractTeacherNameAdvanced(text) {
+        let cleanStr = text.replace(/\n/g, ' ').trim();
+
+        if (cleanStr.includes('-')) {
+            let parts = cleanStr.split('-');
+            let potentialTeacher = parts[parts.length - 1].trim();
+            return potentialTeacher;
+        }
+
+        // Bắt các trường hợp chữ cái viết hoa liền ngay sau chữ thường hoặc dấu ngoặc (VD: C.nghệHồng, MĩthuậtThuân)
+        let match = cleanStr.match(/[a-zà-ỹ\)]([A-ZẮẰẲẴẶĂẤẦẨẪẬĐÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴ][a-zà-ỹA-ZẮẰẲẴẶĂẤẦẨẪẬĐÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴ]+)$/);
+        if (match) {
+            return match[1];
+        }
+
+        let words = cleanStr.split(/\s+/);
+        let lastWord = words[words.length - 1];
+        if (lastWord.length > 1 && /^[A-ZẮẰẲẴẶĂẤẦẨẪẬĐÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴ]/.test(lastWord)) {
+            return lastWord;
+        }
+
+        return cleanStr;
+    }
+</script>
+
+<!-- SAOBAY-PROTECT: (c) 2026 Truong THPT Sao Bay | Nghiem cam sao chep duoi moi hinh thuc -->
+<footer class="saobay-copyright-footer" style="margin-top:2rem;padding:1rem 0.5rem 2.5rem;text-align:center;border-top:1px solid #e2e8f0;">
+<p style="font-size:12px;color:#94a3b8;margin:0">© 2026 Trường THPT Sào Báy — Nền tảng học tập SAOBAY</p>
+<p style="font-size:12px;color:#94a3b8;margin:4px 0 0">Nghiêm cấm sao chép, phát tán nội dung dưới mọi hình thức khi chưa được sự cho phép bằng văn bản.</p>
+</footer>
+<script data-saobay-guard="1">(function(){try{var h=(location.hostname||"").toLowerCase();var ok=(h===""||h==="saobay.github.io"||h==="localhost"||h==="127.0.0.1"||h.slice(-17)===".saobay.github.io");if(!ok&&document.body){document.body.innerHTML="";var d=document.createElement("div");d.setAttribute("style","max-width:560px;margin:60px auto;padding:32px;text-align:center;border:1px solid #e2e8f0;border-radius:16px;background:#fff;font-family:system-ui,sans-serif");var t1=document.createElement("h2");t1.setAttribute("style","color:#0f172a");t1.textContent="(c) SAOBAY - Truong THPT Sao Bay";var t2=document.createElement("p");t2.setAttribute("style","color:#475569");t2.textContent="Noi dung nay chi duoc hien thi tai dia chi chinh thuc saobay.github.io. Vui long truy cap dung dia chi de hoc tap.";d.appendChild(t1);d.appendChild(t2);document.body.appendChild(d);}}catch(e){}})();<\/script>
+</body>
+</html>

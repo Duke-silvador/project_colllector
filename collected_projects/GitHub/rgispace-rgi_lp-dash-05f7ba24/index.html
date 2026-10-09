@@ -1,0 +1,1119 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Letture palazzina</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f4f4f2;
+    --surface-1: #fcfcfb;
+    --bordo: #e4e3df;
+    --bordo-forte: #cfcec9;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #77756f;
+    --series-1: #0099aa;
+    --series-2: #eb6834;
+    --series-3: #4a3aa7;
+    --griglia: #eceae5;
+    --ombra: 0 1px 2px rgba(0,0,0,.05), 0 4px 12px rgba(0,0,0,.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #111110;
+      --surface-1: #1a1a19;
+      --bordo: #2c2c2a;
+      --bordo-forte: #3c3c39;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #8e8d85;
+      --series-1: #00a5b5;
+      --series-2: #d95926;
+      --series-3: #9085e9;
+      --griglia: #2a2a28;
+      --ombra: 0 1px 2px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.25);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #111110;
+    --surface-1: #1a1a19;
+    --bordo: #2c2c2a;
+    --bordo-forte: #3c3c39;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #8e8d85;
+    --series-1: #00a5b5;
+    --series-2: #d95926;
+    --series-3: #9085e9;
+    --griglia: #2a2a28;
+    --ombra: 0 1px 2px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.25);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+  }
+  .guscio { max-width: 1180px; margin: 0 auto; padding: 24px 16px 64px; }
+
+  header.testata {
+    display: flex; flex-wrap: wrap; gap: 12px;
+    align-items: baseline; justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  h1 { margin: 0; font-size: 26px; font-weight: 600; letter-spacing: -.01em; }
+  .sottotitolo { color: var(--text-secondary); font-size: 14px; margin-top: 2px; }
+  .bottone {
+    background: var(--surface-1); color: var(--text-secondary);
+    border: 1px solid var(--bordo-forte); border-radius: 8px;
+    padding: 7px 13px; font-size: 13px; cursor: pointer; font-family: inherit;
+  }
+  .bottone:hover { color: var(--text-primary); border-color: var(--text-muted); }
+  .bottone[aria-pressed="true"] { background: var(--series-1); border-color: var(--series-1); color: #fff; }
+
+  .tessere { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 22px; }
+  .tessera { background: var(--surface-1); border: 1px solid var(--bordo); border-radius: 10px; padding: 14px 16px; box-shadow: var(--ombra); }
+  .tessera .etichetta { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
+  .tessera .valore { font-size: 27px; font-weight: 600; letter-spacing: -.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .tessera .nota { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+  .ambito { margin: -12px 0 14px; font-size: 12.5px; color: var(--text-muted); }
+
+  .barra-filtri { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .barra-filtri input {
+    background: var(--surface-1); color: var(--text-primary);
+    border: 1px solid var(--bordo-forte); border-radius: 8px;
+    padding: 7px 11px; font-size: 14px; font-family: inherit; min-width: 190px;
+  }
+  .cresci { flex: 1 1 auto; }
+
+  .scheda { background: var(--surface-1); border: 1px solid var(--bordo); border-radius: 12px; box-shadow: var(--ombra); overflow: hidden; }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 9px 14px; text-align: right; font-size: 14px; border-bottom: 1px solid var(--bordo); }
+  th:first-child, td:first-child { text-align: left; }
+  th {
+    position: sticky; top: 0; z-index: 1;
+    background: var(--surface-1); color: var(--text-muted);
+    font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; font-weight: 600;
+    cursor: pointer; user-select: none; white-space: nowrap;
+  }
+  th:hover { color: var(--text-primary); }
+  th .freccia { opacity: .45; font-size: 10px; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: color-mix(in srgb, var(--series-1) 7%, transparent); }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { font-variant-numeric: tabular-nums; }
+  .pallino { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+  .pallino.loft { background: var(--series-1); }
+  .pallino.condizionatori { background: var(--series-2); }
+  .pallino.servizi { background: var(--series-3); }
+  .gruppo-testo { color: var(--text-secondary); font-size: 13px; }
+
+  /* ---- pannello statistiche: un solo riquadro con le tre scale ---- */
+  .pannello {
+    background: linear-gradient(180deg,
+                color-mix(in srgb, var(--series-1) 15%, var(--surface-1)) 0%,
+                var(--surface-1) 58%);
+    border: 1px solid var(--bordo); border-radius: 18px; box-shadow: var(--ombra);
+    padding: 20px 18px 12px; position: relative;
+  }
+  .pannello-testa { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 4px 14px; margin-bottom: 18px; }
+  .pannello-etichetta { font-size: 16px; color: var(--text-secondary); }
+  .pannello-valore { font-size: 34px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .pannello-valore .unita { font-size: 17px; font-weight: 600; color: var(--text-secondary); margin-left: 5px; letter-spacing: 0; }
+
+  .schede {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px;
+    background: color-mix(in srgb, var(--surface-1) 78%, transparent);
+    border-radius: 999px; padding: 4px; margin: 0 auto 18px; max-width: 460px;
+  }
+  .schede button {
+    border: none; border-radius: 999px; padding: 9px 4px; cursor: pointer;
+    font-family: inherit; font-size: 15px; color: var(--text-secondary);
+    background: transparent; transition: background .12s, color .12s;
+  }
+  .schede button:hover { color: var(--text-primary); }
+  .schede button[aria-selected="true"] { background: var(--series-1); color: #fff; font-weight: 600; }
+  .schede button:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+
+  /* altezza stabile: se il contenitore collassa mentre si ridisegna, la pagina
+     si accorcia e il browser sposta lo scorrimento */
+  #stat-tela { min-height: 250px; }
+  @media (max-width: 520px) { #stat-tela { min-height: 200px; } }
+
+  .navigatore {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface-1); border: 1px solid var(--bordo); border-radius: 18px;
+    box-shadow: var(--ombra); padding: 10px 14px; margin-top: 14px;
+  }
+  .navigatore .periodo { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .navigatore button {
+    width: 40px; height: 40px; border-radius: 50%; cursor: pointer;
+    border: 1px solid var(--bordo); background: var(--bg); color: var(--text-secondary);
+    font-size: 19px; line-height: 1; font-family: inherit;
+  }
+  .navigatore button:hover:not(:disabled) { color: var(--text-primary); border-color: var(--text-muted); }
+  .navigatore button:disabled,
+  .navigatore button[aria-disabled="true"] { opacity: .3; cursor: default; }
+
+  .grafico { background: var(--surface-1); border: 1px solid var(--bordo); border-radius: 12px; box-shadow: var(--ombra); padding: 16px 18px 12px; margin-bottom: 16px; position: relative; }
+  .grafico h3 { margin: 0 0 2px; font-size: 15px; font-weight: 600; }
+  .grafico .dida { margin: 0 0 12px; font-size: 13px; color: var(--text-secondary); }
+  .grafico svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .testa-grafico { display: flex; flex-wrap: wrap; gap: 8px; justify-content: space-between; align-items: flex-start; }
+  .intervalli { display: flex; gap: 6px; align-items: center; }
+  .intervalli .bottone { padding: 4px 11px; font-size: 13px; line-height: 1.2; }
+  .intervalli .bottone:disabled { opacity: .35; cursor: default; }
+  .intervalli .bottone:disabled:hover { color: var(--text-secondary); border-color: var(--bordo-forte); }
+  .giorno-scelto { font-size: 13.5px; font-weight: 600; color: var(--text-primary); min-width: 98px; text-align: center; font-variant-numeric: tabular-nums; }
+
+  .suggerimento {
+    position: absolute; pointer-events: none; opacity: 0; transition: opacity .1s;
+    background: var(--text-primary); color: var(--bg);
+    padding: 6px 9px; border-radius: 7px; font-size: 12.5px; white-space: nowrap;
+    transform: translate(-50%, -100%); z-index: 5; font-variant-numeric: tabular-nums;
+  }
+  .suggerimento strong { font-weight: 600; }
+
+  details.tabella-dati { margin-top: 4px; border-top: 1px solid var(--bordo); padding-top: 8px; }
+  details.tabella-dati summary { cursor: pointer; font-size: 12.5px; color: var(--text-muted); }
+  details.tabella-dati summary:hover { color: var(--text-primary); }
+  details.tabella-dati .involucro { max-height: 260px; overflow: auto; margin-top: 8px; }
+  details.tabella-dati td, details.tabella-dati th { padding: 5px 10px; font-size: 12.5px; }
+
+  .avviso { background: color-mix(in srgb, var(--series-2) 11%, var(--surface-1)); border: 1px solid color-mix(in srgb, var(--series-2) 34%, var(--bordo)); border-radius: 10px; padding: 11px 14px; font-size: 13.5px; margin-bottom: 16px; color: var(--text-primary); }
+  .pie-pagina { margin-top: 26px; font-size: 12.5px; color: var(--text-muted); text-align: center; }
+  .dati-nuovi {
+    position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 12px; z-index: 40;
+    background: var(--surface-1); color: var(--text-primary);
+    border: 1px solid var(--bordo-forte); border-radius: 999px;
+    box-shadow: var(--ombra); padding: 9px 10px 9px 18px; font-size: 14px;
+    max-width: calc(100vw - 32px);
+  }
+  .dati-nuovi .bottone { background: var(--series-1); border-color: var(--series-1); color: #fff; }
+
+  .attesa { margin: 18px 0; font-size: 14px; color: var(--text-secondary); }
+
+  .nascosto { display: none !important; }
+  .vuoto { padding: 26px; text-align: center; color: var(--text-muted); font-size: 14px; }
+  .indietro { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 12px; }
+  h2.titolo-unita { margin: 0 0 2px; font-size: 22px; font-weight: 600; }
+  @media (max-width: 640px) {
+    .guscio { padding: 16px 12px 48px; }
+    h1 { font-size: 21px; }
+    th, td { padding: 8px 10px; font-size: 13px; }
+    .nascondi-stretto { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="guscio">
+
+  <header class="testata">
+    <div>
+      <h1>Letture palazzina</h1>
+      <div class="sottotitolo" id="sottotitolo"></div>
+    </div>
+    <button class="bottone" id="tema" type="button">Tema scuro</button>
+  </header>
+
+  <div id="avvisi"></div>
+
+  <!-- ===== ELENCO ===== -->
+  <section id="vista-elenco">
+    <div class="tessere" id="tessere-generali"></div>
+    <p class="ambito" id="ambito"></p>
+
+    <div class="barra-filtri">
+      <input type="search" id="cerca" placeholder="Cerca unita..." aria-label="Cerca unita">
+      <button class="bottone" data-gruppo="tutti" aria-pressed="true" type="button">Tutte</button>
+      <button class="bottone" data-gruppo="loft" aria-pressed="false" type="button">Loft</button>
+      <button class="bottone" data-gruppo="condizionatori" aria-pressed="false" type="button">Condizionatori</button>
+      <button class="bottone" data-gruppo="servizi" aria-pressed="false" type="button">Servizi</button>
+      <span class="cresci"></span>
+      <span class="gruppo-testo" id="conteggio"></span>
+    </div>
+
+    <div class="scheda">
+      <table id="tabella-unita">
+        <thead>
+          <tr>
+            <th data-campo="n">Unita <span class="freccia"></span></th>
+            <th data-campo="oggi" class="num">Oggi <span class="freccia"></span></th>
+            <th data-campo="sette" class="num nascondi-stretto">7 giorni <span class="freccia"></span></th>
+            <th data-campo="mese" class="num">Mese <span class="freccia"></span></th>
+            <th data-campo="tot" class="num">Totale contatore <span class="freccia"></span></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="vuoto nascosto" id="nessun-risultato">Nessuna unita corrisponde alla ricerca.</div>
+    </div>
+    <p class="pie-pagina" id="pie-elenco"></p>
+  </section>
+
+  <!-- ===== DETTAGLIO ===== -->
+  <section id="vista-dettaglio" class="nascosto">
+    <button class="bottone indietro" id="torna" type="button">&larr; Tutte le unita</button>
+    <h2 class="titolo-unita" id="nome-unita"></h2>
+    <div class="sottotitolo" id="sotto-unita"></div>
+    <div class="tessere" id="tessere-unita" style="margin-top:16px"></div>
+
+    <p id="grafici-attesa" class="attesa nascosto">Scarico i dati di questa unita'...</p>
+
+    <div class="pannello">
+      <div class="pannello-testa">
+        <span class="pannello-etichetta" id="stat-etichetta"></span>
+        <span class="pannello-valore" id="stat-valore"></span>
+      </div>
+      <div class="schede" role="tablist" aria-label="Scala temporale">
+        <button type="button" role="tab" data-scala="giorno" aria-selected="true">Giorno</button>
+        <button type="button" role="tab" data-scala="mese" aria-selected="false">Mese</button>
+        <button type="button" role="tab" data-scala="anno" aria-selected="false">Anno</button>
+      </div>
+      <div id="stat-tela" style="position:relative"></div>
+      <details class="tabella-dati" id="stat-tabella">
+        <summary>Vedi i dati in tabella</summary>
+        <div class="involucro"></div>
+      </details>
+    </div>
+
+    <div class="navigatore">
+      <button type="button" id="nav-prec" aria-label="Periodo precedente">&#8249;</button>
+      <span class="periodo" id="nav-periodo"></span>
+      <button type="button" id="nav-succ" aria-label="Periodo successivo">&#8250;</button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+/* Nella pagina locale i dati sono qui dentro. Nella copia pubblicata su GitHub
+   Pages restano a null: li fornisce la maschera di accesso dopo averli decifrati,
+   e a quel punto chiama avvia(). */
+let DATI = null;
+
+/* ---------- utilita ---------- */
+const $ = (s, r) => (r || document).querySelector(s);
+const crea = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
+const num = (v, d) => v === null || v === undefined ? "-" : v.toLocaleString("it-IT", { minimumFractionDigits: d === undefined ? 1 : d, maximumFractionDigits: d === undefined ? 1 : d });
+const somma = a => a.reduce((t, v) => t + (v || 0), 0);
+
+const MESI_BREVI = ["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"];
+const MESI = ["gennaio","febbraio","marzo","aprile","maggio","giugno","luglio","agosto","settembre","ottobre","novembre","dicembre"];
+function etichettaGiorno(g) { const [a, m, d] = g.split("-"); return d + "/" + m; }
+function etichettaGiornoLunga(g) { const [a, m, d] = g.split("-"); return d + "/" + m + "/" + a; }
+function etichettaMese(m) { const [a, mm] = m.split("-"); return MESI[+mm - 1] + " " + a; }
+function istanteLungo(s) { const [g, h] = s.split(" "); return etichettaGiornoLunga(g) + (h ? " ore " + h : ""); }
+
+/* ---------- grafico a barre (SVG, nessuna dipendenza) ---------- */
+function graficoBarre(contenitore, opzioni) {
+  const etichette = opzioni.etichette, valori = opzioni.valori;
+  /* il sistema di coordinate segue la larghezza reale: cosi i testi restano
+     della stessa dimensione su schermo grande e su telefono */
+  const W = Math.max(300, Math.round(opzioni.larghezza || contenitore.clientWidth || 920));
+  const stretto = W < 520;
+  const L = stretto ? 38 : 48, R = 10, T = 22, B = stretto ? 26 : 30;
+  const H = stretto ? 200 : 250;
+  const largPlot = W - L - R, altPlot = H - T - B;
+
+  const validi = valori.filter(v => v !== null && v !== undefined);
+  const massimo = validi.length ? Math.max(...validi) : 0;
+  const cima = massimo <= 0 ? 1 : scalaGradevole(massimo);
+  const y = v => T + altPlot - (v / cima) * altPlot;
+
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", opzioni.titolo);
+
+  /* griglia recessiva + asse dei valori */
+  const passi = 4;
+  for (let i = 0; i <= passi; i++) {
+    const v = (cima / passi) * i;
+    const linea = document.createElementNS(ns, "line");
+    linea.setAttribute("x1", L); linea.setAttribute("x2", W - R);
+    linea.setAttribute("y1", y(v)); linea.setAttribute("y2", y(v));
+    linea.setAttribute("stroke", "var(--griglia)");
+    linea.setAttribute("stroke-width", i === 0 ? 1.5 : 1);
+    svg.appendChild(linea);
+    const testo = document.createElementNS(ns, "text");
+    testo.setAttribute("x", L - 8); testo.setAttribute("y", y(v) + 4);
+    testo.setAttribute("text-anchor", "end");
+    testo.setAttribute("font-size", "11");
+    testo.setAttribute("fill", "var(--text-muted)");
+    testo.textContent = num(v, cima < 2 ? 2 : 1);
+    svg.appendChild(testo);
+  }
+
+  /* barre: spessore sottile, 2px di distacco, estremita arrotondata sul dato */
+  const n = valori.length || 1;
+  const passo = largPlot / n;
+  /* marchi sottili: con pochi periodi la barra non deve diventare un lastrone */
+  const larg = Math.max(1, Math.min(passo - 2, 46));
+  const indiceMax = valori.indexOf(massimo);
+
+  valori.forEach((v, i) => {
+    if (v === null || v === undefined || v <= 0) return;
+    const x = L + i * passo + (passo - larg) / 2;
+    const alt = Math.max(1.5, T + altPlot - y(v));
+    const r = Math.min(4, larg / 2, alt);
+    const p = document.createElementNS(ns, "path");
+    p.setAttribute("d",
+      "M" + x + "," + (T + altPlot) +
+      "V" + (y(v) + r) +
+      "a" + r + "," + r + " 0 0 1 " + r + ",-" + r +
+      "h" + (larg - 2 * r) +
+      "a" + r + "," + r + " 0 0 1 " + r + "," + r +
+      "V" + (T + altPlot) + "Z");
+    p.setAttribute("fill", "var(--series-1)");
+    svg.appendChild(p);
+  });
+
+  /* etichetta diretta solo sul massimo, non su ogni barra */
+  if (massimo > 0 && indiceMax >= 0) {
+    const t = document.createElementNS(ns, "text");
+    t.setAttribute("x", L + indiceMax * passo + passo / 2);
+    t.setAttribute("y", y(massimo) - 7);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("font-size", "11.5");
+    t.setAttribute("font-weight", "600");
+    t.setAttribute("fill", "var(--text-secondary)");
+    t.textContent = num(massimo, 1) + " kWh";
+    svg.appendChild(t);
+  }
+
+  /* etichette dell'asse dei tempi, selettive */
+  const quante = Math.min(stretto ? 4 : 8, n);
+  const salto = Math.max(1, Math.round(n / quante));
+  const daMostrare = [];
+  for (let i = 0; i < n; i += salto) daMostrare.push(i);
+  const ultimaMostrata = daMostrare[daMostrare.length - 1];
+  if (ultimaMostrata !== n - 1 && (n - 1) - ultimaMostrata >= salto) daMostrare.push(n - 1);
+  etichette.forEach((e, i) => {
+    if (!daMostrare.includes(i)) return;
+    const t = document.createElementNS(ns, "text");
+    t.setAttribute("x", L + i * passo + passo / 2);
+    t.setAttribute("y", H - B + 17);
+    t.setAttribute("text-anchor", "middle");
+    t.setAttribute("font-size", "11");
+    t.setAttribute("fill", "var(--text-muted)");
+    t.textContent = opzioni.formatoAsse(e);
+    svg.appendChild(t);
+  });
+
+  /* strato di passaggio del mouse: bersagli piu larghi delle barre */
+  const sugg = crea("div", "suggerimento");
+  contenitore.appendChild(sugg);
+  valori.forEach((v, i) => {
+    const zona = document.createElementNS(ns, "rect");
+    zona.setAttribute("x", L + i * passo); zona.setAttribute("y", T);
+    zona.setAttribute("width", Math.max(passo, 6)); zona.setAttribute("height", altPlot);
+    zona.setAttribute("fill", "transparent");
+    zona.addEventListener("mouseenter", () => {
+      sugg.innerHTML = "<strong>" + (v === null || v === undefined ? "dato mancante" : num(v, 2) + " kWh") + "</strong><br>" + opzioni.formatoSugg(etichette[i]);
+      const r = svg.getBoundingClientRect(), c = contenitore.getBoundingClientRect();
+      const fx = r.width / W;
+      sugg.style.left = (r.left - c.left + (L + i * passo + passo / 2) * fx) + "px";
+      sugg.style.top = (r.top - c.top + (v ? y(v) : T + altPlot) * (r.height / H) - 8) + "px";
+      sugg.style.opacity = "1";
+    });
+    zona.addEventListener("mouseleave", () => { sugg.style.opacity = "0"; });
+    svg.appendChild(zona);
+  });
+
+  contenitore.appendChild(svg);
+}
+
+function scalaGradevole(m) {
+  const e = Math.pow(10, Math.floor(Math.log10(m)));
+  const r = m / e;
+  const passi = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10];
+  return e * passi.find(p => r <= p + 1e-9);
+}
+
+
+/* ---------- stato ---------- */
+let filtroGruppo = "tutti", testoCerca = "", ordinaCampo = "n", ordinaGiu = false;
+let unitaCorrente = null;
+let scala = "giorno";      /* "giorno" | "mese" | "anno" */
+let giornoScelto = null, meseScelto = null, annoScelto = null;
+
+function calcolati(u) {
+  /* i riassunti arrivano gia' pronti: con il file locale come con l'indice
+     scaricato a pezzi, cosi' la pagina li legge allo stesso modo */
+  return {
+    oggi: u.oggi || 0, sette: u.sette || 0, mese: u.mese || 0,
+    periodo: u.periodo || 0, tot: u.tot, n: u.n, g: u.g, u: u
+  };
+}
+
+/* Online i dati di un'unita' si scaricano solo quando la si apre. In locale
+   sono gia' tutti nel file, e questa funzione non deve fare nulla. */
+async function caricaUnita(u) {
+  if (u.o) return u;
+  if (typeof scaricaUnita !== "function") throw new Error("dati non disponibili");
+  Object.assign(u, await scaricaUnita(u.f));
+  return u;
+}
+
+/* ---------- vista elenco ---------- */
+function disegnaTessere(righe) {
+  /* Le tessere riassumono esattamente le unita' elencate sotto: se il filtro
+     mostra solo i loft, i totali sono quelli dei loft. */
+  const c = $("#tessere-generali");
+  const nG = DATI.giorni.length;
+  const oggiTot = somma(righe.map(x => x.oggi));
+  const meseTot = somma(righe.map(x => x.mese));
+  const periodoTot = somma(righe.map(x => x.periodo));
+  const attive = righe.filter(x => x.sette > 0.15).length;
+
+  const quali = filtroGruppo === "loft" ? "dei loft"
+              : filtroGruppo === "condizionatori" ? "dei condizionatori"
+              : filtroGruppo === "servizi" ? "dei servizi comuni"
+              : "di tutte le unita";
+  const cercate = testoCerca ? " che corrispondono alla ricerca" : "";
+
+  const tessere = [
+    ["Consumo di oggi", num(oggiTot, 1) + " kWh", etichettaGiornoLunga(DATI.giorni[nG - 1])],
+    ["Mese in corso", num(meseTot, 1) + " kWh", etichettaMese(DATI.mesi[DATI.mesi.length - 1])],
+    ["Totale periodo", num(periodoTot, 1) + " kWh", DATI.giorni.length + " giorni di rilevazioni"],
+    ["Unita con consumo", attive + " su " + righe.length, "negli ultimi 7 giorni"]
+  ];
+  c.innerHTML = "";
+  tessere.forEach(x => {
+    const d = crea("div", "tessera");
+    d.innerHTML = "<div class='etichetta'>" + x[0] + "</div><div class='valore'>" + x[1] +
+                  "</div><div class='nota'>" + x[2] + "</div>";
+    c.appendChild(d);
+  });
+  $("#ambito").textContent = "totali " + quali + cercate;
+}
+
+function disegnaTabella() {
+  const corpo = $("#tabella-unita tbody");
+  corpo.innerHTML = "";
+  let righe = DATI.unita.map(calcolati);
+  if (filtroGruppo !== "tutti") righe = righe.filter(r => r.g === filtroGruppo);
+  if (testoCerca) righe = righe.filter(r => r.n.toLowerCase().includes(testoCerca));
+
+  righe.sort((a, b) => {
+    let c;
+    if (ordinaCampo === "n") {
+      /* ordine per numero di unita: i loft (101, 102, ... 606) e poi le aree comuni */
+      const peso = g => g === "loft" ? 0 : g === "condizionatori" ? 1 : 2;
+      c = peso(a.g) - peso(b.g) || a.n.localeCompare(b.n, "it", { numeric: true });
+    } else {
+      c = a[ordinaCampo] - b[ordinaCampo];
+    }
+    return ordinaGiu ? -c : c;
+  });
+
+  righe.forEach(r => {
+    const tr = crea("tr");
+    tr.innerHTML =
+      "<td><span class='pallino " + r.g + "'></span>" + r.n + "</td>" +
+      "<td class='num'>" + num(r.oggi, 1) + "</td>" +
+      "<td class='num nascondi-stretto'>" + num(r.sette, 1) + "</td>" +
+      "<td class='num'>" + num(r.mese, 1) + "</td>" +
+      "<td class='num'>" + num(r.tot, 1) + "</td>";
+    tr.addEventListener("click", () => apriUnita(r.n));
+    corpo.appendChild(tr);
+  });
+
+  disegnaTessere(righe);
+  $("#nessun-risultato").classList.toggle("nascosto", righe.length > 0);
+  $("#conteggio").textContent = righe.length + (righe.length === 1 ? " unita" : " unita") +
+    " - valori in kWh";
+  document.querySelectorAll("#tabella-unita th").forEach(th => {
+    const f = th.querySelector(".freccia");
+    f.textContent = th.dataset.campo === ordinaCampo ? (ordinaGiu ? "▼" : "▲") : "";
+  });
+}
+
+/* ---------- vista dettaglio ---------- */
+async function apriUnita(nome) {
+  const u = DATI.unita.find(x => x.n === nome);
+  if (!u) return;
+  unitaCorrente = u;
+  const c = calcolati(u);
+  $("#vista-elenco").classList.add("nascosto");
+  $("#vista-dettaglio").classList.remove("nascosto");
+  $("#nome-unita").textContent = u.n;
+  const tipo = u.g === "loft" ? "Loft" : u.g === "condizionatori" ? "Condizionatore" : "Servizio comune";
+  $("#sotto-unita").textContent = tipo +
+    " - ultima lettura " + istanteLungo(u.ultima);
+
+  const tess = $("#tessere-unita");
+  tess.innerHTML = "";
+  [["Oggi", num(c.oggi, 1) + " kWh", etichettaGiornoLunga(DATI.giorni[DATI.giorni.length - 1])],
+   ["Ultimi 7 giorni", num(c.sette, 1) + " kWh", "somma dei consumi giornalieri"],
+   ["Mese in corso", num(c.mese, 1) + " kWh", etichettaMese(DATI.mesi[DATI.mesi.length - 1])],
+   ["Totale contatore", num(u.tot, 1) + " kWh", "cumulativo dall'installazione"]
+  ].forEach(t => {
+    const d = crea("div", "tessera");
+    d.innerHTML = "<div class='etichetta'>" + t[0] + "</div><div class='valore'>" + t[1] + "</div><div class='nota'>" + t[2] + "</div>";
+    tess.appendChild(d);
+  });
+
+  $("#grafici-attesa").classList.remove("nascosto");
+  window.scrollTo({ top: 0, behavior: "instant" });
+  location.hash = encodeURIComponent(u.n);
+  try {
+    await caricaUnita(u);
+  } catch (e) {
+    $("#grafici-attesa").textContent = "Non sono riuscito a scaricare i dati di questa unita'.";
+    return;
+  }
+  if (unitaCorrente !== u) return;        /* nel frattempo ne e' stata aperta un'altra */
+  $("#grafici-attesa").classList.add("nascosto");
+  disegnaGrafici(u);
+}
+
+function disegnaGrafici(u) {
+  /* Un solo pannello con tre scale: Giorno mostra le 24 ore, Mese i giorni del
+     mese, Anno i mesi dell'anno. Le frecce in fondo spostano il periodo. */
+  const oggi = DATI.giorni[DATI.giorni.length - 1];
+  const meseCorrente = DATI.mesi[DATI.mesi.length - 1];
+  const anni = [...new Set(DATI.mesi.map(m => m.slice(0, 4)))].sort();
+  const annoCorrente = anni[anni.length - 1];
+
+  if (!giornoScelto || DATI.giorni.indexOf(giornoScelto) < 0) giornoScelto = oggi;
+  if (!meseScelto || DATI.mesi.indexOf(meseScelto) < 0) meseScelto = meseCorrente;
+  if (!annoScelto || anni.indexOf(annoScelto) < 0) annoScelto = annoCorrente;
+
+  const valoreOra = new Map();
+  DATI.ore.forEach((o, i) => valoreOra.set(o, u.o[i]));
+  const valoreGiorno = new Map();
+  DATI.giorni.forEach((g, i) => valoreGiorno.set(g, u.d[i]));
+  const valoreMese = new Map();
+  DATI.mesi.forEach((m, i) => valoreMese.set(m, u.m[i]));
+
+  let etichette = [], valori = [], formatoAsse, formatoSugg, intestazione, periodo;
+  let indietro = false, avanti = false;
+
+  if (scala === "giorno") {
+    for (let h = 0; h < 24; h++) {
+      const chiave = giornoScelto + " " + String(h).padStart(2, "0") + ":00";
+      etichette.push(chiave);
+      valori.push(valoreOra.has(chiave) ? valoreOra.get(chiave) : null);
+    }
+    formatoAsse = o => o.split(" ")[1].slice(0, 2);
+    formatoSugg = o => {
+      const [gg, hh] = o.split(" "), h = parseInt(hh, 10);
+      return etichettaGiornoLunga(gg) + ", dalle " + String(h).padStart(2, "0") +
+             ":00 alle " + String((h + 1) % 24).padStart(2, "0") + ":00";
+    };
+    const [a, m, g] = giornoScelto.split("-");
+    periodo = a + "/" + m + "/" + g;
+    intestazione = giornoScelto === oggi ? "Consumo totale oggi" : "Consumo totale del giorno";
+    const i = DATI.giorni.indexOf(giornoScelto);
+    indietro = i > 0; avanti = i < DATI.giorni.length - 1;
+
+  } else if (scala === "mese") {
+    const [a, m] = meseScelto.split("-");
+    const quanti = new Date(+a, +m, 0).getDate();
+    for (let d = 1; d <= quanti; d++) {
+      const chiave = meseScelto + "-" + String(d).padStart(2, "0");
+      etichette.push(chiave);
+      valori.push(valoreGiorno.has(chiave) ? valoreGiorno.get(chiave) : null);
+    }
+    formatoAsse = g => g.slice(8);
+    formatoSugg = etichettaGiornoLunga;
+    periodo = a + "." + m;
+    intestazione = meseScelto === meseCorrente ? "Consumo totale questo mese" : "Consumo totale del mese";
+    const i = DATI.mesi.indexOf(meseScelto);
+    indietro = i > 0; avanti = i < DATI.mesi.length - 1;
+
+  } else {
+    for (let m = 1; m <= 12; m++) {
+      const chiave = annoScelto + "-" + String(m).padStart(2, "0");
+      etichette.push(chiave);
+      valori.push(valoreMese.has(chiave) ? valoreMese.get(chiave) : null);
+    }
+    formatoAsse = m => MESI_BREVI[+m.slice(5) - 1];
+    formatoSugg = etichettaMese;
+    periodo = annoScelto;
+    intestazione = annoScelto === annoCorrente ? "Consumo totale quest'anno" : "Consumo totale dell'anno";
+    const i = anni.indexOf(annoScelto);
+    indietro = i > 0; avanti = i < anni.length - 1;
+  }
+
+  $("#stat-etichetta").textContent = intestazione;
+  $("#stat-valore").innerHTML = num(somma(valori), 2) + "<span class='unita'>kWh</span>";
+  $("#nav-periodo").textContent = periodo;
+  /* aria-disabled invece di disabled: un bottone disabilitato mentre ha il fuoco
+     lo cede al body, e il browser sposta lo scorrimento */
+  $("#nav-prec").setAttribute("aria-disabled", String(!indietro));
+  $("#nav-succ").setAttribute("aria-disabled", String(!avanti));
+  document.querySelectorAll(".schede button").forEach(b =>
+    b.setAttribute("aria-selected", String(b.dataset.scala === scala)));
+
+  /* si costruisce il grafico nuovo e lo si scambia in un colpo solo: svuotare
+     prima avrebbe accorciato la pagina, spostando lo scorrimento */
+  const tela = $("#stat-tela");
+  const larghezza = tela.clientWidth;
+  const nuovo = crea("div");
+  nuovo.style.position = "relative";
+  graficoBarre(nuovo, { etichette, valori, titolo: intestazione, formatoAsse, formatoSugg, larghezza });
+  tela.replaceChildren(nuovo);
+
+  /* vista tabellare: l'identita del dato non dipende dal colore */
+  let html = "<table><thead><tr><th>Periodo</th><th style='text-align:right'>Consumo</th></tr></thead><tbody>";
+  for (let i = etichette.length - 1; i >= 0; i--) {
+    if (valori[i] === null || valori[i] === undefined) continue;
+    html += "<tr><td>" + formatoSugg(etichette[i]) + "</td><td class='num' style='text-align:right'>" +
+            num(valori[i], 2) + " kWh</td></tr>";
+  }
+  $("#stat-tabella .involucro").innerHTML = html + "</tbody></table>";
+}
+
+function spostaPeriodo(passo) {
+  const bottone = passo < 0 ? $("#nav-prec") : $("#nav-succ");
+  if (bottone.getAttribute("aria-disabled") === "true") return;
+  const scorrimento = window.scrollY;
+  if (scala === "giorno") {
+    const i = DATI.giorni.indexOf(giornoScelto) + passo;
+    if (i >= 0 && i < DATI.giorni.length) giornoScelto = DATI.giorni[i];
+  } else if (scala === "mese") {
+    const i = DATI.mesi.indexOf(meseScelto) + passo;
+    if (i >= 0 && i < DATI.mesi.length) meseScelto = DATI.mesi[i];
+  } else {
+    const anni = [...new Set(DATI.mesi.map(m => m.slice(0, 4)))].sort();
+    const i = anni.indexOf(annoScelto) + passo;
+    if (i >= 0 && i < anni.length) annoScelto = anni[i];
+  }
+  if (unitaCorrente) disegnaGrafici(unitaCorrente);
+  /* rete di sicurezza: qualunque cosa succeda al riflusso, si resta dov'eravamo */
+  if (window.scrollY !== scorrimento) window.scrollTo(0, scorrimento);
+}
+
+function tornaElenco() {
+  $("#vista-dettaglio").classList.add("nascosto");
+  $("#vista-elenco").classList.remove("nascosto");
+  unitaCorrente = null;          /* altrimenti un ricaricamento rientrerebbe nel dettaglio */
+  if (location.hash) history.replaceState(null, "", location.pathname + location.search);
+}
+
+/* ---------- ricordare dove si era, e accorgersi dei dati nuovi ---------- */
+const MEMORIA = "posizione-letture-palazzina";
+
+function ricordaPosizione() {
+  try {
+    sessionStorage.setItem(MEMORIA, JSON.stringify({
+      unita: (unitaCorrente && !$("#vista-dettaglio").classList.contains("nascosto"))
+             ? unitaCorrente.n : null,
+      scala, giornoScelto, meseScelto, annoScelto,
+      filtroGruppo, testoCerca, ordinaCampo, ordinaGiu,
+      scorrimento: Math.round(window.scrollY)
+    }));
+  } catch (e) {}
+}
+
+function riprendiPosizione() {
+  let p = null;
+  try { p = JSON.parse(sessionStorage.getItem(MEMORIA) || "null"); } catch (e) {}
+  if (!p) return false;
+  try { sessionStorage.removeItem(MEMORIA); } catch (e) {}
+
+  if (p.filtroGruppo) {
+    filtroGruppo = p.filtroGruppo;
+    document.querySelectorAll("[data-gruppo]").forEach(b =>
+      b.setAttribute("aria-pressed", String(b.dataset.gruppo === filtroGruppo)));
+  }
+  if (p.testoCerca) { testoCerca = p.testoCerca; $("#cerca").value = p.testoCerca; }
+  if (p.ordinaCampo) { ordinaCampo = p.ordinaCampo; ordinaGiu = !!p.ordinaGiu; }
+  disegnaTabella();
+
+  if (p.scala) scala = p.scala;
+  if (p.giornoScelto) giornoScelto = p.giornoScelto;
+  if (p.meseScelto) meseScelto = p.meseScelto;
+  if (p.annoScelto) annoScelto = p.annoScelto;
+  if (p.unita && DATI.unita.some(u => u.n === p.unita)) apriUnita(p.unita);
+
+  if (p.scorrimento) window.scrollTo(0, p.scorrimento);
+  return true;
+}
+
+function ricarica() {
+  ricordaPosizione();
+  location.reload();
+}
+
+function avvisaDatiNuovi() {
+  if ($("#dati-nuovi")) return;
+  const barra = crea("div", "dati-nuovi");
+  barra.id = "dati-nuovi";
+  barra.innerHTML = "<span>Sono arrivate letture piu' recenti.</span>";
+  const b = crea("button", "bottone");
+  b.type = "button"; b.textContent = "Aggiorna";
+  b.addEventListener("click", ricarica);
+  barra.appendChild(b);
+  document.body.appendChild(barra);
+}
+
+/* Sulla copia pubblicata si controlla un file minuscolo, versione.json, e si
+   ricarica solo quando cambia davvero: index.html e' grande e GitHub Pages lo
+   tiene in cache dieci minuti, quindi ricaricare a vuoto non servirebbe.
+   Sul file locale quel controllo non e' possibile (il browser vieta di leggere
+   file vicini), quindi ci si ricarica a tempo. */
+const PROVATO = "ricarica-gia-provata";
+
+function sorvegliaVersione() {
+  const miaVersione = DATI.generato;
+  /* Il segno si cancella solo se la pagina mostra davvero la versione che si
+     stava inseguendo: se e' ancora quella vecchia va tenuto, altrimenti si
+     ricomincerebbe a ricaricare in tondo. */
+  try {
+    if (sessionStorage.getItem(PROVATO) === miaVersione) sessionStorage.removeItem(PROVATO);
+  } catch (e) {}
+  let ultimoControllo = 0;
+
+  async function controlla() {
+    if (document.hidden) return;
+    ultimoControllo = Date.now();
+    try {
+      const r = await fetch("versione.json?t=" + Date.now(), { cache: "no-store" });
+      if (!r.ok) return;
+      const v = await r.json();
+      if (!v.generato || v.generato === miaVersione) return;
+
+      /* Se dopo un ricaricamento la pagina e' ancora quella vecchia - succede
+         perche' GitHub Pages tiene index.html in cache dieci minuti - non ha
+         senso ricaricare di nuovo: si finirebbe in un giro infinito. Si prova
+         una volta sola per ogni versione, poi si lascia decidere a chi guarda. */
+      let gia = null;
+      try { gia = sessionStorage.getItem(PROVATO); } catch (e) {}
+      if (gia === v.generato) { avvisaDatiNuovi(); return; }
+      try { sessionStorage.setItem(PROVATO, v.generato); } catch (e) {}
+
+      /* se le credenziali non sono memorizzate, ricaricare rimanderebbe alla
+         maschera di accesso: meglio chiedere prima */
+      if (window.PAGINA_PROTETTA && !window.CREDENZIALI_RICORDATE) avvisaDatiNuovi();
+      else ricarica();
+    } catch (e) { /* rete assente: si riprova al giro dopo */ }
+  }
+
+  if (location.protocol === "file:") {
+    const ogni = 3 * 60 * 1000;
+    setInterval(() => { if (!document.hidden) ricarica(); }, ogni);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && Date.now() - partenza > 90 * 1000) ricarica();
+    });
+    return;
+  }
+
+  controlla();
+  setInterval(controlla, 60 * 1000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && Date.now() - ultimoControllo > 20 * 1000) controlla();
+  });
+}
+
+const partenza = Date.now();
+
+/* ---------- avvio ---------- */
+function avvia() {
+  $("#sottotitolo").textContent =
+    (DATI.stabile ? DATI.stabile + " - " : "") + DATI.unita.length + " contatori - rilevazioni dal " +
+    etichettaGiornoLunga(DATI.periodo.da.split(" ")[0]) + " al " +
+    istanteLungo(DATI.periodo.a) + " - aggiornato il " +
+    istanteLungo(DATI.generato).replace(" ore ", " alle ");
+
+  const avvisi = $("#avvisi");
+  const note = [];
+  if (DATI.azzeramenti.length) {
+    note.push("Rilevati " + DATI.azzeramenti.length + " azzeramenti di contatore: " +
+      DATI.azzeramenti.map(a => a.contatore + " il " + a.istante).join(", ") +
+      ". Per quelle ore il consumo e stimato sul valore ripartito da zero.");
+  }
+  note.push("Il primo giorno (" + etichettaGiornoLunga(DATI.primo_giorno_parziale) +
+    ") e il primo mese sono parziali: le rilevazioni iniziano a meta giornata. " +
+    "Le email riportano un decimale, quindi per le unita a consumo molto basso il grafico orario resta spesso a zero con salti di 0,1 kWh.");
+  note.forEach(t => { const d = crea("div", "avviso"); d.textContent = t; avvisi.appendChild(d); });
+
+  $("#pie-elenco").textContent = DATI.letture.toLocaleString("it-IT") +
+    " letture in archivio" + (DATI.sorgente ? " - dati dal " + DATI.sorgente : "");
+
+  disegnaTabella();   /* disegna anche le tessere, con le stesse righe filtrate */
+
+  $("#cerca").addEventListener("input", e => { testoCerca = e.target.value.trim().toLowerCase(); disegnaTabella(); });
+  document.querySelectorAll("[data-gruppo]").forEach(b => {
+    b.addEventListener("click", () => {
+      filtroGruppo = b.dataset.gruppo;
+      document.querySelectorAll("[data-gruppo]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+      disegnaTabella();
+    });
+  });
+  document.querySelectorAll("#tabella-unita th").forEach(th => {
+    th.addEventListener("click", () => {
+      const c = th.dataset.campo;
+      if (c === ordinaCampo) ordinaGiu = !ordinaGiu; else { ordinaCampo = c; ordinaGiu = c !== "n"; }
+      disegnaTabella();
+    });
+  });
+  $("#torna").addEventListener("click", tornaElenco);
+
+  document.querySelectorAll(".schede button").forEach(b => {
+    b.addEventListener("click", () => {
+      const scorrimento = window.scrollY;
+      scala = b.dataset.scala;
+      if (unitaCorrente) disegnaGrafici(unitaCorrente);
+      if (window.scrollY !== scorrimento) window.scrollTo(0, scorrimento);
+    });
+  });
+  $("#nav-prec").addEventListener("click", () => spostaPeriodo(-1));
+  $("#nav-succ").addEventListener("click", () => spostaPeriodo(1));
+
+  /* i grafici si ridisegnano quando cambia la larghezza, per non rimpicciolire i testi */
+  let attesa;
+  let larghezzaNota = window.innerWidth;
+  window.addEventListener("resize", () => {
+    if (window.innerWidth === larghezzaNota) return;
+    larghezzaNota = window.innerWidth;
+    clearTimeout(attesa);
+    attesa = setTimeout(() => {
+      if (unitaCorrente && !$("#vista-dettaglio").classList.contains("nascosto")) disegnaGrafici(unitaCorrente);
+    }, 180);
+  });
+
+  const tema = $("#tema");
+  const applica = s => {
+    document.documentElement.setAttribute("data-theme", s);
+    tema.textContent = s === "dark" ? "Tema chiaro" : "Tema scuro";
+  };
+  let scelto = null;
+  try { scelto = localStorage.getItem("tema-letture"); } catch (e) {}
+  if (scelto) applica(scelto);
+  else tema.textContent = matchMedia("(prefers-color-scheme: dark)").matches ? "Tema chiaro" : "Tema scuro";
+  tema.addEventListener("click", () => {
+    const attuale = document.documentElement.getAttribute("data-theme") ||
+      (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    const nuovo = attuale === "dark" ? "light" : "dark";
+    applica(nuovo);
+    try { localStorage.setItem("tema-letture", nuovo); } catch (e) {}
+  });
+
+  sorvegliaVersione();
+
+  if (!riprendiPosizione() && location.hash) {
+    const n = decodeURIComponent(location.hash.slice(1));
+    if (DATI.unita.some(u => u.n === n)) apriUnita(n);
+  }
+  window.addEventListener("hashchange", () => {
+    const n = decodeURIComponent(location.hash.slice(1));
+    if (!n) tornaElenco();
+    else if (DATI.unita.some(u => u.n === n)) apriUnita(n);
+  });
+}
+
+if (DATI) avvia();
+</script>
+<!-- Maschera di accesso della copia pubblicata.
+     Viene aggiunta da pubblica.py dopo il corpo del cruscotto. I dati arrivano
+     cifrati: la password non apre una porta, ricostruisce la chiave. Stesso schema
+     di cripta.py, qui con WebCrypto. -->
+<div id="schermo-accesso">
+  <form id="modulo-accesso" autocomplete="on">
+    <h1>Letture palazzina</h1>
+    <p class="occhiello">Accesso riservato</p>
+    <label for="acc-utente">Nome utente</label>
+    <input id="acc-utente" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+    <label for="acc-password">Password</label>
+    <input id="acc-password" name="password" type="password" autocomplete="current-password" required>
+    <label class="ricorda"><input id="acc-ricorda" type="checkbox" checked> Ricordami su questo dispositivo</label>
+    <button type="submit" id="acc-invia">Entra</button>
+    <p id="acc-messaggio" role="status"></p>
+    <p class="nota-cifratura">I dati di questa pagina sono cifrati. Senza la password
+      sono illeggibili anche scaricando il file.</p>
+  </form>
+</div>
+
+<style>
+  #schermo-accesso {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg); padding: 24px 16px;
+  }
+  #modulo-accesso {
+    width: 100%; max-width: 360px;
+    background: var(--surface-1); border: 1px solid var(--bordo);
+    border-radius: 14px; box-shadow: var(--ombra); padding: 28px 26px 22px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  #modulo-accesso h1 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: -.01em; }
+  #modulo-accesso .occhiello { margin: 0 0 16px; font-size: 13.5px; color: var(--text-secondary); }
+  #modulo-accesso label { font-size: 12.5px; color: var(--text-secondary); margin-top: 8px; }
+  #modulo-accesso input[type="text"], #modulo-accesso input[type="password"] {
+    background: var(--bg); color: var(--text-primary);
+    border: 1px solid var(--bordo-forte); border-radius: 8px;
+    padding: 9px 11px; font-size: 15px; font-family: inherit; width: 100%;
+  }
+  #modulo-accesso input:focus-visible { outline: 2px solid var(--series-1); outline-offset: 1px; }
+  #modulo-accesso .ricorda {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 14px; font-size: 13px; color: var(--text-secondary); cursor: pointer;
+  }
+  #modulo-accesso .ricorda input { accent-color: var(--series-1); }
+  #acc-invia {
+    margin-top: 16px; padding: 10px 14px;
+    background: var(--series-1); color: #fff; border: none; border-radius: 8px;
+    font-size: 15px; font-family: inherit; font-weight: 600; cursor: pointer;
+  }
+  #acc-invia:hover { filter: brightness(1.06); }
+  #acc-invia:disabled { opacity: .6; cursor: default; }
+  #acc-messaggio { margin: 12px 0 0; font-size: 13px; min-height: 1.2em; color: var(--text-secondary); }
+  #acc-messaggio.errore { color: var(--series-2); font-weight: 600; }
+  .nota-cifratura { margin: 16px 0 0; font-size: 11.5px; line-height: 1.45; color: var(--text-muted); }
+  body.sbloccato #schermo-accesso { display: none; }
+</style>
+
+<script>
+(function () {
+  window.PAGINA_PROTETTA = true;   /* lo legge il cruscotto prima di ricaricarsi */
+  let CHIAVI = null;               /* derivate una volta sola, poi riusate per ogni file */
+  const DEPOSITO = "accesso-letture-palazzina";
+  const $$ = s => document.querySelector(s);
+  const messaggio = $$("#acc-messaggio");
+
+  const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+  async function chiavi(utente, password, sale, giri) {
+    const materiale = new TextEncoder().encode(utente.trim().toLowerCase() + "\n" + password);
+    const base = await crypto.subtle.importKey("raw", materiale, "PBKDF2", false, ["deriveBits"]);
+    const bit = await crypto.subtle.deriveBits(
+      { name: "PBKDF2", salt: sale, iterations: giri, hash: "SHA-256" }, base, 512);
+    const b = new Uint8Array(bit);
+    return [b.slice(0, 32), b.slice(32)];
+  }
+
+  async function importaHmac(grezza) {
+    return crypto.subtle.importKey("raw", grezza, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  }
+
+  async function flusso(chiaveGrezza, nonce, lunghezza) {
+    const k = await importaHmac(chiaveGrezza);
+    const uscita = new Uint8Array(lunghezza);
+    const blocco = new Uint8Array(nonce.length + 8);
+    blocco.set(nonce, 0);
+    const vista = new DataView(blocco.buffer);
+    for (let i = 0, c = 0; i < lunghezza; i += 32, c++) {
+      vista.setUint32(nonce.length, 0, false);
+      vista.setUint32(nonce.length + 4, c, false);
+      const d = new Uint8Array(await crypto.subtle.sign("HMAC", k, blocco));
+      uscita.set(d.subarray(0, Math.min(32, lunghezza - i)), i);
+    }
+    return uscita;
+  }
+
+  function uguali(a, b) {
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+    return diff === 0;
+  }
+
+  async function scarica(percorso) {
+    const r = await fetch(percorso + "?t=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) throw new Error("file mancante: " + percorso);
+    return r.json();
+  }
+
+  /* Apre un singolo file cifrato con le chiavi gia' derivate. La firma si
+     verifica PRIMA di decifrare, cosi' una password sbagliata viene respinta
+     subito invece di produrre spazzatura. */
+  async function apriPacco(pacco) {
+    const [kCifra, kFirma] = CHIAVI;
+    const nonce = b64(pacco.nonce), cifrato = b64(pacco.cifrato), firma = b64(pacco.firma);
+    const daFirmare = new Uint8Array(nonce.length + cifrato.length);
+    daFirmare.set(nonce, 0);
+    daFirmare.set(cifrato, nonce.length);
+    const atteso = new Uint8Array(await crypto.subtle.sign("HMAC", await importaHmac(kFirma), daFirmare));
+    if (!uguali(atteso, firma)) throw new Error("credenziali");
+    const maschera = await flusso(kCifra, nonce, cifrato.length);
+    const chiaro = new Uint8Array(cifrato.length);
+    for (let i = 0; i < cifrato.length; i++) chiaro[i] = cifrato[i] ^ maschera[i];
+    return JSON.parse(new TextDecoder().decode(chiaro));
+  }
+
+  /* Il cruscotto chiama questa quando apri un'unita': scarica e apre solo quella. */
+  window.scaricaUnita = async function (chiave) {
+    return apriPacco(await scarica("dati/u/" + chiave + ".json"));
+  };
+
+  async function apri(utente, password) {
+    const cifratura = await scarica("cifratura.json");
+    CHIAVI = await chiavi(utente, password, b64(cifratura.sale), cifratura.giri);
+    return apriPacco(await scarica("dati/indice.json"));
+  }
+
+  function ricorda(utente, password) {
+    try { localStorage.setItem(DEPOSITO, JSON.stringify({ utente, password })); } catch (e) {}
+  }
+  function dimentica() {
+    try { localStorage.removeItem(DEPOSITO); } catch (e) {}
+  }
+  function ricordate() {
+    try { return JSON.parse(localStorage.getItem(DEPOSITO) || "null"); } catch (e) { return null; }
+  }
+
+  async function entra(utente, password, salva) {
+    const invia = $$("#acc-invia");
+    invia.disabled = true;
+    messaggio.className = "";
+    messaggio.textContent = "Decifro i dati...";
+    try {
+      DATI = await apri(utente, password);
+      if (salva) ricorda(utente, password); else dimentica();
+      /* se le credenziali restano memorizzate, un ricaricamento automatico non
+         ripresenta la maschera: il cruscotto puo' aggiornarsi da solo */
+      window.CREDENZIALI_RICORDATE = !!salva;
+      document.body.classList.add("sbloccato");
+      avvia();
+    } catch (errore) {
+      messaggio.className = "errore";
+      messaggio.textContent = errore && errore.message === "credenziali"
+        ? "Nome utente o password non corretti."
+        : "Non sono riuscito ad aprire i dati. Riprova.";
+      invia.disabled = false;
+      $$("#acc-password").value = "";
+      $$("#acc-password").focus();
+    }
+  }
+
+  $$("#modulo-accesso").addEventListener("submit", ev => {
+    ev.preventDefault();
+    entra($$("#acc-utente").value, $$("#acc-password").value, $$("#acc-ricorda").checked);
+  });
+
+  if (!window.crypto || !crypto.subtle) {
+    messaggio.className = "errore";
+    messaggio.textContent = "Questo browser non puo' decifrare la pagina. Serve una connessione https.";
+    $$("#acc-invia").disabled = true;
+  } else {
+    const salvate = ricordate();
+    if (salvate && salvate.utente) {
+      $$("#acc-utente").value = salvate.utente;
+      $$("#acc-password").value = salvate.password || "";
+      messaggio.textContent = "Accesso con le credenziali salvate...";
+      entra(salvate.utente, salvate.password, true);
+    } else {
+      $$("#acc-utente").focus();
+    }
+  }
+})();
+</script>
+
+</body>
+</html>
