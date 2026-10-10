@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Reforma Teritorială</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://unpkg.com" crossorigin>
+<link rel="dns-prefetch" href="//a.tile.openstreetmap.org">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="atlas-explorer-shell.css">
+<link rel="stylesheet" href="atlas-p5.3.css">
+<link rel="stylesheet" href="atlas-p6.1.css">
+<link rel="stylesheet" href="atlas-p6.2.css">
+<link rel="stylesheet" href="atlas-p6.3.css">
+<link rel="stylesheet" href="atlas-p6.4.css">
+</head>
+<body>
+<a id="skip-map" class="skip-link" href="#map">Sari la hartă</a>
+<a id="skip-navigation" class="skip-link" href="#atlas-controls">Sari la navigare</a>
+<header>
+  <div><h1>REFORMA TERITORIALĂ</h1><span>Atlas teritorial România · Republica Moldova</span></div>
+  <nav aria-label="Moduri Atlas">
+    <button class="mode active" data-mode="actual" aria-pressed="true">ACTUAL</button>
+    <button class="mode" data-mode="istoric" aria-pressed="false" disabled title="Modul ISTORIC va fi activat după publicarea primului corpus istoric" aria-label="ISTORIC — în pregătire">ISTORIC</button>
+    <button class="mode" data-mode="propuneri" aria-pressed="false" disabled title="Modul PROPUNERI va fi activat după publicarea primului corpus de propuneri" aria-label="PROPUNERI — în pregătire">PROPUNERI</button>
+  </nav>
+</header>
+<main id="atlas-main" aria-label="Atlas teritorial">
+<nav id="atlas-mobile-toolbar" class="atlas-mobile-toolbar" aria-label="Acțiuni rapide de navigare" hidden>
+  <button id="mobile-navigation" class="mobile-control mobile-navigation" type="button" aria-expanded="false" aria-controls="atlas-controls" hidden>☰ Entități</button>
+  <button id="mobile-search" class="mobile-control" type="button" aria-controls="atlas-controls" hidden>Căutare</button>
+  <button id="mobile-filters" class="mobile-control" type="button" aria-controls="filters-panel" hidden>Filtre</button>
+</nav>
+<button id="drawer-backdrop" class="drawer-backdrop" type="button" aria-label="Închide navigarea" tabindex="-1" hidden></button>
+<aside id="atlas-controls" class="controls" aria-label="Entități, căutare și filtre">
+  <button id="drawer-close" class="mobile-control drawer-close" type="button" hidden>Închide navigarea</button>
+  <h2>Explorează</h2>
+  <div class="atlas-primary-actions" role="group" aria-label="Acțiuni de navigare">
+    <button id="copy-link" class="action-button" type="button">Copiază link</button>
+    <button id="filters-toggle" class="action-button atlas-filters-trigger" type="button" aria-expanded="false" aria-controls="filters-panel">Filtre <span id="filters-count" aria-live="polite"></span></button>
+    <button id="info-toggle" class="action-button" type="button" aria-haspopup="dialog" aria-controls="atlas-info-dialog">Informații</button>
+  </div>
+  <div class="atlas-advanced-actions" role="group" aria-label="Instrumente avansate">
+    <button id="advanced-visible" class="action-button" type="button" aria-haspopup="dialog" aria-controls="atlas-advanced-dialog">Straturi</button>
+    <button id="advanced-recent" class="action-button" type="button" aria-haspopup="dialog" aria-controls="atlas-advanced-dialog">Recente</button>
+    <button id="advanced-compare" class="action-button" type="button" aria-haspopup="dialog" aria-controls="atlas-advanced-dialog">Compară</button>
+  </div>
+  <p id="share-status" class="hint" role="status" aria-live="polite"></p>
+
+  <section id="search-panel">
+    <h3 class="sr-only">Căutare</h3>
+    <input id="entity-search" class="search" type="search" aria-label="Caută entități teritoriale" aria-describedby="search-help" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="search-results" placeholder="Nume, SIRUTA/CUATM, cod statistic sau OSM…" autocomplete="off">
+    <p id="search-help" class="sr-only">Săgețile sus/jos navighează rezultatele, Enter selectează, Escape închide lista. Căutarea include și geometrii ascunse.</p>
+  </section>
+  <div class="atlas-navigation-tabs" role="tablist" aria-label="Navigare entități și rezultate">
+    <button id="tab-entities" class="atlas-navigation-tab" type="button" role="tab" aria-selected="true" aria-controls="entities-panel">Entități</button>
+    <button id="tab-results" class="atlas-navigation-tab" type="button" role="tab" aria-selected="false" aria-controls="results-panel" tabindex="-1">Rezultate</button>
+  </div>
+  <section id="results-panel" role="tabpanel" aria-labelledby="tab-results" hidden>
+    <div id="search-results" class="search-results" role="listbox" aria-label="Rezultate căutare" hidden></div>
+    <p id="search-status" class="hint" role="status" aria-live="polite"></p>
+  </section>
+  <section id="entities-panel" role="tabpanel" aria-labelledby="tab-entities">
+    <h3 class="sr-only">Arbore</h3>
+    <p class="hint atlas-tree-hint">Bifează geometria pentru afișare. Apasă numele pentru detalii.</p>
+    <p id="hierarchy-error" class="hint" role="alert"></p>
+    <div id="hierarchy-tree" class="hierarchy-tree"><p class="muted">Se încarcă arborele teritorial…</p></div>
+  </section>
+
+  <section id="filters-panel" class="atlas-filters-panel" aria-label="Filtre geometrice" hidden inert>
+    <div class="atlas-filters-heading"><h2>Filtre</h2><button id="filters-close" class="action-button" type="button">Închide filtrele</button></div>
+    <button id="filters-reset" class="action-button" type="button" disabled>Resetează filtrele</button>
+    <p class="hint">Filtrele limitează geometriile deja bifate în arbore; nu modifică bifele entităților.</p>
+    <section>
+    <h3>Jurisdicții</h3>
+    <label><input id="layer-ro" type="checkbox" checked> România</label>
+    <label><input id="layer-md" type="checkbox" checked> Moldova</label>
+  </section>
+
+    <section>
+    <div id="filter-list" class="filter-list"><span class="muted">Se încarcă…</span></div>
+    </section>
+  </section>
+
+  <p id="geometry-load-status" class="hint" role="alert"></p>
+</aside>
+<dialog id="atlas-info-dialog" aria-labelledby="atlas-info-title">
+  <div class="atlas-info-heading">
+    <h2 id="atlas-info-title">Informații despre hartă</h2>
+    <button id="info-close" class="action-button" type="button">Închide</button>
+  </div>
+  <div class="atlas-info-body">
+  <section>
+    <h3>Nivel de detaliu</h3>
+    <p class="hint">Limitele regionale sunt încărcate imediat. UAT-urile locale apar de la zoom 7, iar sectoarele și reprezentările de detaliu de la zoom 10.</p>
+  </section>
+
+  <section id="atlas-legend" aria-label="Legenda hărții"></section>
+  <section class="status" aria-labelledby="provenance-heading">
+    <h3 id="provenance-heading">Release și proveniență</h3>
+    <p>Identitatea juridică și reprezentarea geometrică sunt afișate separat. SIRUTA/CUATM furnizează identitatea oficială când există o reconciliere pozitivă; geometria publică păstrează coordonatele master ale snapshot-ului OSM validat, fără simplificare.</p>
+    <div id="global-provenance"></div>
+    <p id="actual-release-status" role="status" aria-live="polite">ACTUAL: verificare release…</p>
+    <p id="ro-source-status">RO: verificare snapshot…</p>
+    <p id="md-source-status">MD: verificare snapshot…</p>
+  </section>
+  </div>
+</dialog>
+<dialog id="atlas-advanced-dialog" aria-labelledby="atlas-advanced-title">
+  <div class="atlas-advanced-heading">
+    <h2 id="atlas-advanced-title">Navigare avansată</h2>
+    <button id="advanced-close" class="action-button" type="button">Închide</button>
+  </div>
+  <div class="atlas-advanced-tabs" role="tablist" aria-label="Instrumente de navigare">
+    <button type="button" id="advanced-tab-visible" role="tab" aria-controls="atlas-advanced-content" aria-selected="true">Straturi</button>
+    <button type="button" id="advanced-tab-recent" role="tab" aria-controls="atlas-advanced-content" aria-selected="false">Recente</button>
+    <button type="button" id="advanced-tab-compare" role="tab" aria-controls="atlas-advanced-content" aria-selected="false">Compară</button>
+  </div>
+  <section id="atlas-advanced-content" role="tabpanel" aria-label="Conținut navigare avansată"></section>
+</dialog>
+<div id="explorer-resizer" role="separator" tabindex="0" aria-orientation="vertical" aria-label="Redimensionează panoul Entități" aria-controls="atlas-controls" aria-valuemin="280" aria-valuemax="660" aria-valuenow="340"></div>
+
+<p id="map-help" class="sr-only">Hartă navigabilă cu săgeți și tastele plus/minus. Pentru selecția entităților fără mouse folosește căutarea sau arborele din navigare.</p>
+<div id="map" role="region" aria-label="Hartă teritorială România și Republica Moldova" aria-describedby="map-help" tabindex="0"></div>
+<button id="map-home" class="atlas-home-control" type="button" title="Centrează România și Moldova fără resetarea straturilor">Centrare RO + MD</button>
+<button id="basemap-toggle" class="atlas-basemap-toggle" type="button" aria-pressed="true" aria-label="Fundal OpenStreetMap activ. Dezactivează fundalul">Fundal OSM: activ</button>
+
+<button id="explorer-collapse" class="atlas-explorer-collapse" type="button" aria-pressed="false" aria-controls="atlas-controls" aria-label="Ascunde panoul de explorare" title="Ascunde panoul de explorare">☰</button>
+<aside id="details-panel" class="details" hidden aria-labelledby="details-title">
+  <div id="sheet-drag" class="atlas-sheet-drag" role="slider" tabindex="0" aria-label="Înălțimea cardului de detalii" aria-orientation="vertical" aria-valuemin="0" aria-valuemax="2" aria-valuenow="0" aria-valuetext="Minimizat" hidden><span aria-hidden="true"></span></div>
+  <div class="details-head">
+    <div><span class="eyebrow">Entitate selectată</span><h2 id="details-title" aria-live="polite" aria-atomic="true">Nicio selecție</h2></div>
+    <button id="sheet-half" class="mobile-control" type="button" aria-pressed="false" aria-controls="details-body" hidden>Jumătate</button>
+    <button id="sheet-expand" class="mobile-control" type="button" aria-expanded="false" aria-controls="details-body" hidden>Extinde</button>
+    <button id="details-close" class="icon-button" type="button" title="Închide detaliile" aria-label="Șterge selecția">×</button>
+  </div>
+  <p id="details-summary" class="details-summary"></p>
+  <p id="selection-visibility" class="hint" role="status" aria-live="polite"></p>
+  <button id="selection-visibility-action" class="action-button" type="button" hidden></button>
+  <p id="geometry-status" class="hint" role="status" aria-live="polite"></p>
+  <div id="details-body" class="details-body">
+    <p class="muted">Selectează o limită de pe hartă sau caută o entitate după nume ori identificator.</p>
+  </div>
+</aside>
+</main>
+<footer><span>Date cartografice: © OpenStreetMap contributors · identitate oficială: INS SIRUTA / BNS CUATM</span><span id="modeLabel">Mod: ACTUAL</span></footer>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
