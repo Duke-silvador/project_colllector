@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#155eef">
+<title>PDFLeo Analytics · Admin</title>
+<style>
+:root{--blue:#2563eb;--ink:#172554;--muted:#64748b;--line:#e2e8f0;--bg:#f4f7fc;--green:#087f5b}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 10% 0%,#dbeafe,transparent 35%),linear-gradient(145deg,#f8fbff,#eef3ff);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);min-height:100vh}
+.wrap{width:min(1120px,92%);margin:auto}.top{display:flex;justify-content:space-between;align-items:center;padding:24px 0;gap:16px}.brand{font-size:25px;font-weight:850;letter-spacing:-1px}.brand span{color:var(--blue)}.subbrand{color:var(--muted);font-size:12px;margin-top:3px}.top-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+button,a.btn{border:0;border-radius:11px;padding:11px 15px;font:inherit;font-size:13px;font-weight:750;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.primary{background:var(--blue);color:#fff;box-shadow:0 7px 18px #2563eb26}.secondary{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.hero{padding:28px 0 20px}.eyebrow{color:var(--blue);font-size:11px;letter-spacing:1.5px;font-weight:850;text-transform:uppercase}.hero h1{font-size:clamp(30px,5vw,44px);letter-spacing:-1.8px;margin:9px 0}.hero p{color:var(--muted);margin:0;line-height:1.65}
+.panel{background:rgba(255,255,255,.82);border:1px solid #fff;border-radius:20px;padding:24px;box-shadow:0 14px 40px #2847750c;margin:18px 0 24px}.login{max-width:480px;margin:55px auto}.login h2{margin:0 0 8px}.login p{color:var(--muted);font-size:14px;line-height:1.6}.field{display:flex;gap:9px;margin-top:18px}.field input{min-width:0;flex:1;border:1px solid var(--line);border-radius:11px;padding:12px;font:inherit;background:#fff}.msg{font-size:13px;margin-top:13px;color:var(--muted);line-height:1.6;overflow-wrap:anywhere}.msg.error{color:#b42318}.msg.ok{color:var(--green)}
+.hidden{display:none!important}.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.stat{background:rgba(255,255,255,.86);border:1px solid #fff;border-radius:18px;padding:20px;box-shadow:0 10px 30px #28477508}.stat .label{font-size:12px;color:var(--muted);font-weight:700}.stat .num{font-size:clamp(25px,4vw,36px);font-weight:850;letter-spacing:-1px;margin-top:10px;overflow-wrap:anywhere}.stat .hint{font-size:11px;color:var(--muted);margin-top:5px}
+.columns{display:grid;grid-template-columns:1.2fr .8fr;gap:16px}.panel h2{font-size:17px;margin:0 0 5px}.panel .desc{font-size:12px;color:var(--muted);margin:0 0 18px}.chart{display:grid;gap:13px}.barrow{display:grid;grid-template-columns:minmax(90px,145px) 1fr 45px;gap:10px;align-items:center;font-size:12px}.barlabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#334155}.track{height:11px;background:#edf2fa;border-radius:20px;overflow:hidden}.fill{height:100%;border-radius:20px;background:linear-gradient(90deg,#2563eb,#7c9cff);min-width:0}.count{text-align:right;font-weight:800;font-variant-numeric:tabular-nums}
+.days{height:190px;display:flex;align-items:stretch;gap:10px;padding-top:10px}.day{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:7px}.day .n{font-size:11px;color:#334155;font-weight:800}.day .column{width:min(100%,34px);min-height:3px;border-radius:8px 8px 3px 3px;background:linear-gradient(180deg,#7c9cff,#2563eb)}.day .date{font-size:10px;color:var(--muted);white-space:nowrap}
+.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid #edf1f7}th{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}td:last-child,th:last-child{text-align:right;font-variant-numeric:tabular-nums}tbody tr:last-child td{border-bottom:0}.empty{color:var(--muted);font-size:13px;padding:20px 0}.foot{color:var(--muted);font-size:11px;padding:14px 0 35px;line-height:1.6}
+@media(max-width:800px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}.columns{grid-template-columns:1fr}}@media(max-width:520px){.top{align-items:flex-start}.top-actions{justify-content:flex-end}.field{flex-direction:column}.panel{padding:17px}.barrow{grid-template-columns:85px 1fr 32px;gap:7px}.stat{padding:15px}.day .date{font-size:9px}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<div class="wrap">
+<header class="top"><div><div class="brand">PDF<span>Leo</span></div><div class="subbrand">Private analytics dashboard</div></div><div class="top-actions"><a class="btn secondary" href="/">← Website</a><button id="refresh" class="secondary hidden" type="button">↻ Refresh</button><button id="logout" class="secondary hidden" type="button">Sign out</button></div></header>
+<section id="loginView" class="panel login"><div class="eyebrow">ADMIN ACCESS</div><h2>Welcome back</h2><p>Sign in using your approved admin email. We'll send a secure sign-in link to your inbox. Only the authorized admin account can read analytics.</p><form id="loginForm"><label for="email" style="font-size:12px;font-weight:800">Admin email</label><div class="field"><input id="email" type="email" autocomplete="email" required value="mureedabbas121@gmail.com" placeholder="you@example.com"><button class="primary" id="sendLink" type="submit">Send sign-in link</button></div></form><div id="loginMsg" class="msg" role="status"></div></section>
+<main id="dashboard" class="hidden">
+<section class="hero"><div class="eyebrow">LIVE OVERVIEW</div><h1>Your PDFLeo activity</h1><p>Usage analytics from successful PDF tool operations. This is tool usage, not unique visitors or page views.</p></section>
+<section class="stats">
+<div class="stat"><div class="label">All-time tool uses</div><div class="num" id="total">—</div><div class="hint">Recorded successful operations</div></div>
+<div class="stat"><div class="label">Tools used</div><div class="num" id="toolKinds">—</div><div class="hint">Different tools with activity</div></div>
+<div class="stat"><div class="label">Last 7 days</div><div class="num" id="last7">—</div><div class="hint">Operations in the last seven days</div></div>
+<div class="stat"><div class="label">Most popular tool</div><div class="num" id="popular" style="font-size:25px">—</div><div class="hint" id="popularHint">By recorded usage</div></div>
+</section>
+<section class="columns">
+<div class="panel"><h2>Most-used tools</h2><p class="desc">Ranked by total recorded uses</p><div id="ranking" class="chart"><div class="empty">Loading analytics…</div></div></div>
+<div class="panel"><h2>Daily usage</h2><p class="desc">Last seven days, based on your browser's local time</p><div id="daily" class="days"></div></div>
+</section>
+<section class="panel"><h2>Tool breakdown</h2><p class="desc">Every tool with recorded activity</p><div class="tablewrap"><table><thead><tr><th>Tool</th><th>Share</th><th>Last used (UTC)</th><th>Uses</th></tr></thead><tbody id="breakdown"></tbody></table></div><div id="tableEmpty" class="empty hidden">No tool usage has been recorded yet.</div></section>
+<div id="dataMsg" class="msg"></div>
+</main>
+<footer class="foot">PDFLeo Admin · Analytics access is restricted by Supabase authentication and row-level security. Tool usage records do not identify unique visitors.</footer>
+</div>
+<script>
+(() => {
+  const SUPABASE_URL = 'https://hasdyzmvqwyztssbqvet.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_ira0ndyrnmNUuCJ6HF0xGQ_tydy0H55';
+  const ADMIN_EMAIL = 'mureedabbas121@gmail.com';
+  const client = window.supabase?.createClient ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY) : null;
+  const $ = id => document.getElementById(id);
+  const loginView = $('loginView'), dashboard = $('dashboard');
+  let busy = false;
+  const fmt = n => new Intl.NumberFormat().format(n);
+  const nice = s => ({jpgpdf:'JPG to PDF',pdfjpg:'PDF to JPG',pdfword:'PDF to Word',pdfexcel:'PDF to Excel',wordpdf:'Word to PDF',excelpdf:'Excel to PDF',pptpdf:'PowerPoint to PDF',pdfppt:'PDF to PowerPoint',htmlpdf:'HTML to PDF',pdfa:'PDF/A',ocr:'OCR PDF'}[s] || String(s).replace(/([a-z])([A-Z])/g,'$1 $2').replace(/pdf/ig,'PDF').replace(/\b\w/g,c=>c.toUpperCase()));
+  function showMsg(el, message, type=''){el.textContent=message;el.className='msg'+(type?' '+type:'');}
+  function setAuthed(session){
+    const user=session?.user;
+    const allowed=!!user && (user.email||'').toLowerCase()===ADMIN_EMAIL;
+    loginView.classList.toggle('hidden',allowed);
+    dashboard.classList.toggle('hidden',!allowed);
+    $('refresh').classList.toggle('hidden',!allowed);
+    $('logout').classList.toggle('hidden',!allowed);
+    if(user && !allowed) showMsg($('loginMsg'),'This account is not authorized for PDFLeo analytics. Please sign out and use the admin email.','error');
+    if(allowed) loadAnalytics();
+  }
+  async function loadAnalytics(){
+    if(!client || busy) return;
+    busy=true; $('refresh').disabled=true; showMsg($('dataMsg'),'Refreshing analytics…');
+    try{
+      let all=[], from=0, pageSize=1000;
+      while(true){
+        const {data,error}=await client.from('tool_usage').select('tool_name,created_at').order('created_at',{ascending:false}).range(from,from+pageSize-1);
+        if(error) throw error;
+        all=all.concat(data||[]);
+        if(!data || data.length<pageSize) break;
+        from+=pageSize;
+      }
+      render(all); showMsg($('dataMsg'),'Updated just now · '+fmt(all.length)+' records loaded.','ok');
+    }catch(e){
+      showMsg($('dataMsg'),'Could not load analytics: '+(e?.message||'Unknown error')+'. Confirm you signed in with the authorized email and that the email link returned to this page.','error');
+    }finally{busy=false;$('refresh').disabled=false;}
+  }
+  function render(rows){
+    const counts=new Map(), latest=new Map(), daily=new Map();
+    const now=new Date(); const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const dates=[];
+    for(let i=6;i>=0;i--){const d=new Date(today);d.setDate(today.getDate()-i);const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');dates.push({key,label:d.toLocaleDateString(undefined,{weekday:'short'}),date:d.toLocaleDateString(undefined,{month:'short',day:'numeric'})});daily.set(key,0);}
+    let recent=0;
+    for(const r of rows){
+      counts.set(r.tool_name,(counts.get(r.tool_name)||0)+1);
+      if(!latest.has(r.tool_name)) latest.set(r.tool_name,r.created_at);
+      const dt=new Date(r.created_at);
+      if(Number.isFinite(dt.getTime())){
+        const key=dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+        if(daily.has(key)) daily.set(key,daily.get(key)+1);
+        if(dt>=new Date(today.getTime()-6*86400000) && dt<=now) recent++;
+      }
+    }
+    const ranked=[...counts.entries()].sort((a,b)=>b[1]-a[1]);
+    $('total').textContent=fmt(rows.length);$('toolKinds').textContent=fmt(counts.size);$('last7').textContent=fmt(recent);
+    $('popular').textContent=ranked.length?nice(ranked[0][0]):'—';$('popularHint').textContent=ranked.length?fmt(ranked[0][1])+' recorded uses':'No usage yet';
+    const max=ranked[0]?.[1]||1;
+    $('ranking').innerHTML=ranked.length?ranked.slice(0,10).map(([name,n])=>'<div class="barrow"><div class="barlabel" title="'+nice(name)+'">'+nice(name)+'</div><div class="track"><div class="fill" style="width:'+Math.max(2,n/max*100)+'%"></div></div><div class="count">'+fmt(n)+'</div></div>').join(''):'<div class="empty">No tool usage has been recorded yet.</div>';
+    const maxDay=Math.max(1,...[...daily.values()]);
+    $('daily').innerHTML=dates.map(d=>'<div class="day" title="'+d.date+': '+fmt(daily.get(d.key))+' uses"><div class="n">'+fmt(daily.get(d.key))+'</div><div class="column" style="height:'+Math.max(3,daily.get(d.key)/maxDay*125)+'px"></div><div class="date">'+d.date+'</div></div>').join('');
+    $('breakdown').innerHTML=ranked.map(([name,n])=>'<tr><td>'+nice(name)+'</td><td>'+((n/Math.max(1,rows.length))*100).toFixed(1)+'%</td><td>'+new Date(latest.get(name)).toLocaleString(undefined,{timeZone:'UTC',dateStyle:'medium',timeStyle:'short'})+'</td><td><strong>'+fmt(n)+'</strong></td></tr>').join('');
+    $('tableEmpty').classList.toggle('hidden',ranked.length>0);
+  }
+  $('loginForm').addEventListener('submit',async e=>{
+    e.preventDefault(); if(!client){showMsg($('loginMsg'),'Supabase client could not load. Please refresh and try again.','error');return;}
+    const email=$('email').value.trim().toLowerCase();
+    if(email!==ADMIN_EMAIL){showMsg($('loginMsg'),'Only the configured admin email can sign in here.','error');return;}
+    $('sendLink').disabled=true;showMsg($('loginMsg'),'Sending secure sign-in link…');
+    try{
+      const {error}=await client.auth.signInWithOtp({email,options:{emailRedirectTo:window.location.href.split('#')[0]}});
+      if(error) throw error;
+      showMsg($('loginMsg'),'Sign-in link sent. Open the email and click the link in this same browser. Check Spam if it does not arrive.','ok');
+    }catch(err){showMsg($('loginMsg'),err?.message||'Could not send sign-in link.','error');}
+    finally{$('sendLink').disabled=false;}
+  });
+  $('refresh').addEventListener('click',loadAnalytics);
+  $('logout').addEventListener('click',async()=>{if(client){await client.auth.signOut();}loginView.classList.remove('hidden');dashboard.classList.add('hidden');$('logout').classList.add('hidden');$('refresh').classList.add('hidden');showMsg($('loginMsg'),'You have signed out.');});
+  if(client){
+    client.auth.onAuthStateChange((_event,session)=>{setAuthed(session);});
+    client.auth.getSession().then(({data})=>setAuthed(data?.session));
+  }else{showMsg($('loginMsg'),'Supabase client failed to load. Check your connection and refresh.','error');}
+})();
+</script>
+</body>
+</html>
