@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>NSE F&amp;O Mobile Dashboard</title>
+  <link rel="stylesheet" href="mobile.css">
+</head>
+<body>
+  <main class="app-shell">
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">NSE F&amp;O / MOBILE</p>
+        <h1>Market signals</h1>
+      </div>
+      <button class="icon-button" id="refreshButton" type="button" aria-label="Refresh dashboard" title="Refresh dashboard">↻</button>
+    </header>
+
+    <div class="notice">Educational and beta-testing dashboard. Do not place real trades based on this data.</div>
+
+    <section class="market-hero" aria-labelledby="marketTitle">
+      <div class="hero-topline"><span id="marketTitle">NIFTY 50</span><span class="live-dot">● LIVE</span></div>
+      <div class="hero-main"><strong id="niftyPrice">—</strong><span id="niftyDirection" class="direction">—</span></div>
+      <div class="hero-change" id="niftyChange">Loading market snapshot…</div>
+      <div class="score-strip">
+        <div><span>Market score</span><strong id="marketScore">—</strong></div>
+        <div><span>Buy score</span><strong id="buyScore">—</strong></div>
+        <div><span>Sell score</span><strong id="sellScore">—</strong></div>
+      </div>
+      <div class="refresh-line"><span id="refreshStatus">Connecting to existing market board…</span><span id="refreshTime">—</span></div>
+    </section>
+
+    <section class="toolbar" aria-label="Dashboard controls">
+      <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search symbol" autocomplete="off"></label>
+      <div class="control-row">
+        <label>Expiry<select id="expirySelect"><option value="current">Current</option><option value="next">Next</option><option value="far">Far</option><option value="all">All expiries</option></select></label>
+        <label>Rows<select id="rowsSelect"><option>3</option><option>5</option><option>10</option><option>15</option><option>20</option><option value="all" selected>All</option></select></label>
+        <label>Sort<select id="sortSelect"><option value="score">Final score</option><option value="symbol">Symbol</option><option value="spot">Spot</option><option value="oiYesterday">OI yesterday</option><option value="oiQuery">OI last query</option></select></label>
+      </div>
+    </section>
+
+    <nav class="signal-tabs" aria-label="Signal category">
+      <button class="signal-tab active" data-signal="ALL">ALL <span id="countAll">0</span></button>
+      <button class="signal-tab" data-signal="LONG">LONG <span id="countLong">0</span></button>
+      <button class="signal-tab" data-signal="SHORT">SHORT <span id="countShort">0</span></button>
+      <button class="signal-tab" data-signal="COVER">COVER <span id="countCover">0</span></button>
+      <button class="signal-tab" data-signal="UNWIND">UNWIND <span id="countUnwind">0</span></button>
+    </nav>
+
+    <section class="results-head"><div><span class="eyebrow">SIGNAL BOARD</span><h2 id="resultsTitle">LONG opportunities</h2></div><span id="resultCount" class="result-count">—</span></section>
+    <section id="cards" class="cards" aria-live="polite"><div class="state-card">Loading existing market data…</div></section>
+  </main>
+
+  <dialog id="dossierDialog" class="dossier-dialog"><div class="dialog-head"><div><p class="eyebrow">360° DOSSIER</p><h2 id="dialogTitle">Stock detail</h2></div><button id="dialogClose" class="icon-button" type="button" aria-label="Close">×</button></div><div id="dialogBody"></div></dialog>
+
+  <script>
+    (() => {
+      'use strict';
+      const state = { rows: [], metadata: {}, signal: 'ALL', expiry: 'current', query: '', limit: 'all', sort: 'score' };
+      const $ = id => document.getElementById(id);
+      const text = (node, fallback = '—') => (node?.textContent || '').trim() || fallback;
+      const num = value => { const n = parseFloat(String(value ?? '').replace(/[^0-9.+-]/g, '')); return Number.isFinite(n) ? n : null; };
+      const money = value => { const n = num(value); return n === null ? '—' : '₹' + n.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2}); };
+      const signed = value => { const n = num(value); return n === null ? '—' : (n > 0 ? '+' : '') + n.toFixed(2) + '%'; };
+      const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+      function parseRows(doc) {
+        const rows = [];
+        doc.querySelectorAll('#buyTable tr, #sellTable tr').forEach(row => {
+          const cells = [...row.querySelectorAll(':scope > td')];
+          if (cells.length < 10) return;
+          const symbol = text(cells[0], '').toUpperCase();
+          const signal = text(cells[4], '').toUpperCase();
+          if (!symbol || !['LONG','SHORT','COVER','UNWIND'].includes(signal)) return;
+          rows.push({ symbol, spot: text(cells[1]), oiYesterday: text(cells[2]), oiQuery: text(cells[3]), signal, lastSignal: text(cells[5]), oiScore: text(cells[6]), qgvt: text(cells[7]), ai: text(cells[8]), score: text(cells[9]), pivot: text(cells[10]) });
+        });
+        return rows;
+      }
+
+      function setMarketSummary(raw) {
+        const line = [...raw.querySelectorAll('.nifty')][0];
+        const value = text(line, '');
+        const get = pattern => (value.match(pattern) || [,'—'])[1];
+        const price = get(/NIFTY 50:\s*([^|]+)/i), change = get(/Change:\s*([^|]+)/i), pct = get(/Change %:\s*([^|]+)/i), market = get(/Market:\s*([^|]+)/i), buy = get(/B:\s*([^|]+)/i), sell = get(/S:\s*([^|]+)/i);
+        $('niftyPrice').textContent = money(price); $('niftyChange').textContent = `${signed(change)} (${signed(pct)}) · ${market}`;
+        $('niftyDirection').textContent = /down|bear|weak/i.test(market) ? '▼' : /up|strong/i.test(market) ? '▲' : '—';
+        $('niftyDirection').className = 'direction ' + (/down|bear|weak/i.test(market) ? 'negative' : 'positive');
+        $('buyScore').textContent = buy; $('sellScore').textContent = sell; $('marketScore').textContent = `${buy} / ${sell}`;
+        const stamp = text(raw.querySelector('.board-refresh-time'), ''); $('refreshTime').textContent = stamp.replace(/^Last board data refresh:\s*/i, '');
+      }
+
+      function optionData(row) {
+        const stock = state.metadata[row.symbol] || {}; const expiry = state.expiry === 'all' ? 'current' : state.expiry; const option = stock.options?.[expiry] || stock.options?.current || {};
+        return { stock, option, futures: stock.futures?.[expiry] || stock.futures?.current || {} };
+      }
+
+      function render() {
+        let rows = state.rows.filter(r => (state.signal === 'ALL' || r.signal === state.signal) && (!state.query || r.symbol.includes(state.query)));
+        rows.sort((a,b) => state.sort === 'symbol' ? a.symbol.localeCompare(b.symbol) : (state.sort === 'spot' ? (num(b.spot)||0)-(num(a.spot)||0) : state.sort === 'oiYesterday' ? (num(b.oiYesterday)||0)-(num(a.oiYesterday)||0) : state.sort === 'oiQuery' ? (num(b.oiQuery)||0)-(num(a.oiQuery)||0) : (num(b.score)||0)-(num(a.score)||0)));
+        if (state.limit !== 'all') rows = rows.slice(0, Number(state.limit));
+        $('resultCount').textContent = `${rows.length} shown`;
+        $('resultsTitle').textContent = state.signal === 'ALL' ? 'All market signals' : `${state.signal} ${state.signal === 'LONG' || state.signal === 'COVER' ? 'opportunities' : 'watchlist'}`;
+        $('cards').innerHTML = rows.length ? rows.map(card).join('') : '<div class="state-card">No matching stocks in the existing market board.</div>';
+        $('cards').querySelectorAll('[data-dossier]').forEach(button => button.addEventListener('click', () => openDossier(button.dataset.dossier)));
+      }
+
+      function card(row) {
+        const { stock, option, futures } = optionData(row); const signalClass = row.signal.toLowerCase();
+        const expiries = ['current','next','far'].map(key => { const o = stock.options?.[key] || {}; const f = stock.futures?.[key] || {}; return `<div class="expiry-block"><b>${key.toUpperCase()}</b><span>Future ${money(f.price)} · Strike ${esc(o.strike ?? '—')} · CE ${money(o.CE?.price)} · PE ${money(o.PE?.price)}</span><small>${esc(o.CE?.trading_symbol || '')} / ${esc(o.PE?.trading_symbol || '')}</small></div>`; }).join('');
+        const pivot = stock.pivot_points || {};
+        return `<article class="stock-card"><div class="card-head"><button class="symbol" data-dossier="${esc(row.symbol)}">${esc(row.symbol)}<small>${esc(stock.company_name || '')}</small></button><span class="signal-pill ${signalClass}">${esc(row.signal)}</span></div><div class="price-grid"><div><span>Spot</span><strong>${money(row.spot)}</strong></div><div><span>Current future</span><strong>${money(futures.price)}</strong></div><div><span>Final score</span><strong class="score-value">${esc(row.score)}</strong></div></div><div class="metrics"><div><span>OI yesterday</span><b class="${num(row.oiYesterday) < 0 ? 'negative' : 'positive'}">${esc(row.oiYesterday)}</b></div><div><span>OI last query</span><b class="${num(row.oiQuery) < 0 ? 'negative' : 'positive'}">${esc(row.oiQuery)}</b></div><div><span>Last signal</span><b>${esc(row.lastSignal)}</b></div></div><details><summary>All values: futures, options, scores &amp; levels</summary><div class="detail-grid"><div><span>Lot size</span><b>${esc(stock.lot_size || option.CE?.lot_size || '—')}</b></div><div><span>OI status</span><b>${esc(stock.oi_status || '—')}</b></div><div><span>OI previous day</span><b>${esc(stock.previous_day_oi ?? '—')}</b></div><div><span>OI current</span><b>${esc(stock.current_oi ?? '—')}</b></div><div><span>OI change day</span><b>${esc(stock.oi_change_yesterday ?? '—')}</b></div><div><span>OI change query</span><b>${esc(stock.oi_change_last_query ?? '—')}</b></div><div><span>OI score</span><b>${esc(row.oiScore)}</b></div><div><span>QGVT score</span><b>${esc(row.qgvt)}</b></div><div><span>AI quant score</span><b>${esc(row.ai)}</b></div></div><div class="expiry-list">${expiries}</div><p class="pivot-copy">Pivot: ${esc(pivot.pivot ?? '—')} · R1 ${esc(pivot.r1 ?? '—')} · R2 ${esc(pivot.r2 ?? '—')} · R3 ${esc(pivot.r3 ?? '—')} · S1 ${esc(pivot.s1 ?? '—')} · S2 ${esc(pivot.s2 ?? '—')} · S3 ${esc(pivot.s3 ?? '—')} · Bias ${esc(pivot.bias ?? '—')} · Zone ${esc(pivot.zone ?? '—')}</p><p class="pivot-copy">Original pivot column: ${esc(row.pivot)}</p></details></article>`;
+      }
+
+      function openDossier(symbol) { const row = state.rows.find(item => item.symbol === symbol); const { stock, option, futures } = optionData(row || {}); $('dialogTitle').textContent = `${symbol} · ${stock.company_name || ''}`; $('dialogBody').innerHTML = `<div class="dialog-summary"><span class="signal-pill ${(row?.signal || '').toLowerCase()}">${esc(row?.signal || '—')}</span><strong>${money(row?.spot)}</strong></div><div class="detail-grid"><div><span>Futures</span><b>${money(futures.price)}</b></div><div><span>Strike</span><b>${esc(option.strike ?? '—')}</b></div><div><span>CE / PE</span><b>${money(option.CE?.price)} / ${money(option.PE?.price)}</b></div><div><span>Lot size</span><b>${esc(stock.lot_size || '—')}</b></div><div><span>Final score</span><b>${esc(row?.score || '—')}</b></div><div><span>OI shifts</span><b>${esc(row?.oiYesterday || '—')} / ${esc(row?.oiQuery || '—')}</b></div></div>`; $('dossierDialog').showModal(); }
+
+      async function fetchFirst(paths) { let lastError; for (const path of paths) { try { const response = await fetch(path + (path.includes('?') ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' }); if (response.ok) return response; lastError = new Error(`${response.status} ${response.statusText}: ${path}`); } catch (error) { lastError = error; } } throw lastError || new Error('No data source matched'); }
+      async function load() { $('refreshStatus').textContent = 'Loading existing market board…'; try { const boardResponse = await fetchFirst(['tabs/market.html', '../html/tabs/market.html', '/tabs/market.html', '/html/tabs/market.html']); const boardText = await boardResponse.text(); const raw = new DOMParser().parseFromString(boardText, 'text/html'); state.rows = parseRows(raw); setMarketSummary(raw); try { const metadataResponse = await fetchFirst(['../json/market_metadata.json', 'json/market_metadata.json', '/json/market_metadata.json']); state.metadata = await metadataResponse.json(); } catch (metadataError) { console.warn('Optional metadata source unavailable; showing board fields only.', metadataError); state.metadata = {}; } $('countAll').textContent = state.rows.length; ['LONG','SHORT','COVER','UNWIND'].forEach(signal => $('count' + signal[0] + signal.slice(1).toLowerCase()).textContent = state.rows.filter(r => r.signal === signal).length); $('refreshStatus').textContent = `Updated ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`; render(); } catch (error) { console.error('Mobile dashboard data load failed:', error); $('refreshStatus').textContent = 'Unable to load existing market data'; $('cards').innerHTML = '<div class="state-card error-state">Market data could not be loaded. Open this page through the existing dashboard server (not directly as a file), then refresh.</div>'; } }
+
+      document.querySelectorAll('.signal-tab').forEach(button => button.addEventListener('click', () => { document.querySelectorAll('.signal-tab').forEach(item => item.classList.remove('active')); button.classList.add('active'); state.signal = button.dataset.signal; render(); }));
+      $('searchInput').addEventListener('input', event => { state.query = event.target.value.toUpperCase().trim(); render(); }); $('expirySelect').addEventListener('change', event => { state.expiry = event.target.value; render(); }); $('rowsSelect').addEventListener('change', event => { state.limit = event.target.value; render(); }); $('sortSelect').addEventListener('change', event => { state.sort = event.target.value; render(); }); $('refreshButton').addEventListener('click', load); $('dialogClose').addEventListener('click', () => $('dossierDialog').close()); $('dossierDialog').addEventListener('click', event => { if (event.target === $('dossierDialog')) $('dossierDialog').close(); });
+      load();
+    })();
+  </script>
+</body>
+</html>
