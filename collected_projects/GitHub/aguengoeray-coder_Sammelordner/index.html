@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sammelordner</title>
+<meta name="description" content="Checkliste für Pokémon-Sammelkarten: alle englischen und deutschen Sets von Base Set bis heute, getrennt nach Sprache abhaken.">
+<meta name="theme-color" content="#2a44c0">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sammelordner">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="stylesheet" href="style.css?v=14">
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Sammelordner</h1>
+      <p class="sub" id="subCheck">Alle englischen und deutschen Sets von Base Set bis heute. Hake jede Karte ab, die in deinem Ordner steckt – getrennt nach Sprache. Tippe auf einen Kartennamen, um den Zustand festzuhalten.</p>
+    </div>
+    <button class="pill" id="syncPill" type="button" aria-describedby="syncHint">Nur auf diesem Gerät</button>
+  </header>
+  <p class="hint" id="syncHint" hidden></p>
+
+  <div class="view" id="viewCheck">
+  <section class="sheet">
+    <div class="sethead">
+      <div class="st"><h2 id="setName">Base Set</h2><p id="setMeta"></p></div>
+      <div class="row"><button class="btn ghost" type="button" id="openCollection">Meine Sammlung</button><button class="btn" type="button" id="pickSet">Set wechseln</button></div>
+    </div>
+    <div class="recent" id="recent" hidden></div>
+    <div class="summary" id="summary"></div>
+    <div class="tools">
+      <input type="search" id="q" placeholder="Name oder Nummer suchen" aria-label="Karten suchen">
+      <div class="seg" role="group" aria-label="Filter" id="filter">
+        <button type="button" data-f="all" aria-pressed="true">Alle</button>
+        <button type="button" data-f="missing" aria-pressed="false">Fehlt</button>
+        <button type="button" data-f="have" aria-pressed="false">Habe ich</button>
+      </div>
+      <div class="seg" role="group" aria-label="Namenssprache" id="lang">
+        <button type="button" data-l="de" aria-pressed="true">DE-Namen</button>
+        <button type="button" data-l="en" aria-pressed="false">EN-Namen</button>
+      </div>
+      <button class="pill vt" type="button" id="varToggle" aria-pressed="true" hidden>Varianten</button>
+    </div>
+    <ol class="cards" id="cards"></ol>
+  </section>
+
+  <details class="panel" id="accountPanel">
+    <summary>Konto &amp; Synchronisierung</summary>
+    <div class="body">
+      <div id="accNoConfig" hidden>
+        <p>Die Cloud-Speicherung ist noch nicht eingerichtet. Deine Sammlung wird nur in diesem Browser gespeichert.</p>
+      </div>
+      <div id="accOut" hidden>
+        <p>Melde dich mit deiner E-Mail-Adresse an. Dann liegt deine Sammlung sicher in der Cloud und ist auf Handy und Laptop gleich. Ein Passwort brauchst du nicht – du bekommst einen Code per Mail.</p>
+        <form id="emailForm" class="row">
+          <input type="email" id="email" required autocomplete="email" placeholder="deine@mail.de" aria-label="E-Mail-Adresse">
+          <button class="btn" type="submit" id="sendCode">Code anfordern</button>
+        </form>
+        <form id="codeForm" class="row" hidden>
+          <input type="text" id="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,10}" required placeholder="Code aus der E-Mail" aria-label="Code aus der E-Mail">
+          <button class="btn" type="submit">Anmelden</button>
+          <button class="btn ghost" type="button" id="otherMail">Andere E-Mail</button>
+        </form>
+      </div>
+      <div id="accIn" hidden>
+        <p>Angemeldet als <b id="accMail"></b>. Jede Änderung wird automatisch gespeichert.</p>
+        <div class="row"><button class="btn ghost" type="button" id="logout">Abmelden</button></div>
+        <p class="small">Beim Abmelden wird die Sammlung von diesem Gerät entfernt. In der Cloud bleibt sie erhalten.</p>
+      </div>
+      <p class="msg" id="accMsg" role="status"></p>
+    </div>
+  </details>
+
+  <details class="panel">
+    <summary>Fehlliste teilen</summary>
+    <div class="body">
+      <p>Erzeugt eine Liste aller fehlenden Karten im aktuellen Set, die du Sammlerfreunden per Nachricht schicken kannst.</p>
+      <div class="seg" role="group" aria-label="Sprache der Fehlliste" id="misslang">
+        <button type="button" data-m="de" aria-pressed="true">Deutsch fehlt</button>
+        <button type="button" data-m="en" aria-pressed="false">Englisch fehlt</button>
+      </div>
+      <textarea id="missing" readonly aria-label="Fehlliste"></textarea>
+      <div class="row"><button class="btn" type="button" id="copyMissing">Liste kopieren</button></div>
+    </div>
+  </details>
+  </div>
+
+  <div class="view" id="viewBuys" hidden>
+  <section class="sheet buysheet">
+    <div class="sethead">
+      <div class="st"><h2>Einkäufe &amp; Wert</h2><p>Kaufpreise und aktuellen Wert festhalten – Einzelkarten und Sealed.</p></div>
+      <div class="row"><button class="btn" type="button" id="addBuy">+ Einkauf</button></div>
+    </div>
+    <div class="colstats buystats" id="buyStats"></div>
+    <details class="chartbox" id="chartBox">
+      <summary><span>Verlauf</span><small>Gesamtwert &amp; Rendite</small></summary>
+      <div class="chartin">
+        <div class="row between">
+          <div class="seg" role="group" aria-label="Ansicht" id="chartMode"><button type="button" data-v="value" aria-pressed="true">Wert</button><button type="button" data-v="ret" aria-pressed="false">Rendite</button></div>
+          <div class="seg" role="group" aria-label="Zeitraum" id="chartRange"><button type="button" data-v="1M">1M</button><button type="button" data-v="6M">6M</button><button type="button" data-v="1J">1J</button><button type="button" data-v="Max" aria-pressed="true">Max</button></div>
+        </div>
+        <div class="chartread" id="chartRead" aria-live="polite"></div>
+        <div class="chartplot" id="chartPlot"></div>
+        <div class="chartlegend" id="chartLegend"><span><i class="lk val"></i>Gesamtwert</span><span><i class="lk inv"></i>Investiert</span></div>
+        <p class="charthint" id="chartHint">Der Verlauf füllt sich, je öfter du Werte aktualisierst – jede Änderung wird mit Datum gemerkt. Zum Ablesen den Finger über den Grafen ziehen.</p>
+      </div>
+    </details>
+    <p class="stalehint" id="buyStale" hidden></p>
+    <div class="tools">
+      <div class="seg wide2" role="group" aria-label="Bestand oder Verkauft" id="buyView">
+        <button type="button" data-v="hold" aria-pressed="true">Bestand</button><button type="button" data-v="sold" aria-pressed="false">Verkauft</button>
+      </div>
+      <input type="search" id="buySearch" placeholder="Karte, Produkt oder Händler suchen" aria-label="Einkäufe durchsuchen">
+      <div class="seg" role="group" aria-label="Art" id="buyType">
+        <button type="button" data-v="all" aria-pressed="true">Alle</button><button type="button" data-v="card" aria-pressed="false">Karten</button><button type="button" data-v="sealed" aria-pressed="false">Sealed</button>
+      </div>
+      <select id="buySort" aria-label="Sortierung">
+        <option value="date">Neueste zuerst</option>
+        <option value="value">Höchster Wert</option>
+        <option value="gain">Höchster Gewinn</option>
+        <option value="roi">Beste Rendite</option>
+        <option value="stale">Wert veraltet zuerst</option>
+      </select>
+    </div>
+    <div id="buyList"></div>
+  </section>
+  <p class="small buynote">Den aktuellen Wert trägst du selbst ein, z. B. den Trendpreis von Cardmarket. Eine freie Preis-Schnittstelle gibt es leider nicht.</p>
+  </div>
+
+  <details class="panel">
+    <summary>Sicherungscode</summary>
+    <div class="body">
+      <p>Ohne Konto kannst du deine Sammlung mit diesem Code auf ein anderes Gerät mitnehmen: kopieren, dort einfügen, „Code einlesen“.</p>
+      <textarea id="backup" aria-label="Sicherungscode"></textarea>
+      <div class="row">
+        <button class="btn" type="button" id="copyBackup">Code kopieren</button>
+        <button class="btn ghost" type="button" id="importBackup">Code einlesen</button>
+      </div>
+    </div>
+  </details>
+
+  <footer class="foot">Fan-Projekt ohne Verbindung zu Nintendo, The Pokémon Company oder Wizards of the Coast. Kartendaten: pokemon-tcg-data und PokeAPI. Deutsche Kartennamen ab 2003 werden automatisch aus den Pokémon-Namen erzeugt; Trainer- und Energiekarten stehen englisch.</footer>
+</div>
+<nav class="navbar" aria-label="Bereiche">
+  <div class="navin" role="tablist">
+    <button type="button" class="navbtn" role="tab" data-tab="check" aria-selected="true"><span class="ni" aria-hidden="true">☑</span>Checkliste</button>
+    <button type="button" class="navbtn" role="tab" data-tab="buys" aria-selected="false"><span class="ni" aria-hidden="true">€</span>Einkäufe &amp; Wert</button>
+  </div>
+</nav>
+<div class="toast" id="toast" hidden></div>
+
+<div class="picker" id="picker" hidden role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
+  <div class="pickhead">
+    <div class="row between"><h2 id="pickerTitle">Set wählen</h2><button class="btn ghost" type="button" id="closePicker">Schließen</button></div>
+    <input type="search" id="setSearch" placeholder="Set, Serie oder Jahr suchen" aria-label="Sets durchsuchen">
+    <div class="row between"><button class="pill" type="button" id="pickMine" aria-pressed="false">Nur Sets mit Karten</button>
+      <span class="legend"><span class="pd">DE</span><span class="pe">EN</span> abgehakt</span></div>
+  </div>
+  <div class="setlist" id="setList"></div>
+</div>
+
+<div class="picker" id="collection" hidden role="dialog" aria-modal="true" aria-labelledby="colTitle">
+  <div class="pickhead">
+    <div class="row between"><h2 id="colTitle">Meine Sammlung</h2><button class="btn ghost" type="button" id="closeCollection">Schließen</button></div>
+    <div class="colstats" id="colStats"></div>
+    <input type="search" id="colSearch" placeholder="Name oder Nummer suchen" aria-label="Sammlung durchsuchen">
+    <div class="row">
+      <div class="seg" role="group" aria-label="Sprache" id="colLang">
+        <button type="button" data-v="all" aria-pressed="true">Alle</button><button type="button" data-v="de" aria-pressed="false">DE</button><button type="button" data-v="en" aria-pressed="false">EN</button>
+      </div>
+      <div class="seg" role="group" aria-label="Zustand" id="colKind">
+        <button type="button" data-v="all" aria-pressed="true">Alle</button><button type="button" data-v="graded" aria-pressed="false">Gegradet</button><button type="button" data-v="raw" aria-pressed="false">Raw</button><button type="button" data-v="none" aria-pressed="false">Ohne Zustand</button>
+      </div>
+    </div>
+    <p class="colcount" id="colCount"></p>
+  </div>
+  <div class="setlist" id="colList"></div>
+</div>
+
+<div class="cardsheet" id="cardSheet" hidden role="dialog" aria-modal="true" aria-labelledby="csTitle">
+  <div class="csbox">
+    <div class="cshead">
+      <div class="cst"><p class="csno" id="csNo"></p><h2 id="csTitle"></h2><p class="csalt" id="csAlt"></p></div>
+      <button class="btn ghost" type="button" id="closeCard">Schließen</button>
+    </div>
+    <div class="csslots" id="csSlots"></div>
+  </div>
+</div>
+
+<div class="cardsheet" id="buySheet" hidden role="dialog" aria-modal="true" aria-labelledby="bfTitle">
+  <form class="csbox bform" id="buyForm" novalidate>
+    <div class="cshead">
+      <h2 id="bfTitle">Neuer Einkauf</h2>
+      <button class="btn ghost" type="button" id="bfClose">Schließen</button>
+    </div>
+    <div class="bfchoose" id="bfChoose" hidden>
+      <p>Was hast du gekauft?</p>
+      <button type="button" class="choice" data-v="card"><span class="ci" aria-hidden="true">🃏</span><b>Einzelkarte</b><small>Eine Karte aus der Checkliste</small></button>
+      <button type="button" class="choice" data-v="sealed"><span class="ci" aria-hidden="true">📦</span><b>Sealed-Produkt</b><small>Booster, Display, ETB, Box …</small></button>
+    </div>
+    <div class="seg" role="group" aria-label="Art des Einkaufs" id="bfType">
+      <button type="button" data-v="card" aria-pressed="true">Einzelkarte</button><button type="button" data-v="sealed" aria-pressed="false">Sealed-Produkt</button>
+    </div>
+    <div class="sellbox" id="bfSellBox" hidden></div>
+    <div class="bfgroup" id="bfCard">
+      <label>Set<select id="bfSet"></select></label>
+      <label>Karte<select id="bfCardSel"></select></label>
+      <label id="bfVarRow" hidden>Variante<select id="bfVar"></select></label>
+      <div class="bflabel">Sprache
+        <div class="seg" role="group" aria-label="Sprache der Karte" id="bfCardLang"><button type="button" data-v="1" aria-pressed="true">Deutsch</button><button type="button" data-v="2" aria-pressed="false">Englisch</button><button type="button" data-v="4" aria-pressed="false">Japanisch</button></div>
+      </div>
+    </div>
+    <div class="bfgroup" id="bfSealed" hidden>
+      <label>Produkt<input type="text" id="bfName" placeholder="z. B. Base Set Booster" autocomplete="off"></label>
+      <label>Art<select id="bfKind"></select></label>
+      <div class="bflabel">Sprache
+        <div class="seg" role="group" aria-label="Sprache des Produkts" id="bfSealedLang"><button type="button" data-v="de" aria-pressed="true">Deutsch</button><button type="button" data-v="en" aria-pressed="false">Englisch</button><button type="button" data-v="ja" aria-pressed="false">Japanisch</button></div>
+      </div>
+    </div>
+    <div class="bfrest" id="bfRest">
+    <div class="bfgrid">
+      <label>Anzahl<input type="number" id="bfQty" min="1" step="1" inputmode="numeric" value="1"></label>
+      <label>Kaufpreis pro Stück (€)<input type="text" id="bfPrice" inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
+      <label>Kaufdatum<input type="date" id="bfDate"></label>
+      <label>Aktueller Wert pro Stück (€)<input type="text" id="bfValue" inputmode="decimal" placeholder="0,00" autocomplete="off"><small id="bfValueHint"></small></label>
+    </div>
+    <label>Gekauft bei (optional)<input type="text" id="bfSeller" placeholder="z. B. Cardmarket, Flohmarkt, Kleinanzeigen" autocomplete="off"></label>
+    <label>Notiz (optional)<input type="text" id="bfNote" autocomplete="off"></label>
+    <p class="msg" id="bfMsg" role="alert"></p>
+    <div class="row between">
+      <button class="btn ghost danger" type="button" id="bfDelete" hidden>Löschen</button>
+      <span class="row"><button class="btn ghost" type="button" id="bfCancel">Abbrechen</button><button class="btn" type="submit">Speichern</button></span>
+    </div>
+    </div>
+  </form>
+</div>
+
+<div class="cardsheet" id="sellSheet" hidden role="dialog" aria-modal="true" aria-labelledby="sfTitle">
+  <form class="csbox bform" id="sellForm" novalidate>
+    <div class="cshead">
+      <div class="cst"><p class="csno" id="sfSub"></p><h2 id="sfTitle">Verkaufen</h2><p class="csalt" id="sfName"></p></div>
+      <button class="btn ghost" type="button" id="sfClose">Schließen</button>
+    </div>
+    <div class="bfgrid">
+      <label id="sfQtyRow">Anzahl<span class="qtyrow"><input type="number" id="sfQty" min="1" step="1" inputmode="numeric" value="1"><button type="button" class="pill" id="sfAll">Alle</button></span></label>
+      <label>Verkaufspreis pro Stück (€)<input type="text" id="sfPrice" inputmode="decimal" placeholder="0,00" autocomplete="off"></label>
+      <label>Gebühren (€)<input type="text" id="sfFee" inputmode="decimal" placeholder="0,00" autocomplete="off"><small>z. B. Provision der Plattform</small></label>
+      <label>Versand (€)<input type="text" id="sfShip" inputmode="decimal" placeholder="0,00" autocomplete="off"><small>was du fürs Verschicken bezahlt hast</small></label>
+      <label>Verkaufsdatum<input type="date" id="sfDate"></label>
+      <label>Verkauft an / über (optional)<input type="text" id="sfBuyer" placeholder="z. B. Cardmarket" autocomplete="off"></label>
+    </div>
+    <div class="sfpreview" id="sfPreview"></div>
+    <p class="msg" id="sfMsg" role="alert"></p>
+    <div class="row between">
+      <span></span>
+      <span class="row"><button class="btn ghost" type="button" id="sfCancel">Abbrechen</button><button class="btn" type="submit">Verkauf speichern</button></span>
+    </div>
+  </form>
+</div>
+
+<script src="config.js?v=14"></script>
+<script src="condition.js?v=14"></script>
+<script src="app.js?v=14"></script>
+<script src="buys.js?v=14"></script>
+</body>
+</html>
