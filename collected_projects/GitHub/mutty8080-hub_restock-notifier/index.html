@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amazon Restock Notifier</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --card: #171a21;
+    --border: #2a2e38;
+    --text: #e8e9ec;
+    --muted: #8b8f9a;
+    --accent: #4f8cff;
+    --danger: #ff5f5f;
+    --good: #34c77b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px 60px;
+  }
+  .wrap { width: 100%; max-width: 480px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.subtitle { color: var(--muted); font-size: 13px; margin: 0 0 24px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 6px; }
+  label:first-child { margin-top: 0; }
+  input, select {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #10131a;
+    color: var(--text);
+    font-size: 14px;
+  }
+  input:focus, select:focus { outline: 1px solid var(--accent); }
+  button {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 16px;
+  }
+  button:hover { opacity: 0.9; }
+  button.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  button.danger { background: var(--danger); width: auto; padding: 6px 10px; font-size: 12px; margin: 0; }
+  .item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .item:last-child { border-bottom: none; }
+  .item-name { font-size: 14px; font-weight: 600; }
+  .item-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .empty { color: var(--muted); font-size: 13px; text-align: center; padding: 12px 0; }
+  .status { font-size: 12px; margin-top: 10px; min-height: 16px; }
+  .status.err { color: var(--danger); }
+  .status.ok { color: var(--good); }
+  .pin-digits { display: flex; gap: 8px; margin: 16px 0; }
+  .pin-digits input {
+    text-align: center;
+    font-size: 20px;
+    letter-spacing: 2px;
+  }
+  .hidden { display: none; }
+  .link-btn {
+    background: none; border: none; color: var(--accent);
+    font-size: 12px; width: auto; padding: 0; margin-top: 12px; text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Amazon Restock Notifier</h1>
+  <p class="subtitle">Track Amazon products for restocks + price drops. (More marketplaces coming later.)</p>
+
+  <!-- LOCK SCREEN -->
+  <div id="lockScreen" class="card">
+    <label id="lockLabel" for="pinInput">Enter passcode</label>
+    <input id="pinInput" type="password" inputmode="numeric" maxlength="4" placeholder="••••">
+    <button onclick="tryUnlock()">Unlock</button>
+    <div id="lockStatus" class="status"></div>
+  </div>
+
+  <!-- SETUP SCREEN (first run) -->
+  <div id="setupScreen" class="card hidden">
+    <label>Set a 4-digit passcode</label>
+    <input id="setupPin" type="password" inputmode="numeric" maxlength="4" placeholder="e.g. 1234">
+    <label>GitHub repo owner</label>
+    <input id="setupOwner" type="text" placeholder="your-github-username">
+    <label>GitHub repo name</label>
+    <input id="setupRepo" type="text" placeholder="restock-notifier">
+    <label>GitHub personal access token (repo scope, this repo only)</label>
+    <input id="setupToken" type="password" placeholder="ghp_...">
+    <button onclick="saveSetup()">Save & Continue</button>
+    <div id="setupStatus" class="status"></div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div id="app" class="hidden">
+    <div class="card">
+      <label for="marketplaceInput">Marketplace</label>
+      <select id="marketplaceInput" onchange="toggleMarketplaceFields()">
+        <option value="amazon">Amazon</option>
+        <option value="kohls">Kohls</option>
+      </select>
+      <label id="asinLabel" for="asinInput">Product ASIN or Amazon link</label>
+      <input id="asinInput" type="text" placeholder="B0XXXXXXXX or full link">
+      <label for="nameInput">Name (optional, for your reference)</label>
+      <input id="nameInput" type="text" placeholder="Product A">
+      <label for="priceInput">Alert me if price drops to or below</label>
+      <input id="priceInput" type="number" step="0.01" placeholder="49.99">
+      <label for="durationInput">Keep watching for</label>
+      <select id="durationInput">
+        <option value="1">1 month</option>
+        <option value="3">3 months</option>
+        <option value="6">6 months</option>
+        <option value="12">12 months</option>
+        <option value="0">Until I turn it off</option>
+      </select>
+      <button onclick="addProduct()">Add to watchlist</button>
+      <div id="addStatus" class="status"></div>
+    </div>
+
+    <div class="card">
+      <label style="margin-top:0;">Active watches</label>
+      <div id="itemList"><div class="empty">Loading…</div></div>
+    </div>
+
+    <div class="card">
+      <label style="margin-top:0;">Diagnostics</label>
+      <div id="tokenPreview" class="item-meta" style="margin-bottom:10px;"></div>
+      <button class="secondary" onclick="testConnection()">Test GitHub connection</button>
+      <button class="secondary" onclick="sendTestNotification()">Send test Telegram + Gmail</button>
+      <button class="secondary" onclick="resetSetup()">Reset setup (clear saved token)</button>
+      <div id="diagStatus" class="status"></div>
+    </div>
+
+    <button class="secondary" onclick="lockApp()">Lock</button>
+  </div>
+</div>
+
+<script>
+const FILE_PATH = "watchlist.json";
+
+function getSettings() {
+  return {
+    pin: localStorage.getItem("rn_pin"),
+    owner: localStorage.getItem("rn_owner"),
+    repo: localStorage.getItem("rn_repo"),
+    token: localStorage.getItem("rn_token"),
+  };
+}
+
+const VERCEL_ACTION_URL = ""; // paste your Vercel URL here, e.g. "https://restock-webhook.vercel.app/api/action"
+
+function redirectOldActionLinks() {
+  const params = new URLSearchParams(window.location.search);
+  const asin = params.get("asin");
+  const action = params.get("action"); // old param name from previously-sent emails
+  if (asin && action && VERCEL_ACTION_URL) {
+    const doValue = action === "stop" ? "stop" : action === "adjust" ? "adjust" : null;
+    if (doValue) {
+      window.location.replace(`${VERCEL_ACTION_URL}?asin=${encodeURIComponent(asin)}&do=${doValue}`);
+      return true;
+    }
+  }
+  return false;
+}
+
+function init() {
+  if (redirectOldActionLinks()) return; // bounce old email links to the new instant backend
+
+  const s = getSettings();
+  const params = new URLSearchParams(window.location.search);
+  const hasAction = params.get("asin") && params.get("action");
+
+  if (!s.pin || !s.owner || !s.repo || !s.token) {
+    document.getElementById("lockScreen").classList.add("hidden");
+    document.getElementById("setupScreen").classList.remove("hidden");
+  } else if (localStorage.getItem("rn_unlocked") === "true" || hasAction) {
+    unlockApp();
+  }
+}
+init();
+
+function saveSetup() {
+  const pin = document.getElementById("setupPin").value.trim();
+  const owner = document.getElementById("setupOwner").value.trim();
+  const repo = document.getElementById("setupRepo").value.trim();
+  const token = document.getElementById("setupToken").value.trim();
+  const status = document.getElementById("setupStatus");
+
+  if (!/^\d{4}$/.test(pin)) { status.textContent = "Passcode must be 4 digits."; status.className = "status err"; return; }
+  if (!owner || !repo || !token) { status.textContent = "All fields required."; status.className = "status err"; return; }
+
+  localStorage.setItem("rn_pin", pin);
+  localStorage.setItem("rn_owner", owner);
+  localStorage.setItem("rn_repo", repo);
+  localStorage.setItem("rn_token", token);
+
+  document.getElementById("setupScreen").classList.add("hidden");
+  localStorage.setItem("rn_unlocked", "true");
+  unlockApp();
+}
+
+function tryUnlock() {
+  const entered = document.getElementById("pinInput").value.trim();
+  const s = getSettings();
+  const status = document.getElementById("lockStatus");
+  if (entered === s.pin) {
+    localStorage.setItem("rn_unlocked", "true");
+    unlockApp();
+  } else {
+    status.textContent = "Wrong passcode.";
+    status.className = "status err";
+  }
+}
+
+function unlockApp() {
+  document.getElementById("lockScreen").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  const s = getSettings();
+  const preview = document.getElementById("tokenPreview");
+  if (preview && s.token) {
+    preview.textContent = `Using owner: ${s.owner} · repo: ${s.repo} · token ending in …${s.token.slice(-6)}`;
+  }
+  loadWatchlist().then(() => handleDeepLinkAction());
+}
+
+async function handleDeepLinkAction() {
+  const params = new URLSearchParams(window.location.search);
+  const asin = params.get("asin");
+  const action = params.get("action");
+  if (!asin || !action) return;
+
+  if (action === "stop") {
+    if (confirm(`Stop tracking ${asin}?`)) {
+      await removeProduct(asin);
+      alert("Stopped tracking that product.");
+    }
+  } else if (action === "adjust") {
+    try {
+      const { content } = await fetchWatchlist();
+      const item = content.find((i) => getItemId(i) === asin);
+      if (item) await editPrice(asin, item.max_price);
+    } catch (e) {
+      alert(`Couldn't load product: ${e.message}`);
+    }
+  }
+
+  // clean the URL so refreshing doesn't re-trigger the action
+  window.history.replaceState({}, "", window.location.pathname);
+}
+
+function resetSetup() {
+  if (!confirm("This clears your saved passcode, owner, repo, and token from this browser. Continue?")) return;
+  localStorage.removeItem("rn_pin");
+  localStorage.removeItem("rn_owner");
+  localStorage.removeItem("rn_repo");
+  localStorage.removeItem("rn_token");
+  localStorage.removeItem("rn_unlocked");
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("setupScreen").classList.remove("hidden");
+}
+
+function lockApp() {
+  localStorage.removeItem("rn_unlocked");
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("pinInput").value = "";
+  document.getElementById("lockScreen").classList.remove("hidden");
+}
+
+function apiUrl() {
+  const s = getSettings();
+  return `https://api.github.com/repos/${s.owner}/${s.repo}/contents/${FILE_PATH}`;
+}
+
+async function fetchWatchlist() {
+  const s = getSettings();
+  const res = await fetch(apiUrl(), {
+    headers: { Authorization: `token ${s.token}`, Accept: "application/vnd.github+json" },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`GitHub API error: ${res.status} — ${body.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const content = JSON.parse(decodeURIComponent(escape(atob(data.content))));
+  return { content, sha: data.sha };
+}
+
+const SHARD_COUNT = 5; // must match SHARD_COUNT in the workflow file
+
+async function fetchState() {
+  const s = getSettings();
+  const merged = {};
+  for (let i = 0; i < SHARD_COUNT; i++) {
+    const url = `https://api.github.com/repos/${s.owner}/${s.repo}/contents/state_shard${i}.json`;
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `token ${s.token}`, Accept: "application/vnd.github+json" },
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const parsed = JSON.parse(decodeURIComponent(escape(atob(data.content))));
+      Object.assign(merged, parsed);
+    } catch (e) {
+      // skip this shard's file, keep merging the rest
+    }
+  }
+  return merged;
+}
+
+async function pushWatchlist(list, sha, message) {
+  const s = getSettings();
+  const body = {
+    message,
+    content: btoa(unescape(encodeURIComponent(JSON.stringify(list, null, 2)))),
+    sha,
+  };
+  const res = await fetch(apiUrl(), {
+    method: "PUT",
+    headers: { Authorization: `token ${s.token}`, Accept: "application/vnd.github+json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    throw new Error(`GitHub API error: ${res.status} — ${errBody.slice(0, 200)}`);
+  }
+}
+
+async function testConnection() {
+  const diag = document.getElementById("diagStatus");
+  diag.textContent = "Testing…";
+  diag.className = "status";
+  try {
+    const { content } = await fetchWatchlist();
+    diag.textContent = `Connected OK — found ${content.length} product(s) in watchlist.json.`;
+    diag.className = "status ok";
+  } catch (e) {
+    diag.textContent = e.message;
+    diag.className = "status err";
+  }
+}
+
+async function sendTestNotification() {
+  const diag = document.getElementById("diagStatus");
+  const s = getSettings();
+  diag.textContent = "Triggering test notification…";
+  diag.className = "status";
+  try {
+    const url = `https://api.github.com/repos/${s.owner}/${s.repo}/actions/workflows/monitor.yml/dispatches`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `token ${s.token}`, Accept: "application/vnd.github+json" },
+      body: JSON.stringify({ ref: "main", inputs: { test: "true" } }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`GitHub API error: ${res.status} — ${body.slice(0, 200)}`);
+    }
+    diag.textContent = "Triggered — check Telegram/Gmail in ~30-60 sec, or the Actions tab for progress.";
+    diag.className = "status ok";
+  } catch (e) {
+    diag.textContent = e.message;
+    diag.className = "status err";
+  }
+}
+
+function extractAsin(value) {
+  value = value.trim();
+  let m = value.match(/\/dp\/([A-Z0-9]{10})/i);
+  if (m) return m[1].toUpperCase();
+  m = value.match(/\/gp\/product\/([A-Z0-9]{10})/i);
+  if (m) return m[1].toUpperCase();
+  return value.toUpperCase();
+}
+
+function toggleMarketplaceFields() {
+  const marketplace = document.getElementById("marketplaceInput").value;
+  const label = document.getElementById("asinLabel");
+  const input = document.getElementById("asinInput");
+  if (marketplace === "kohls") {
+    label.textContent = "Kohls product URL";
+    input.placeholder = "https://www.kohls.com/product/prd-.../....html";
+  } else {
+    label.textContent = "Product ASIN or Amazon link";
+    input.placeholder = "B0XXXXXXXX or full link";
+  }
+}
+
+function getItemId(item) {
+  const marketplace = item.marketplace || "amazon";
+  if (marketplace === "amazon") return extractAsin(item.asin);
+  return item.id; // Kohls (and future non-Amazon) items store their own id at add-time
+}
+
+async function loadWatchlist() {
+  const listEl = document.getElementById("itemList");
+  listEl.innerHTML = '<div class="empty">Loading…</div>';
+  try {
+    const [{ content }, state] = await Promise.all([fetchWatchlist(), fetchState()]);
+    renderList(content, state);
+  } catch (e) {
+    listEl.innerHTML = `<div class="empty">Couldn't load list (${e.message})</div>`;
+  }
+}
+
+function renderList(items, state = {}) {
+  const listEl = document.getElementById("itemList");
+  if (!items.length) {
+    listEl.innerHTML = '<div class="empty">No active watches yet.</div>';
+    return;
+  }
+  const params = new URLSearchParams(window.location.search);
+  const highlightAsin = params.get("asin");
+
+  listEl.innerHTML = "";
+  items.forEach((item) => {
+    const id = getItemId(item);
+    const div = document.createElement("div");
+    div.className = "item";
+    if (id === highlightAsin) {
+      div.style.background = "#1a2333";
+      div.style.borderRadius = "8px";
+      div.style.padding = "8px";
+    }
+    const s = state[id];
+    let statusLine = "Not checked yet";
+    if (s && s.last_checked) {
+      const priceStr = s.last_price != null ? `$${s.last_price.toFixed(2)}` : "no price found";
+      const stockStr = s.last_in_stock ? "In stock" : "Out of stock";
+      statusLine = `${stockStr} · ${priceStr} · checked ${s.last_checked}`;
+    }
+    const marketplaceLabel = item.marketplace === "kohls" ? "Kohls" : "Amazon";
+    div.innerHTML = `
+      <div>
+        <div class="item-name">${item.name || id} <span style="color:var(--muted); font-weight:400;">(${marketplaceLabel})</span></div>
+        <div class="item-meta">≤ $${item.max_price} · ${item.watch_until ? "until " + item.watch_until : "until turned off"}</div>
+        <div class="item-meta">${statusLine}</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        <button class="danger" data-action="remove">Remove</button>
+        <button class="secondary" data-action="edit" style="width:auto; padding:6px 10px; font-size:12px; margin:0;">Edit price</button>
+      </div>
+    `;
+    div.querySelector('[data-action="remove"]').addEventListener("click", () => removeProduct(id));
+    div.querySelector('[data-action="edit"]').addEventListener("click", () => editPrice(id, item.max_price));
+    listEl.appendChild(div);
+  });
+
+  if (highlightAsin) {
+    setTimeout(() => {
+      const target = [...listEl.children].find((el) => el.querySelector(".item-name"));
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 100);
+  }
+}
+
+async function editPrice(itemId, currentPrice) {
+  const newPrice = prompt(`New alert price for this product (currently $${currentPrice}):`, currentPrice);
+  if (newPrice === null) return;
+  const parsed = parseFloat(newPrice);
+  if (isNaN(parsed)) {
+    alert("Enter a valid number.");
+    return;
+  }
+  try {
+    const { content, sha } = await fetchWatchlist();
+    const updated = content.map((i) => (getItemId(i) === itemId ? { ...i, max_price: parsed } : i));
+    await pushWatchlist(updated, sha, `Update price for ${itemId}`);
+    loadWatchlist();
+  } catch (e) {
+    alert(`Failed to update: ${e.message}`);
+  }
+}
+
+async function triggerImmediateCheck(asin) {
+  const s = getSettings();
+  try {
+    const url = `https://api.github.com/repos/${s.owner}/${s.repo}/actions/workflows/monitor.yml/dispatches`;
+    await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `token ${s.token}`, Accept: "application/vnd.github+json" },
+      body: JSON.stringify({ ref: "main", inputs: { check_asin: asin } }),
+    });
+  } catch (e) {
+    // non-critical — the regular ~5 min schedule will still pick it up
+  }
+}
+
+async function addProduct() {
+  const status = document.getElementById("addStatus");
+  const marketplace = document.getElementById("marketplaceInput").value;
+  const inputRaw = document.getElementById("asinInput").value.trim();
+  const name = document.getElementById("nameInput").value.trim();
+  const maxPrice = parseFloat(document.getElementById("priceInput").value);
+  const months = parseInt(document.getElementById("durationInput").value, 10);
+
+  if (!inputRaw || isNaN(maxPrice)) {
+    status.textContent = "Product info and max price are required.";
+    status.className = "status err";
+    return;
+  }
+
+  let watch_until = null;
+  if (months > 0) {
+    const until = new Date();
+    until.setMonth(until.getMonth() + months);
+    watch_until = until.toISOString().slice(0, 10);
+  }
+
+  status.textContent = "Saving…";
+  status.className = "status";
+
+  try {
+    const { content, sha } = await fetchWatchlist();
+
+    let newItem;
+    if (marketplace === "kohls") {
+      const id = `kohls-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+      newItem = { marketplace: "kohls", id, url: inputRaw, name: name || "Kohls product", max_price: maxPrice, watch_until };
+    } else {
+      const asin = extractAsin(inputRaw);
+      newItem = { marketplace: "amazon", asin, name: name || asin, max_price: maxPrice, watch_until };
+    }
+    const newId = getItemId(newItem);
+
+    const alreadyTracked = content.some((i) => getItemId(i) === newId);
+    if (alreadyTracked) {
+      status.textContent = "Already tracking this product — skipped duplicate.";
+      status.className = "status err";
+      return;
+    }
+
+    content.push(newItem);
+    await pushWatchlist(content, sha, `Add ${newItem.name} to watchlist`);
+    status.textContent = "Added — checking it now…";
+    status.className = "status ok";
+    document.getElementById("asinInput").value = "";
+    document.getElementById("nameInput").value = "";
+    document.getElementById("priceInput").value = "";
+    renderList(content);
+    if (marketplace === "amazon") triggerImmediateCheck(newId); // instant-check only supported for Amazon so far
+  } catch (e) {
+    status.textContent = `Failed: ${e.message}`;
+    status.className = "status err";
+  }
+}
+
+async function removeProduct(itemId) {
+  try {
+    const { content, sha } = await fetchWatchlist();
+    const updated = content.filter((i) => getItemId(i) !== itemId);
+    await pushWatchlist(updated, sha, `Remove ${itemId} from watchlist`);
+    renderList(updated);
+  } catch (e) {
+    alert(`Failed to remove: ${e.message}`);
+  }
+}
+</script>
+</body>
+</html>
