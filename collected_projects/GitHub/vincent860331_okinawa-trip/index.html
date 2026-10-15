@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>沖繩 4 天 3 夜 11 人同事慢活放空之旅</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Leaflet (maps) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 300px;
+            max-height: 360px;
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 340px;
+            }
+        }
+        .trip-map { height: 320px; border-radius: 0.75rem; z-index: 0; }
+        @media (min-width: 768px) { .trip-map { height: 400px; } }
+        .stop-pin { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 9999px; color: #fff; font-size: 12px; font-weight: 700; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.35); }
+        .leg-label { background: rgba(255,255,255,.95); border: 1px solid #cbd5e1; border-radius: 6px; padding: 1px 5px; font-size: 11px; font-weight: 600; color: #334155; white-space: nowrap; box-shadow: none; }
+        .leg-label::before { display: none; }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans antialiased min-h-screen flex flex-col selection:bg-teal-100 selection:text-teal-800">
+
+    <!-- Chosen Palette: Okinawa Ocean Breeze & Warm Sand -->
+    <!-- Application Structure Plan:
+        Designed an interactive dashboard tailored for 11-person company trip planning:
+        1. Sticky Header & Hero: Key trip constraints (11 colleagues, <=3 spots/day, drive time <1 hr).
+        2. Visual Metrics & Dashboard: Chart.js bar chart for driving duration.
+        3. Dynamic Itinerary Explorer: Interactive day filtering (Day 1 to 4) displaying concise spots, driving times, highlights, and group travel tips.
+        4. Logistics: 3 rented sedans (decided) vs 14-seater private bus.
+        5. Group Travel Survival Tips: Practical advice for large groups on reservations, car navigation, parking, and flexible grouping.
+    -->
+    <!-- Visualization & Content Choices:
+        - Drive Time Chart: Bar chart highlighting max drive times per day (all safely under 50 mins).
+        - Interactive Day Filter: Dynamic DOM manipulation for effortless exploration on mobile devices.
+        - NO SVG or Mermaid JS used. Clean styling using standard Unicode icons and CSS components.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <!-- Header Navigation -->
+    <header class="bg-teal-700 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <span class="text-2xl">🌺</span>
+                <div>
+                    <h1 class="font-bold text-lg sm:text-xl leading-tight">沖繩慢活放空之旅</h1>
+                    <p class="text-xs text-teal-100">11位同事 ‧ 4天3夜 ‧ 住那霸 3 晚 ‧ 景點≤3個/天 ‧ 車程多在 1 小時內</p>
+                </div>
+            </div>
+            <nav class="hidden md:flex space-x-6 text-sm font-medium">
+                <a href="#overview" class="hover:text-teal-200 transition">行程總覽</a>
+                <a href="#booking" class="hover:text-teal-200 transition">預約清單</a>
+                <a href="#itinerary" class="hover:text-teal-200 transition">每日行程 & 地圖</a>
+                <a href="#spare" class="hover:text-teal-200 transition">隨機想去</a>
+                <a href="#logistics" class="hover:text-teal-200 transition">交通方式</a>
+                <a href="#group-tips" class="hover:text-teal-200 transition">避坑指南</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-10">
+
+        <!-- Section 1: Overview & Highlights -->
+        <section id="overview" class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80">
+            <div class="mb-6">
+                <span class="bg-teal-100 text-teal-800 text-xs font-semibold px-3 py-1 rounded-full">企劃核心原則</span>
+                <h2 class="text-2xl font-bold text-slate-800 mt-2">11 人專屬「零壓力放空」行程規劃</h2>
+                <p class="text-slate-600 mt-1 leading-relaxed text-sm sm:text-base">
+                    多人出遊最忌諱點拉太遠與走馬看花。本行程 3 晚都住<strong>那霸國際通旁的 Hotel Monterey La Soeur Naha</strong>，單趟車程多控制在 <strong>1 小時內</strong>（只有去美麗海水族館約 1.5 小時），每天只排 <strong>1 個大行程</strong>（Day 2 卡丁車、Day 3 水族館），其他時間可以從「隨機想去」清單裡挑順路的點，保證全員都能輕鬆享受度假氛圍！
+                </p>
+            </div>
+
+            <!-- Metric Cards -->
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                <div class="bg-amber-50/70 p-4 rounded-xl border border-amber-100 text-center">
+                    <div class="text-2xl mb-1">⏱️</div>
+                    <div class="text-xs text-amber-800 font-medium">最長單趟車程</div>
+                    <div class="text-lg sm:text-xl font-bold text-amber-900 mt-1">約 1.5 小時</div>
+                    <div class="text-[11px] text-amber-700">只有水族館那段，其餘都 &lt; 1 小時</div>
+                </div>
+                <div class="bg-teal-50/70 p-4 rounded-xl border border-teal-100 text-center">
+                    <div class="text-2xl mb-1">📍</div>
+                    <div class="text-xs text-teal-800 font-medium">每日景點數量</div>
+                    <div class="text-lg sm:text-xl font-bold text-teal-900 mt-1">2 ~ 3 個地點</div>
+                    <div class="text-[11px] text-teal-700">留足拍照放空時間</div>
+                </div>
+                <div class="bg-sky-50/70 p-4 rounded-xl border border-sky-100 text-center">
+                    <div class="text-2xl mb-1">🏖️</div>
+                    <div class="text-xs text-sky-800 font-medium">海景與沙灘</div>
+                    <div class="text-lg sm:text-xl font-bold text-sky-900 mt-1">3 大特色水岸</div>
+                    <div class="text-[11px] text-sky-700">瀨長島 / 翡翠海灘 / 豐崎海灘</div>
+                </div>
+                <div class="bg-orange-50/70 p-4 rounded-xl border border-orange-100 text-center">
+                    <div class="text-2xl mb-1">🍱</div>
+                    <div class="text-xs text-orange-800 font-medium">在地美食</div>
+                    <div class="text-lg sm:text-xl font-bold text-orange-900 mt-1">精選高口碑</div>
+                    <div class="text-[11px] text-orange-700">炭火燒肉 / 亞洲百大酒吧 / 濱海咖啡</div>
+                </div>
+            </div>
+
+            <!-- Charts Grid -->
+            <div class="border-t border-slate-100 pt-6">
+                <div>
+                    <h3 class="text-base font-semibold text-slate-800 mb-1 flex items-center gap-2">
+                        <span>🚗</span> 每日行車時間估算 (分鐘)
+                    </h3>
+                    <p class="text-xs text-slate-500 mb-4">精確掌握每日拉車時長，不把時間浪費在車程上。</p>
+                    <div class="chart-container">
+                        <canvas id="driveTimeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section: Booking Checklist -->
+        <section id="booking" class="bg-white rounded-2xl p-6 shadow-sm border border-rose-200">
+            <div class="mb-4">
+                <span class="bg-rose-100 text-rose-800 text-xs font-semibold px-3 py-1 rounded-full">📞 出發前一定要處理</span>
+                <h2 class="text-2xl font-bold text-slate-800 mt-2">事先預約清單</h2>
+                <p class="text-slate-600 mt-1 text-sm leading-relaxed">
+                    11 人團體臨時去很容易沒位子，下面這些請負責的同事先訂好，完成就打勾（打勾只記在你自己的手機/電腦上）。
+                </p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="booking-list"></div>
+            <div class="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div class="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                    <strong class="text-slate-800">🙆 不用預約（現場排隊）</strong>
+                    <ul class="mt-1 text-slate-600 space-y-1 list-disc list-inside">
+                        <li>瀨長島 UMIKAJI TERRACE、Ashibinaa Outlet，以及「隨機想去」清單裡的景點</li>
+                        <li>ラーメン ちゃんや（只有 18 席，Day 3 19:00 開門就到或分兩批）</li>
+                        <li>本部町沖繩麵午餐（老店多半不接受預約，排隊約 15-30 分）</li>
+                    </ul>
+                </div>
+                <div class="p-3 rounded-xl bg-amber-50 border border-amber-200">
+                    <strong class="text-amber-900">🪪 出發前準備（不是預約但一定要做）</strong>
+                    <ul class="mt-1 text-amber-900 space-y-1 list-disc list-inside">
+                        <li>每位要開車或開卡丁車的人都到監理站申請「駕照日文譯本」，出國帶譯本 + 台灣駕照正本 + 護照</li>
+                        <li>確認出發日期有沒有碰到：ぶち 週三、ちゃんや 週日公休</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 2: Interactive Itinerary Explorer -->
+        <section id="itinerary" class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80">
+            <div class="mb-6">
+                <span class="bg-sky-100 text-sky-800 text-xs font-semibold px-3 py-1 rounded-full">行程細節探索</span>
+                <h2 class="text-2xl font-bold text-slate-800 mt-2">四天三夜行程與路線地圖</h2>
+                <p class="text-slate-600 mt-1 text-sm leading-relaxed">
+                    點選下方的天數，地圖與行程只會顯示那一天：包含機場、租車點、飯店、每個景點與餐廳，以及點到點的交通方式與時間。
+                </p>
+            </div>
+
+            <!-- Day Tabs (sticky) -->
+            <div class="sticky top-[60px] z-40 -mx-6 px-6 py-3 bg-white/95 backdrop-blur border-b border-slate-200 mb-4">
+                <div class="flex gap-2 overflow-x-auto custom-scrollbar pb-1" id="day-filter-buttons">
+                    <button data-day="1" onclick="filterDay(1)" class="day-btn shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition"><span class="block font-bold">Day 1</span><span class="block text-[11px] opacity-80">機場 ‧ 瀨長島 ‧ 燒肉 ‧ 酒吧</span></button>
+                    <button data-day="2" onclick="filterDay(2)" class="day-btn shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition"><span class="block font-bold">Day 2</span><span class="block text-[11px] opacity-80">公路卡丁車 ‧ 下午自由</span></button>
+                    <button data-day="3" onclick="filterDay(3)" class="day-btn shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition"><span class="block font-bold">Day 3</span><span class="block text-[11px] opacity-80">美麗海水族館 ‧ 拉麵</span></button>
+                    <button data-day="4" onclick="filterDay(4)" class="day-btn shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition"><span class="block font-bold">Day 4</span><span class="block text-[11px] opacity-80">Outlet ‧ 還車 ‧ 機場</span></button>
+                    <button data-day="all" onclick="filterDay('all')" class="day-btn shrink-0 px-4 py-2 rounded-xl text-sm font-medium transition"><span class="block font-bold">全程總覽</span><span class="block text-[11px] opacity-80">四天路線一次看</span></button>
+                </div>
+            </div>
+
+            <!-- Route Map (follows selected day) -->
+            <div class="bg-slate-50 rounded-2xl p-4 border border-slate-200 mb-6">
+                <div class="flex flex-wrap justify-between items-center gap-2 mb-2">
+                    <h3 class="font-bold text-slate-800 text-base" id="map-title">🗺️ 路線地圖</h3>
+                    <a id="map-gmaps-link" href="#" target="_blank" rel="noopener" class="text-[11px] font-semibold text-white bg-teal-700 px-2 py-1 rounded hover:bg-teal-800">在 Google 地圖開啟全日路線</a>
+                </div>
+                <div class="flex flex-wrap gap-1.5 mb-2 text-[11px] font-semibold" id="map-legend"></div>
+                <div id="route-map" class="trip-map border border-slate-200"></div>
+                <p class="text-[11px] text-slate-500 mt-2" id="map-hint"></p>
+            </div>
+
+            <!-- Itinerary Timeline Container -->
+            <div id="itinerary-cards-container" class="space-y-8">
+                <!-- Dynamically rendered via JS -->
+            </div>
+        </section>
+
+        <!-- Section: Optional stops near the route -->
+        <section id="spare" class="bg-white rounded-2xl p-6 shadow-sm border border-violet-200">
+            <div class="mb-4">
+                <span class="bg-violet-100 text-violet-800 text-xs font-semibold px-3 py-1 rounded-full">⭐ 隨機想去</span>
+                <h2 class="text-2xl font-bold text-slate-800 mt-2">順路 10 分鐘內的 10 個點</h2>
+                <p class="text-slate-600 mt-1 text-sm leading-relaxed">
+                    不在固定行程裡，都在這趟路線（飯店、機場/租車點、水族館）附近開車或走路 10 分鐘內，有空檔就隨時去。地圖上的 ⭐ 就是這些點；營業時間可能變動，出發前用 Google 地圖再確認。
+                </p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">🌳</span>
+                        <div>
+                            <span class="text-[11px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">景點</span>
+                            <span class="text-[11px] bg-violet-100 text-violet-800 px-1.5 py-0.5 rounded font-semibold">Day 3 ‧ 美麗海水族館旁</span>
+                            <h4 class="font-bold text-slate-800 text-sm mt-0.5">備瀨福木林道</h4>
+                        </div>
+                    </div>
+                    <p class="text-xs text-teal-800 font-semibold">📍 水族館開車約 5 分</p>
+                    <p class="text-xs text-slate-600 leading-relaxed mt-1 flex-grow">上千棵福木圍出的綠色隧道，老聚落安靜好拍，走到底就是海。看完水族館順路散步 30-40 分鐘剛好。</p>
+                    <p class="text-[11px] text-slate-600 mt-2">🕒 全天可逛 ‧ 附近有收費停車場</p>
+                    <a href="https://www.google.com/maps/dir/?api=1&origin=沖縄美ら海水族館&destination=備瀬のフクギ並木&travelmode=driving" target="_blank" rel="noopener" class="mt-2 inline-block w-fit text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-100">🗺️ 導航過去</a>
+                </div>
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">🐘</span>
+                        <div>
+                            <span class="text-[11px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">景點</span>
+                            <span class="text-[11px] bg-violet-100 text-violet-800 px-1.5 py-0.5 rounded font-semibold">Day 3 ‧ 回程改走海線</span>
+                            <h4 class="font-bold text-slate-800 text-sm mt-0.5">萬座毛</h4>
+                        </div>
+                    </div>
+                    <p class="text-xs text-teal-800 font-semibold">📍 回程改走國道 58 號海線會經過，整體多約 20-30 分</p>
+                    <p class="text-xs text-slate-600 leading-relaxed mt-1 flex-grow">沖繩代表性的象鼻岩斷崖，草原步道一圈約 20 分鐘。想看的話 Day 3 回程別上高速，沿西海岸南下順路停。</p>
+                    <p class="text-[11px] text-slate-600 mt-2">🕒 有停車場與遊客中心 ‧ 收少量入場清潔費</p>
+                    <a href="https://www.google.com/maps/dir/?api=1&origin=岸本食堂 本部&destination=万座毛&travelmode=driving" target="_blank" rel="noopener" class="mt-2 inline-block w-fit text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-100">🗺️ 導航過去</a>
+                </div>
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">🏖️</span>
+                        <div>
+                            <span class="text-[11px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">景點</span>
+                            <span class="text-[11px] bg-violet-100 text-violet-800 px-1.5 py-0.5 rounded font-semibold">Day 1 / Day 4 ‧ 租車點與 Outlet 旁</span>
+                            <h4 class="font-bold text-slate-800 text-sm mt-0.5">豐崎美らSUN海灘</h4>
+                        </div>
+                    </div>
+                    <p class="text-xs text-teal-800 font-semibold">📍 租車點或 Outlet 開車約 5 分</p>
+                    <p class="text-xs text-slate-600 leading-relaxed mt-1 flex-grow">離機場最近的白沙海灘，看飛機起降和夕陽，Day 1 取車後或 Day 4 逛 Outlet 前後都能順路繞一下。</p>
+                    <p class="text-[11px] text-slate-600 mt-2">🕒 有大型停車場</p>
+                    <a href="https://www.google.com/maps/dir/?api=1&origin=沖縄アウトレットモール あしびなー&destination=豊崎美らSUNビーチ&travelmode=driving" target="_blank" rel="noopener" class="mt-2 inline-block w-fit text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-100">🗺️ 導航過去</a>
+                </div>
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">⛩️</span>
+                        <div>
+                            <span class="text-[11px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">景點</span>
+                            <span class="text-[11px] bg-violet-100 text-violet-800 px-1.5 py-0.5 rounded font-semibold">任何一天 ‧ 那霸市區</span>
+                            <h4 class="font-bold text-slate-800 text-sm mt-0.5">波上宮</h4>
+                        </div>
+                    </div>
+                    <p class="text-xs text-teal-800 font-semibold">📍 飯店開車約 5 分 / 步行約 20 分</p>
+                    <p class="text-xs text-slate-600 leading-relaxed mt-1 flex-grow">蓋在海邊斷崖上的神社，下面就是波之上海灘，是那霸最有名的拍照點之一。</p>
+                    <p class="text-[11px] text-slate-600 mt-2">🕒 白天參拜 ‧ 有小型停車場</p>
+                    <a href="https://www.google.com/maps/dir/?api=1&origin=ホテルモントレ ラ・スール那覇&destination=波上宮&travelmode=driving" target="_blank" rel="noopener" class="mt-2 inline-block w-fit text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-100">🗺️ 導航過去</a>
+                </div>
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">🐟</span>
+                        <div>
+                            <span class="text-[11px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">市場</span>
+                            <span class="text-[11px] bg-violet-100 text-violet-800 px-1.5 py-0.5 rounded font-semibold">任何一天 ‧ 國際通旁</span>
+                            <h4 class="font-bold text-slate-800 text-sm mt-0.5">第一牧志公設市場</h4>
+                        </div>
+                    </div>
+                    <p class="text-xs text-teal-800 font-semibold">📍 飯店步行約 10 分</p>
+                    <p class="text-xs text-slate-600 leading-relaxed mt-1 flex-grow">那霸的廚房，1 樓買海鮮、2 樓食堂可以代客料理，Day 2 卡丁車後吃午餐很方便。</p>
+                    <p class="text-[11px] text-slate-600 mt-2">🕒 白天營業 ‧ 部分店家有公休</p>
+                    <a href="https://www.google.com/maps/dir/?api=1&origin=ホテルモントレ ラ・スール那覇&destination=第一牧志公設市場&travelmode=walking" target="_blank" rel="noopener" class="mt-2 inline-block w-fit text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-100">🗺️ 導航過去</a>
+                </div>
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">🏺</span>
+                        <div>
+                            <span class="text-[11px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">逛街</span>
+                            <span class="text-[11px] bg-violet-100 text-violet-800 px-1.5 py-0.5 rounded font-semibold">任何一天 ‧ 國際通旁</span>
+                            <h4 class="font-bold text-slate-800 text-sm mt-0.5">壺屋やちむん通り</h4>
+                        </div>
+                    </div>
+                    <p class="text-xs text-teal-800 font-semibold">📍 飯店步行約 15 分 / 開車 5 分</p>
+                    <p class="text-xs text-slate-600 leading-relaxed mt-1 flex-grow">石疊小路兩旁都是沖繩陶器（やちむん）老店，買伴手禮、拍老街都很好。</p>
+                    <p class="text-[11px] text-slate-600 mt-2">🕒 多數店家白天營業</p>
+                    <a href="https://www.google.com/maps/dir/?api=1&origin=ホテルモントレ ラ・スール那覇&destination=壺屋やちむん通り&travelmode=walking" target="_blank" rel="noopener" class="mt-2 inline-block w-fit text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-100">🗺️ 導航過去</a>
+                </div>
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">🏮</span>
+                        <div>
+                            <span class="text-[11px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">美食</span>
+                            <span class="text-[11px] bg-violet-100 text-violet-800 px-1.5 py-0.5 rounded font-semibold">晚上 ‧ 國際通旁</span>
+                            <h4 class="font-bold text-slate-800 text-sm mt-0.5">國際通屋台村</h4>
+                        </div>
+                    </div>
+                    <p class="text-xs text-teal-800 font-semibold">📍 飯店步行約 10 分</p>
+                    <p class="text-xs text-slate-600 leading-relaxed mt-1 flex-grow">20 多間小攤聚在一起，沖繩料理、串燒、泡盛都有，11 人可以分散各點各的再一起喝。</p>
+                    <p class="text-[11px] text-slate-600 mt-2">🕒 中午到深夜 ‧ 不用預約</p>
+                    <a href="https://www.google.com/maps/dir/?api=1&origin=ホテルモントレ ラ・スール那覇&destination=国際通り屋台村&travelmode=walking" target="_blank" rel="noopener" class="mt-2 inline-block w-fit text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-100">🗺️ 導航過去</a>
+                </div>
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">🍸</span>
+                        <div>
+                            <span class="text-[11px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">酒吧</span>
+                            <span class="text-[11px] bg-violet-100 text-violet-800 px-1.5 py-0.5 rounded font-semibold">晚上 ‧ 久茂地</span>
+                            <h4 class="font-bold text-slate-800 text-sm mt-0.5">Bar Alchemist（琉球調酒）</h4>
+                        </div>
+                    </div>
+                    <p class="text-xs text-teal-800 font-semibold">📍 飯店步行約 5-10 分</p>
+                    <p class="text-xs text-slate-600 leading-relaxed mt-1 flex-grow">用沖繩在地食材做原創雞尾酒的名店，和 El Lequio 是不同路線的另一間。</p>
+                    <p class="text-[11px] text-slate-600 mt-2">🕒 19:00-03:00 ‧ 週日不定休 ‧ 小店建議分 2 批</p>
+                    <a href="https://www.google.com/maps/dir/?api=1&origin=ホテルモントレ ラ・スール那覇&destination=Bar Alchemist 那覇 久茂地&travelmode=walking" target="_blank" rel="noopener" class="mt-2 inline-block w-fit text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-100">🗺️ 導航過去</a>
+                </div>
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">🏺</span>
+                        <div>
+                            <span class="text-[11px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">酒吧</span>
+                            <span class="text-[11px] bg-violet-100 text-violet-800 px-1.5 py-0.5 rounded font-semibold">晚上 ‧ 久米</span>
+                            <h4 class="font-bold text-slate-800 text-sm mt-0.5">泡盛倉庫</h4>
+                        </div>
+                    </div>
+                    <p class="text-xs text-teal-800 font-semibold">📍 飯店步行約 10-15 分</p>
+                    <p class="text-xs text-slate-600 leading-relaxed mt-1 flex-grow">整面牆約 800 種泡盛，老闆會依口味推薦，想認真喝懂泡盛來這裡。</p>
+                    <p class="text-[11px] text-slate-600 mt-2">🕒 18:00-24:00 ‧ 週日公休 ‧ 會員制，先電話確認 ☎ 098-869-0808</p>
+                    <a href="https://www.google.com/maps/dir/?api=1&origin=ホテルモントレ ラ・スール那覇&destination=泡盛倉庫 那覇 久米&travelmode=walking" target="_blank" rel="noopener" class="mt-2 inline-block w-fit text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-100">🗺️ 導航過去</a>
+                </div>
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-col">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="text-2xl">🥃</span>
+                        <div>
+                            <span class="text-[11px] bg-white border border-slate-200 text-slate-600 px-1.5 py-0.5 rounded">酒吧</span>
+                            <span class="text-[11px] bg-violet-100 text-violet-800 px-1.5 py-0.5 rounded font-semibold">晚上 ‧ 泉崎</span>
+                            <h4 class="font-bold text-slate-800 text-sm mt-0.5">Bar Tasting Club</h4>
+                        </div>
+                    </div>
+                    <p class="text-xs text-teal-800 font-semibold">📍 飯店步行約 5-10 分</p>
+                    <p class="text-xs text-slate-600 leading-relaxed mt-1 flex-grow">泡盛、威士忌等數百支蒸餾酒可以比較試飲，氣氛安靜，適合飯後小酌。</p>
+                    <p class="text-[11px] text-slate-600 mt-2">🕒 20:00-01:00 ‧ 週二公休 ‧ 4 樓小店建議分批</p>
+                    <a href="https://www.google.com/maps/dir/?api=1&origin=ホテルモントレ ラ・スール那覇&destination=Bar Tasting Club 那覇 泉崎&travelmode=walking" target="_blank" rel="noopener" class="mt-2 inline-block w-fit text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-100">🗺️ 導航過去</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Group Logistics & Calculator -->
+        <section id="logistics" class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80">
+            <div class="mb-6">
+                <span class="bg-orange-100 text-orange-800 text-xs font-semibold px-3 py-1 rounded-full">團體交通</span>
+                <h2 class="text-2xl font-bold text-slate-800 mt-2">11 人交通方案</h2>
+                <p class="text-slate-600 mt-1 text-sm leading-relaxed">
+                    11 人屬於中大型團體，交通是舒適度的關鍵。本次已決定<strong>自駕租 3 台一般轎車</strong>（4 + 4 + 3 人），下方也保留「包車（14 人座小巴）」作為參考。
+                </p>
+            </div>
+
+            <div>
+                <!-- Transport Comparison Options -->
+                <div class="bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                    <h3 class="font-bold text-slate-800 mb-3 text-lg flex items-center gap-2">
+                        <span>🚌</span> 交通方式方案對比 (11人)
+                    </h3>
+                    
+                    <div class="space-y-4">
+                        <!-- Option A -->
+                        <div class="p-4 bg-white rounded-xl border-2 border-teal-500 shadow-sm">
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <span class="bg-teal-100 text-teal-800 text-xs px-2 py-0.5 rounded font-bold">✅ 已決定</span>
+                                    <h4 class="font-bold text-slate-800 mt-1">租用 3 台一般轎車（分坐 4 + 4 + 3 人）</h4>
+                                    <p class="text-xs text-slate-500 mt-0.5">租車公司：<a href="https://carrental.jpn.com/okinawa-cn/" target="_blank" rel="noopener" class="text-teal-700 underline">沖縄租車 Car Rental Okinawa</a> ‧ ☎ 098-850-8070</p>
+                                </div>
+                                <span class="text-teal-700 font-bold text-sm">費用依訂車報價</span>
+                            </div>
+                            <ul class="text-xs text-slate-600 space-y-1.5 list-disc list-inside">
+                                <li><strong>優勢：</strong> 每台車坐得寬鬆不擠，可依想去的地方或作息分車，行程彈性高。</li>
+                                <li class="list-none -ml-4 my-2 p-3 rounded-lg bg-teal-50 border border-teal-200 text-teal-900"><strong>💡 建議租 3 天（72 小時）：</strong>Day 1 13:00 取車 → Day 4 11:30 還車，共約 70.5 小時，剛好在 3 天內。預約時請把取車填 13:00、還車填 11:30，<strong>還車不要晚於取車時間</strong>，否則會多算 1 天。<br><span class="text-[11px]">為什麼不租 2 天？租車公司在機場旁、9:00 才開，Day 3 早上要先搭單軌 + 接送車去取車，水族館那天會晚 1.5-2 小時出發；Day 1、Day 4 也要改搭 3-4 台計程車帶 11 人和行李，車資加起來和多租 1 天差不多，還更累。</span></li>
+                                <li><strong>取還車：</strong> 營業所不在機場內，有那霸機場與單軌電車赤嶺站的免費接送。營業時間 9:00-18:00，取車與還車都要在這個時間內。有台灣員工，可用中文溝通。</li>
+                                <li><strong>駕駛：</strong> 至少需要 3 位駕駛，最好每台車再多 1 位備用駕駛輪流開（需準備台灣駕照正本 + 日文譯本）。</li>
+                                <li><strong>行李：</strong> 一般轎車後車廂約只能放 2 個大行李箱，3 台車放不下 11 個大箱子。建議大家帶中小型行李箱或登機箱，訂車時確認車款後車廂大小。</li>
+                                <li><strong>停車：</strong> 沖繩大部分景點停車位充足；那霸飯店停車位有限，需先確認 3 台車的停車方式。</li>
+                                <li><strong>高速公路：</strong> 只有 Day 3 去水族館來回會走沖繩自動車道（那霸 IC ↔ 許田 IC），其他天都走一般道路。過路費可付現金，或租車時加租 ETC 卡直接過。</li>
+                                <li><strong>3 車移動：</strong> 每台車固定 1 位駕駛 + 1 位副駕負責導航與 LINE 回報，不必硬跟車，各自導航到同一個目的地停車場集合。</li>
+                                <li><strong>喝酒：</strong> 日本酒駕罰很重，同車乘客也會受罰。Day 1～3 晚上車都停在飯店不開，大家都可以喝；Day 2 早上要開卡丁車上路，Day 1 晚上喝酒請節制、早點結束。</li>
+                            </ul>
+                        </div>
+
+                        <!-- Option B -->
+                        <div class="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                            <div class="flex justify-between items-start mb-2">
+                                <div>
+                                    <span class="bg-slate-100 text-slate-700 text-xs px-2 py-0.5 rounded font-bold">輕鬆無腦</span>
+                                    <h4 class="font-bold text-slate-800 mt-1">包車 14 人座小巴 (含專屬司機)</h4>
+                                </div>
+                                <span class="text-slate-700 font-bold text-sm">約 NT$ 4,500 /人</span>
+                            </div>
+                            <ul class="text-xs text-slate-600 space-y-1.5 list-disc list-inside">
+                                <li><strong>優勢：</strong> 全員上車即可睡覺放空，免找停車位、免看地圖導航。</li>
+                                <li><strong>注意：</strong> 費用較高，行程時間需較為固定（每日服務約 8-10 小時）。</li>
+                                <li><strong>適合：</strong> 全員都不想在國外開車的放空度假團。</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Section 4: Group Travel Survival Tips -->
+        <section id="group-tips" class="bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80">
+            <div class="mb-6">
+                <span class="bg-amber-100 text-amber-800 text-xs font-semibold px-3 py-1 rounded-full">11人團體實用經驗</span>
+                <h2 class="text-2xl font-bold text-slate-800 mt-2">同事出遊順暢避坑指南</h2>
+                <p class="text-slate-600 mt-1 text-sm leading-relaxed">
+                    多人團體出遊要玩得開心，關鍵在於事先做好這四項「流暢細節」的安排：
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div class="text-2xl mb-2">🍽️</div>
+                    <h3 class="font-bold text-slate-800 text-sm mb-1">熱門餐廳提前預訂</h3>
+                    <p class="text-xs text-slate-600 leading-relaxed">
+                        沖繩熱門餐廳（如阿古豬涮涮鍋、石垣牛燒肉）位子有限，11 人臨時現場等位幾乎不可能。建議出發前 2~4 週先訂好大桌或拆 2 桌。
+                    </p>
+                </div>
+
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div class="text-2xl mb-2">🅿️</div>
+                    <h3 class="font-bold text-slate-800 text-sm mb-1">停車與跟車導航</h3>
+                    <p class="text-xs text-slate-600 leading-relaxed">
+                        自駕 3 台車，設定導航時各車駕駛需確認目的地 MAPCODE 或電話號碼一致，並在通訊軟體設立「導航群組」隨時回報進度。住在國際通旁，飯店停車位可能有限，出發前請先向飯店確認 3 台車的停車方式與費用。
+                    </p>
+                </div>
+
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div class="text-2xl mb-2">🛍️</div>
+                    <h3 class="font-bold text-slate-800 text-sm mb-1">自由時間與Outlet定點解散</h3>
+                    <p class="text-xs text-slate-600 leading-relaxed">
+                        逛街景點直接約定 1.5~2 小時後在指定咖啡廳或地標集合，不強制 11 人全程綁在一起，讓每個人都能逛得盡興。
+                    </p>
+                </div>
+
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div class="text-2xl mb-2">💳</div>
+                    <h3 class="font-bold text-slate-800 text-sm mb-1">公費公款專人保管</h3>
+                    <p class="text-xs text-slate-600 leading-relaxed">
+                        建議推舉一位「總務同仁」預收每人一定金額的日幣公費，專門支付過路費、停車費與共同大餐，避免頻繁拆帳與找零。
+                    </p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-800 text-slate-400 py-6 text-center text-xs mt-auto">
+        <p>沖繩 4 天 3 夜 11 人同事放空之旅 ‧ 祝大家旅途愉快！</p>
+    </footer>
+
+    <!-- JavaScript Logic -->
+    <script>
+        // Itinerary Data
+        const itineraryData = [
+            {
+                day: 1,
+                title: "Day 1：抵達沖繩 ‧ 浪漫海景、燒肉與調酒之夜",
+                subtitle: "12:30 抵達那霸 → 取車 → 瀨長島 → 飯店 ‧ 最長車程約 20 分鐘 ‧ 晚上步行/計程車",
+                spots: [
+                    {
+                        name: "瀨長島 UMIKAJI TERRACE",
+                        tag: "海景 / 鬆餅 / 看飛機",
+                        drive: "機場取車後約 15 分鐘車程",
+                        desc: "純白階梯式建築面朝大海，氣氛極度放鬆。一邊喝咖啡吃鬆餅，一邊看飛機起降與蔚藍海景，非常適合同事第一天拍照合照醒腦。逛完開約 20 分鐘回飯店 check-in。"
+                    },
+                    {
+                        name: "炭火燒肉 ぶち 久茂地2號店",
+                        tag: "晚餐 / 炭火燒肉 / 脆友推薦",
+                        drive: "飯店步行約 5-10 分鐘",
+                        desc: "那霸久茂地的人氣炭火燒肉（那霸市久茂地 3-9-12），肉品新鮮、店內乾淨寬敞，適合團體聚餐。車子停在飯店，走路過去大家都能放心喝酒。營業 17:00-22:00（週三公休），11 人務必提前預約。"
+                    },
+                    {
+                        name: "El Lequio 調酒酒吧",
+                        tag: "續攤 / 亞洲百大酒吧 / 琉球 × 拉丁調酒",
+                        drive: "久茂地搭計程車約 5-10 分鐘",
+                        desc: "位於那霸安里（國際通另一端）的名店，以沖繩在地食材做出琉球 × 拉丁風格創意調酒，曾入選亞洲百大酒吧。營業 19:00-02:00，吃完燒肉剛好來續攤，回飯店搭計程車也很近。店內座位有限，11 人建議先訂位或分兩批入場。"
+                    }
+                ],
+                groupTip: "12:30 抵達後約 13:00 出機場，搭 Car Rental Okinawa 接送車到營業所取車（手續約 1 小時），14:15 左右出發。午餐比較晚，飛機上可先吃點東西。建議提前把 11 人分成 3 車（4 + 4 + 3），行李也先分配好放在 3 台車後廂。晚上會喝酒，燒肉和酒吧都用走路或計程車移動。⚠️ 隔天（Day 2）早上 10:00 要開卡丁車上路，日本酒駕標準很嚴，今晚請少喝、早點回飯店；擔心的話可以把卡丁車改訂下午場。若抵達日剛好是週三（ぶち公休），可改到國際通一帶的阿古豬涮涮鍋。",
+                routeTotal: "今日開車合計約 40 分鐘（2 段），晚上全程步行/計程車",
+                route: [{"time": "12:30", "end": "13:00", "leg": "抵達那霸機場，入境、領行李", "dur": "約 30 分", "mode": "stay", "note": "11 人在入境大廳集合後一起去搭接送車"}, {"time": "13:00", "end": "13:15", "leg": "那霸機場 → Car Rental Okinawa 營業所", "dur": "約 10-15 分", "mode": "shuttle", "note": "租車公司免費接送車", "park": "出關後到租車公司接送櫃台/集合點報到，11 人分 3 車取車"}, {"time": "13:15", "end": "14:15", "leg": "取車手續、分 3 車、放行李", "dur": "約 1 小時", "mode": "stay", "note": "豐見城市名嘉地 256-5；確認 3 台車外觀、加 ETC 卡、設好導航群組", "book": "需預約"}, {"time": "14:15", "end": "14:30", "leg": "營業所 → 瀨長島 UMIKAJI TERRACE", "dur": "約 15 分", "mode": "drive", "note": "", "map": "https://www.google.com/maps/dir/?api=1&origin=カーレンタル沖縄 那覇空港店&destination=瀬長島ウミカジテラス&travelmode=driving", "park": "瀨長島有免費停車場，3 台車盡量停一起"}, {"time": "14:30", "end": "16:30", "leg": "瀨長島：遲午餐、看海、拍照", "dur": "約 2 小時", "mode": "stay", "note": "午餐比較晚，飛機上可先吃點東西墊胃"}, {"time": "16:30", "end": "16:55", "leg": "瀨長島 → Hotel Monterey La Soeur Naha", "dur": "約 20-25 分", "mode": "drive", "note": "", "map": "https://www.google.com/maps/dir/?api=1&origin=瀬長島ウミカジテラス&destination=ホテルモントレ ラ・スール那覇&travelmode=driving", "park": "飯店停車方式與費用請事先向飯店確認"}, {"time": "16:55", "end": "18:00", "leg": "飯店 check-in、停車、休息", "dur": "約 1 小時", "mode": "stay", "note": "車子今晚不再開，大家可以放心喝酒"}, {"time": "18:00", "end": "18:10", "leg": "飯店 → 炭火燒肉 ぶち 久茂地2號店", "dur": "約 5-10 分", "mode": "walk", "note": "", "map": "https://www.google.com/maps/dir/?api=1&origin=ホテルモントレ ラ・スール那覇&destination=炭火焼肉ぶち 久茂地2号店&travelmode=walking"}, {"time": "18:10", "end": "20:00", "leg": "ぶち：炭火燒肉晚餐", "dur": "約 2 小時", "mode": "stay", "note": "務必提前預約 11 人；週三公休", "book": "需預約"}, {"time": "20:00", "end": "20:10", "leg": "ぶち → El Lequio", "dur": "約 5-10 分", "mode": "taxi", "note": "3 台計程車，或走 15-20 分鐘", "map": "https://www.google.com/maps/dir/?api=1&origin=炭火焼肉ぶち 久茂地2号店&destination=El Lequio 那覇 安里&travelmode=driving"}, {"time": "20:10", "end": "22:30", "leg": "El Lequio：調酒續攤", "dur": "約 2 小時 20 分", "mode": "stay", "note": "座位有限，建議先訂位或分兩批", "book": "建議訂位"}, {"time": "22:30", "end": "22:40", "leg": "El Lequio → 飯店", "dur": "約 5-10 分", "mode": "taxi", "note": "走國際通回去約 20 分鐘", "map": "https://www.google.com/maps/dir/?api=1&origin=El Lequio 那覇 安里&destination=ホテルモントレ ラ・スール那覇&travelmode=driving"}]
+            },
+            {
+                day: 2,
+                title: "Day 2：那霸公路卡丁車 ‧ 下午自由行",
+                subtitle: "走路去卡丁車 → 國際通午餐 → 下午自由 ‧ 今天不開車",
+                spots: [
+                    {
+                        name: "Gorilla Kart Okinawa（公路卡丁車）",
+                        tag: "卡丁車上路 / 變裝 / 同事車隊",
+                        drive: "飯店步行約 10 分鐘（那霸市久茂地 2-6-12）",
+                        desc: "在那霸街頭開卡丁車上路，可以穿變裝服裝，11 人組成車隊一起跑。2 小時路線會經過那霸機場周邊、海底隧道、瀨長島和國際通（實際路線以預約方案為準）。<strong>上路需要駕照</strong>：台灣駕照正本 + 日文譯本 + 護照，<strong>未滿 18 歲不能開</strong>。"
+                    }
+                ],
+                groupTip: "卡丁車要事先預約 11 人（確認一次能出幾台車、要不要分兩梯）。每位要開的人都要帶台灣駕照正本 + 日文譯本 + 護照；卡丁車是上路駕駛，前一晚（Day 1 燒肉＋酒吧）一定要節制，當天早上不能有酒精。穿包鞋、方便活動的衣服。下午自由活動，可以分組去「隨機想去」清單裡的點，晚上約好地方一起吃飯。",
+                routeTotal: "今日不開車，卡丁車和午餐都走路，下午自由活動",
+                route: [{"time": "08:00", "end": "09:30", "leg": "早餐、準備出發", "dur": "約 1.5 小時", "mode": "stay", "note": "帶台灣駕照正本 + 日文譯本 + 護照；穿包鞋、方便活動的衣服"}, {"time": "09:30", "end": "09:40", "leg": "飯店 → Gorilla Kart Okinawa", "dur": "約 10 分", "mode": "walk", "note": "那霸市久茂地 2-6-12", "map": "https://www.google.com/maps/dir/?api=1&origin=ホテルモントレ ラ・スール那覇&destination=Gorilla Kart Okinawa 那覇 久茂地&travelmode=walking"}, {"time": "09:40", "end": "10:00", "leg": "報到、驗駕照、換裝、行前說明", "dur": "約 20 分", "mode": "stay", "note": "時段以預約確認為準"}, {"time": "10:00", "end": "12:00", "leg": "Gorilla Kart：公路卡丁車 2 小時路線", "dur": "約 2 小時", "mode": "stay", "note": "機場周邊、海底隧道、瀨長島、國際通（以預約方案為準）", "book": "需預約"}, {"time": "12:00", "end": "12:10", "leg": "Gorilla Kart → 國際通", "dur": "約 10 分", "mode": "walk", "note": ""}, {"time": "12:10", "end": "13:30", "leg": "國際通一帶午餐", "dur": "約 1 小時 20 分", "mode": "stay", "note": "例如牧志公設市場 2 樓食堂、國際通屋台村"}, {"time": "13:30", "end": "18:30", "leg": "下午自由活動", "dur": "約 5 小時", "mode": "stay", "note": "分組去「隨機想去」清單：波上宮、やちむん通り、牧志市場…；想休息的回飯店"}, {"time": "18:30", "end": "", "leg": "晚餐（自由或約好一起吃）", "dur": "", "mode": "stay", "note": "晚上可以去清單裡的酒吧續攤，都在飯店走路範圍"}]
+            },
+            {
+                day: 3,
+                title: "Day 3：美麗海水族館一日遊",
+                subtitle: "那霸 → 水族館 → 本部午餐 → 那霸 ‧ 今天只排水族館這個大行程",
+                spots: [
+                    {
+                        name: "沖繩美麗海水族館 & 翡翠海灘",
+                        tag: "黑潮之海 / 鯨鯊 / 海豚秀 / 海灘散步",
+                        drive: "那霸走高速公路約 1 小時 30 分鐘",
+                        desc: "沖繩必去的超大型水族館，巨型「黑潮之海」水槽可以看到鯨鯊與鬼蝠魟悠游，旁邊還有免費的海豚表演，看完可到隔壁翡翠海灘散步。住那霸一定要開這一段，早上 8:30 出發、10:00 入館，逛完在本部町吃午餐再回那霸。回程想多看一點可以參考「隨機想去」清單（備瀨福木林道、萬座毛）。"
+                    },
+                    {
+                        name: "ラーメン ちゃんや (Ramen Chanya)",
+                        tag: "晚餐 / 味噌拉麵 / 國際通",
+                        drive: "飯店步行約 10 分鐘",
+                        desc: "北海道出身老闆開的拉麵店，招牌是 Q 彈雞蛋麵配味噌拉麵，也有沖繩麵與煎餃（那霸市牧志 1-2-30，國際通中段、雜貨店裡面，找門口的暖簾）。營業 19:00-02:00（週五六到 05:00），週日公休。全店只有 18 席，11 人建議開門就到或分兩批。"
+                    }
+                ],
+                groupTip: "今天只有水族館一個大行程，來回各約 1.5 小時高速公路，各車駕駛記得在休息站休息或換手。水族館門票先在網路買好，入館後各自逛、12:50 在出口集合。下午回那霸自由休息，晚上走路吃拉麵；ちゃんや週日公休，若 Day 3 是週日可改國際通其他拉麵店。",
+                routeTotal: "今日開車合計約 3 小時 15 分（3 段，高速公路來回），晚餐步行",
+                route: [{"time": "07:30", "end": "08:30", "leg": "早餐、整理出發", "dur": "約 1 小時", "mode": "stay", "note": "飯店附近早餐或便利商店，準備水和零食"}, {"time": "08:30", "end": "10:00", "leg": "飯店 → 沖繩美麗海水族館", "dur": "約 1 小時 30 分", "mode": "drive", "note": "中途可在休息站換手", "map": "https://www.google.com/maps/dir/?api=1&origin=ホテルモントレ ラ・スール那覇&destination=沖縄美ら海水族館&travelmode=driving", "park": "海洋博公園停車場免費，P7 最靠近水族館", "road": "那霸 IC → 沖繩自動車道 → 許田 IC → 國道 58/449 號，高速公路需付過路費"}, {"time": "10:00", "end": "13:00", "leg": "美麗海水族館 & 翡翠海灘", "dur": "約 3 小時", "mode": "stay", "note": "黑潮之海、海豚秀（戶外免費）、海灘散步；入館後各自逛，12:50 出口集合", "book": "先買票"}, {"time": "13:00", "end": "13:15", "leg": "水族館 → 本部町午餐", "dur": "約 10-15 分", "mode": "drive", "note": "例如岸本食堂等老字號沖繩麵店", "map": "https://www.google.com/maps/dir/?api=1&origin=沖縄美ら海水族館&destination=岸本食堂 本部&travelmode=driving", "park": "老店車位少，3 台車可分散停附近"}, {"time": "13:15", "end": "14:15", "leg": "本部町：沖繩麵午餐", "dur": "約 1 小時", "mode": "stay", "note": ""}, {"time": "14:15", "end": "15:45", "leg": "本部町 → 飯店", "dur": "約 1 小時 30 分", "mode": "drive", "note": "許田 IC 上高速 → 那霸 IC", "map": "https://www.google.com/maps/dir/?api=1&origin=岸本食堂 本部&destination=ホテルモントレ ラ・スール那覇&travelmode=driving", "road": "國道 449/58 號 → 許田 IC → 沖繩自動車道 → 那霸 IC，需付過路費"}, {"time": "15:45", "end": "19:00", "leg": "飯店休息、自由時間", "dur": "約 3 小時", "mode": "stay", "note": "可以參考「隨機想去」清單：牧志市場、やちむん通り、波上宮"}, {"time": "19:00", "end": "19:10", "leg": "飯店 → ラーメン ちゃんや", "dur": "約 10 分", "mode": "walk", "note": "19:00 開門", "map": "https://www.google.com/maps/dir/?api=1&origin=ホテルモントレ ラ・スール那覇&destination=ラーメン ちゃんや 那覇 牧志&travelmode=walking"}, {"time": "19:10", "end": "20:30", "leg": "ちゃんや：味噌拉麵晚餐", "dur": "約 1 小時 20 分", "mode": "stay", "note": "只有 18 席，開門就到或分兩批；週日公休"}, {"time": "20:30", "end": "20:40", "leg": "ちゃんや → 飯店", "dur": "約 10 分", "mode": "walk", "note": "", "map": "https://www.google.com/maps/dir/?api=1&origin=ラーメン ちゃんや 那覇 牧志&destination=ホテルモントレ ラ・スール那覇&travelmode=walking"}]
+            },
+            {
+                day: 4,
+                title: "Day 4：最後採買戰利品與從容返程",
+                subtitle: "飯店 → Outlet → 還車 → 機場 ‧ 14:00 起飛 ‧ 11:30 前還車",
+                spots: [
+                    {
+                        name: "Ashibinaa Outlet 購物中心",
+                        tag: "品牌採買 / 免稅購物",
+                        drive: "飯店退房後約 25 分鐘車程",
+                        desc: "露天歐式造景，上百家國內外品牌齊全，非常適合回國前做最後的戰利品補貨與伴手禮採買。"
+                    },
+                    {
+                        name: "那霸機場返程",
+                        tag: "還車 / 搭機",
+                        drive: "Outlet 至機場/還車點約 15 分鐘車程",
+                        desc: "Outlet 距離機場與主要租車公司營業所極近，還車與搭機節奏完全不慌亂，為行程劃下完美句點。"
+                    }
+                ],
+                groupTip: "最後一天開車前確認 11 人的戰利品與行李箱是否都能妥善塞入 3 台車後廂。14:00 起飛，11:30 前一定要還車（還車＋接送車約 30 分鐘），記得先加滿油。Outlet 只逛 1 小時，時間到就集合出發，不要拖。",
+                routeTotal: "今日開車合計約 40 分鐘（2 段）",
+                route: [{"time": "08:00", "end": "09:15", "leg": "早餐、整理行李、退房", "dur": "約 1 小時 15 分", "mode": "stay", "note": "行李與戰利品先分配好 3 台車"}, {"time": "09:15", "end": "09:40", "leg": "飯店 → Ashibinaa Outlet", "dur": "約 25 分", "mode": "drive", "note": "", "map": "https://www.google.com/maps/dir/?api=1&origin=ホテルモントレ ラ・スール那覇&destination=沖縄アウトレットモール あしびなー&travelmode=driving", "park": "Outlet 停車場免費"}, {"time": "09:40", "end": "10:00", "leg": "停車、等 Outlet 開門", "dur": "約 20 分", "mode": "stay", "note": "10:00 開門"}, {"time": "10:00", "end": "11:00", "leg": "Ashibinaa Outlet 購物", "dur": "約 1 小時", "mode": "stay", "note": "時間只有 1 小時，11:00 準時在停車場集合；機場也有伴手禮店可補買"}, {"time": "11:00", "end": "11:15", "leg": "Outlet → 加油站 → Car Rental Okinawa 營業所", "dur": "約 15 分", "mode": "drive", "note": "11:15 前抵達營業所", "map": "https://www.google.com/maps/dir/?api=1&origin=沖縄アウトレットモール あしびなー&destination=カーレンタル沖縄 那覇空港店&travelmode=driving", "park": "還車前在營業所附近加滿油，保留加油收據"}, {"time": "11:15", "end": "11:30", "leg": "還車手續", "dur": "約 15 分", "mode": "stay", "note": "檢查車內有沒有遺留物品"}, {"time": "11:30", "end": "11:45", "leg": "營業所 → 那霸機場", "dur": "約 10-15 分", "mode": "shuttle", "note": "租車公司接送車"}, {"time": "11:45", "end": "14:00", "leg": "機場報到、托運、出境", "dur": "約 2 小時 15 分", "mode": "stay", "note": "國際線建議起飛前 2 小時完成報到"}, {"time": "14:00", "end": "", "leg": "班機起飛，回台灣", "dur": "", "mode": "flight", "note": ""}]
+            }
+        ];
+
+        // Map Data: places (approximate coordinates) and daily stop order
+        const places = {
+            airport: { name: '那霸機場', q: '那覇空港', lat: 26.2064, lng: 127.6465, icon: '✈️', pin: '#1e293b' },
+            rental: { name: 'Car Rental Okinawa 那霸機場店（取/還車）', q: 'カーレンタル沖縄 那覇空港店', lat: 26.1890, lng: 127.6590, icon: '🚙', pin: '#7c3aed', note: '豐見城市名嘉地 256-5 ‧ 營業 9:00-18:00 ‧ ☎ 098-850-8070' },
+            senaga: { name: '瀨長島 UMIKAJI TERRACE', q: '瀬長島ウミカジテラス', lat: 26.1755, lng: 127.6414 },
+            hotel: { name: 'Hotel Monterey La Soeur Naha', q: 'ホテルモントレ ラ・スール那覇', lat: 26.2143, lng: 127.6810, icon: '🏨', pin: '#475569', note: '那霸市松尾 1-1-2 ‧ 3 晚都住這裡' },
+            buchi: { name: '炭火燒肉 ぶち 久茂地2號店', q: '炭火焼肉ぶち 久茂地2号店', lat: 26.2163, lng: 127.6788 },
+            lequio: { name: 'El Lequio', q: 'El Lequio 那覇 安里', lat: 26.2197, lng: 127.6950 },
+            churaumi: { name: '美麗海水族館 & 翡翠海灘', q: '沖縄美ら海水族館', lat: 26.6943, lng: 127.8779 },
+            motobu: { name: '本部町午餐（沖繩麵）', q: '岸本食堂 本部', lat: 26.6555, lng: 127.8825 },
+            chanya: { name: 'ラーメン ちゃんや', q: 'ラーメン ちゃんや 那覇 牧志', lat: 26.2152, lng: 127.6868 },
+            gorilla: { name: 'Gorilla Kart Okinawa', q: 'Gorilla Kart Okinawa 那覇 久茂地', lat: 26.2178, lng: 127.6793, note: '那霸市久茂地 2-6-12 ‧ ☎ 090-9782-3891' },
+            market: { name: '國際通 ‧ 牧志公設市場一帶（午餐）', q: '第一牧志公設市場', lat: 26.2147, lng: 127.6893 },
+            ashibinaa: { name: 'Ashibinaa Outlet', q: '沖縄アウトレットモール あしびなー', lat: 26.1673, lng: 127.6595 }
+        };
+        // [place, arrive, leave, how you got there from the previous stop]
+        const dayStops = {
+            1: [['airport', '12:30', '13:00', ''], ['rental', '13:15', '14:15', '🚐 接送車 約 10-15 分'], ['senaga', '14:30', '16:30', '🚗 約 15 分'], ['hotel', '16:55', '18:00', '🚗 約 20-25 分'], ['buchi', '18:10', '20:00', '🚶 約 5-10 分'], ['lequio', '20:10', '22:30', '🚕 約 5-10 分'], ['hotel', '22:40', '', '🚕 約 5-10 分']],
+            3: [['hotel', '', '08:30', ''], ['churaumi', '10:00', '13:00', '🚗 約 1 小時 30 分（高速）'], ['motobu', '13:15', '14:15', '🚗 約 10-15 分'], ['hotel', '15:45', '19:00', '🚗 約 1 小時 30 分（高速）'], ['chanya', '19:10', '20:30', '🚶 約 10 分'], ['hotel', '20:40', '', '🚶 約 10 分']],
+            2: [['hotel', '', '09:30', ''], ['gorilla', '09:40', '12:00', '🚶 約 10 分'], ['market', '12:10', '13:30', '🚶 約 10 分']],
+            4: [['hotel', '', '09:15', ''], ['ashibinaa', '09:40', '11:00', '🚗 約 25 分'], ['rental', '11:15', '11:30', '🚗 約 15 分（先加滿油）'], ['airport', '11:45', '', '🚐 接送車 約 10-15 分']]
+        };
+        // Optional stops (⭐ on the map) and the days they're near
+        const extras = [
+            { icon: '🌳', name: '備瀨福木林道', dist: '水族館開車約 5 分', q: '備瀬のフクギ並木', days: [3], lat: 26.704, lng: 127.88 },
+            { icon: '🐘', name: '萬座毛', dist: '回程改走國道 58 號海線會經過，整體多約 20-30 分', q: '万座毛', days: [3], lat: 26.505, lng: 127.8505 },
+            { icon: '🏖️', name: '豐崎美らSUN海灘', dist: '租車點或 Outlet 開車約 5 分', q: '豊崎美らSUNビーチ', days: [1, 4], lat: 26.16, lng: 127.648 },
+            { icon: '⛩️', name: '波上宮', dist: '飯店開車約 5 分 / 步行約 20 分', q: '波上宮', days: [2], lat: 26.2215, lng: 127.6708 },
+            { icon: '🐟', name: '第一牧志公設市場', dist: '飯店步行約 10 分', q: '第一牧志公設市場', days: [2], lat: 26.2147, lng: 127.6893 },
+            { icon: '🏺', name: '壺屋やちむん通り', dist: '飯店步行約 15 分 / 開車 5 分', q: '壺屋やちむん通り', days: [2], lat: 26.2125, lng: 127.6915 },
+            { icon: '🏮', name: '國際通屋台村', dist: '飯店步行約 10 分', q: '国際通り屋台村', days: [2], lat: 26.2152, lng: 127.688 },
+            { icon: '🍸', name: 'Bar Alchemist（琉球調酒）', dist: '飯店步行約 5-10 分', q: 'Bar Alchemist 那覇 久茂地', days: [1, 2, 3], lat: 26.2175, lng: 127.6785 },
+            { icon: '🏺', name: '泡盛倉庫', dist: '飯店步行約 10-15 分', q: '泡盛倉庫 那覇 久米', days: [1, 2, 3], lat: 26.215, lng: 127.674 },
+            { icon: '🥃', name: 'Bar Tasting Club', dist: '飯店步行約 5-10 分', q: 'Bar Tasting Club 那覇 泉崎', days: [1, 2, 3], lat: 26.212, lng: 127.679 }
+        ];
+        const dayColors = { 1: '#0d9488', 2: '#0284c7', 3: '#f59e0b', 4: '#e11d48' };
+
+        function addTiles(map) {
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 18,
+                attribution: '&copy; OpenStreetMap contributors'
+            }).addTo(map);
+        }
+
+        function pinIcon(label, color) {
+            return L.divIcon({ className: '', html: `<div class="stop-pin" style="background:${color}">${label}</div>`, iconSize: [24, 24], iconAnchor: [12, 12] });
+        }
+
+        // Draw one day's stops + legs onto a map; returns the bounds of the points
+        function drawDay(map, layer, day, showLegLabels) {
+            const color = dayColors[day];
+            const stops = dayStops[day];
+            const numbered = {};
+            stops.forEach(([key, arrive, leave], i) => {
+                if (!numbered[key]) numbered[key] = [];
+                const t = [arrive && `${arrive} 抵達`, leave && `${leave} 出發`].filter(Boolean).join('，');
+                numbered[key].push(`${i + 1}. ${t}`);
+            });
+            Object.keys(numbered).forEach(key => {
+                const pl = places[key];
+                const first = stops.findIndex(st => st[0] === key) + 1;
+                const label = pl.icon || first;
+                L.marker([pl.lat, pl.lng], { icon: pinIcon(label, pl.pin || color), zIndexOffset: pl.icon ? 500 : 0 })
+                    .addTo(layer)
+                    .bindPopup(`<strong>Day ${day}｜${pl.name}</strong><br>${pl.note ? pl.note + '<br>' : ''}${numbered[key].join('<br>')}<br><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(pl.q)}" target="_blank" rel="noopener">在 Google 地圖開啟</a>`);
+            });
+            const pts = stops.map(([key]) => [places[key].lat, places[key].lng]);
+            const spanKm = map.distance(L.latLngBounds(pts).getSouthWest(), L.latLngBounds(pts).getNorthEast()) / 1000;
+            for (let i = 1; i < stops.length; i++) {
+                const a = places[stops[i - 1][0]], b = places[stops[i][0]];
+                const how = stops[i][3];
+                const walk = how.startsWith('🚶');
+                const line = L.polyline([[a.lat, a.lng], [b.lat, b.lng]], { color, weight: 4, opacity: 0.8, dashArray: walk ? '4 6' : null }).addTo(layer);
+                const text = `${stops[i - 1][2]} → ${stops[i][1]}｜${how}`;
+                // Spread labels along the line so out/back legs don't overlap; skip tiny city legs on wide maps
+                const legKm = map.distance([a.lat, a.lng], [b.lat, b.lng]) / 1000;
+                if (showLegLabels && (legKm >= 3 || spanKm < 15)) {
+                    const t = i % 2 ? 0.3 : 0.7;
+                    L.marker([a.lat + (b.lat - a.lat) * t, a.lng + (b.lng - a.lng) * t], { opacity: 0, interactive: false })
+                        .addTo(layer)
+                        .bindTooltip(text, { permanent: true, direction: 'center', className: 'leg-label' });
+                    line.bindTooltip(text);
+                } else if (showLegLabels) {
+                    line.bindTooltip(text);
+                } else {
+                    line.bindTooltip(`Day ${day}：${a.name} → ${b.name}<br>${stops[i - 1][2]} 出發 → ${stops[i][1]} 抵達｜${how}`);
+                }
+            }
+            return L.latLngBounds(stops.map(([key]) => [places[key].lat, places[key].lng]));
+        }
+
+        function fullDayMapLink(day) {
+            const stops = dayStops[day].map(([key]) => places[key].q);
+            return 'https://www.google.com/maps/dir/' + stops.map(encodeURIComponent).join('/');
+        }
+
+        let routeMap = null, routeLayer = null;
+        function updateRouteMap(filter) {
+            const days = filter === 'all' ? [1, 2, 3, 4] : [parseInt(filter)];
+            const link = document.getElementById('map-gmaps-link');
+            document.getElementById('map-title').textContent = filter === 'all' ? '🗺️ 全程路線地圖（四天）' : `🗺️ Day ${filter} 路線地圖`;
+            link.style.display = filter === 'all' ? 'none' : '';
+            if (filter !== 'all') link.href = fullDayMapLink(parseInt(filter));
+            document.getElementById('map-legend').innerHTML =
+                days.map(day => `<span class="px-2 py-0.5 rounded-full text-white" style="background:${dayColors[day]}">Day ${day}</span>`).join('') +
+                '<span class="px-2 py-0.5 rounded-full bg-slate-800 text-white">✈️ 機場</span>' +
+                '<span class="px-2 py-0.5 rounded-full bg-violet-600 text-white">🚙 租車點</span>' +
+                '<span class="px-2 py-0.5 rounded-full bg-slate-500 text-white">🏨 飯店</span>' +
+                '<span class="px-2 py-0.5 rounded-full bg-white border border-violet-500 text-violet-700">⭐ 隨機想去</span>' +
+                '<span class="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600">實線＝開車/計程車/接送　虛線＝步行</span>';
+            document.getElementById('map-hint').textContent = filter === 'all'
+                ? '每天一種顏色，數字＝當天停靠順序。點上方 Day 1～4 可只看那一天並顯示每段時間。位置為示意，開車請用 Google 地圖導航。'
+                : '數字＝停靠順序，線上標示「出發時間 → 抵達時間｜交通方式與時間」。點圖釘看地址與時間；那霸市區短程步行請放大地圖或看下方交通明細。位置為示意，開車請用 Google 地圖導航。';
+            if (!window.L) return;
+            if (!routeMap) {
+                routeMap = L.map('route-map', { scrollWheelZoom: false });
+                addTiles(routeMap);
+                routeLayer = L.layerGroup().addTo(routeMap);
+            }
+            routeLayer.clearLayers();
+            let bounds = null;
+            days.forEach(day => {
+                const b = drawDay(routeMap, routeLayer, day, filter !== 'all');
+                bounds = bounds ? bounds.extend(b) : b;
+            });
+            extras.filter(x => x.days.some(d => days.includes(d))).forEach(x => {
+                L.marker([x.lat, x.lng], { icon: L.divIcon({ className: '', html: '<div class="stop-pin" style="background:#fff;border-color:#7c3aed;color:#7c3aed;font-size:13px">⭐</div>', iconSize: [24, 24], iconAnchor: [12, 12] }) })
+                    .addTo(routeLayer)
+                    .bindPopup(`<strong>⭐ 隨機想去｜${x.icon} ${x.name}</strong><br>${x.dist}<br><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.q)}" target="_blank" rel="noopener">在 Google 地圖開啟</a>`);
+            });
+            routeMap.invalidateSize();
+            routeMap.fitBounds(bounds, { padding: [30, 30] });
+        }
+
+        // Booking checklist
+        const bookings = [
+            { id: 'car', level: '最優先', when: '越早越好（建議出發前 1-2 個月）', name: 'Car Rental Okinawa：3 台一般轎車', detail: 'Day 1 13:00 取車 → Day 4 11:30 還車（3 天）。一起詢問：ETC 卡、後車廂能放幾個大行李箱、台灣駕照日文譯本、機場接送集合點。', contact: '☎ 098-850-8070', link: 'https://carrental.jpn.com/okinawa-cn/' },
+            { id: 'hotelpark', level: '最優先', when: '訂完車就問', name: '飯店停車：Hotel Monterey La Soeur Naha', detail: '3 台車停 3 晚，確認有沒有車位、是否要預約、每晚費用；沒有的話請飯店推薦附近停車場。', contact: '直接聯絡飯店', link: 'https://www.hotelmonterey.co.jp/lasoeur_naha/' },
+            { id: 'buchi', level: '必訂', when: '出發前 2-4 週', name: '炭火燒肉 ぶち 久茂地2號店', detail: 'Day 1 晚餐 18:10，11 人（可請店家併桌或分 2 桌）。週三公休。', contact: '☎ 098-975-7711', link: 'https://www.hotpepper.jp/strJ003984545/' },
+            { id: 'lequio', level: '建議先訂', when: '出發前 1-2 週', name: 'El Lequio 調酒酒吧', detail: 'Day 1 20:10 左右，11 人。店內座位有限，先詢問能否訂位，不行就分兩批入場。營業 19:00-02:00。', contact: '店家 IG／電話詢問', link: 'https://sg-management.jp/establishments/lequio/' },
+            { id: 'gorilla', level: '必訂', when: '出發前 2-4 週', name: 'Gorilla Kart Okinawa（公路卡丁車）', detail: 'Day 2 10:00-12:00 的 2 小時路線，11 人。確認一次能出幾台車、需不需要分梯、變裝服裝。每位駕駛帶台灣駕照正本 + 日文譯本 + 護照，未滿 18 歲不能開。可用 Klook / KKday / じゃらん 預約或直接聯絡店家。', contact: '☎ 090-9782-3891 ‧ info@gorillakartt.com', link: 'https://gorillakartt.com/' },
+            { id: 'churaumi', level: '先買票', when: '出發前幾天', name: '沖繩美麗海水族館門票', detail: 'Day 3 10:00 入館。不用預約，但先在網路或便利商店買好票，當天不用排售票口。', contact: '官網／旅遊平台購票', link: 'https://churaumi.okinawa/' }
+        ];
+        const levelCls = { '最優先': 'bg-rose-600 text-white', '必訂': 'bg-rose-100 text-rose-800', '建議先訂': 'bg-amber-100 text-amber-800', '先買票': 'bg-sky-100 text-sky-800' };
+        function loadDone() { try { return JSON.parse(localStorage.getItem('okinawa-bookings') || '{}'); } catch (e) { return {}; } }
+        function toggleBooking(id, checked) {
+            const done = loadDone();
+            done[id] = checked;
+            try { localStorage.setItem('okinawa-bookings', JSON.stringify(done)); } catch (e) {}
+            renderBookings();
+        }
+        function renderBookings() {
+            const done = loadDone();
+            document.getElementById('booking-list').innerHTML = bookings.map(b => `
+                <label class="flex gap-3 p-3 rounded-xl border cursor-pointer transition ${done[b.id] ? 'bg-slate-50 border-slate-200 opacity-60' : 'bg-white border-rose-200 shadow-sm'}">
+                    <input type="checkbox" class="mt-1 w-4 h-4 accent-teal-600 shrink-0" ${done[b.id] ? 'checked' : ''} onchange="toggleBooking('${b.id}', this.checked)">
+                    <div class="text-xs min-w-0">
+                        <div class="flex flex-wrap items-center gap-1.5 mb-1">
+                            <span class="px-1.5 py-0.5 rounded font-bold text-[11px] ${levelCls[b.level]}">${b.level}</span>
+                            <span class="font-bold text-slate-800 text-sm ${done[b.id] ? 'line-through' : ''}">${b.name}</span>
+                        </div>
+                        <div class="text-slate-600 leading-relaxed">${b.detail}</div>
+                        <div class="mt-1 text-slate-500">⏰ ${b.when}　${b.contact}　<a href="${b.link}" target="_blank" rel="noopener" class="text-teal-700 underline" onclick="event.stopPropagation()">網站</a></div>
+                    </div>
+                </label>`).join('');
+        }
+
+        // Render Itinerary Function
+        function renderItinerary(filter) {
+            const container = document.getElementById('itinerary-cards-container');
+            container.innerHTML = '';
+
+            const filteredData = filter === 'all' 
+                ? itineraryData 
+                : itineraryData.filter(item => item.day === parseInt(filter));
+
+            filteredData.forEach(dayInfo => {
+                const dayCard = document.createElement('div');
+                dayCard.className = "bg-slate-50 rounded-2xl p-5 border border-slate-200 transition";
+
+                let spotsHTML = dayInfo.spots.map((spot, idx) => `
+                    <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm">
+                        <div class="flex flex-wrap justify-between items-start gap-2 mb-2">
+                            <h4 class="font-bold text-slate-800 text-base flex items-center gap-1.5">
+                                <span class="bg-teal-100 text-teal-800 text-xs px-2 py-0.5 rounded-full font-bold">景點 ${idx + 1}</span>
+                                ${spot.name}
+                            </h4>
+                            <span class="text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded">
+                                ⏱️ ${spot.drive}
+                            </span>
+                        </div>
+                        <div class="mb-2">
+                            <span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded">${spot.tag}</span>
+                        </div>
+                        <p class="text-xs text-slate-600 leading-relaxed">${spot.desc}</p>
+                    </div>
+                `).join('');
+
+                const modeInfo = {
+                    drive: ['🚗', '開車', 'bg-teal-50 text-teal-800 border-teal-200'],
+                    walk: ['🚶', '步行', 'bg-sky-50 text-sky-800 border-sky-200'],
+                    taxi: ['🚕', '計程車', 'bg-amber-50 text-amber-800 border-amber-200'],
+                    shuttle: ['🚐', '接送車', 'bg-violet-50 text-violet-800 border-violet-200'],
+                    stay: ['📍', '行程', 'bg-slate-100 text-slate-700 border-slate-200'],
+                    flight: ['✈️', '航班', 'bg-slate-800 text-white border-slate-800']
+                };
+                const routeHTML = dayInfo.route.map(leg => {
+                    const [icon, label, cls] = modeInfo[leg.mode];
+                    return `
+                        <li class="flex gap-3 text-xs ${leg.mode === 'stay' || leg.mode === 'flight' ? '' : 'pl-2 border-l-2 border-teal-200'}">
+                            <span class="font-mono shrink-0 w-12 pt-0.5 leading-tight"><span class="block font-bold text-slate-700">${leg.time}</span>${leg.end ? `<span class="block text-[10px] text-slate-400">~${leg.end}</span>` : ''}</span>
+                            <div class="flex-1 min-w-0">
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <span class="border px-1.5 py-0.5 rounded text-[11px] font-semibold ${cls}">${icon} ${label}${leg.dur ? ' ' + leg.dur : ''}</span>
+                                    <span class="font-semibold text-slate-800">${leg.leg}</span>
+                                    ${leg.book ? `<a href="#booking" class="px-1.5 py-0.5 rounded text-[11px] font-bold bg-rose-600 text-white">📞 ${leg.book}</a>` : ''}
+                                </div>
+                                ${leg.note ? `<div class="text-slate-500 mt-0.5">${leg.note}</div>` : ''}
+                                ${leg.road ? `<div class="text-slate-600 mt-0.5">🛣️ 路線：${leg.road}</div>` : ''}
+                                ${leg.park ? `<div class="text-slate-600 mt-0.5">🅿️ ${leg.park}</div>` : ''}
+                                ${leg.map ? `<a href="${encodeURI(leg.map)}" target="_blank" rel="noopener" class="inline-block mt-1 text-[11px] font-semibold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded hover:bg-teal-100">🗺️ Google 地圖導航</a>` : ''}
+                            </div>
+                        </li>`;
+                }).join('');
+
+                dayCard.innerHTML = `
+                    <div class="flex flex-col sm:flex-row justify-between sm:items-center mb-4 pb-3 border-b border-slate-200 gap-1">
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-lg">${dayInfo.title}</h3>
+                            <p class="text-xs text-slate-500">${dayInfo.subtitle}</p>
+                        </div>
+                        <span class="text-xs font-bold bg-teal-50 text-teal-700 px-3 py-1 rounded-full border border-teal-200 w-fit">
+                            每天不超過 3 個景點
+                        </span>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        ${spotsHTML}
+                    </div>
+
+                    <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm mb-4">
+                        <h4 class="font-bold text-slate-800 text-sm mb-1">🕒 時間表 & 交通明細</h4>
+                        <p class="text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 rounded px-2 py-1 mb-1 w-fit">🚗 ${dayInfo.routeTotal}</p>
+                        <p class="text-[11px] text-slate-500 mb-3">時間與車程皆為預估，實際依航班與交通狀況調整。點「Google 地圖導航」可直接開啟路線，3 台車用同一個目的地。</p>
+                        <ol class="space-y-2">${routeHTML}</ol>
+                    </div>
+
+                    <div class="bg-amber-50/80 p-3 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2">
+                        <span>💡</span>
+                        <div><strong>11人團體貼心提醒：</strong> ${dayInfo.groupTip}</div>
+                    </div>
+                `;
+                container.appendChild(dayCard);
+            });
+        }
+
+        // Day Tabs: show only the selected day (map + itinerary)
+        function filterDay(day) {
+            renderItinerary(day);
+            updateRouteMap(day);
+            document.querySelectorAll('.day-btn').forEach(btn => {
+                const active = btn.dataset.day === String(day);
+                btn.classList.toggle('bg-teal-700', active);
+                btn.classList.toggle('text-white', active);
+                btn.classList.toggle('shadow-sm', active);
+                btn.classList.toggle('bg-slate-100', !active);
+                btn.classList.toggle('text-slate-600', !active);
+            });
+        }
+
+        // Chart.js Initialization
+        window.addEventListener('DOMContentLoaded', () => {
+            // Keep the sticky day tabs right under the sticky header
+            const stickTabs = () => {
+                const tabs = document.getElementById('day-filter-buttons').parentElement;
+                tabs.style.top = document.querySelector('header').offsetHeight + 'px';
+            };
+            stickTabs();
+            window.addEventListener('resize', stickTabs);
+            renderBookings();
+            filterDay(1);
+
+            // 1. Drive Time Chart
+            const driveCtx = document.getElementById('driveTimeChart').getContext('2d');
+            new Chart(driveCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Day 1 (那霸)', 'Day 2 (不開車)', 'Day 3 (水族館)', 'Day 4 (Outlet)'],
+                    datasets: [{
+                        label: '單趟最長車程 (分鐘)',
+                        data: [20, 0, 90, 25],
+                        backgroundColor: ['#0d9488', '#0284c7', '#f59e0b', '#10b981'],
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.raw > 60 ? `最長車程: ${context.raw} 分鐘 (水族館在北部，住那霸必經)` : `最長車程: ${context.raw} 分鐘 (1 小時內)`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            title: { display: true, text: '車程時間 (分鐘)', font: { size: 11 } }
+                        }
+                    }
+                }
+            });
+
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HITOWA統合通知ポータル (全画面モックアップ)</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f1f5f9; color: #1e293b; min-height: 100vh; display: flex; flex-direction: column; }
+    
+    /* Header & Navigation */
+    header { background-color: #0f172a; color: #ffffff; padding: 12px 16px; position: sticky; top: 0; z-index: 40; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .header-container { max-width: 900px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-weight: bold; color: #818cf8; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+    .nav-links { display: flex; gap: 8px; font-size: 12px; }
+    .nav-btn { padding: 6px 12px; border-radius: 8px; text-decoration: none; font-weight: 600; cursor: pointer; border: none; font-size: 12px; transition: all 0.2s; }
+    .nav-btn-inactive { background-color: #1e293b; color: #cbd5e1; }
+    .nav-btn-inactive:hover { background-color: #334155; }
+    .nav-btn-active { background-color: #4f46e5; color: #ffffff; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+
+    /* Main Container */
+    main { max-width: 900px; width: 100%; margin: 0 auto; flex: 1; padding: 16px; }
+
+    /* Tab Contents */
+    .tab-content { display: none; flex-direction: column; gap: 20px; }
+    .tab-content.active { display: flex; }
+
+    /* UI Components - General */
+    .card { background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .card-header { padding: 14px 16px; background-color: #0f172a; color: #ffffff; font-size: 14px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+    .card-body { padding: 16px; }
+
+    /* --- TAB 1: マイ通知 --- */
+    .filter-bar { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+    .filter-chip { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: bold; border: 1px solid #cbd5e1; background-color: #ffffff; color: #475569; cursor: pointer; }
+    .filter-chip.active { background-color: #4f46e5; color: #ffffff; border-color: #4f46e5; }
+    
+    .notification-list { display: flex; flex-direction: column; gap: 12px; }
+    .notif-card { border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #fff; transition: transform 0.1s; }
+    .notif-card:hover { transform: translateY(-1px); border-color: #cbd5e1; }
+    .notif-header { padding: 8px 12px; color: #fff; font-size: 11px; font-weight: bold; display: flex; justify-content: space-between; }
+    .bg-kaonavi { background-color: #2563eb; }
+    .bg-tokium { background-color: #059669; }
+    .bg-cloudhouse { background-color: #7c3aed; }
+    .notif-body { padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+    .notif-title { font-size: 14px; font-weight: bold; color: #0f172a; }
+    .notif-summary { font-size: 12px; color: #475569; line-height: 1.4; }
+    .notif-footer { padding: 8px 12px; background: #f8fafc; border-top: 1px solid #f1f5f9; display: flex; justify-content: space-between; align-items: center; }
+    .deadline-tag { font-size: 11px; color: #dc2626; font-weight: bold; }
+    .action-link { font-size: 11px; color: #2563eb; font-weight: bold; text-decoration: none; }
+
+    /* --- TAB 2: Webメール --- */
+    .mail-container { display: grid; grid-template-columns: 1fr; gap: 12px; }
+    @media(min-width: 640px) { .mail-container { grid-template-columns: 300px 1fr; } }
+    .mail-item { padding: 12px; border-bottom: 1px solid #f1f5f9; cursor: pointer; background: #fff; }
+    .mail-item:hover, .mail-item.selected { background-color: #f0f9ff; }
+    .mail-item.unread { border-left: 3px solid #0284c7; font-weight: bold; }
+    .mail-sender { font-size: 12px; color: #0f172a; }
+    .mail-subject { font-size: 12px; color: #334155; margin-top: 2px; }
+    .mail-date { font-size: 10px; color: #94a3b8; margin-top: 4px; }
+    .mail-preview { padding: 16px; background: #fff; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 12px; line-height: 1.6; color: #334155; }
+
+    /* --- TAB 3: 設定 (マイページ) --- */
+    .profile-card { background-color: #ffffff; border-radius: 12px; padding: 16px; border: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+    .steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+    .step-box { background-color: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; font-size: 11px; }
+    .action-area { background-color: #eef2ff; border-radius: 12px; padding: 20px; border: 1px solid #e0e7ff; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .btn-generate { padding: 10px 20px; background-color: #4f46e5; color: #ffffff; font-weight: bold; border-radius: 8px; border: none; font-size: 12px; cursor: pointer; }
+    .code-box { background-color: #ffffff; padding: 10px 20px; border-radius: 8px; border: 2px solid #4f46e5; font-family: monospace; font-size: 22px; font-weight: 800; letter-spacing: 0.2em; color: #312e81; }
+    .btn-line { width: 100%; max-width: 280px; padding: 10px; background-color: #06C755; color: #ffffff; font-weight: bold; border-radius: 6px; text-decoration: none; font-size: 12px; display: inline-block; }
+    
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <!-- ヘッダーナビゲーション -->
+  <header>
+    <div class="header-container">
+      <div class="logo">🔔 HITOWA統合通知ポータル</div>
+      <div class="nav-links">
+        <button id="nav-notif" class="nav-btn nav-btn-active" onclick="switchTab('notif')">マイ通知</button>
+        <button id="nav-mail" class="nav-btn nav-btn-inactive" onclick="switchTab('mail')">Webメール</button>
+        <button id="nav-mypage" class="nav-btn nav-btn-inactive" onclick="switchTab('mypage')">設定</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- TAB 1: 統合マイ通知画面 -->
+    <div id="tab-notif" class="tab-content active">
+      <div class="filter-bar">
+        <span class="filter-chip active">すべて (3)</span>
+        <span class="filter-chip">カオナビ</span>
+        <span class="filter-chip">TOKIUM</span>
+        <span class="filter-chip">クラウドハウス労務</span>
+      </div>
+
+      <div class="notification-list">
+        <!-- カオナビ -->
+        <div class="notif-card">
+          <div class="notif-header bg-kaonavi">
+            <span>カオナビ (評価・人事)</span>
+            <span>2026/09/08</span>
+          </div>
+          <div class="notif-body">
+            <div class="notif-title">2026年度上期 人事評価シート提出のお願い</div>
+            <div class="notif-summary">山田 太郎 様、2026年度上期評価シートの入力期限が迫っています。期日までにカオナビよりご提出をお願いいたします。</div>
+          </div>
+          <div class="notif-footer">
+            <span class="deadline-tag">⏰ 提出期限: 2026/09/15</span>
+            <a href="#" class="action-link">カオナビを開く ↗</a>
+          </div>
+        </div>
+
+        <!-- TOKIUM -->
+        <div class="notif-card">
+          <div class="notif-header bg-tokium">
+            <span>TOKIUM経費精算</span>
+            <span>2026/09/07</span>
+          </div>
+          <div class="notif-body">
+            <div class="notif-title">8月分 交通費・経費申請の差し戻し連絡</div>
+            <div class="notif-summary">申請ID: #TK-8820 領収書画像の解像度が不足しているため差し戻されました。再アップロードをお願いします。</div>
+          </div>
+          <div class="notif-footer">
+            <span class="deadline-tag">⏰ 修正期限: 2026/09/10</span>
+            <a href="#" class="action-link">TOKIUMを開く ↗</a>
+          </div>
+        </div>
+
+        <!-- クラウドハウス労務 -->
+        <div class="notif-card">
+          <div class="notif-header bg-cloudhouse">
+            <span>クラウドハウス労務</span>
+            <span>2026/09/05</span>
+          </div>
+          <div class="notif-body">
+            <div class="notif-title">定期健康診断 問診票の回答手続き</div>
+            <div class="notif-summary">今年度の定期健康診断に向けた事前Web問診票の回答フォームが公開されました。</div>
+          </div>
+          <div class="notif-footer">
+            <span class="deadline-tag" style="color:#64748b">⏰ 提出期限: 2026/09/20</span>
+            <a href="#" class="action-link">回答画面を開く ↗</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: Webメールポータル画面 -->
+    <div id="tab-mail" class="tab-content">
+      <div class="card">
+        <div class="card-header">
+          <span>📥 KAGOYA 受信トレイ (転送用通知メール)</span>
+          <button style="padding:4px 8px; background:#334155; color:#fff; border:none; border-radius:4px; font-size:11px; cursor:pointer;" onclick="alert('最新メールを同期しました')">↻ 受信用更新</button>
+        </div>
+        <div class="card-body mail-container">
+          <!-- メールリスト -->
+          <div style="border-right: 1px solid #f1f5f9;">
+            <div class="mail-item unread selected">
+              <div class="mail-sender">no-reply@kaonavi.jp</div>
+              <div class="mail-subject">【カオナビ】2026年度上期 人事評価シート...</div>
+              <div class="mail-date">09/08 10:00</div>
+            </div>
+            <div class="mail-item">
+              <div class="mail-sender">expense@tokium.jp</div>
+              <div class="mail-subject">【TOKIUM】経費申請差し戻しのお知らせ</div>
+              <div class="mail-date">09/07 15:30</div>
+            </div>
+            <div class="mail-item">
+              <div class="mail-sender">info@cloudhouse.jp</div>
+              <div class="mail-subject">【クラウドハウス】Web問診票ご回答のお願い</div>
+              <div class="mail-date">09/05 09:15</div>
+            </div>
+          </div>
+
+          <!-- メール本文プレビュー -->
+          <div class="mail-preview">
+            <div style="border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 12px;">
+              <h3 style="font-size: 14px; font-weight: bold; color: #0f172a;">【カオナビ】2026年度上期 人事評価シート提出のお願い</h3>
+              <p style="font-size: 11px; color: #64748b; margin-top: 4px;">差出人: no-reply@kaonavi.jp │ 宛先: yamada.t@hitowa.com</p>
+            </div>
+            <p>山田 太郎 様</p><br>
+            <p>お疲れ様です。人事部です。<br>2026年度上期の評価シートの入力期限が近づいております。<br>以下の内容をご確認の上、期日までにカオナビよりご提出をお願いいたします。</p><br>
+            <div style="background: #f8fafc; padding: 10px; border-radius: 6px; font-family: monospace;">
+              ■ 対象者情報<br>
+              社員番号：00400611<br>
+              提出期限：2026/09/15<br><br>
+              ■ 入力・提出用URL<br>
+              <a href="#" style="color:#2563eb">https://p.kaonavi.jp/member/evaluations/2026_first_half</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: LINE連携設定マイページ画面 -->
+    <div id="tab-mypage" class="tab-content">
+      <div class="profile-card">
+        <div>
+          <h2 style="font-size:16px; font-weight:bold;">山田 太郎 <span style="font-size:11px; background:#eef2ff; color:#4338ca; padding:2px 6px; border-radius:4px;">現場社員</span></h2>
+          <p style="font-size:11px; color:#64748b; margin-top:2px;">社員番号: <strong>00400611</strong> │ 所属: HITOWAキッズライフ 恵比寿保育園</p>
+        </div>
+        <span style="font-size:11px; background:#fffbeb; color:#b45309; padding:4px 8px; border-radius:6px; font-weight:bold;">⚠️ LINE未連携</span>
+      </div>
+
+      <div class="card">
+        <div class="card-header">💬 LINE Push通知連携 (BYOD設定)</div>
+        <div class="card-body" style="display:flex; flex-direction:column; gap:16px;">
+          <p style="font-size:12px; color:#475569;">カオナビ・TOKIUM・クラウドハウス労務の業務通知を個人のスマホ（LINE）へ即時Push通知します。</p>
+
+          <div class="steps-grid">
+            <div class="step-box"><strong>1. コード発行</strong><br><span style="color:#64748b">下のボタンで6桁コードを発行。</span></div>
+            <div class="step-box"><strong>2. LINEを開く</strong><br><span style="color:#64748b">公式LINEトーク画面を開く。</span></div>
+            <div class="step-box"><strong>3. コード送信</strong><br><span style="color:#64748b">トークに6桁コードを送信して完了。</span></div>
+          </div>
+
+          <div class="action-area">
+            <span style="font-size:12px; font-weight:bold; color:#1e1b4b;">🛡️ あなたの6桁連携ワンタイムコード</span>
+            
+            <div id="code-btn-area">
+              <button class="btn-generate" onclick="generateCode()">📱 ワンタイム連携コードを発行する</button>
+            </div>
+
+            <div id="code-show-area" class="hidden" style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+              <div class="code-box" id="code-val">------</div>
+              <span style="font-size:11px; color:#b45309;">⏳ 有効期限: 10分間</span>
+              <a href="https://line.me/ti/p/" target="_blank" class="btn-line">💬 公式LINEを開いてコードを送信する ↗</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // タブ切り替え処理
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(el => {
+        el.classList.remove('nav-btn-active');
+        el.classList.add('nav-btn-inactive');
+      });
+
+      document.getElementById('tab-' + tabName).classList.add('active');
+      const activeNav = document.getElementById('nav-' + tabName);
+      activeNav.classList.remove('nav-btn-inactive');
+      activeNav.classList.add('nav-btn-active');
+    }
+
+    // 6桁コード発行インタラクション
+    function generateCode() {
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      document.getElementById('code-val').innerText = code;
+      document.getElementById('code-btn-area').classList.add('hidden');
+      document.getElementById('code-show-area').classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
