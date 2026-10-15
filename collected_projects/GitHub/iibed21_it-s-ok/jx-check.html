@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>JinX X4G | عیب‌یابی پنل</title>
+<style>
+  body{margin:0;background:#0f1220;color:#e8eaf6;font:15px/1.7 system-ui,-apple-system,Segoe UI,Tahoma,sans-serif}
+  .w{max-width:640px;margin:0 auto;padding:18px}
+  h1{font-size:19px;margin:0 0 4px;color:#ffd54a}
+  p.s{margin:0 0 14px;color:#9aa3c7;font-size:13px}
+  .r{display:flex;justify-content:space-between;gap:10px;padding:9px 12px;margin:6px 0;border-radius:10px;background:#181c30;direction:ltr;font-size:13px;word-break:break-all}
+  .r b{flex:none} .ok{color:#3ddc97} .bad{color:#ff6b6b} .wait{color:#ffd54a}
+  .sum{margin:14px 0;padding:12px;border-radius:12px;background:#1f2440;font-size:15px}
+  a.btn,button{display:inline-block;margin:6px 4px 0 0;padding:10px 16px;border:0;border-radius:10px;background:#ffd54a;color:#111;font:inherit;font-weight:700;text-decoration:none;cursor:pointer}
+  iframe{width:1px;height:1px;border:0;position:absolute;left:-9999px}
+</style>
+</head>
+<body>
+<div class="w">
+  <h1>عیب‌یابی پنل JinX X4G</h1>
+  <p class="s">این صفحه داخل مرورگر خودت پنل را تست می‌کند. صبر کن تا تمام شود، بعد از کل صفحه اسکرین‌شات بگیر.</p>
+  <div id="out"></div>
+  <div class="sum" id="sum">در حال تست...</div>
+  <a class="btn" id="go" href="/">رفتن به پنل</a>
+  <button id="again" type="button">تست دوباره</button>
+</div>
+<iframe id="fr" title="test"></iframe>
+<script>
+(function () {
+  'use strict';
+  var out = document.getElementById('out'), sum = document.getElementById('sum');
+  var problems = [];
+  function row(name, cls, val) {
+    var d = document.createElement('div'); d.className = 'r';
+    var a = document.createElement('span'); a.textContent = name;
+    var b = document.createElement('b'); b.className = cls; b.textContent = val;
+    d.appendChild(a); d.appendChild(b); out.appendChild(d); return b;
+  }
+  function ms(t) { return Math.round(performance.now() - t) + ' ms'; }
+  function get(url, opt) {
+    var t = performance.now();
+    var ctl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function () { if (ctl) ctl.abort(); }, 25000);
+    opt = opt || {}; opt.cache = 'no-store'; opt.credentials = 'same-origin'; if (ctl) opt.signal = ctl.signal;
+    return fetch(url, opt).then(function (r) {
+      return r.arrayBuffer().then(function (b) { clearTimeout(timer); return { r: r, size: b.byteLength, buf: b, time: ms(t) }; });
+    }, function (e) { clearTimeout(timer); return { r: null, size: 0, err: (e && e.name === 'AbortError') ? 'timeout' : String(e), time: ms(t) }; });
+  }
+  function kb(n) { return n > 2048 ? Math.round(n / 1024) + ' KB' : n + ' B'; }
+  function run() {
+    out.innerHTML = ''; problems = []; sum.className = 'sum'; sum.textContent = 'در حال تست...';
+    row('browser', 'wait', navigator.userAgent.slice(0, 70));
+    get('/jx-status').then(function (s) {
+      var txt = s.buf ? new TextDecoder().decode(s.buf) : '';
+      var bld = (txt.match(/build\s+(\S+)/) || [])[1] || '?';
+      row('server status', s.r && s.r.ok ? 'ok' : 'bad', (s.r ? s.r.status : s.err) + ' | build ' + bld + ' | ' + s.time);
+      if (/FAIL/.test(txt)) problems.push('server');
+      return get('/', { redirect: 'follow' });
+    }).then(function (p) {
+      if (!p.r || !p.r.ok) { row('panel page', 'bad', (p.r ? p.r.status : p.err) + ' | ' + p.time); problems.push('page'); return finish(null); }
+      var url = p.r.url, html = new TextDecoder().decode(p.buf);
+      var base = new URL(url).pathname.replace(/panel\/.*$/, '');
+      document.getElementById('go').href = base;
+      row('panel page', 'ok', '200 | ' + kb(p.size) + ' | ' + p.time);
+      var refs = [], re = /(?:src|href)="([^"]+\.(?:js|css)[^"]*)"/g, m;
+      while ((m = re.exec(html))) refs.push(m[1]);
+      var chain = Promise.resolve();
+      refs.forEach(function (ref) {
+        chain = chain.then(function () {
+          var name = ref.replace(base, '').replace(/\?.*$/, '');
+          var cell = row(name, 'wait', '...');
+          return get(ref).then(function (a) {
+            var good = a.r && a.r.ok && a.size > 0;
+            cell.className = good ? 'ok' : 'bad';
+            cell.textContent = (a.r ? a.r.status : a.err) + ' | ' + kb(a.size) + ' | ' + a.time;
+            if (!good) problems.push(name);
+          });
+        });
+      });
+      return chain.then(function () {
+        return get(base + 'getTwoFactorEnable', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: '' }).then(function (l) {
+          var t = l.buf ? new TextDecoder().decode(l.buf) : '';
+          var good = l.r && l.r.ok && /"success":true/.test(t);
+          row('login api', good ? 'ok' : 'bad', (l.r ? l.r.status : l.err) + ' | ' + l.time);
+          if (!good) problems.push('login api');
+          return finish(base);
+        });
+      });
+    }).catch(function (e) { row('test error', 'bad', String(e)); finish(null); });
+  }
+  function finish(base) {
+    if (!base) return report(false);
+    var cell = row('panel in this browser', 'wait', 'loading...');
+    var fr = document.getElementById('fr'), t0 = performance.now(), done = false;
+    function check() {
+      if (done) return;
+      var w, d;
+      try { w = fr.contentWindow; d = fr.contentDocument; } catch (e) { cell.className = 'bad'; cell.textContent = 'blocked'; done = true; return report(true); }
+      var form = d && d.querySelector && d.querySelector('form, .ant-form, input[type=password], .ant-layout-sider, .ant-layout-content');
+      if (form) { done = true; cell.className = 'ok'; cell.textContent = 'login form shown | ' + ms(t0); return report(true); }
+      if (performance.now() - t0 > 30000) {
+        done = true; cell.className = 'bad';
+        var miss = [];
+        if (w) { ['Vue', 'antd', 'axios', 'moment', 'Qs'].forEach(function (k) { if (typeof w[k] === 'undefined') miss.push(k); }); }
+        cell.textContent = 'blank after 30s' + (miss.length ? ' | missing: ' + miss.join(',') : '') + (w && w.__jxErr ? ' | ' + w.__jxErr : '');
+        problems.push('render');
+        return report(true);
+      }
+      setTimeout(check, 500);
+    }
+    fr.onload = function () {
+      try { fr.contentWindow.addEventListener('error', function (e) { fr.contentWindow.__jxErr = (e.message || 'error') + ' @ ' + String(e.filename || '').split('/').pop(); }, true); } catch (e) {}
+      setTimeout(check, 300);
+    };
+    fr.src = base + '?jxcheck=' + Date.now();
+  }
+  function report() {
+    if (!problems.length) {
+      sum.className = 'sum ok';
+      sum.textContent = 'همه‌چیز در مرورگر تو سالم است. دکمه‌ی «رفتن به پنل» را بزن. اگر باز سفید بود، کش مرورگر را پاک کن.';
+    } else {
+      sum.className = 'sum bad';
+      sum.textContent = 'مشکل در: ' + problems.join('، ') + ' | از همین صفحه اسکرین‌شات بفرست.';
+    }
+  }
+  document.getElementById('again').onclick = run;
+  run();
+})();
+</script>
+</body>
+</html>
