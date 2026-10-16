@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Commander Keen - The Mystery of Isis IIa</title>
+<meta name="description" content="Commander Keen in The Mystery of Isis IIa, playable in the browser, with a full guide to its enemies, weapons, items and levels.">
+<link rel="icon" id="favicon">
+<link rel="stylesheet" href="docs/style.css">
+</head>
+<body>
+
+<header class="site">
+  <h1>Commander Keen in The Mystery of Isis IIa</h1>
+  <p>A fan-made Keen game, ported from Python to plain browser JavaScript</p>
+  <nav>
+    <a href="fullscreen/">Fullscreen version</a>
+    <a href="#guide">Game guide</a>
+    <a href="https://github.com/isonian314/commander-keen-isis-iia-web">Source on GitHub</a>
+  </nav>
+</header>
+
+<div id="stage">
+  <canvas id="screen" width="320" height="200" tabindex="0" aria-label="Isis IIa game screen"></canvas>
+  <button id="gear" title="Settings (` or F10)" aria-label="Settings">&#9881;</button>
+
+  <div id="settings" hidden>
+    <div class="panel" role="dialog" aria-label="Settings">
+      <h2>Settings</h2>
+      <p class="hint">The game is paused while this panel is open. Press ` (backquote), F10 or Esc to close.</p>
+
+      <h3>Audio</h3>
+      <div class="row"><label for="sfxVolume">Sound effects</label><input id="sfxVolume" type="range" min="0" max="100"></div>
+      <div class="row"><label for="musicVolume">Music</label><input id="musicVolume" type="range" min="0" max="100"></div>
+      <p class="hint">Sound and music can also be switched on or off from the in-game Options menu.</p>
+
+      <h3>Display</h3>
+      <div class="row"><label for="scale">Scaling</label>
+        <select id="scale"><option value="fit">Fit to window</option><option value="integer">Whole pixels only</option></select>
+        <button id="fullscreen">Fullscreen</button>
+      </div>
+
+      <h3>Controls</h3>
+      <div class="row"><label for="gamepad">Gamepad</label><input id="gamepad" type="checkbox"></div>
+      <div class="row"><label for="debugKeys">Cheat / debug keys</label><input id="debugKeys" type="checkbox"></div>
+      <p class="hint">Esc opens the menu and Enter selects; these can't be rebound. Some browsers keep Ctrl+W, Ctrl+number and
+        (on macOS) Ctrl+arrow for themselves, so Z / X are bound for jump / pogo as well.</p>
+      <table id="bindings"></table>
+
+      <div class="footer">
+        <button id="resetKeys">Reset controls</button>
+        <button id="closeSettings">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="controls">
+  <div class="group">
+    <span class="label">Game</span>
+    <button type="button" data-toggle="sound" aria-pressed="true">Sound</button>
+    <button type="button" data-toggle="music" aria-pressed="true">Music</button>
+    <button type="button" id="btn-settings">Settings <kbd>`</kbd></button>
+    <button type="button" id="btn-full">Full screen</button>
+  </div>
+  <div class="group">
+    <span class="label">Inventory</span>
+    <button type="button" data-press="inv1" data-needs="inventory" aria-pressed="false">Battery <kbd data-action="inv1">F1</kbd></button>
+    <button type="button" data-press="inv2" data-needs="inventory" aria-pressed="false">Shield <kbd data-action="inv2">F2</kbd></button>
+    <button type="button" data-press="inv3" data-needs="inventory" aria-pressed="false">Ion Scanner <kbd data-action="inv3">F3</kbd></button>
+  </div>
+  <div class="group">
+    <span class="label">Cheats</span>
+    <button type="button" data-toggle="cheats" aria-pressed="true" title="Turns all the cheat keys on or off">Cheat keys</button>
+    <button type="button" data-press="dbgWeapons" data-needs="cheats">All weapons <kbd data-action="dbgWeapons">W</kbd></button>
+    <button type="button" data-press="dbgKeys" data-needs="cheats">All keys <kbd data-action="dbgKeys">K</kbd></button>
+    <button type="button" data-press="dbgLives" data-needs="cheats">99 lives + health <kbd data-action="dbgLives">L</kbd></button>
+    <button type="button" data-press="dbgInventory" data-needs="cheats">Full inventory <kbd data-action="dbgInventory">I</kbd></button>
+    <button type="button" data-press="dbgJump" data-toggle="jump" data-needs="cheats" aria-pressed="false" title="Jump again in mid-air">Fly <kbd data-action="dbgJump">J</kbd></button>
+    <button type="button" data-press="dbgStats" data-toggle="stats" data-needs="cheats" aria-pressed="false">Statistics <kbd data-action="dbgStats">S</kbd></button>
+    <button type="button" data-press="dbgColour" data-needs="cheats" title="Cycles the statistics text colour">Stats colour <kbd data-action="dbgColour">C</kbd></button>
+    <button type="button" data-press="dbgHidden" data-toggle="hidden" data-needs="cheats" aria-pressed="false">Solid areas <kbd data-action="dbgHidden">H</kbd></button>
+    <span id="cheat-status"></span>
+  </div>
+  <div class="group" id="warp" title="Start any level straight away (Shift+click: play its cut-scene first). In a level, N / B warp to the next / previous level.">
+    <span class="label">Warp to level</span>
+  </div>
+</div>
+<p class="keyhint">
+  <kbd>←</kbd><kbd>→</kbd> run &middot; <kbd>Z</kbd> jump &middot; <kbd>X</kbd> pogo &middot; <kbd>Space</kbd> shoot &middot;
+  <kbd>↑</kbd> doors, switches and poles &middot; <kbd>1</kbd>–<kbd>8</kbd> pick a weapon &middot; <kbd>Enter</kbd> select &middot;
+  <kbd>Esc</kbd> menu &middot; <kbd>F1</kbd> help (title screen).
+  The game only takes the keys while it is at least half in view; scroll down to read and it pauses.
+</p>
+
+<div id="toast" role="status"></div>
+<input id="customFile" type="file" accept=".tmx,.xml" hidden>
+
+<main id="guide">
+
+<!-- =================================================================== -->
+<section id="contents">
+<h2>Game guide</h2>
+<p class="lead">Billy Blaze, alias Commander Keen, sneaks onto the Isonian planet Isis IIa to find out who has been training its army
+to invade Earth. This is a fan game that began in the late 1990s and was finished as a 9-level episode in PyGame. Everything below
+was worked out from the game's own code and data (enemy hit points, speeds, item values, level contents), and the pictures are cut
+straight from its sprite sheets.</p>
+<ul class="toc">
+  <li><a href="#how-to-play">How to play</a></li>
+  <li><a href="#keys">Keys and gamepad</a></li>
+  <li><a href="#moves">Keen's moves</a></li>
+  <li><a href="#hud">The status bar (HUD)</a></li>
+  <li><a href="#health">Health, lives and damage</a></li>
+  <li><a href="#scoring">Scoring and level rating</a></li>
+  <li><a href="#items">Items</a></li>
+  <li><a href="#powerups">Powerups</a></li>
+  <li><a href="#inventory">Inventory</a></li>
+  <li><a href="#weapons">Weapons</a></li>
+  <li><a href="#enemies">Enemies</a></li>
+  <li><a href="#hazards">Hazards and obstacles</a></li>
+  <li><a href="#levels">Levels</a></li>
+  <li><a href="#story">Story</a></li>
+  <li><a href="#cheats">Cheats and debug keys</a></li>
+  <li><a href="#quirks">Quirks and curiosities</a></li>
+  <li><a href="#about">About this port</a></li>
+</ul>
+</section>
+
+<!-- =================================================================== -->
+<section id="how-to-play">
+<h2>How to play</h2>
+<p>Pick <strong>New Game</strong> on the title screen. Each level is a large scrolling map: find the exit and walk into it to finish.
+Along the way, collect point items (to score), health items, keys for locked doors, ammunition, powerups and inventory gadgets.
+Finishing a level shows a statistics screen (items, points and enemies, as percentages) and a star rating, then the next cutscene.</p>
+<ul>
+  <li><strong>Title menu:</strong> New Game, Load Level, Options and Quit. <kbd>F1</kbd> opens Help (Controls, Story, Isis, Items and History).</li>
+  <li><strong>Load Level</strong> lets you replay any level you have reached. It restores the lives, health, score, ammo and inventory you
+    had when you finished the level before it. Progress is kept in your browser (16 save slots, one per level, including 7 levels that were
+    never built; they show as grey boxes).</li>
+  <li><strong>Options:</strong> load a custom level (a Tiled <code>.tmx</code> file), sound on/off, music on/off and clear statistics.</li>
+  <li><strong>Checkpoints</strong> (flags) in levels 3 and 4 mark where you restart after losing a life. Otherwise you restart at the
+    beginning of the level.</li>
+  <li>Pressing <kbd>Esc</kbd> during a level quits to the title screen and ends the game.</li>
+</ul>
+<div class="shots">
+  <figure><img src="screenshots/lvl1.png" alt="Level 1, the Jungle"><figcaption>Level 1, Jungle</figcaption></figure>
+  <figure><img src="screenshots/lvl3.png" alt="Level 3, the Mountain"><figcaption>Level 3, Mountain</figcaption></figure>
+  <figure><img src="screenshots/lvl8.png" alt="Level 8, Central Command"><figcaption>Level 8, Central Command</figcaption></figure>
+</div>
+</section>
+
+<!-- =================================================================== -->
+<section id="keys">
+<h2>Keys and gamepad</h2>
+<p>Use <kbd>Z</kbd> for jump and <kbd>X</kbd> for pogo. The original <kbd>Ctrl</kbd> and <kbd>Shift</kbd> still work, but
+browsers react badly to them: <kbd>Ctrl</kbd>+<kbd>W</kbd> closes the tab, <kbd>Ctrl</kbd>+number switches tabs, and on macOS
+<kbd>Ctrl</kbd>+arrow switches desktops. Every key except <kbd>Esc</kbd> and <kbd>Enter</kbd> can be rebound in the settings panel
+(the gear in the top-right corner of the game, or <kbd>`</kbd> / <kbd>F10</kbd>).</p>
+<div class="two-col">
+<div>
+<table>
+  <tr><th>Key</th><th>Action</th></tr>
+  <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Run (or swim) left and right</td></tr>
+  <tr><td><kbd>↑</kbd></td><td>Look up, grab or climb a pole, go through a door, flip a switch, aim up, swim up</td></tr>
+  <tr><td><kbd>↓</kbd></td><td>Look down, climb down a pole, aim down in the air, swim down</td></tr>
+  <tr><td><kbd>Z</kbd> (or <kbd>Ctrl</kbd>)</td><td>Jump. Hold it for a higher jump; hold it in water to swim faster</td></tr>
+  <tr><td><kbd>X</kbd> (or <kbd>Shift</kbd>)</td><td>Get on or off the pogo stick</td></tr>
+  <tr><td><kbd>Space</kbd></td><td>Shoot the current weapon</td></tr>
+  <tr><td><kbd>1</kbd> – <kbd>8</kbd></td><td>Select a weapon (see <a href="#weapons">Weapons</a>)</td></tr>
+  <tr><td><kbd>F1</kbd> <kbd>F2</kbd> <kbd>F3</kbd></td><td>Switch the Battery, Shield or Ion Scanner on or off (or use the buttons above)</td></tr>
+  <tr><td><kbd>Enter</kbd></td><td>Select in menus, skip cutscenes</td></tr>
+  <tr><td><kbd>Esc</kbd></td><td>Back in menus; quit to the title from a level</td></tr>
+  <tr><td><kbd>`</kbd> or <kbd>F10</kbd></td><td>Settings panel (pauses the game)</td></tr>
+</table>
+</div>
+<div>
+<table>
+  <tr><th>Gamepad</th><th>Action</th></tr>
+  <tr><td>D-pad / left stick</td><td>Move</td></tr>
+  <tr><td>A</td><td>Jump</td></tr>
+  <tr><td>B</td><td>Pogo</td></tr>
+  <tr><td>X or Y</td><td>Shoot</td></tr>
+  <tr><td>Start</td><td>Enter</td></tr>
+  <tr><td>Back / Select</td><td>Esc</td></tr>
+</table>
+<p class="note">Turn the gamepad on in the settings panel. The game pauses whenever the tab is hidden, the settings panel is open,
+or less than half of the game is on screen.</p>
+</div>
+</div>
+</section>
+
+<!-- =================================================================== -->
+<section id="moves">
+<h2>Keen's moves</h2>
+<div class="sprites">
+  <img class="px" src="docs/img/keen-run.png" alt="Keen running">
+  <img class="px" src="docs/img/keen-jump.png" alt="Keen jumping">
+  <img class="px" src="docs/img/keen-pogo.png" alt="Keen on the pogo stick">
+</div>
+<ul>
+  <li><strong>Run:</strong> 110 pixels per second, about 7 tiles (a tile is 16 pixels).</li>
+  <li><strong>Jump:</strong> a quick press gives a short hop. Holding jump keeps pushing Keen up for 0.3 seconds. Gravity is 450 px/s²
+    and Keen falls at most 400 px/s.</li>
+  <li><strong>Pogo:</strong> press <kbd>X</kbd> to hop on. Keen bounces by himself; hold jump as he lands for a much bigger bounce.
+    Press <kbd>X</kbd> again to get off.</li>
+  <li><strong>Look up and down:</strong> hold <kbd>↑</kbd> or <kbd>↓</kbd> while standing still to pan the view.</li>
+  <li><strong>Drop through a platform:</strong> <kbd>↓</kbd> + jump while standing on a platform you can jump up through.</li>
+</ul>
+<div class="sprites">
+  <img class="px" src="docs/img/keen-pole.png" alt="Keen climbing a pole">
+  <img class="px" src="docs/img/keen-ledge.png" alt="Keen grabbing and climbing a ledge">
+</div>
+<ul>
+  <li><strong>Poles:</strong> press <kbd>↑</kbd> as you jump or fall past a pole to grab it, or <kbd>↓</kbd> while standing on the top
+    of one. Climb up at 50 px/s and slide down at 100 px/s. Jump to let go (with half a normal jump).</li>
+  <li><strong>Ledges:</strong> fall past the edge of a ledge while holding towards it and Keen grabs on. Press <kbd>↑</kbd> or towards the
+    wall to climb up (about a second), or away to drop.</li>
+  <li><strong>Doors:</strong> press <kbd>↑</kbd> in front of a door and Keen walks through and comes out of its partner door elsewhere in the level.</li>
+  <li><strong>Switches:</strong> stand still at a switch and press <kbd>↑</kbd>. Switches start and stop the moving platforms they are linked to.</li>
+  <li><strong>Locked doors:</strong> walk into one while holding a key of the same colour. The key is used up and the door slides open.</li>
+</ul>
+<div class="sprites">
+  <img class="px" src="docs/img/keen-swim.png" alt="Keen swimming">
+  <img class="px" src="docs/img/keen-shoot.png" alt="Keen shooting">
+  <img class="px" src="docs/img/keen-look.png" alt="Keen looking up and down, and shrugging">
+</div>
+<ul>
+  <li><strong>Swimming:</strong> in water the arrows move Keen in every direction (55 px/s, or 1.5 times that while holding jump).
+    The Harpoon is selected automatically, and your previous weapon comes back when you climb out.</li>
+  <li><strong>Shooting:</strong> <kbd>Space</kbd> fires one shot per press (no autofire). Hold <kbd>↑</kbd> to shoot upwards, or
+    <kbd>↓</kbd> while in the air to shoot downwards. The Blowgun and Plutezarp only fire forwards. Keen can't shoot while hanging from a
+    ledge, going through a door, or in God or Crazy mode. Shooting on the ground stops Keen for a quarter of a second, and
+    shooting from the pogo stick knocks him off it.</li>
+  <li><strong>Stomping:</strong> landing on a Spider with the pogo stick kills it. It's the only enemy that can be stomped.</li>
+  <li><strong>Idling:</strong> leave Keen alone and after 10 seconds he looks up at you; after 15 he shrugs.</li>
+</ul>
+</section>
+
+<!-- =================================================================== -->
+<section id="hud">
+<h2>The status bar (HUD)</h2>
+<div class="two-col">
+<div>
+<img class="px" src="docs/img/hud-panel.png" alt="The status bar on the left of the screen">
+</div>
+<div>
+<p>The status bar runs down the left of the screen. From top to bottom:</p>
+<ul>
+  <li><strong>Keen's face.</strong> It smiles after picking something up, looks worried at 6 health or less, and hurt at 4 or less. It also changes
+    for God mode, Crazy mode and dying:<br><img class="px" src="docs/img/hud-faces.png" alt="Keen's HUD faces"></li>
+  <li><strong>Health bar</strong>, 10 segments.</li>
+  <li><strong>Weapons</strong> with their ammo: Plutezarp at the top, then HR-42, Solarizer, Pulsar, Zeffer and Blowgun, with the Harpoon at the bottom.
+    A weapon appears once you've picked it up, and is greyed out when its ammo runs out. The two secret weapons show up in a separate slot only while selected.</li>
+  <li><strong>Light globe</strong>, which changes colour when Keen heals, gets hurt, or has a powerup:<br>
+    <img class="px" src="docs/img/hud-lights.png" alt="Light globe colours"></li>
+  <li><strong>Keys</strong> held, and <strong>lives</strong>.</li>
+  <li><strong>Powerup</strong> icon and the seconds it has left.</li>
+  <li><strong>Inventory</strong>: the active gadget with its power bar, and a dot for each gadget you own.</li>
+  <li><strong>Score</strong>, 8 digits.</li>
+</ul>
+</div>
+</div>
+</section>
+
+<!-- =================================================================== -->
+<section id="health">
+<h2>Health, lives and damage</h2>
+<ul>
+  <li>Keen starts with <strong>3 lives</strong> and <strong>10 health</strong>. Lives go up to 99.</li>
+  <li>Touching an enemy, a bullet or a hazard costs health; each enemy below lists its damage. Afterwards Keen flashes and can't be hurt
+    for 1 second.</li>
+  <li>Hazard tiles (thorns, spikes, acid, lava and so on) do 1, 2 or 5 damage, or kill outright.</li>
+  <li>At 0 health Keen loses a life and drops any keys he was carrying. The level restarts at the last checkpoint, with 10 health.
+    He keeps his score, ammo and inventory. Losing the last life is game over and returns you to the title screen.</li>
+</ul>
+</section>
+
+<!-- =================================================================== -->
+<section id="scoring">
+<h2>Scoring and level rating</h2>
+<p>Points come <strong>only from point items</strong>; shooting enemies scores nothing. Picking up a
+<strong>Point Multiplier</strong> makes point items worth four times as much for 5 seconds. The score tops out at 99,999,999.</p>
+<table>
+  <tr><th>Item</th><th class="num">Points</th><th class="num">With multiplier</th></tr>
+  <tr><td><img class="px" src="docs/img/items-jbeans.png" alt=""> Jelly Bean (six colours)</td><td class="num">100</td><td class="num">400</td></tr>
+  <tr><td><img class="px" src="docs/img/item-cola.png" alt=""> Isonian Cola</td><td class="num">200</td><td class="num">800</td></tr>
+  <tr><td><img class="px" src="docs/img/item-burger.png" alt=""> Triple Cheeseburger</td><td class="num">500</td><td class="num">2,000</td></tr>
+  <tr><td><img class="px" src="docs/img/item-ginger.png" alt=""> Gingerbread House</td><td class="num">1,000</td><td class="num">4,000</td></tr>
+  <tr><td><img class="px" src="docs/img/item-sugar.png" alt=""> Bag o' Sugar</td><td class="num">2,000</td><td class="num">8,000</td></tr>
+  <tr><td><img class="px" src="docs/img/item-cereal.png" alt=""> IQ Cereal</td><td class="num">5,000</td><td class="num">20,000</td></tr>
+</table>
+<p>The original nine levels together hold 385,400 points' worth of items (before multipliers); with levels 10–16 the total is 445,700.</p>
+
+<h3>End-of-level statistics</h3>
+<p>The statistics screen shows the share of <strong>items</strong>, <strong>points</strong> and <strong>enemies</strong> you got.
+Only <em>items</em> count towards the star rating. Here, items means jelly beans, the five food items, batteries, shields and ion scanners.
+Health items, keys, weapons and powerups don't count. Points are counted before the multiplier.</p>
+<table>
+  <tr><th>Items collected</th><td>100%</td><td>90%+</td><td>80%+</td><td>70%+</td><td>60%+</td><td>50%+</td><td>40%+</td><td>30%+</td><td>20%+</td><td>less</td></tr>
+  <tr><th>Stars</th><td>10</td><td>9</td><td>8</td><td>7</td><td>6</td><td>5</td><td>4</td><td>3</td><td>2</td><td>1</td></tr>
+</table>
+<p><img class="px" src="docs/img/stats-stars.png" alt="Rating stars"></p>
+<p>Your best rating for each level is shown in the Load Level menu, and finishing a level unlocks the next one there.</p>
+</section>
+
+<!-- =================================================================== -->
+<section id="items">
+<h2>Items</h2>
+<h3>Health and lives</h3>
+<table>
+  <tr><th></th><th>Item</th><th>Effect</th></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-pyapa.png" alt=""></td><td>Pyapa Fruit</td><td>+1 health</td></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-peeta.png" alt=""></td><td>Peeta Berries</td><td>+3 health</td></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-isis-fruit.png" alt=""></td><td>Isis Fruit</td><td>+5 health</td></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-potion.png" alt=""></td><td>Life Potion</td><td>+10 health (full)</td></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-nephthys.png" alt=""></td><td>Nephthys Fruit</td><td>&minus;3 health. It looks almost exactly like an Isis Fruit.
+    The help screen says it won't kill Keen, but in the code it does if he has 3 health or less.</td></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-yorp.png" alt=""></td><td>Chocolate Yorp</td><td>+1 life</td></tr>
+</table>
+<p class="note">Health items stay where they are if Keen already has full health, and so do Chocolate Yorps at 99 lives.</p>
+
+<h3>Keys</h3>
+<p><img class="px" src="docs/img/items-keys.png" alt="Red, yellow, green, cyan, blue and magenta keys"></p>
+<p>There are six keys: red, yellow (gold), green, cyan, blue and magenta. Keen can carry one of each. Walk into a locked door of the
+same colour to open it, which uses up the key. Keys are lost when Keen loses a life.</p>
+
+<h3>Other pickups</h3>
+<p>Weapons and ammo are covered under <a href="#weapons">Weapons</a>, powerups under <a href="#powerups">Powerups</a>, and the
+Battery, Shield and Ion Scanner under <a href="#inventory">Inventory</a>.</p>
+</section>
+
+<!-- =================================================================== -->
+<section id="powerups">
+<h2>Powerups</h2>
+<p>Only one powerup is active at a time; picking up another replaces it. The HUD shows its icon and the seconds left.</p>
+<table>
+  <tr><th></th><th>Powerup</th><th class="num">Lasts</th><th>What it does</th></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-shoes.png" alt=""></td><td>Super Sneakers</td><td class="num">10 s</td>
+    <td>Faster running (140 instead of 110 px/s) and higher jumps and pogo bounces. The help screen says they also protect Keen's feet,
+      but the code only makes him faster.</td></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-points.png" alt=""></td><td>Point Multiplier</td><td class="num">5 s</td>
+    <td>Point items are worth 4 times as much.</td></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-god.png" alt=""></td><td>God Mode</td><td class="num">10 s</td>
+    <td>Keen glows gold and nothing can hurt him. He runs at 170 px/s, jumps higher and falls more slowly, but can't shoot.
+      <br><img class="px" src="docs/img/keen-god.png" alt="God-mode Keen"></td></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-crazy.png" alt=""></td><td>Crazy Keen</td><td class="num">10 s</td>
+    <td>A bad one: left and right are swapped, and his speed and jump height change at random every second and a half.
+      He can't shoot, grab poles or use the Battery. When it wears off he is sick on the spot.
+      <br><img class="px" src="docs/img/keen-crazy.png" alt="Crazy Keen"> <img class="px" src="docs/img/keen-spew.png" alt="Keen being sick"></td></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-regen.png" alt=""></td><td>Regeneration</td><td class="num">20 s</td>
+    <td>+1 health every 2 seconds.</td></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-degen.png" alt=""></td><td>Degeneration</td><td class="num">20 s</td>
+    <td>&minus;1 health every 2 seconds, and it can kill. Grab an Anti Powerup or wait it out with a full health bar.</td></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-anti.png" alt=""></td><td>Anti Powerup</td><td class="num">3 s</td>
+    <td>Cancels whatever powerup Keen has, good or bad.</td></tr>
+</table>
+<p class="note">God Mode and Regeneration exist in the code but aren't placed in any level.</p>
+</section>
+
+<!-- =================================================================== -->
+<section id="inventory">
+<h2>Inventory</h2>
+<p>Gadgets you keep once found. Each one has a power level, and it switches off when the power runs out.
+Each Battery you collect raises the maximum power by one (up to 20). Press <kbd>F1</kbd>, <kbd>F2</kbd> or <kbd>F3</kbd>
+(or the buttons under the game) to switch a gadget on; pressing it again, or choosing another, switches it off. Only one can be on at a time.</p>
+<table>
+  <tr><th></th><th>Gadget</th><th>Key</th><th>What it does</th><th>Found in</th></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-battery.png" alt=""></td><td>Battery</td><td><kbd>F1</kbd></td>
+    <td>While switched on it drains 1 unit every 2 seconds and charges the other gadgets at the same rate.
+      When it is off, its solar panel recharges it by 1 unit every 4 seconds.</td><td>Every level except 7 (11 in total)</td></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-shield.png" alt=""></td><td>Shield</td><td><kbd>F2</kbd></td>
+    <td>Uses 1 unit a second. Blocks enemy bullets coming at Keen from the front while he's on the ground, in the air or on the pogo stick (not on poles, on ledges or in water).
+      <br><img class="px" src="docs/img/keen-shield.png" alt="Keen with the shield"></td><td>Level 4, Cave</td></tr>
+  <tr><td class="icon"><img class="px" src="docs/img/item-ionscanner.png" alt=""></td><td>Ion Scanner</td><td><kbd>F3</kbd></td>
+    <td>Uses 1 unit a second and shows a health bar over every enemy.</td><td>Level 6, Artillery Division</td></tr>
+</table>
+<p class="note">Your inventory and battery capacity survive a game over, as in the original game. The code also has a fourth, unnamed gadget
+(<kbd>F4</kbd>, <img class="px" src="docs/img/item-unknown.png" alt="">) that does nothing and isn't placed anywhere.</p>
+</section>
+
+<!-- =================================================================== -->
+<section id="weapons">
+<h2>Weapons</h2>
+<p>Keen starts with no weapons. Each weapon pickup gives <strong>5 shots</strong> (up to 99) and, if Keen has nothing selected,
+selects it. When a weapon runs out, Keen switches to the next weaker weapon that still has ammo. Damage is taken off the enemy's hit points (listed under <a href="#enemies">Enemies</a>).</p>
+<div class="wrap"><table>
+  <tr><th>Key</th><th>Weapon</th><th>Shot</th><th class="num">Damage</th><th class="num">Speed</th><th>How it behaves</th><th>Found in</th></tr>
+  <tr><td><kbd>1</kbd></td><td><img class="px" src="docs/img/item-w-blowgun.png" alt=""><br>Blowgun (Blowdart)</td>
+    <td><img class="px" src="docs/img/proj-blowgun.png" alt=""></td><td class="num">1</td><td class="num">200</td>
+    <td>Flies straight for half a second, then drops. Forwards only.</td><td>Levels 1, 2, 3, 5, 9</td></tr>
+  <tr><td><kbd>2</kbd></td><td><img class="px" src="docs/img/item-w-zeffer.png" alt=""><br>Zeffer 4000</td>
+    <td><img class="px" src="docs/img/proj-zeffer.png" alt=""></td><td class="num">2</td><td class="num">250</td>
+    <td>Wobbles along a sine wave and leaves a purple trail; half its shots also drift upwards. Good for covering an area.</td><td>Levels 2 to 9</td></tr>
+  <tr><td><kbd>3</kbd></td><td><img class="px" src="docs/img/item-w-pulsar.png" alt=""><br>Pulsar</td>
+    <td><img class="px" src="docs/img/proj-pulsar.png" alt=""></td><td class="num">4</td><td class="num">250</td>
+    <td>Goes straight through enemies, but its damage halves with each one it hits (4, 2, 1, 1…).</td><td>Levels 3 to 9</td></tr>
+  <tr><td><kbd>4</kbd></td><td><img class="px" src="docs/img/item-w-solarizer.png" alt=""><br>Solarizer</td>
+    <td><img class="px" src="docs/img/proj-solarizer.png" alt=""><br><img class="px" src="docs/img/explode-solarizer.png" alt=""></td><td class="num">8</td><td class="num">150</td>
+    <td>Explodes on impact. The explosion kills Keen if he touches it, so don't fire it at a nearby wall.</td><td>Levels 8, 9</td></tr>
+  <tr><td><kbd>5</kbd></td><td><img class="px" src="docs/img/item-w-hr42.png" alt=""><br>HR-42 (Hell Rifle)</td>
+    <td><img class="px" src="docs/img/proj-hr42.png" alt=""></td><td class="num">16</td><td class="num">150</td>
+    <td>Heavy, slow bolts.</td><td>Not placed (cheat only)</td></tr>
+  <tr><td><kbd>6</kbd></td><td><img class="px" src="docs/img/item-w-plutezarp.png" alt=""><br>Plutezarp</td>
+    <td><img class="px" src="docs/img/proj-plutezarp.png" alt=""></td><td class="num">32</td><td class="num">beam</td>
+    <td>A laser beam that grows to 100 pixels over 0.375 s, then fades. The first enemy it reaches takes 32 damage, and so does anything else
+      it overlaps at that moment. Forwards only. (The "deadly residue" in the help text was never added.)</td><td>Not placed (cheat only)</td></tr>
+  <tr><td><kbd>7</kbd></td><td><img class="px" src="docs/img/item-w-raygun.png" alt=""><br>Raygun (secret 1)</td>
+    <td><img class="px" src="docs/img/proj-raygun.png" alt=""></td><td class="num">1</td><td class="num">200</td>
+    <td>Keen's classic raygun.</td><td>Not placed (cheat only)</td></tr>
+  <tr><td><kbd>8</kbd></td><td><img class="px" src="docs/img/item-w-neural.png" alt=""><br>Neural Stunner (secret 2)</td>
+    <td><img class="px" src="docs/img/proj-neural.png" alt=""></td><td class="num">1</td><td class="num">200</td>
+    <td>Keen's classic stunner, and the only weapon with its own sound.</td><td>Not placed (cheat only)</td></tr>
+  <tr><td>auto</td><td><img class="px" src="docs/img/item-w-harpoon.png" alt=""><br>Harpoon</td>
+    <td><img class="px" src="docs/img/proj-harpoon.png" alt=""></td><td class="num">1</td><td class="num">100</td>
+    <td>The only weapon that works underwater, and it only works there. It's selected automatically when Keen enters water.</td><td>Levels 2, 3, 4, 6</td></tr>
+</table></div>
+<p class="note">Speeds are in pixels per second. The HR-42 and Plutezarp are also removed from custom levels, so the only way to try them,
+or the two secret weapons, is the All Weapons cheat. The HUD calls it the HR-42, while the help screen calls it the Hell Rifle 32.</p>
+</section>
+
+<!-- =================================================================== -->
+<section id="enemies">
+<h2>Enemies</h2>
+<p>Stats are hit points (HP), the damage done by touching the enemy, and walking speed in pixels per second. Unless noted otherwise,
+walkers pace back and forth and turn at walls and at invisible markers placed by the level designers. They don't avoid ledges.
+Enemies give no points, but they count towards the "enemies" percentage at the end of a level. The groups follow the in-game Help.</p>
+
+<h3>Jungle critters</h3>
+<div class="critter"><h4>Foog</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-foog.png" alt="Foog"></div>
+  <div class="stats"><b>HP</b> 2 &middot; <b>touch</b> 1 &middot; <b>speed</b> 35 &middot; levels 1, 2, 5, 6, 9</div>
+  <p>The original inhabitants of the Isis jungles. A Foog wanders about, stops now and then to look around, and sometimes turns back.</p></div>
+<div class="critter"><h4>Jumping Foog</h4>
+  <div class="stats"><b>HP</b> 2 &middot; <b>touch</b> 1 &middot; <b>speed</b> 35 &middot; levels 1, 2, 4, 5, 6, 9</div>
+  <p>Looks just like a Foog, but also leaps into the air at random, with a croak you can hear when it's on screen.</p></div>
+<div class="critter"><h4>Spider</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-spider.png" alt="Spider"><img class="px" src="docs/img/enemy-proj-spider.png" alt="Spider spit"></div>
+  <div class="stats"><b>HP</b> 2 &middot; <b>touch</b> 2 &middot; <b>speed</b> 50 &middot; <b>spit</b> 5 &middot; levels 1, 2, 6, 9</div>
+  <p>Spits a lump of goo at random moments (at most once every 3 seconds), whether Keen is nearby or not. The goo arcs forwards and, where it lands,
+    leaves a puddle that hurts for 5 until it fades about six seconds later. The goo isn't used up when it hits Keen. Landing on a Spider with the pogo stick kills it.</p></div>
+<div class="critter"><h4>Leafy <span class="note">(not in any level)</span></h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-leafy.png" alt="Leafy"></div>
+  <p>A camouflaged leaf insect that walks about.</p></div>
+
+<h3>Cave and mountain dwellers</h3>
+<div class="critter"><h4>Hole Monster</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-holemonster.png" alt="Hole Monster"></div>
+  <div class="stats"><b>HP</b> 4 &middot; <b>touch</b> 2 &middot; doesn't move &middot; levels 3, 4</div>
+  <p>Hides in a hole in the rock. It peeks out when Keen comes within 64 pixels and lunges when he's within 32.</p></div>
+<div class="critter"><h4>Blue Mouth</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-bluemouth.png" alt="Blue Mouth"></div>
+  <div class="stats"><b>HP</b> 8 &middot; <b>touch</b> 3 &middot; <b>speed</b> 50 &middot; levels 3, 4, 9</div>
+  <p>Has a double-jointed jaw. When Keen is right above it (within 16 pixels across and 48 up), it opens its jaws upwards, so jumping over it rarely works.</p></div>
+<div class="critter"><h4>Garnak</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-garnak.png" alt="Garnak"></div>
+  <div class="stats"><b>HP</b> 10 &middot; <b>touch</b> 5 &middot; <b>speed</b> 40 &middot; levels 4, 9</div>
+  <p>One of the toughest natives. It just walks, but a touch takes half your health.</p></div>
+<div class="critter"><h4>Yellow Guy</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-yellow.png" alt="Yellow Guy"></div>
+  <div class="stats"><b>HP</b> 8 &middot; <b>touch</b> 4 &middot; <b>speed</b> 20 &middot; level 3</div>
+  <p>Gasping for air at high altitude. When Keen comes within 128 pixels across and 64 up or down, it turns to face him, opens its mouth and breathes in.
+    That pulls Keen towards it, harder the closer he gets, and even drags him off poles and ledges.</p></div>
+<div class="critter"><h4>Demon</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-demon.png" alt="Demon"><img class="px" src="docs/img/enemy-proj-demon.png" alt="Fireball"></div>
+  <div class="stats"><b>HP</b> 6 &middot; <b>touch</b> 3 &middot; <b>speed</b> 100 &middot; <b>fireball</b> 1 &middot; level 6</div>
+  <p>A small, fast pest. It throws a fireball when Keen is in front of it, within 50 pixels and at the same height, at most every 3 seconds.</p></div>
+<div class="critter"><h4>Frog</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-frog.png" alt="Frog"><img class="px" src="docs/img/enemy-frog-swim.png" alt="Swimming frog"></div>
+  <div class="stats"><b>HP</b> 2 &middot; <b>touch</b> 1 &middot; <b>speed</b> 35 &middot; levels 3, 4</div>
+  <p>A pink frog (it isn't in the Help). One kind hops about on land; the other swims in caves.</p></div>
+
+<h3>Marine life</h3>
+<div class="critter"><h4>Redfish</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-redfish.png" alt="Redfish"></div>
+  <div class="stats"><b>HP</b> 2 &middot; <b>touch</b> 1 &middot; <b>speed</b> 35 &middot; levels 2, 3</div>
+  <p>The most common fish in the Sea of Isis. It swims back and forth, and floats belly-up to the surface when shot.</p></div>
+<div class="critter"><h4>Chomper</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-chomper.png" alt="Chomper"></div>
+  <div class="stats"><b>HP</b> 2 &middot; <b>touch</b> 3 &middot; <b>speed</b> 55 &middot; levels 2, 4, 6</div>
+  <p>The piranha of Isis. It starts opening its mouth when Keen is within 64 pixels and bites at 32.</p></div>
+<div class="critter"><h4>Urchin</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-urchin.png" alt="Urchin"></div>
+  <div class="stats"><b>HP</b> can't be killed &middot; <b>touch</b> 1 &middot; doesn't move &middot; level 6</div>
+  <p>A poisonous sea-floor spike. Its spikes twitch when Keen comes within 50 pixels. Because it can't be killed, level 6 can never show 100% enemies.</p></div>
+<div class="critter"><h4>Floppy and the radioactive fish <span class="note">(level 12)</span></h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-floppy.png" alt="Floppy"><img class="px" src="docs/img/enemy-fish-yellow.png" alt="Yellow fish"><img class="px" src="docs/img/enemy-fish-green.png" alt="Green fish"><img class="px" src="docs/img/enemy-fish-blue.png" alt="Blue fish"></div>
+  <p>A one-eyed stingray and deformed fish, the results of a nuclear testing site on Isis. They're drawn and described in the Help but weren't used in the original nine levels; the new Ocean Moat (level 12) places them, though they only drift for now.</p></div>
+
+<h3>Army slaves</h3>
+<div class="critter"><h4>Lemming</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-lemming.png" alt="Lemming"><img class="px" src="docs/img/enemy-proj-lemming.png" alt="Lemming bullet"></div>
+  <div class="stats"><b>HP</b> 4 &middot; <b>touch</b> 2 &middot; <b>speed</b> 40 &middot; <b>bullet</b> 1 &middot; levels 5, 6</div>
+  <p>"About as stupid as the original lemmings, just not quite as suicidal." It shoots when Keen is in front within 100 pixels and at about the same height, at most every 3 seconds.</p></div>
+<div class="critter"><h4>Lemming Truckie</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-truckie-lemming.png" alt="Lemming Truckie"></div>
+  <div class="stats"><b>HP</b> 4 &middot; <b>touch</b> 2 &middot; <b>speed</b> 40 &middot; <b>bullet</b> 1 &middot; level 6</div>
+  <p>A more alert lemming with a driver's licence. Same range as a Lemming, but it can fire every 0.2 seconds, a stream of bullets.</p></div>
+<div class="critter"><h4>Alien Trucky</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-truckie-alien.png" alt="Alien Trucky"></div>
+  <div class="stats"><b>HP</b> 6 &middot; <b>touch</b> 2 &middot; <b>speed</b> 40 &middot; <b>bullet</b> 1 &middot; levels 5, 8</div>
+  <p>A truck driver from a nearby star system. Tougher than a Truckie; it fires once a second.</p></div>
+<div class="critter"><h4>Cyborg Lemming</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-cyborg-lemming.png" alt="Cyborg Lemming"><img class="px" src="docs/img/enemy-cyborg-lemming-solarized.png" alt="Cyborg Lemming melting"></div>
+  <div class="stats"><b>HP</b> 20 &middot; <b>touch</b> 5 &middot; <b>speed</b> 65 &middot; <b>bullet</b> 1 &middot; level 9</div>
+  <p>The deadliest army slave. Shoots at close range (50 pixels), every 3 seconds at most. "Reacts interestingly to fire": kill it with the Solarizer and it melts.</p></div>
+<div class="critter"><h4>Trucks <span class="note">(not in any level)</span></h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-truck-lemming.png" alt="Lemming truck"><img class="px" src="docs/img/enemy-truck-alien.png" alt="Alien truck"></div>
+  <p>Trucks that drive back and forth (2 HP). Destroying one blows it up, and its driver jumps out and carries on the fight on foot.</p></div>
+
+<h3>Robots</h3>
+<div class="critter"><h4>Grey Robot</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-robot-grey.png" alt="Grey Robot"><img class="px" src="docs/img/enemy-proj-robot-grey.png" alt="Grey Robot bullet"></div>
+  <div class="stats"><b>HP</b> 8 &middot; <b>touch</b> 3 &middot; <b>speed</b> 40 &middot; <b>bullet</b> 1 &middot; levels 6, 7, 8</div>
+  <p>A standard droid. It shoots when Keen is in front within 100 pixels and level with it, and every so often charges at two and a half times its normal speed.</p></div>
+<div class="critter"><h4>Red Robot</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-robot-red.png" alt="Red Robot"><img class="px" src="docs/img/enemy-proj-robot-red.png" alt="Red Robot shell"></div>
+  <div class="stats"><b>HP</b> 8 &middot; <b>touch</b> 3 &middot; <b>speed</b> 40 &middot; <b>shell</b> 8 &middot; level 6</div>
+  <p>"Transformers, Isis style." Within 50 pixels it unfolds into a cannon and fires an 8-damage shell that explodes against walls, at most every 5 seconds.</p></div>
+<div class="critter"><h4>Flasher</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-flasher.png" alt="Flasher"></div>
+  <div class="stats"><b>HP</b> 8 &middot; <b>touch</b> 3 &middot; <b>speed</b> 75 &middot; <b>shell</b> 8 &middot; levels 6, 7</div>
+  <p>A hunter that fires the same heavy shells as the Red Robot from up to 100 pixels away, and bursts into metal shards when destroyed.</p></div>
+<div class="critter"><h4>Hovercraft</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-hover.png" alt="Hovercraft"><img class="px" src="docs/img/enemy-proj-hover.png" alt="Hovercraft bomb"></div>
+  <div class="stats"><b>HP</b> 8 &middot; <b>touch</b> 3 &middot; <b>speed</b> 75 &middot; <b>bomb</b> 2 &middot; level 5</div>
+  <p>A flying saucer that cruises back and forth. It drops a bomb on a 45° diagonal whenever Keen is ahead of it and on that line below it.</p></div>
+<div class="critter"><h4>Tele Turret</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-teleturret.png" alt="Tele Turret"><img class="px" src="docs/img/enemy-proj-teleturret.png" alt="Tele Turret shot"></div>
+  <div class="stats"><b>HP</b> 2 &middot; <b>touch</b> 0 &middot; doesn't move &middot; <b>shot</b> 1 &middot; levels 6, 8</div>
+  <p>Fires straight ahead every half second. When Keen is level with it and in front, it pulls back into the wall and can't be hurt until he moves away,
+    so shoot it from above, from below, or as it comes back out.</p></div>
+
+<h3>Isonians</h3>
+<div class="critter"><h4>Regular, Military and Scientist</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-isonian-green.png" alt="Regular Isonian"><img class="px" src="docs/img/enemy-isonian-red.png" alt="Military Isonian"><img class="px" src="docs/img/enemy-isonian-white.png" alt="Scientist Isonian"><img class="px" src="docs/img/enemy-proj-isonian.png" alt="Isonian shots"></div>
+  <div class="stats">all <b>HP</b> 10 &middot; levels 8, 15</div>
+  <table>
+    <tr><th>Isonian</th><th class="num">Touch</th><th class="num">Shot</th><th class="num">Speed</th><th>Notes</th></tr>
+    <tr><td>Regular (green)</td><td class="num">2</td><td class="num">2</td><td class="num">40</td><td>Shoots on sight.</td></tr>
+    <tr><td>Military (red)</td><td class="num">5</td><td class="num">5</td><td class="num">30</td><td>A trained assassin.</td></tr>
+    <tr><td>Scientist (white)</td><td class="num">1</td><td class="num">9</td><td class="num">50</td><td>Harmless at first: it won't shoot and turns its back on Keen.
+      Once it's been hurt, it shoots back with 9-damage blasts.</td></tr>
+  </table>
+  <p>Isonians shoot when Keen is in front within 96 pixels and at the same height, once a second. When their health drops below half,
+    they teleport to the nearest hiding spot in the level (Central Command has four). Shots pass straight through them while they teleport.
+    At the hiding spot they heal 1 HP every 3 seconds, and once fully healed they teleport back to where they left.</p></div>
+<div class="critter"><h4>Isonian fighter</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-isonian-fly.png" alt="Isonian fighter craft"></div>
+  <div class="stats"><b>HP</b> 10 &middot; <b>touch</b> 5 &middot; <b>speed</b> 70 &middot; levels 7, 11, 15</div>
+  <p>A small Isonian craft parked in the Hangar. It floats back and forth and doesn't shoot; it looks like an unfinished enemy. The Missile Tower and Imperial Castle also place a couple.</p></div>
+
+<h3>Not used in the original nine levels</h3>
+<p>These enemies are fully coded but were never placed in the original nine levels. They can appear in custom levels, except the Shapeshifter and Evil Keen, which are removed from them too.
+  The new levels 13–16 use most of them: Yorps, Gargs and Slugs on the Secret Island, the garden grubs and the bird in the Castle Garden and
+  Imperial Castle, and Evil Keen and the Shapeshifter as stand-ins for RoboKeen and Mort on the rooftop.</p>
+<div class="critter"><h4>Garden grubs: Caterpillar, Giant Dragonfly, Snail and Foog Warrior</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-caterpillar.png" alt="Caterpillar"><img class="px" src="docs/img/enemy-dragonfly.png" alt="Giant Dragonfly"><img class="px" src="docs/img/enemy-snail.png" alt="Snail"><img class="px" src="docs/img/enemy-foog-warrior.png" alt="Foog Warrior"></div>
+  <p>The <strong>Caterpillar</strong> lies dormant and unhurtable until Keen comes close, then wakes up and crawls slowly (2 HP, touch 1).
+    The <strong>Giant Dragonfly</strong> (4 HP) is harmless but shoves Keen around; hurt it badly enough and it drops to the ground and crawls.
+    The <strong>Snail</strong> is a slow poisonous crawler (2 HP, touch 1), and the <strong>Foog Warrior</strong>, "a domesticated Foog", has 500 HP.</p></div>
+<div class="critter"><h4>Others</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-slug.png" alt="Slug"><img class="px" src="docs/img/enemy-yorp.png" alt="Yorp"><img class="px" src="docs/img/enemy-garg.png" alt="Garg"><img class="px" src="docs/img/enemy-bird.png" alt="Bird"><img class="px" src="docs/img/enemy-bigfrog.png" alt="Big frog"></div>
+  <div class="sprites"><img class="px" src="docs/img/enemy-shapeshifter.png" alt="Shapeshifter"><img class="px" src="docs/img/enemy-evilkeen.png" alt="Evil Keen"><img class="px" src="docs/img/enemy-isonian-giant1.png" alt="Giant Isonian"><img class="px" src="docs/img/enemy-isonian-giant2.png" alt="Giant Isonian"></div>
+  <p>A <strong>Slug</strong> that leaves a trail of harmful slime, a <strong>Yorp</strong> and a <strong>Garg</strong> from Keen 1, a <strong>bird</strong>,
+    a <strong>big frog</strong>, and two <strong>giant Isonians</strong>. The <strong>Shapeshifter</strong> stands disguised as a tree until Keen gets close,
+    then jumps around firing rapidly. <strong>Evil Keen</strong> runs, jumps and shoots like Keen himself.</p></div>
+</section>
+
+<!-- =================================================================== -->
+<section id="hazards">
+<h2>Hazards and obstacles</h2>
+<div class="critter"><h4>Mine</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-mine.png" alt="Mine"></div>
+  <div class="stats">can't be destroyed &middot; levels 5 (54 of them!) and 6</div>
+  <p>Harmless until Keen comes within about 12 pixels. Then it arms, and a third of a second later it becomes deadly for an instant and blows up.
+    Keep moving and you're usually past it in time; stop next to one and it kills you.</p></div>
+<div class="critter"><h4>Rocks</h4>
+  <div class="sprites"><img class="px" src="docs/img/enemy-rocks.png" alt="Rocks"></div>
+  <div class="stats"><b>HP</b> 2 &middot; harmless &middot; levels 2, 3, 4, 6</div>
+  <p>Piles of rock blocking a passage. Shoot them twice to clear the way.</p></div>
+<div class="critter"><h4>Drips</h4>
+  <p>Water drips (harmless) and acid drips (1 damage) fall from ceilings, splash, and fall again 1 to 3 seconds later.
+    Water drips are in levels 2, 3, 4 and 9; acid drips in level 6.</p></div>
+<div class="critter"><h4>Hazard tiles</h4>
+  <p>Some tiles hurt Keen for 1, 2 or 5 on contact, and some kill him outright. Deadly tiles are everywhere in the Cave (over 300)
+    and the Mountain. God Mode protects Keen from all of them.</p></div>
+</section>
+
+<!-- =================================================================== -->
+<section id="levels">
+<h2>Levels</h2>
+<p>The original game has nine levels. Levels 10–16 are new, generated placeholder levels that complete the story from the design doc, so
+the game now runs from the jungle to the epilogue. Each level ends at an exit that leads to the next, with a cutscene in between; the Ocean
+Moat has a second, hidden exit to the Secret Island, and both routes continue to the Castle Garden. Item and point totals are the
+amounts needed for 100%; enemy counts include only enemies that count in the statistics (not mines, rocks or drips).
+Full maps are linked under each level.</p>
+
+<div class="level"><h3>1. Jungle</h3>
+  <img src="screenshots/lvl1.png" alt="Level 1 screenshot">
+  <div>
+    <blockquote>"I wonder if I can sneak through this jungle undetected..."</blockquote>
+    <ul>
+      <li>272 × 138 tiles &middot; music "Branching Out"</li>
+      <li><strong>Enemies (22):</strong> Foog 13, Jumping Foog 4, Spider 5</li>
+      <li><strong>Items:</strong> 175 for 100%, 67,500 points &middot; Blowgun ×9 &middot; Super Sneakers, Point Multiplier, Chocolate Yorp, Battery</li>
+      <li>No keys needed. A gentle start: learn to pogo and to stomp Spiders.</li>
+      <li><a href="resources/maps/level1-jungle-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>2. Jungle Nights</h3>
+  <img src="screenshots/lvl2.png" alt="Level 2 screenshot">
+  <div>
+    <blockquote>"Just how big IS this jungle anyway?! It's getting late, and I think I see a storm approaching..."</blockquote>
+    <ul>
+      <li>411 × 110 tiles, the widest level &middot; music "Branching Out Remix"</li>
+      <li>Night falls as you play (the screen darkens over ten minutes), with rain and lightning. Large flooded areas.</li>
+      <li><strong>Enemies (43):</strong> Foog 17, Jumping Foog 9, Spider 4, Redfish 8, Chomper 5</li>
+      <li><strong>Items:</strong> 341 for 100%, 110,400 points (the most of any level) &middot; Blowgun ×9, Zeffer ×1, Harpoon ×8 &middot; yellow and magenta keys &middot; Crazy Keen, Life Potion, Nephthys Fruit, Chocolate Yorp, Battery</li>
+      <li><a href="resources/maps/level2-jungle-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>3. Mountain</h3>
+  <img src="screenshots/lvl3.png" alt="Level 3 screenshot">
+  <div>
+    <blockquote>"These mountains sure look steep... it MUST be on the other side! Brrr, it's going to be cold up there!"</blockquote>
+    <ul>
+      <li>300 × 164 tiles &middot; music "Thin Air"</li>
+      <li>Snow and drifting clouds, a checkpoint, and the first switch-operated moving platform.</li>
+      <li><strong>Enemies (25):</strong> Yellow Guy 9, Hole Monster 7, Blue Mouth 5, Frog 2, Redfish 2</li>
+      <li><strong>Items:</strong> 357 for 100% (the most of any level), 81,300 points &middot; Blowgun ×7, Zeffer ×10, Pulsar ×2, Harpoon ×1 &middot; yellow, green and magenta keys &middot; 3 Chocolate Yorps, 3 Point Multipliers, Battery</li>
+      <li><a href="resources/maps/level3-mountain-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>4. Cave</h3>
+  <img src="screenshots/lvl4.png" alt="Level 4 screenshot">
+  <div>
+    <blockquote>"Wow, those mountains were a bit too rugged for my liking. Perhaps I should try going through them instead..."</blockquote>
+    <ul>
+      <li>256 × 201 tiles, the tallest level &middot; music "Tight Spaces"</li>
+      <li>Two checkpoints, underground lakes, no poles and lots of deadly tiles.</li>
+      <li><strong>Enemies (35):</strong> Hole Monster 10, Frog 8 (+2 swimming), Blue Mouth 6, Garnak 6, Chomper 2, Jumping Foog 1</li>
+      <li><strong>Items:</strong> 107 for 100%, 28,600 points &middot; Zeffer ×7, Pulsar ×10, Harpoon ×2 &middot; red, green and blue keys &middot; <strong>Shield</strong>, 2 Batteries, 2 Chocolate Yorps</li>
+      <li><a href="resources/maps/level4-cave-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>5. Minefield</h3>
+  <img src="screenshots/lvl5.png" alt="Level 5 screenshot">
+  <div>
+    <blockquote>"Uh oh, I'd better be careful here! These Isonians sure don't like visitors."</blockquote>
+    <ul>
+      <li>286 × 60 tiles &middot; music "Infiltration"</li>
+      <li><strong>54 mines</strong>, plus the first Isonian army troops.</li>
+      <li><strong>Enemies (16):</strong> Lemming 6, Hovercraft 4, Foog 3, Alien Trucky 2, Jumping Foog 1</li>
+      <li><strong>Items:</strong> 49 for 100%, 11,500 points &middot; Blowgun ×1, Zeffer ×3, Pulsar ×2 &middot; red, yellow and blue keys &middot; Super Sneakers, Anti Powerup, Degeneration, Chocolate Yorp, Battery</li>
+      <li><a href="resources/maps/level5-minefield-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>6. Artillery Division</h3>
+  <img src="screenshots/lvl6.png" alt="Level 6 screenshot">
+  <div>
+    <blockquote>"*GULP*! So much for being undetected... Here goes nothing!"</blockquote>
+    <ul>
+      <li>256 × 165 tiles &middot; music "Flooded Flashback" &middot; Keen starts facing left</li>
+      <li>The most varied level: robots, turrets, acid drips, mines and a flooded section.</li>
+      <li><strong>Enemies (38):</strong> Red Robot 7, Grey Robot 6, Lemming 5, Urchin 4, Lemming Truckie 3, Tele Turret 3, Chomper 3, Spider 2, Demon 2, Flasher 1, Foog 1, Jumping Foog 1 (plus 6 mines)</li>
+      <li><strong>Items:</strong> 172 for 100%, 58,900 points &middot; Zeffer ×6, Pulsar ×2, Harpoon ×1 &middot; yellow, cyan, blue and magenta keys &middot; <strong>Ion Scanner</strong>, Battery, 2 Chocolate Yorps, Life Potion, Super Sneakers, Anti Powerup, Degeneration</li>
+      <li><a href="resources/maps/level6-artillery-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>7. Hangar</h3>
+  <img src="screenshots/lvl7.png" alt="Level 7 screenshot">
+  <div>
+    <blockquote>"Wow, by the look of that underground base, Isis IIa sure got a beating recently! I might duck for cover in this hangar for a while..."</blockquote>
+    <ul>
+      <li>100 × 40 tiles, the smallest level &middot; music "The Core"</li>
+      <li>A short level with moving platforms and parked Isonian fighters.</li>
+      <li><strong>Enemies (10):</strong> Grey Robot 6, Flasher 2, Isonian fighter 2</li>
+      <li><strong>Items:</strong> 21 for 100%, 2,900 points &middot; Zeffer ×3, Pulsar ×1 &middot; cyan key</li>
+      <li><a href="resources/maps/level7-hangar-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>8. Central Command</h3>
+  <img src="screenshots/lvl8.png" alt="Level 8 screenshot">
+  <div>
+    <blockquote>"This must be their headquarters. Now I'll find out who's behind this and put a stop to it!"</blockquote>
+    <ul>
+      <li>140 × 150 tiles &middot; music "Rhythm of a Robot" &middot; Keen starts facing left</li>
+      <li>A tall base full of poles and platforms, home of the Isonians themselves.</li>
+      <li><strong>Enemies (23):</strong> Tele Turret 6, Alien Trucky 5, Regular Isonian 4, Military Isonian 3, Grey Robot 3, Scientist Isonian 2</li>
+      <li><strong>Items:</strong> 37 for 100%, 7,500 points &middot; Zeffer ×5, Pulsar ×3, Solarizer ×2 &middot; yellow, green and blue keys &middot; 2 Batteries, Life Potion, Super Sneakers, Point Multiplier</li>
+      <li><a href="resources/maps/level8-central_command-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>9. Dungeon</h3>
+  <img src="screenshots/lvl9.png" alt="Level 9 screenshot">
+  <div>
+    <blockquote>"The fleet awaits. For the glory of Isis 2 and our divine teacher!"<br><small>The Isonian commander, as he drops Keen through a trapdoor</small></blockquote>
+    <ul>
+      <li>145 × 101 tiles &middot; music "Cistern"</li>
+      <li>Keen lands with 5 health missing after the fall. The dungeon is littered with bad powerups: 14 Degeneration and 10 Crazy Keen (with 4 Anti Powerups).</li>
+      <li><strong>Enemies (19):</strong> Jumping Foog 5, Foog 4, Blue Mouth 4, Spider 3, Garnak 2, and one Cyborg Lemming</li>
+      <li><strong>Items:</strong> 51 for 100%, 16,800 points &middot; Blowgun ×1, Zeffer ×3, Pulsar ×1, Solarizer ×1 &middot; red, yellow and cyan keys &middot; 2 Batteries, Chocolate Yorp</li>
+      <li>The exit used to end the game with a "thanks for playing" screen; it now leads on to the Barracks.</li>
+      <li><a href="resources/maps/level9-dungeon-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>10. Barracks</h3>
+  <img src="screenshots/lvl10.png" alt="Level 10 screenshot">
+  <div>
+    <blockquote>"Nobody here... they must be out boarding the fleet!"</blockquote>
+    <ul>
+      <li>150 × 46 tiles &middot; music "The Core"</li>
+      <li>A three-storey Isonian base building: white platforms, blue panel walls and poles between the floors. The red key on the top floor opens the way out on the ground floor, and a two-way door leads up to a bonus area on the roof. Two checkpoints.</li>
+      <li><strong>Enemies (9):</strong> Lemming 3, Cyborg Lemming 2, Lemming Truckie 1, Alien Trucky 1, Grey Robot 1, Red Robot 1</li>
+      <li><strong>Items:</strong> 60 for 100%, 15,000 points &middot; Zeffer ×1, Pulsar ×1 &middot; red key &middot; Pyapa Fruit, Nephthys Fruit</li>
+      <li><a href="resources/maps/level10-barracks-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>11. Missile Tower</h3>
+  <img src="screenshots/lvl11.png" alt="Level 11 screenshot">
+  <div>
+    <blockquote>"(angrily) This won't be leaving Isis II... Ever."</blockquote>
+    <ul>
+      <li>82 × 112 tiles &middot; music "Flooded Flashback"</li>
+      <li>A seven-floor climb up the tower by poles and platform stairs. The yellow key halfway up opens the launch deck at the top, where <strong>Robo Grey</strong> guards the exit. One checkpoint.</li>
+      <li><strong>Enemies (11):</strong> Grey Robot 2, Lemming 2, Isonian fighter 2, Cyborg Lemming 1, Red Robot 1, Lemming Truckie 1, Robo Grey 1, Robo Blue 1. Robo Grey and Robo Blue have no code of their own yet; they behave as a tougher Grey Robot and Flasher.</li>
+      <li><strong>Items:</strong> 49 for 100%, 6,400 points &middot; Zeffer ×1, Pulsar ×1 &middot; yellow key &middot; Life Potion</li>
+      <li><a href="resources/maps/level11-missile_tower-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>12. Ocean Moat</h3>
+  <img src="screenshots/lvl12.png" alt="Level 12 screenshot">
+  <div>
+    <blockquote>"I think I know who I'm going to find over there. Earth isn't getting pushed around by the likes of you, do you hear me?"</blockquote>
+    <ul>
+      <li>172 × 66 tiles &middot; music "Branching Out Remix" &middot; Keen starts in the water</li>
+      <li>Swim across the Sea of Isis to the castle island (exit to level 14). A shaft in the sea floor leads to a fork with two signs in the Standard Galactic Alphabet: "TAKE THE BLUE PILL" loops back up to the sea, while "TAKE THE RED PILL" leads down to a flooded brimstone grotto with lava pools, the <strong>Devil</strong>, the <strong>Solarizer</strong> and a hidden exit to the Secret Island (level 13).</li>
+      <li><strong>Enemies (15):</strong> Redfish 4, Chomper 2, Floppy 2, Urchin 2, Yellow fish 2, Green fish 1, Blue fish 1, Devil 1 (the Devil is a tougher Demon for now)</li>
+      <li><strong>Items:</strong> 36 for 100%, 3,900 points &middot; Harpoon ×1, Solarizer ×1 &middot; Isis Fruit, Life Potion</li>
+      <li><a href="resources/maps/level12-ocean-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>13. Secret Island</h3>
+  <img src="screenshots/lvl13.png" alt="Level 13 screenshot">
+  <div>
+    <blockquote>"Yorps? Gargs? I haven't seen those since Vorticon VI! What are they doing out here?"</blockquote>
+    <ul>
+      <li>124 × 42 tiles &middot; music "Branching Out" &middot; Keen turns into his EGA self for this level</li>
+      <li>A Keen 1 throwback. The Raygun lies near the start and the Neural Stunner in a cave in the cliff; the cyan key on the cliff top opens the gate to the exit, which leads on to the Castle Garden.</li>
+      <li><strong>Enemies (10):</strong> Yorp 4, Garg 3, Slug 3</li>
+      <li><strong>Items:</strong> 23 for 100%, 2,300 points &middot; Raygun ×1, Neural Stunner ×1 &middot; cyan key &middot; 2 Chocolate Yorps, Nephthys Fruit</li>
+      <li><a href="resources/maps/level13-secret-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>14. Castle Garden</h3>
+  <img src="screenshots/lvl14.png" alt="Level 14 screenshot">
+  <div>
+    <blockquote>Keen emerges from the water and races into the castle's garden.</blockquote>
+    <ul>
+      <li>152 × 46 tiles &middot; music "Art of Gardens"</li>
+      <li>Built from the new garden tile set (hedges and plants). Hedge stairs lead up to the green key, there's a pond with a swimming frog, and the level ends at the castle gate (the green door) and entrance hall.</li>
+      <li><strong>Enemies (10):</strong> Snail 2, Giant Dragonfly 2, Foog Warrior 2, Frog 1 (+1 swimming), Caterpillar 1, Bird 1. Foog Warriors have 500 HP, so go around them.</li>
+      <li><strong>Items:</strong> 20 for 100%, 2,000 points &middot; green key &middot; Peeta Berries, Isis Fruit, Life Potion</li>
+      <li><a href="resources/maps/level14-castle_garden-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>15. Imperial Castle</h3>
+  <img src="screenshots/lvl15.png" alt="Level 15 screenshot">
+  <div>
+    <blockquote>Keen enters the Imperial Castle, preparing for the final showdown.</blockquote>
+    <ul>
+      <li>140 × 58 tiles &middot; music "Cistern"</li>
+      <li>Four stone storeys with paintings, torches and cages. The blue key on the second floor opens the rest of the ground floor; climb to the third floor for the yellow key, then take the pole up to the roof, where the yellow door leads to the stairs (exit). One checkpoint.</li>
+      <li><strong>Enemies (12):</strong> Foog Warrior 3, Regular Isonian 2, Military Isonian 2, Scientist Isonian 2, Isonian fighter 1, Grey Robot 1, Red Robot 1</li>
+      <li><strong>Items:</strong> 81 for 100%, 30,000 points &middot; blue and yellow keys &middot; Life Potion, Chocolate Yorp</li>
+      <li><a href="resources/maps/level15-castle-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<div class="level"><h3>16. Rooftop Showdown</h3>
+  <img src="screenshots/lvl16.png" alt="Level 16 screenshot">
+  <div>
+    <blockquote>"They said you wouldn't make it this far... You are obsolete." <small>RoboKeen</small></blockquote>
+    <ul>
+      <li>124 × 40 tiles &middot; music "Rhythm of a Robot"</li>
+      <li>Two arenas on the castle roof. <strong>RoboKeen</strong> (Evil Keen stands in for him) waits in the first. The door marked "314" (with a "THREE ONE FOUR" sign) plays a dialogue in the middle of the level: RoboKeen's last words, then <strong>Mort</strong>. Behind it, Mort (the Shapeshifter stands in) fights Keen in the second arena, where the HR-42 and the Plutezarp lie. The far exit plays the epilogue.</li>
+      <li><strong>Enemies (2):</strong> Evil Keen (RoboKeen) 1, Shapeshifter (Mort) 1</li>
+      <li><strong>Items:</strong> 5 for 100%, 700 points &middot; HR-42 ×1, Plutezarp ×1 &middot; Life Potion, Pyapa Fruit</li>
+      <li><a href="resources/maps/level16-rooftop-full.png">Full map</a></li>
+    </ul>
+  </div></div>
+
+<p>Custom levels play the track "Art of Gardens". The level music is by GameBird, and "Art of Gardens" is from danosongs.com. The new levels reuse the existing tracks for now.</p>
+</section>
+
+<!-- =================================================================== -->
+<section id="story">
+<h2>Story</h2>
+<h3>The Lull, the Fateful Day and the Mission</h3>
+<p>Billy Blaze is relaxing at home when his Photachyon Transceiver picks up a broadcast in Omnispeak. Squadrons from the planet
+Isis II are preparing to attack Sol III, the Earth. Then the voice orders that Commander Keen be killed, and the transceiver
+blows up. Billy sets off in the Bean-with-Bacon Megarocket to find out what's going on.</p>
+<p>Isis II is a very Earth-like planet, which is why its inhabitants are so interested in Earth. Its water is X36Y25Z88 rather than H₂O,
+and its military bases sit on the cliffs and mountains around the Sea of Isis, which covers about 80% of the planet.</p>
+<div class="shots">
+  <figure><img class="px" src="docs/img/story-intro.png" alt="Intro"><figcaption>The intro</figcaption></figure>
+  <figure><img class="px" src="docs/img/story-stealth.png" alt="Stealth mode"><figcaption>Keen activates stealth mode and heads for the surface of Isis IIa</figcaption></figure>
+  <figure><img class="px" src="docs/img/story-landing.png" alt="Landing"><figcaption>Landing in the jungle</figcaption></figure>
+</div>
+<h3>The journey</h3>
+<p>Keen lands his ship in the jungle and tries to sneak through unseen (levels 1–2). He climbs over the freezing mountains towards the base
+(level 3), then gives up on the peaks and tunnels through the caves instead (level 4). He reaches a minefield guarding the Isonian
+army (level 5), is spotted at the artillery division (level 6), hides in a battered hangar (level 7), and finally storms Central
+Command (level 8). Before each level a cutscene shows Keen on his way, with his own comment:</p>
+<div class="shots">
+  <figure><img class="px" src="docs/img/cutscene-2.png" alt="Cutscene before level 2"><figcaption>Before level 2</figcaption></figure>
+  <figure><img class="px" src="docs/img/cutscene-3.png" alt="Cutscene before level 3"><figcaption>Before level 3</figcaption></figure>
+  <figure><img class="px" src="docs/img/cutscene-4.png" alt="Cutscene before level 4"><figcaption>Before level 4</figcaption></figure>
+  <figure><img class="px" src="docs/img/cutscene-5.png" alt="Cutscene before level 5"><figcaption>Before level 5</figcaption></figure>
+  <figure><img class="px" src="docs/img/cutscene-6.png" alt="Cutscene before level 6"><figcaption>Before level 6</figcaption></figure>
+  <figure><img class="px" src="docs/img/cutscene-7.png" alt="Cutscene before level 7"><figcaption>Before level 7</figcaption></figure>
+  <figure><img class="px" src="docs/img/cutscene-8.png" alt="Cutscene before level 8"><figcaption>Before level 8</figcaption></figure>
+</div>
+<h3>The Grand Advisor</h3>
+<p>At the top of Central Command an Isonian commander is waiting for him: "Impressive, Comrade Keen." He explains that the Isonians were
+invaded by the Bloogs ("never buy your defense system from a Vorticon"), and that a mysterious alien, the <strong>Grand Advisor</strong>,
+helped them rebuild and turned them into a military power. Now a biological warhead in their missile tower is ready to numb every human mind
+on Earth, and the Grand Advisor directs it all from his castle on an island. Keen refuses to join them, so the commander drops him through a trapdoor
+into the dungeon (level 9).</p>
+<div class="shots">
+  <figure><img class="px" src="docs/img/story-advisor.png" alt="The Isonian commander"><figcaption>The commander explains</figcaption></figure>
+  <figure><img class="px" src="docs/img/story-trapdoor.png" alt="The trapdoor"><figcaption>Down the trapdoor</figcaption></figure>
+  <figure><img class="px" src="docs/img/story-worldmap.png" alt="World map"><figcaption>The world of Isis</figcaption></figure>
+</div>
+<p>Escaping the dungeon is where the original game stopped. The rest of the story, from the design doc, is now playable with placeholder levels and text cut-scenes. Keen sneaks through the empty barracks (level 10), climbs the missile tower, reprograms the missile and scrambles the fleet's controls (level 11), then dives into the Sea of Isis towards the castle island (level 12). A hidden grotto under the sea leads to a secret island full of Yorps and Gargs (level 13). In the castle garden (level 14) and the Imperial Castle (level 15) he fights his way up to the roof. There RoboKeen, built to be "the new Commander Keen", is waiting (level 16), followed by Mort behind a door marked "314". In the epilogue the shapeshifter confesses that the Isonians are being controlled, and a viewscreen reveals "PHASE 1 COMPLETE... PHASE 2 UNDERWAY". To be continued...</p>
+<h3>Credits and history</h3>
+<p>Project lead and programming by Geoff; story by pLeitorian, eK and Ceilick; art by eK, AA, Geoff and tulip; sound effects by Mike Koenig;
+music by GameBird. Isis II began in the late 1990s as a Worminator mod by David Layne (DML1001) and was continued by Charles Byrd until 2002,
+before being reborn as this PyGame game. See the in-game Help (History) for the full story.</p>
+</section>
+
+<!-- =================================================================== -->
+<section id="cheats">
+<h2>Cheats and debug keys</h2>
+<p>The developer keys from the Python version are on by default. Turn them off with the <strong>Cheat keys</strong> button above or in the
+settings panel. They only work during a level, and each one also has a button under the game.</p>
+<table>
+  <tr><th>Key</th><th>Cheat</th></tr>
+  <tr><td><kbd>W</kbd></td><td>All weapons with 99 ammo (including the HR-42, Plutezarp and both secret weapons)</td></tr>
+  <tr><td><kbd>K</kbd></td><td>All six keys</td></tr>
+  <tr><td><kbd>L</kbd></td><td>99 lives and full health</td></tr>
+  <tr><td><kbd>I</kbd></td><td>All inventory gadgets at full power (20)</td></tr>
+  <tr><td><kbd>J</kbd></td><td>Jump cheat on/off: jump again in mid-air, so you can fly</td></tr>
+  <tr><td><kbd>S</kbd></td><td>Statistics overlay on/off (items, points and enemies so far)</td></tr>
+  <tr><td><kbd>C</kbd></td><td>Change the statistics text colour</td></tr>
+  <tr><td><kbd>H</kbd></td><td>Show solid and hidden areas on/off</td></tr>
+  <tr><td><kbd>M</kbd></td><td>A leftover developer message (shows an internal movement value)</td></tr>
+  <tr><td><kbd>N</kbd> / <kbd>B</kbd></td><td>Warp to the next / previous level</td></tr>
+</table>
+<p>The buttons under the game also warp to any of levels 1–16 (Shift+click plays the level's cut-scene first), and with cheat keys on every level is unlocked in <em>Load Level</em>.</p>
+</section>
+
+<!-- =================================================================== -->
+<section id="quirks">
+<h2>Quirks and curiosities</h2>
+<p>This port copies the original's behaviour exactly, oddities included. Some of them:</p>
+<ul>
+  <li>Every weapon except the Neural Stunner uses the Blowgun's sound.</li>
+  <li>The Super Sneakers don't protect Keen's feet, the Plutezarp leaves no residue, and the Nephthys Fruit can kill, all contrary to the Help.</li>
+  <li>Eating a Nephthys Fruit during the second of invulnerability after a hit uses it up with no effect.</li>
+  <li>The Urchins in level 6 can't be killed, so that level's enemy score can never reach 100%.</li>
+  <li>A Solarizer shot hitting a wall creates 100 explosions on the same spot.</li>
+  <li>Level 9 knocks 5 off Keen's health every time it starts, even after losing a life.</li>
+  <li>The sprite sheets include an EGA-style Keen and a pyjama-clad "Keen Dreams" Keen. A level can switch Keen to the EGA look; none of the original nine do, but the new Secret Island (level 13) does.
+    <br><img class="px" src="docs/img/keen-ega.png" alt="EGA Keen"> <img class="px" src="docs/img/keen-dreams.png" alt="Keen in pyjamas"></li>
+  <li>Your inventory and battery capacity carry over into a new game.</li>
+</ul>
+</section>
+
+<!-- =================================================================== -->
+<section id="about">
+<h2>About this port</h2>
+<p>The game was written in Python 2 and PyGame, later updated to Python 3, and has been ported line by line to plain JavaScript with
+no libraries or build step. The canvas runs at the original 320 × 200 resolution and is scaled up. All the graphics, sounds, fonts and the
+sixteen Tiled levels are bundled in <code>data/assets.js</code>, and the music is streamed from <code>music/</code>.
+The <a href="fullscreen/">fullscreen version</a> is the same game filling the whole window.</p>
+<p>The pictures in this guide are cut from the game's own sprite sheets by <code>tools/build_docs.py</code> (needs Python 3 and Pillow),
+which writes them to <code>docs/img/</code>. The numbers come from reading the game code and counting the sprites in each level file.</p>
+<p>Original Python source: <a href="https://github.com/isonian314/commander-keen-isis-iia-1.1">isonian314/commander-keen-isis-iia-1.1</a>.
+Commander Keen is a trademark of id Software; this is a non-commercial fan game.</p>
+</section>
+
+</main>
+
+<script src="data/assets.js"></script>
+<script src="js/core.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/input.js"></script>
+<script src="js/constants.js"></script>
+<script src="js/tmx.js"></script>
+<script src="js/effects.js"></script>
+<script src="js/weapons.js"></script>
+<script src="js/items.js"></script>
+<script src="js/enemies.js"></script>
+<script src="js/objects.js"></script>
+<script src="js/level.js"></script>
+<script src="js/keen.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/cutscenes.js"></script>
+<script src="js/game.js"></script>
+<script src="js/menu.js"></script>
+<script src="js/worldmap.js"></script>
+<script src="js/main.js"></script>
+<script src="js/page.js"></script>
+</body>
+</html>
