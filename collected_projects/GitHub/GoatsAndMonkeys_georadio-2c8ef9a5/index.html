@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Geo Radio Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&family=Overpass+Mono:wght@400;600&display=swap">
+<style>
+/* One screen for a phone on the move: a parkway-sign header that says where you
+   are, then the record that's playing and why, then two big controls. Dark for night. */
+:root {
+  color-scheme: dark;
+  --asphalt: #121513;
+  --asphalt-2: #1b201d;
+  --line: #2c332f;
+  --sign: #0f6b3d;
+  --sign-deep: #0a5230;
+  --paper: #f4f6f2;
+  --muted: #a3ada6;
+  --amber: #f2b33d;
+  --font-sign: "Overpass", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Overpass Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--asphalt); color: var(--paper); font-family: var(--font-sign);
+  padding: env(safe-area-inset-top, 0px) 16px env(safe-area-inset-bottom, 0px);
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 520px; margin: 0 auto; padding-block: 14px 28px; display: grid; gap: 16px; }
+.sign {
+  background: var(--sign); border: 3px solid var(--paper); outline: 4px solid var(--sign);
+  border-radius: 10px; padding: 12px 14px; display: grid; gap: 6px;
+}
+.eyebrow { font-size: .8125rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase;
+  display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.eyebrow .mono { font-family: var(--font-mono); letter-spacing: 0; font-weight: 400; opacity: .85; }
+.why { font-size: 1.75rem; font-weight: 800; line-height: 1.1; margin: 0; text-wrap: balance; }
+.now { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 14px; align-items: center;
+  background: var(--asphalt-2); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+.art { width: 96px; height: 96px; border-radius: 8px; background: var(--line) center/cover no-repeat; }
+.meta { min-width: 0; display: grid; gap: 4px; }
+.title { font-size: 1.25rem; font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; }
+.artist { color: var(--muted); overflow-wrap: anywhere; }
+.bar { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--amber); transition: width .5s linear; }
+.controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+button, .link {
+  font: 800 1.0625rem/1 var(--font-sign); letter-spacing: .04em; text-transform: uppercase;
+  min-height: 64px; border-radius: 12px; border: 2px solid var(--paper); cursor: pointer;
+  color: var(--paper); background: var(--sign-deep); display: grid; place-items: center; text-decoration: none;
+}
+button.primary { background: var(--amber); color: var(--asphalt); border-color: var(--amber); grid-column: 1 / -1; min-height: 76px; font-size: 1.25rem; }
+.link { grid-column: 1 / -1; min-height: 48px; font-size: .875rem; background: transparent; border-color: var(--line); color: var(--muted); }
+button:focus-visible, .link:focus-visible { outline: 3px solid var(--amber); outline-offset: 2px; }
+.note { color: var(--muted); font-size: .8125rem; line-height: 1.45; max-width: 60ch; }
+.status { font-family: var(--font-mono); font-size: .75rem; color: var(--muted); }
+.err { color: var(--amber); }
+.decades { border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px 10px; margin: 0;
+  display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.decades legend { font-size: .75rem; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); padding: 0 4px; }
+.decades label { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; font-weight: 600; cursor: pointer; }
+.decades input { width: 20px; height: 20px; accent-color: var(--amber); margin: 0; }
+[hidden] { display: none !important; }
+@media (prefers-reduced-motion: reduce) { .bar > i { transition: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="sign" aria-live="polite">
+    <div class="eyebrow"><span>Geo Radio · Prototype</span><span class="mono" id="where">no location yet</span></div>
+    <h1 class="why" id="why">Songs about where you are</h1>
+  </header>
+
+  <section class="now" aria-live="polite">
+    <div class="art" id="art" role="img" aria-label="Album art"></div>
+    <div class="meta">
+      <div class="title" id="title">Tap Start</div>
+      <div class="artist" id="artist">It plays a 30-second preview of a song about your spot, then checks where you are and plays the next one.</div>
+      <div class="bar" aria-hidden="true"><i id="progress"></i></div>
+    </div>
+  </section>
+
+  <div class="controls">
+    <button type="button" class="primary" id="start">Start radio</button>
+    <button type="button" id="pause" hidden>Pause</button>
+    <button type="button" id="skip" hidden>Next</button>
+    <a class="link" id="full" href="#" target="_blank" rel="noopener" hidden>Open full song in Apple Music</a>
+    <button type="button" id="am" class="link" hidden>Sign in to Apple Music for full songs</button>
+  </div>
+
+  <fieldset class="decades" id="decades">
+    <legend>Decades</legend>
+    <label><input type="checkbox" id="dec-all" checked> All</label>
+    <label><input type="checkbox" data-decade="2020s" checked> 2020s</label>
+    <label><input type="checkbox" data-decade="2010s" checked> 2010s</label>
+    <label><input type="checkbox" data-decade="00s" checked> 00s</label>
+    <label><input type="checkbox" data-decade="90s" checked> 90s</label>
+    <label><input type="checkbox" data-decade="70s80s" checked> 70s/80s</label>
+  </fieldset>
+
+  <p class="status" id="status"></p>
+  <p class="note">Prototype: Apple's free 30-second previews stand in for full songs. With MusicKit (an Apple Developer account) the same player plays whole tracks, explicit versions included.
+    Songs are ranked on your phone from the places they rap about, anywhere in the US; the closest and best-known come first.
+    Keep this page open; when the phone is locked it keeps playing and uses your last known location. Place data © OpenStreetMap contributors.</p>
+</div>
+
+<audio id="audio" preload="auto" playsinline></audio>
+
+<script src="applemusic.js"></script>
+<script>
+// Client-side port of geo/scoring.py. Mirrors it function by function, with
+// the same constants; see that file's docstring for the formulas and choices.
+// Data is the JSON written by `geo export-web` (geo/stages/export_web.py).
+// Dependency-free ES module: `import { radio } from "./score.js"`.
+
+const EARTH_RADIUS_M = 6371008.8;
+const M_PER_DEG_LAT = EARTH_RADIUS_M * Math.PI / 180;
+
+const MIN_GEO = 0.05;
+const MIN_CANDIDATES = 30;
+const EXPAND_FACTOR = 1.5;
+const MAX_EXPANSIONS = 8;
+const CUTOFF_RADII = 3.0;
+const HOMETOWN_WEIGHT = 0.1;
+const HOMETOWN_RADIUS_M = 5000.0;
+const ORIGIN_ROLE = "artist_origin";  // why-entry role for "<artist> is from <origin>"
+// Folk station (user decision 2026-10-02): inverse-distance terms, see geo/scoring.py.
+// Data with data.scoring === "folk" uses scoreSongsFolk; any other data is scored as before.
+const FOLK_RADIUS_SCALE = 0.5;  // R = radius_m * this * zoom
+const FOLK_MIN_GEO = 0.0125;     // a song qualifies when its best ref term is at least this
+const SCORING_FOLK = "folk";
+const POP_FLOOR = 0.25;     // final multiplier at pop = 0; 1.0 at pop = 1
+const POP_DEFAULT = 0.3;    // used when popularity is null
+const ARTIST_CAP = 2;
+const CAP_WINDOW = 30;
+
+const rad = (deg) => deg * Math.PI / 180;
+
+function haversineM(lat1, lon1, lat2, lon2) {
+  const p1 = rad(lat1);
+  const p2 = rad(lat2);
+  const dp = p2 - p1;
+  const dl = rad(lon2 - lon1);
+  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(Math.min(1.0, h)));
+}
+
+const SPECIFICITY_REF_M = 2000.0;
+const SPECIFICITY_EXP = 0.75;
+const SPECIFICITY_MIN = 0.08;
+const SPECIFICITY_MAX = 2.5;
+
+function specificity(radiusM) {
+  if (!radiusM || radiusM <= 0) return 1.0;
+  const w = Math.pow(SPECIFICITY_REF_M / radiusM, SPECIFICITY_EXP);
+  return Math.min(SPECIFICITY_MAX, Math.max(SPECIFICITY_MIN, w));
+}
+
+function gauss(d, scale) {
+  const x = d / scale;
+  return Math.exp(-(x * x));
+}
+
+function popMultiplier(pop) {
+  const p = pop == null ? POP_DEFAULT : pop;
+  return POP_FLOOR + (1 - POP_FLOOR) * p;
+}
+
+function inBbox(lat, lon, plat, plon, reachM) {
+  const dlat = reachM / M_PER_DEG_LAT;
+  const dlon = dlat / Math.max(Math.cos(rad(plat)), 1e-6);
+  return Math.abs(lat - plat) <= dlat && Math.abs(lon - plon) <= dlon;  // no antimeridian in NYC
+}
+
+function tierOf(final) {
+  return Math.floor(Math.log2(final));
+}
+
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function next() {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), a | 1) >>> 0;
+    t = (((t + Math.imul(t ^ (t >>> 7), t | 61)) >>> 0) ^ t) >>> 0;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function shuffleInPlace(items, rng) {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+}
+
+// Origin place indices, most specific first ([] if none).
+function artistOrigins(artist) {
+  if (artist === undefined || artist === null || artist.length < 5 || !artist[4] || !artist[4].length) return [];
+  return artist[4];
+}
+
+// [lat, lon, radius_m, origin name or null] for the hometown term, or null.
+function homePoint(artist, places) {
+  const origins = artistOrigins(artist);
+  if (origins.length) {
+    const p = places[origins[0]];
+    return [p[3], p[4], p[5], p[1]];
+  }
+  if (artist !== undefined && artist !== null && artist[2] != null && artist[3] != null) {
+    return [artist[2], artist[3], HOMETOWN_RADIUS_M, null];
+  }
+  return null;
+}
+
+// place_idx -> [distance_m, effective_radius_m] for places within the cutoff.
+const BROAD_TYPES = ["borough", "region"];
+const BROAD_RADIUS_M = 10000.0;
+const TOO_GENERAL_RADIUS_M = 20000.0;
+
+function placeScope(ptype, radiusM) {
+  if (ptype === "city" && radiusM >= TOO_GENERAL_RADIUS_M) return "general";
+  if (BROAD_TYPES.includes(ptype) || radiusM >= BROAD_RADIUS_M) return "broad";
+  return "specific";
+}
+
+// Lined places (rivers, long roads; user 2026-10-03: "Hudson River ... should be multiple points
+// along the long river"). In folk data a place MAY carry index 6 = list of polylines, each a flat
+// [lat0, lon0, lat1, lon1, ...], and index 7 = corridor radius in metres. For such a place the
+// distance is the distance to the nearest segment, its radius is the corridor and its scope is
+// "specific". Indices 0-5 keep the centroid/footprint for old clients. Both stations (hip-hop
+// since 2026-10-03).
+const LINE_CORRIDOR_M = 5000.0;
+
+// [lines, corridor_m] for a place with a non-empty line, else null.
+function placeGeom(place) {
+  if (place.length < 7) return null;
+  const lines = place[6];
+  if (!Array.isArray(lines) || !lines.length) return null;
+  const c = place.length > 7 ? place[7] : null;
+  return [lines, typeof c === "number" && c > 0 ? c : LINE_CORRIDOR_M];
+}
+
+// Min distance (m) from (lat, lon) to any segment of any polyline, in a local equirectangular
+// projection around the listener. A one-point polyline is a point; Infinity if there is none.
+function lineDistanceM(lat, lon, lines) {
+  const ky = M_PER_DEG_LAT;
+  const kx = Math.cos(rad(lat)) * M_PER_DEG_LAT;
+  let best2 = Infinity;
+  for (const pl of lines) {
+    const n = pl.length - (pl.length % 2);
+    if (n < 2) continue;
+    let ax = (pl[1] - lon) * kx;
+    let ay = (pl[0] - lat) * ky;
+    if (n === 2) best2 = Math.min(best2, ax * ax + ay * ay);
+    for (let i = 2; i < n; i += 2) {
+      const bx = (pl[i + 1] - lon) * kx;
+      const by = (pl[i] - lat) * ky;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len2 = dx * dx + dy * dy;
+      let t = len2 > 0 ? -(ax * dx + ay * dy) / len2 : 0;
+      t = t < 0 ? 0 : (t > 1 ? 1 : t);
+      const px = ax + t * dx;
+      const py = ay + t * dy;
+      const d2 = px * px + py * py;
+      if (d2 < best2) best2 = d2;
+      ax = bx;
+      ay = by;
+    }
+  }
+  return Math.sqrt(best2);
+}
+
+// Is (lat, lon) inside the lines' bbox expanded by reachM? (bbox prefilter, like inBbox)
+function lineInBbox(lat, lon, lines, reachM) {
+  let s = Infinity, n = -Infinity, w = Infinity, e = -Infinity;
+  for (const pl of lines) {
+    for (let i = 0; i + 1 < pl.length; i += 2) {
+      if (pl[i] < s) s = pl[i];
+      if (pl[i] > n) n = pl[i];
+      if (pl[i + 1] < w) w = pl[i + 1];
+      if (pl[i + 1] > e) e = pl[i + 1];
+    }
+  }
+  if (s > n) return false;
+  const dlat = reachM / M_PER_DEG_LAT;
+  const dlon = dlat / Math.max(Math.cos(rad(lat)), 1e-6);  // same x scale as lineDistanceM: never cuts a hit
+  return lat >= s - dlat && lat <= n + dlat && lon >= w - dlon && lon <= e + dlon;
+}
+
+// Shaped places (states, counties, parks; user 2026-10-03: "the state is only the center of the
+// state. But it should play the state songs all over the state"). In folk data a place MAY carry
+// index 8 = polygon rings, each a flat [lat0, lon0, lat1, lon1, ...] (rings implicitly closed);
+// then indices 6 and 7 are null unless it also has a line. A BROAD place with a shape counts only
+// when the listener is inside the polygon (even-odd rule over all rings together, so islands and
+// holes work), at distance 0; outside it does not count. Specific places, places with a line
+// (the line wins) and places without a shape keep the old rules. Both stations (hip-hop since
+// 2026-10-03).
+// Phone player ranking (nearestRef): a broad place you are inside ranks at key
+// BROAD_FALLBACK_M + 0.1 * size, size = the polygon's footprint (placeFootprintM, not the radius
+// clamped to 300 km, so a state always beats its country) or radius_m without a shape, so a specific song within ~50 km plays first, then the
+// smallest region you are in (county before state before country).
+const BROAD_FALLBACK_M = 50000.0;
+
+// Non-empty polygon rings of a place (index 8), else null. Rings with < 3 points are dropped.
+function placeShape(place) {
+  if (place.length < 9) return null;
+  const rings = place[8];
+  if (!Array.isArray(rings)) return null;
+  const ok = rings.filter((r) => Array.isArray(r) && r.length >= 6);
+  return ok.length ? ok : null;
+}
+
+// [south, north, west, east] of a list of flat rings (or polylines); null if there are no points.
+function ringsBbox(rings) {
+  let s = Infinity, n = -Infinity, w = Infinity, e = -Infinity;
+  for (const r of rings) {
+    for (let i = 0; i + 1 < r.length; i += 2) {
+      if (r[i] < s) s = r[i];
+      if (r[i] > n) n = r[i];
+      if (r[i + 1] < w) w = r[i + 1];
+      if (r[i + 1] > e) e = r[i + 1];
+    }
+  }
+  return s > n ? null : [s, n, w, e];
+}
+
+// Even-odd ray casting over all rings together, in the lat/lon plane (x = lon, y = lat), with a
+// bbox prefilter (bbox = ringsBbox(rings), or computed here when not given). No antimeridian.
+function pointInRings(lat, lon, rings, bbox = null) {
+  const b = bbox === null ? ringsBbox(rings) : bbox;
+  if (b === null || lat < b[0] || lat > b[1] || lon < b[2] || lon > b[3]) return false;
+  let inside = false;
+  for (const r of rings) {
+    const n = r.length - (r.length % 2);
+    if (n < 6) continue;
+    let yj = r[n - 2], xj = r[n - 1];
+    for (let i = 0; i < n; i += 2) {
+      const yi = r[i], xi = r[i + 1];
+      if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) inside = !inside;
+      yj = yi;
+      xj = xi;
+    }
+  }
+  return inside;
+}
+
+// Area (m^2) of flat rings under the even-odd rule: a ring nested in an odd number of other rings
+// (tested with its first vertex) is a hole and is subtracted. Each ring's area is the shoelace
+// formula on a local equirectangular projection at the ring's mean latitude.
+function ringsAreaM2(rings) {
+  let total = 0;
+  rings.forEach((r, k) => {
+    const n = r.length - (r.length % 2);
+    if (n < 6) return;
+    let mlat = 0;
+    for (let i = 0; i < n; i += 2) mlat += r[i];
+    mlat /= n / 2;
+    const kx = Math.cos(rad(mlat)) * M_PER_DEG_LAT;
+    let a = 0;
+    let yj = r[n - 2] * M_PER_DEG_LAT, xj = r[n - 1] * kx;
+    for (let i = 0; i < n; i += 2) {
+      const yi = r[i] * M_PER_DEG_LAT, xi = r[i + 1] * kx;
+      a += xj * yi - xi * yj;
+      yj = yi;
+      xj = xi;
+    }
+    let depth = 0;
+    rings.forEach((o, m) => { if (m !== k && pointInRings(r[0], r[1], [o])) depth += 1; });
+    total += (depth % 2 === 0 ? 1 : -1) * Math.abs(a) / 2;
+  });
+  return Math.max(total, 0);
+}
+
+// Footprint (m) of a shaped place: radius of the circle with the polygon's area; null without a
+// shape (or with a zero-area one). Used for the broad-fallback rank key in the player.
+function placeFootprintM(place) {
+  const m = shapeMemo(place);
+  if (m.rings === null) return null;
+  if (m.footprint === undefined) {
+    const f = Math.sqrt(ringsAreaM2(m.rings) / Math.PI);
+    m.footprint = f > 0 ? f : null;
+  }
+  return m.footprint;
+}
+
+// Per-place memo (rings, bbox, footprint, last query) so the player's per-song loop parses and tests each
+// polygon once per fix. Keyed by the place row (place rows are never mutated after loading).
+const SHAPE_MEMO = new WeakMap();
+function shapeMemo(place) {
+  let m = SHAPE_MEMO.get(place);
+  if (m === undefined) {
+    const rings = placeShape(place);
+    m = { rings, bbox: rings === null ? null : ringsBbox(rings), lat: NaN, lon: NaN, inside: false };
+    SHAPE_MEMO.set(place, m);
+  }
+  return m;
+}
+
+// true/false for a place with a shape (inside its polygon?), null for a place without one.
+function insidePlaceShape(lat, lon, place) {
+  const m = shapeMemo(place);
+  if (m.rings === null) return null;
+  if (m.lat !== lat || m.lon !== lon) {
+    m.inside = pointInRings(lat, lon, m.rings, m.bbox);
+    m.lat = lat;
+    m.lon = lon;
+  }
+  return m.inside;
+}
+
+// [distance_m, effective radius_m, scope] of a folk place: lined places use the line and the
+// corridor; a broad shaped place is at 0 when you are inside its polygon, else at Infinity.
+function placeDistanceFolk(lat, lon, place) {
+  const g = placeGeom(place);
+  if (g !== null) return [lineDistanceM(lat, lon, g[0]), g[1], "specific"];
+  const scope = placeScope(place[2], place[5]);
+  if (scope === "broad") {
+    const inside = insidePlaceShape(lat, lon, place);
+    if (inside !== null) return [inside ? 0 : Infinity, place[5], scope];
+  }
+  return [haversineM(lat, lon, place[3], place[4]), place[5], scope];
+}
+
+// The radius a place scores with: the corridor for a lined place, else radius_m.
+function placeRadiusM(place) {
+  const g = placeGeom(place);
+  return g === null ? place[5] : g[1];
+}
+
+// place_idx -> [distance_m, effective_radius_m] for places within the cutoff. Geometry (user
+// 2026-10-03: "Bring river and state outlines to hip-hop"): a lined place is 'specific', measured
+// to its nearest segment with the corridor as radius_m; a broad shaped place counts only inside
+// its polygon, at distance 0.
+function nearPlaces(lat, lon, places, mult, zoomMult = null) {
+  const out = new Map();
+  const zm = zoomMult === null || zoomMult === undefined ? mult : zoomMult;
+  places.forEach((place, idx) => {
+    const ptype = place[2], plat = place[3], plon = place[4];
+    const geom = placeGeom(place);
+    const radiusM = geom === null ? place[5] : geom[1];
+    const scope = geom === null ? placeScope(ptype, radiusM) : "specific";
+    if (scope === "general") return;
+    const r = radiusM * (scope === "broad" ? zm : mult);
+    const reach = scope === "broad" ? r : CUTOFF_RADII * r;
+    let d;
+    if (geom !== null) {
+      if (!lineInBbox(lat, lon, geom[0], reach)) return;
+      d = lineDistanceM(lat, lon, geom[0]);
+    } else {
+      if (scope === "broad") {
+        const inside = insidePlaceShape(lat, lon, place);
+        if (inside !== null) {
+          if (inside) out.set(idx, [0.0, r]);
+          return;
+        }
+      }
+      if (!inBbox(lat, lon, plat, plon, reach)) return;
+      d = haversineM(lat, lon, plat, plon);
+    }
+    if (d <= reach) out.set(idx, [d, r]);
+  });
+  return out;
+}
+
+function folkRadius(radiusM, zoomMult) {
+  return Math.max(radiusM * FOLK_RADIUS_SCALE * zoomMult, 1.0);
+}
+
+// place_idx -> [distance_m, R, specificity] for places that can still give a ref term >= FOLK_MIN_GEO:
+// a term is at most specificity * R^2 / (d^2 + R^2), so beyond R * sqrt(specificity / min - 1) none can.
+function nearPlacesFolk(lat, lon, places, zoomMult) {
+  const out = new Map();
+  places.forEach((place, idx) => {
+    const [_pid, _name, ptype, plat, plon] = place;
+    const geom = placeGeom(place);
+    // A lined place (river, long road) is "specific" with the corridor as its radius.
+    const radiusM = geom === null ? place[5] : geom[1];
+    // Same scope rule as hip-hop: "New York City" never counts; broad places only inside.
+    const scope = geom === null ? placeScope(ptype, radiusM) : "specific";
+    if (scope === "general") return;
+    const k = specificity(radiusM);
+    if (k <= FOLK_MIN_GEO) return;
+    const r = folkRadius(radiusM, zoomMult);
+    const reach = scope === "broad" ? radiusM * zoomMult : r * Math.sqrt(k / FOLK_MIN_GEO - 1.0);
+    if (geom === null && scope === "broad") {
+      // A broad place with a polygon (index 8) counts only inside it, at distance 0.
+      const inside = insidePlaceShape(lat, lon, place);
+      if (inside !== null) {
+        if (inside) out.set(idx, [0.0, r, k]);
+        return;
+      }
+    }
+    if (geom === null) {
+      if (!inBbox(lat, lon, plat, plon, reach)) return;
+    } else if (!lineInBbox(lat, lon, geom[0], reach)) return;
+    const d = geom === null ? haversineM(lat, lon, plat, plon) : lineDistanceM(lat, lon, geom[0]);
+    if (d <= reach) out.set(idx, [d, r, k]);
+  });
+  return out;
+}
+
+// Folk variant of scoreSongs: ref term = conf * weight * specificity * R^2 / (d^2 + R^2).
+function scoreSongsFolk(lat, lon, zoomMult, data) {
+  const places = data.places;
+  const weights = data.roles;
+  const codes = data.role_codes;
+  const artists = new Map(data.artists.map((a) => [a[0], a]));
+  const near = nearPlacesFolk(lat, lon, places, zoomMult);
+  const out = [];
+  for (const song of data.songs) {
+    const [_sid, artistId, _title, _year, pop, _am, refs] = song;
+    let geo = 0.0;
+    let best = 0.0;
+    const why = [];
+    for (const [placeIdx, roleCode, conf] of refs) {
+      const hit = near.get(placeIdx);
+      if (hit === undefined) continue;
+      const [d, r, k] = hit;
+      const role = codes[roleCode];
+      const term = conf * weights[role] * k * r * r / (d * d + r * r);
+      geo += term;
+      if (term > best) best = term;
+      why.push([term, { place: places[placeIdx][1], role, distance_m: Math.round(d) }]);
+    }
+    if (best < FOLK_MIN_GEO) continue;
+    const artist = artists.get(artistId);
+    let originWhy = null;
+    const home = homePoint(artist, places);
+    if (home !== null) {
+      const [hlat, hlon, hr, originName] = home;
+      const dh = haversineM(lat, lon, hlat, hlon);
+      geo += HOMETOWN_WEIGHT * gauss(dh, hr * zoomMult);
+      if (originName !== null && dh <= hr * zoomMult) {
+        originWhy = { place: originName, role: ORIGIN_ROLE, distance_m: Math.round(dh) };
+      }
+    }
+    why.sort((x, y) => y[0] - x[0]);
+    const whys = why.map((w) => w[1]);
+    if (originWhy !== null) whys.push(originWhy);
+    out.push({ song, artist, geo, score: geo * popMultiplier(pop), why: whys });
+  }
+  out.sort((x, y) => (y.score - x.score) || (x.song[0] - y.song[0]));
+  return out;
+}
+
+// Per-data memo for the phone player (national hip-hop, 2026-10-03): the artist map and, per
+// place index, the indices of the songs that reference it, so scoreSongs only visits songs with a
+// ref near the listener (any other song has best term 0 < MIN_GEO). Keyed by the songs array (never
+// mutated after loading). The result is identical to a loop over every song: candidates are
+// sorted by (score desc, id asc) and each song is visited once, in data order.
+const SONG_INDEX = new WeakMap();
+function songIndex(data) {
+  let m = SONG_INDEX.get(data.songs);
+  if (m === undefined) {
+    const byPlace = new Map();
+    data.songs.forEach((song, i) => {
+      for (const ref of song[6]) {
+        let l = byPlace.get(ref[0]);
+        if (l === undefined) byPlace.set(ref[0], (l = []));
+        if (l[l.length - 1] !== i) l.push(i);
+      }
+    });
+    m = { byPlace, artists: new Map(data.artists.map((a) => [a[0], a])) };
+    SONG_INDEX.set(data.songs, m);
+  }
+  return m;
+}
+
+// Song rows with a ref to any place in `near` (a Map keyed by place index), in data order.
+function songsNear(data, near) {
+  const { byPlace } = songIndex(data);
+  const songs = data.songs;
+  const mark = new Uint8Array(songs.length);
+  let lo = songs.length, hi = -1;
+  for (const idx of near.keys()) {
+    const l = byPlace.get(idx);
+    if (l === undefined) continue;
+    for (const i of l) {
+      mark[i] = 1;
+      if (i < lo) lo = i;
+      if (i > hi) hi = i;
+    }
+  }
+  const out = [];
+  for (let i = lo; i <= hi; i++) if (mark[i]) out.push(songs[i]);
+  return out;
+}
+
+// All candidates at effective multiplier `mult`, sorted by final desc, id asc.
+// keep: optional predicate over song rows; rejected songs are never candidates (the national
+// phone player passes "has a preview, not played yet, decade checked").
+function scoreSongs(lat, lon, mult, data, zoomMult = null, keep = null) {
+  const places = data.places;
+  const weights = data.roles;
+  const codes = data.role_codes;
+  const artists = songIndex(data).artists;
+  const near = nearPlaces(lat, lon, places, mult, zoomMult);
+  const out = [];
+  for (const song of songsNear(data, near)) {
+    if (keep !== null && !keep(song)) continue;
+    const [_sid, artistId, _title, _year, pop, _am, refs] = song;
+    let geo = 0.0;
+    let best = 0.0;
+    const why = [];
+    for (const [placeIdx, roleCode, conf] of refs) {
+      const hit = near.get(placeIdx);
+      if (hit === undefined) continue;
+      const [d, r] = hit;
+      const role = codes[roleCode];
+      const term = conf * weights[role] * gauss(d, r) * specificity(placeRadiusM(places[placeIdx]));
+      geo += term;
+      if (term > best) best = term;
+      why.push([term, { place: places[placeIdx][1], role, distance_m: Math.round(d) }]);
+    }
+    if (best < MIN_GEO) continue;
+    const artist = artists.get(artistId);
+    let originWhy = null;
+    const home = homePoint(artist, places);
+    if (home !== null) {
+      const [hlat, hlon, hr, originName] = home;
+      const dh = haversineM(lat, lon, hlat, hlon);
+      geo += HOMETOWN_WEIGHT * gauss(dh, hr * mult);
+      if (originName !== null && dh <= hr * mult) {
+        originWhy = { place: originName, role: ORIGIN_ROLE, distance_m: Math.round(dh) };
+      }
+    }
+    why.sort((x, y) => y[0] - x[0]);
+    const whys = why.map((w) => w[1]);
+    if (originWhy !== null) whys.push(originWhy);
+    out.push({ song, artist, geo, score: geo * popMultiplier(pop), why: whys });
+  }
+  out.sort((x, y) => (y.score - x.score) || (x.song[0] - y.song[0]));
+  return out;
+}
+
+// Expand radii until >= MIN_CANDIDATES. Returns [sorted candidates, expansion].
+// keep (optional song-row predicate): rejected songs are left out before the candidate count, so
+// the radius keeps growing past songs already played (national player).
+function gather(lat, lon, zoom, data, keep = null) {
+  const zm = data.zoom[zoom] ?? 1.0;
+  if (data.scoring === SCORING_FOLK) {
+    const c = scoreSongsFolk(lat, lon, zm, data);
+    return [keep === null ? c : c.filter((x) => keep(x.song)), 1.0];
+  }
+  let expand = 1.0;
+  let cands = scoreSongs(lat, lon, zm * expand, data, zm, keep);
+  let k = 0;
+  while (cands.length < MIN_CANDIDATES && k < MAX_EXPANSIONS) {
+    k += 1;
+    expand *= EXPAND_FACTOR;
+    cands = scoreSongs(lat, lon, zm * expand, data, zm, keep);
+  }
+  return [cands, expand];
+}
+
+// cands sorted by score desc -> same tiers in order, shuffled within each.
+function shuffleTiers(cands, rng) {
+  const out = [];
+  let i = 0;
+  while (i < cands.length) {
+    const t = tierOf(cands[i].score);
+    let j = i;
+    while (j < cands.length && tierOf(cands[j].score) === t) j += 1;
+    const block = cands.slice(i, j);
+    shuffleInPlace(block, rng);
+    out.push(...block);
+    i = j;
+  }
+  return out;
+}
+
+// At most ARTIST_CAP per artist in each CAP_WINDOW block; top up if short.
+function applyArtistCap(cands, n) {
+  let remaining = cands.slice();
+  const out = [];
+  while (remaining.length && out.length < n) {
+    const size = Math.min(CAP_WINDOW, n - out.length);
+    const counts = new Map();
+    const block = [];
+    const rest = [];
+    for (const c of remaining) {
+      const aid = c.song[1];
+      if (block.length < size && (counts.get(aid) ?? 0) < ARTIST_CAP) {
+        counts.set(aid, (counts.get(aid) ?? 0) + 1);
+        block.push(c);
+      } else {
+        rest.push(c);
+      }
+    }
+    while (block.length < size && rest.length) block.push(rest.shift());
+    out.push(...block);
+    remaining = rest;
+  }
+  return out;
+}
+
+function radio(lat, lon, zoom, n, data, seed = null, keep = null) {
+  if (seed == null) seed = Math.floor(Math.random() * 2 ** 32);
+  const rng = mulberry32(seed);
+  const [cands, _expand] = gather(lat, lon, zoom, data, keep);
+  const ranked = applyArtistCap(shuffleTiers(cands, rng), n);
+  const places = data.places;
+  return ranked.map((c) => {
+    const [sid, artistId, title, year, pop, amId, _refs] = c.song;
+    const artist = c.artist;
+    const origins = artistOrigins(artist);
+    return {
+      song: {
+        id: sid, title, year,
+        artist_id: artistId,
+        artist: artist !== undefined ? artist[1] : null,
+        origin: origins.length ? places[origins[0]][1] : null,
+        pop, apple_music_id: amId,
+      },
+      score: c.score,
+      geo: c.geo,
+      why: c.why,
+    };
+  });
+}
+
+
+// ---- national player library (pure helpers; tests/test_proto_player.py and
+// ios/RadioCore/Tests/make_fixtures.mjs run this block under a JS engine) ----
+// BEGIN national-player-lib
+// National hip-hop (user 2026-10-03: "I'd love a national hip hop map"): national.json holds the
+// places and songs (geo/stages/export_web.py build_data, packed by geo/stages/export_folk.py:
+// songs = [[id, artist_id, title, year, pop, apple_music_id, refs, preview, art], ...]) and the
+// page ranks them with score.js's hip-hop radio() (Gaussian, radius expansion, artist cap, tiers).
+const PREVIEW_PREFIX = "https://audio-ssl.itunes.apple.com/itunes-assets/";
+function unpackPreview(s) {            // geo/stages/export_folk.py: pack_preview
+  if (!s) return "";
+  if (s.startsWith("http")) return s;
+  const [n, uuid, num] = s.split("|");
+  return `${PREVIEW_PREFIX}AudioPreview${n}/v4/${uuid.slice(0, 2)}/${uuid.slice(2, 4)}/${uuid.slice(4, 6)}/${uuid}/mzaf_${num}.plus.aac.p.m4a`;
+}
+function unpackArt(s) {                // geo/stages/export_folk.py: pack_art
+  if (!s) return "";
+  if (s.startsWith("http")) return s;
+  const [host, music, uuid, ...name] = s.split("|");
+  return `https://is${host}-ssl.mzstatic.com/image/thumb/${music}/v4/${uuid.slice(0, 2)}/${uuid.slice(2, 4)}/${uuid.slice(4, 6)}/${uuid}/${name.join("|")}/600x600bb.jpg`;
+}
+const ROLE_TEXT = { narrator_is_from: "reps", shoutout: "shouts out", setting: "set in", passing_mention: "mentions" };
+// One-line reason for a radio() result, like scripts/export_grid.py why_text.
+function whyText(r) {
+  const top = r.why.find((w) => w.role !== ORIGIN_ROLE);
+  const org = r.why.find((w) => w.role === ORIGIN_ROLE);
+  const origin = org ? `${r.song.artist || "The artist"} is from ${org.place}` : null;
+  if (!top) return origin || "";
+  const ref = `${ROLE_TEXT[top.role] || "mentions"} ${top.place}`;
+  if (origin === null) return ref;
+  return org.place === top.place ? origin : `${ref} · ${origin}`;
+}
+const NATIONAL_ZOOM = "neighborhood";
+const NATIONAL_N = 30;                 // ranked list length; the pick is one of its top 3
+const decadeOfYear = (y) => (y >= 2020 ? "2020s" : y >= 2010 ? "2010s" : y >= 2000 ? "00s" : y >= 1990 ? "90s" : "70s80s");
+// Decade filter: songs without a year always pass; nothing checked counts as everything checked.
+const yearOk = (y, decades) => !y || decades.size === 0 || decades.has(decadeOfYear(y));
+const ROW_BY_ID = new WeakMap();
+function rowById(data, id) {
+  let m = ROW_BY_ID.get(data.songs);
+  if (m === undefined) { m = new Map(data.songs.map((s) => [s[0], s])); ROW_BY_ID.set(data.songs, m); }
+  return m.get(id);
+}
+// The place behind a result's top reason (why[0], always a place ref): km from the listener to its
+// edge (0 = inside), its radius and whether it is broad (borough, state: inside its outline). Lined
+// places are measured to the line with the corridor as radius (score.js placeDistanceFolk).
+function topRef(lat, lon, r, row, places) {
+  const name = r.why.length ? r.why[0].place : null;
+  let best = null;
+  for (const [pi] of row[6]) {
+    const p = places[pi];
+    if (p[1] !== name) continue;
+    const [dc, radius, scope] = placeDistanceFolk(lat, lon, p);
+    const edge = Math.max(0, dc - radius);
+    if (best === null || edge < best.edge) best = { edge, radius, broad: scope === "broad" };
+  }
+  return best === null ? { km: 0, radius: 0, broad: true }
+    : { km: best.edge / 1000, radius: best.radius, broad: best.broad };
+}
+// Status line once a song plays, as the folk player: km away, or "for your block" / "for where you are".
+function statusText(song) {
+  return song.km > 0.4 ? `Nearest songs: ${song.km.toFixed(1)} km away`
+    : (song.radius <= 1000 && !song.broad ? "Song for your block" : "Song for where you are");
+}
+// Next song for (lat, lon): score.js radio() over the songs that have a preview, have not played
+// (played = Set of song ids) and pass the decade filter, so the radius keeps expanding past played
+// songs; then one of the top 3 (rnd = Math.random). null when nothing is in reach.
+function nationalPick(data, lat, lon, played, decades, rnd) {
+  const keep = (row) => !!row[7] && !played.has(row[0]) && yearOk(row[3], decades);
+  const ranked = radio(lat, lon, NATIONAL_ZOOM, NATIONAL_N, data, Math.floor(rnd() * 2 ** 32), keep);
+  if (!ranked.length) return null;
+  const r = ranked[Math.floor(rnd() * Math.min(3, ranked.length))];
+  const row = rowById(data, r.song.id);
+  const ref = topRef(lat, lon, r, row, data.places);
+  return { id: row[5] || "", sid: row[0], t: `${row[2]} · ${r.song.artist || ""}`, p: unpackPreview(row[7]),
+           a: unpackArt(row[8]), why: whyText(r), km: ref.km, radius: ref.radius, broad: ref.broad, national: true };
+}
+// END national-player-lib
+
+(function () {
+  const GRID_URL = "grid.json";
+  const NATIONAL_URL = "national.json";   // places + songs, scored here; grid.json is the fallback
+  const $ = (id) => document.getElementById(id);
+  const audio = $("audio");
+  let grid = null, nat = null, here = null, current = null, started = false;
+
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  };
+  here = store.get("georadio.last", null);
+
+  function status(msg, isErr) { $("status").textContent = msg; $("status").className = "status" + (isErr ? " err" : ""); }
+
+  function showWhere() {
+    if (!here) { $("where").textContent = "no location yet"; return; }
+    const age = Math.round((Date.now() - (here.t || Date.now())) / 60000);
+    $("where").textContent = `${here.lat.toFixed(4)}, ${here.lon.toFixed(4)}` + (here.acc ? ` ±${Math.round(here.acc)} m` : "") + (age > 1 ? ` · ${age} min ago` : "");
+  }
+
+  // Ask the phone for a fresh fix (up to 12 s). Falls back to the watch's last fix.
+  function freshFix() {
+    return new Promise((resolve) => {
+      if (!("geolocation" in navigator)) return resolve(here);
+      navigator.geolocation.getCurrentPosition((p) => {
+        here = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() };
+        store.set("georadio.last", here); showWhere(); resolve(here);
+      }, (e) => { status("Location: " + e.message + (here ? " (using last known spot)" : ""), true); resolve(here); },
+      { enableHighAccuracy: true, maximumAge: 15000, timeout: 12000 });
+    });
+  }
+
+  function watchLocation() {
+    if (!("geolocation" in navigator)) { status("This browser can't share location.", true); return; }
+    navigator.geolocation.watchPosition((p) => {
+      here = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy, t: Date.now() };
+      store.set("georadio.last", here);
+      showWhere();
+    }, (e) => status("Location: " + e.message + (here ? " (using last known spot)" : ""), true),
+    { enableHighAccuracy: true, maximumAge: 30000, timeout: 20000 });
+  }
+
+  // Songs played this session (this tab): no repeats until everything within reach has played.
+  const played = new Set(sessionGet("georadio.played", []));          // grid song numbers
+  const playedN = new Set(sessionGet("georadio.playedNational", []));   // national: song ids
+  function sessionGet(k, d) { try { const v = sessionStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+  function sessionSet(k, v) { try { sessionStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  const playable = (n) => !!grid.songs[n - 1].p;
+
+  // Decade filter (user 2026-10-03): checked decades only; years before 1990 are "70s/80s".
+  // Songs without a year ("y") always pass, and nothing checked counts as everything checked.
+  // BEGIN proto-player-lib (tests/test_proto_player.py runs this block)
+  const DECADES = ["2020s", "2010s", "00s", "90s", "70s80s"];
+  const decadeOf = (y) => (y >= 2020 ? "2020s" : y >= 2010 ? "2010s" : y >= 2000 ? "00s" : y >= 1990 ? "90s" : "70s80s");
+  const decadeOk = (n) => {
+    const y = grid.songs[n - 1].y;
+    return !y || decades.size === 0 || decades.has(decadeOf(y));
+  };
+
+  // Nearest square (up to ~20 km out) that still has an unplayed song; ring by ring,
+  // nearest square first within a ring.
+  function findUnplayed(lat, lon) {
+    const i0 = Math.round(lat * grid.step), j0 = Math.round(lon * grid.step);
+    const kx = Math.cos(lat * Math.PI / 180);
+    for (let r = 0; r <= 40; r++) {
+      const ring = [];
+      for (let di = -r; di <= r; di++) for (let dj = -r; dj <= r; dj++) {
+        if (Math.max(Math.abs(di), Math.abs(dj)) !== r) continue;
+        const cell = grid.cells[`${i0 + di}_${j0 + dj}`];
+        if (cell && cell.length) ring.push({ cell, km: Math.hypot(di, dj * kx) * 111.2 / grid.step });
+      }
+      ring.sort((a, b) => a.km - b.km);
+      for (const c of ring) {
+        const pool = c.cell.filter(([n]) => playable(n) && !played.has(n) && decadeOk(n));
+        if (pool.length) return { pool, km: c.km };
+      }
+    }
+    // Nothing within ~20 km: the coarse NYS + NJ layer (~5 km squares), own square first,
+    // then its 8 neighbours by distance.
+    if (grid.coarse && grid.coarse_step) {
+      const cs = grid.coarse_step, ci = Math.round(lat * cs), cj = Math.round(lon * cs);
+      const near = [];
+      for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) {
+        const cell = grid.coarse[`${ci + di}_${cj + dj}`];
+        if (cell && cell.length) near.push({ cell, own: di === 0 && dj === 0, km: Math.hypot(di, dj * kx) * 111.2 / cs });
+      }
+      near.sort((a, b) => a.km - b.km);
+      for (const c of near) {
+        const pool = c.cell.filter(([n]) => playable(n) && !played.has(n) && decadeOk(n));
+        if (pool.length) return { pool, km: c.km, own: c.own, coarse: true };
+      }
+    }
+    return null;
+  }
+
+  // END proto-player-lib
+  const savedDecades = store.get("georadio.decades", null);
+  let decades = new Set((Array.isArray(savedDecades) ? savedDecades : DECADES).filter((d) => DECADES.includes(d)));
+
+  const decadeBoxes = [...document.querySelectorAll("#decades input[data-decade]")];
+  function syncDecades() {
+    decadeBoxes.forEach((b) => { b.checked = decades.has(b.dataset.decade); });
+    $("dec-all").checked = decades.size === DECADES.length;
+  }
+  decadeBoxes.forEach((b) => b.addEventListener("change", () => {
+    if (b.checked) decades.add(b.dataset.decade); else decades.delete(b.dataset.decade);
+    store.set("georadio.decades", [...decades]); syncDecades();
+  }));
+  $("dec-all").addEventListener("change", () => {
+    decades = new Set($("dec-all").checked ? DECADES : []);
+    store.set("georadio.decades", [...decades]); syncDecades();
+  });
+  syncDecades();
+
+  function pick() {
+    if (!here) return null;
+    if (nat) {
+      let song = nationalPick(nat, here.lat, here.lon, playedN, decades, Math.random);
+      if (!song && playedN.size) {  // everything within reach has played: start over
+        playedN.clear();
+        song = nationalPick(nat, here.lat, here.lon, playedN, decades, Math.random);
+      }
+      if (!song) return null;
+      playedN.add(song.sid);
+      sessionSet("georadio.playedNational", [...playedN]);
+      return song;
+    }
+    let found = findUnplayed(here.lat, here.lon);
+    if (!found && played.size) {  // everything within reach has played: start over
+      played.clear();
+      found = findUnplayed(here.lat, here.lon);
+    }
+    if (!found) return null;
+    const pool = found.pool;  // best-ranked first; a little shuffle among the top few
+    const [n, w] = pool[Math.floor(Math.random() * Math.min(3, pool.length))];
+    played.add(n);
+    sessionSet("georadio.played", [...played]);
+    return { ...grid.songs[n - 1], n, why: grid.whys[w - 1] || "", km: found.km, ownCoarse: !!(found.coarse && found.own) };
+  }
+
+  function show(song) {
+    const [title, artist] = song.t.split(" · ");
+    $("title").textContent = title;
+    $("artist").textContent = artist || "";
+    $("why").textContent = song.why ? song.why.charAt(0).toUpperCase() + song.why.slice(1) : "Near you";
+    $("art").style.backgroundImage = song.a ? `url("${song.a}")` : "";
+    const full = $("full");
+    if (song.id) { full.href = `https://music.apple.com/us/song/${song.id}`; full.hidden = false; } else full.hidden = true;
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title, artist: artist || "", album: "Geo Radio · " + (song.why || "near you"),
+        artwork: song.a ? [{ src: song.a, sizes: "600x600", type: "image/jpeg" }] : [],
+      });
+    }
+  }
+
+  async function next() {
+    status("Getting your location…");
+    await freshFix();
+    if (!here) { status("No location yet. Allow location for Safari: Settings → Privacy → Location Services → Safari Websites → While Using.", true); $("start").hidden = false; return; }
+    const song = pick();
+    if (!song) { status(nat ? "No songs about this area yet. Geo Radio knows NYC, New York State and New Jersey best, and more US cities every week."
+                                : "No songs within 20 km of you yet. Geo Radio covers NYC and Westchester.", true); return; }
+    current = song;
+    show(song);
+    audio.src = song.p;
+    if (globalThis.AM && AM.ready && AM.authorized() && song.id) {   // full song, the listener's Apple Music
+      try { audio.pause(); await AM.play(song.id); status("Full song · Apple Music"); return; }
+      catch (e) { status("Apple Music couldn't play this one; preview instead."); }
+    } else if (globalThis.AM && AM.active) AM.stop();
+    try { await audio.play(); status(song.national ? statusText(song) : song.ownCoarse ? "Song for where you are" : song.km > 0.4 ? `Nearest songs: ${song.km.toFixed(1)} km away` : "Song for your block"); }
+    catch (e) { status("Tap Start to begin playback (" + e.name + ").", true); $("start").hidden = false; }
+  }
+
+  audio.addEventListener("ended", () => { if (current) next(); });
+  audio.addEventListener("error", () => { if (!current) return; status("Preview failed to load; skipping.", true); next(); });
+  audio.addEventListener("timeupdate", () => {
+    if (audio.duration) $("progress").style.width = (100 * audio.currentTime / audio.duration) + "%";
+  });
+  audio.addEventListener("play", () => { $("pause").textContent = "Pause"; });
+  audio.addEventListener("pause", () => { $("pause").textContent = "Play"; });
+
+  if ("mediaSession" in navigator) {
+    navigator.mediaSession.setActionHandler("nexttrack", next);
+    navigator.mediaSession.setActionHandler("play", () => audio.play());
+    navigator.mediaSession.setActionHandler("pause", () => audio.pause());
+  }
+
+  $("start").addEventListener("click", async () => {
+    $("start").hidden = true; $("pause").hidden = false; $("skip").hidden = false;
+    // iOS only lets a tap start audio: play silence now so later songs may start on their own.
+    if (!started) { audio.src = "data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA=="; audio.play().catch(() => {}); }
+    status("Loading songs…");
+    if (!started) { started = true; watchLocation(); }
+    if (!grid && !nat) {
+      try {   // the national data first; an older site without it still has grid.json
+        const res = await fetch(NATIONAL_URL, { cache: "no-cache" });
+        if (res.ok) { const d = await res.json(); if (Array.isArray(d.places) && Array.isArray(d.songs)) nat = d; }
+      } catch (e) { /* fall back to the grid */ }
+      if (!nat) {
+        try { grid = await (await fetch(GRID_URL, { cache: "no-cache" })).json(); }
+        catch (e) { status("Couldn't load the song list: " + e.message, true); $("start").hidden = false; return; }
+      }
+    }
+    try { navigator.wakeLock && navigator.wakeLock.request("screen").catch(() => {}); } catch (e) {}
+    next();
+  });
+  $("skip").addEventListener("click", next);
+  $("pause").addEventListener("click", () => (globalThis.AM && AM.active ? AM.toggle() : (audio.paused ? audio.play() : audio.pause())));
+  // Apple Music sign-in: full-length songs for subscribers (web/applemusic.js).
+  function amLabel() { $("am").textContent = AM.authorized() ? "Apple Music: full songs on (tap to sign out)" : "Sign in to Apple Music for full songs"; }
+  if (globalThis.AM) {
+    AM.onEnded = () => { if (current) next(); };
+    AM.onTime = (t, d) => { if (d) $("progress").style.width = (100 * t / d) + "%"; };
+    AM.load().then((ok) => { if (ok) { $("am").hidden = false; amLabel(); } });
+    $("am").addEventListener("click", async () => {
+      try { if (AM.authorized()) await AM.signOut(); else await AM.signIn(); } catch (e) { status("Apple Music sign-in didn't finish.", true); }
+      amLabel();
+    });
+  }
+  showWhere();
+})();
+</script>
+</body>
+</html>

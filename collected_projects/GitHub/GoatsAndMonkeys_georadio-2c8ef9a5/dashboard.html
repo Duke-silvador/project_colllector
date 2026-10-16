@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hip-Hop Radio Pipeline</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+:root {
+  --bg: #f7f6f2; --card: #ffffff; --ink: #1f1d1a; --muted: #6d6860; --line: #e4e1da;
+  --accent: #3d4fb8; --accent2: #c0562f; --track: #ebe8e1; --on: #2f8a4c; --off: #9b968d;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #171614; --card: #211f1c; --ink: #ece8e1; --muted: #a29c92; --line: #34312c;
+    --accent: #8f9cf0; --accent2: #f08a5d; --track: #2e2b27; --on: #5fcf83; --off: #6d6860;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #171614; --card: #211f1c; --ink: #ece8e1; --muted: #a29c92; --line: #34312c;
+  --accent: #8f9cf0; --accent2: #f08a5d; --track: #2e2b27; --on: #5fcf83; --off: #6d6860;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 22px; margin: 0 0 2px; }
+.sub { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.tile, .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.tile { padding: 12px 14px; }
+.tile .v { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.tile .k { color: var(--muted); font-size: 12px; }
+.card { padding: 6px 16px; margin-bottom: 18px; }
+.card h2 { font-size: 14px; color: var(--muted); font-weight: 600; margin: 10px 0 4px; text-transform: uppercase; letter-spacing: .04em; }
+.stage { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.stage:first-of-type { border-top: 0; }
+.name { font-weight: 600; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; background: var(--off); }
+.dot.on { background: var(--on); box-shadow: 0 0 0 3px color-mix(in srgb, var(--on) 25%, transparent); }
+.nums { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+.bar { grid-column: 1 / -1; height: 8px; background: var(--track); border-radius: 4px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.meta { grid-column: 1 / -1; color: var(--muted); font-size: 12.5px; }
+.loops { display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 8px 0 12px; font-size: 13.5px; }
+#chart svg { width: 100%; height: auto; display: block; }
+.legend { display: flex; gap: 16px; font-size: 12.5px; color: var(--muted); padding: 0 0 10px; }
+.sw { display: inline-block; width: 12px; height: 3px; vertical-align: middle; margin-right: 5px; border-radius: 2px; }
+.proj { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; padding: 6px 0 4px; }
+.proj .v { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.proj .k { color: var(--muted); font-size: 12px; }
+.proj .now { color: var(--muted); font-size: 12px; }
+.note { color: var(--muted); font-size: 12.5px; padding: 6px 0 12px; }
+#map { height: 440px; border-radius: 8px; margin: 6px 0 8px; z-index: 0; }
+.leaflet-popup-content { font-size: 13px; line-height: 1.4; }
+.leaflet-popup-content b { font-size: 14px; }
+.pop-list { margin: 4px 0 0; padding-left: 16px; }
+.stale { color: var(--accent2); font-weight: 600; }
+footer { color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Hip-hop radio pipeline</h1>
+  <div class="sub" id="updated">Loading…</div>
+  <div class="tiles" id="tiles"></div>
+  <div class="card"><h2>Map</h2><div id="map"></div>
+    <div class="note" id="mapnote">Each pin is a place named in a hip-hop song; bigger pins have more songs. Tap a pin for the songs.</div></div>
+  <div class="card" id="projcard"><h2>When the full run is done</h2><div id="proj"></div></div>
+  <div class="card" id="metrocard" style="display:none"><h2>By city</h2><div id="metros"></div></div>
+  <div class="card"><h2>Stages</h2><div id="stages"></div></div>
+  <div class="card"><h2>Progress over time</h2><div id="chart"></div>
+    <div class="legend"><span><i class="sw" style="background:var(--accent)"></i>songs extracted</span>
+    <span><i class="sw" style="background:var(--accent2)"></i>songs on the map</span></div></div>
+  <div class="card"><h2>Background jobs</h2><div class="loops" id="loops"></div></div>
+  <footer>Counts only, refreshed every 2 minutes from the laptop. This page reloads itself every minute.
+    <a href="./" style="color:var(--accent)">Open the hip-hop player</a></footer>
+</main>
+<script>
+const fmt = n => (n ?? 0).toLocaleString();
+function eta(left, perHour) {
+  if (left <= 0) return "done";
+  if (!perHour || perHour <= 0) return "–";
+  const h = left / perHour;
+  return h < 1 ? Math.round(h * 60) + " min" : h < 48 ? h.toFixed(1) + " h" : (h / 24).toFixed(1) + " days";
+}
+function render(s) {
+  const c = s.counts, r = s.per_hour || {}, ageMin = (Date.now() / 1000 - s.updated) / 60;
+  const when = new Date(s.updated * 1000).toLocaleString([], { weekday: "short", hour: "numeric", minute: "2-digit" });
+  document.getElementById("updated").innerHTML = `Updated ${when}` +
+    (ageMin > 10 ? ` · <span class="stale">no update for ${Math.round(ageMin)} min; the laptop may be asleep</span>` : "");
+  const tiles = [["songs on the map", c.placed_songs], ["places", c.places], ["place references", c.refs],
+                 ["with Apple Music", c.apple_matched]];
+  document.getElementById("tiles").innerHTML = tiles.map(([k, v]) =>
+    `<div class="tile"><div class="v">${fmt(v)}</div><div class="k">${k}</div></div>`).join("");
+  const pj = s.projection;
+  document.getElementById("projcard").style.display = pj ? "" : "none";
+  if (pj) {
+    const items = [["songs on the map", pj.songs, c.placed_songs], ["place references", pj.refs, c.refs],
+                   ["places", pj.places, c.places]];
+    const left = pj.hours_left == null ? "" : ` in about ${eta(1, 1 / pj.hours_left)}`;
+    document.getElementById("proj").innerHTML = `<div class="proj">` + items.map(([k, v, now]) =>
+      `<div><div class="v">~${fmt(v)}</div><div class="k">${k}</div><div class="now">now ${fmt(now)}</div></div>`).join("") +
+      `</div><div class="note">Estimate${left}: ${fmt(pj.to_check)} songs still to check for lyrics, about ${fmt(pj.to_extract)} still to extract.
+       Based on the hit rates so far; not counting the Genius town search or new artists.</div>`;
+  }
+  const st = s.stages, rows = [
+    ["Discographies", "songs", c.artists_with_songs, c.artists_slice, `${fmt(c.songs)} songs from ${fmt(c.artists_with_songs)} artists`, "artists_with_songs"],
+    ["Genius match", "genius", c.genius_resolved, c.songs, `songs linked to Genius (annotations)`, "genius_resolved"],
+    ["Lyrics check", "lyrics", c.lyrics_checked, c.lyrics_target, `${fmt(c.lyrics_found)} have lyrics`, "lyrics_checked"],
+    ["Place extraction (Claude)", "extract", c.extracted, c.extracted + c.extract_waiting, `${fmt(c.extract_waiting)} waiting · ${fmt(c.extract_skipped)} skipped (no place words)`, "extracted"],
+    ["Geocoding", "geocode", c.m_resolved + c.m_review, c.mentions, `${fmt(c.m_resolved)} placed · ${fmt(c.m_review)} to review · ${fmt(c.m_pending)} pending`, "m_resolved"],
+    ["Apple Music match", "catalog", c.apple_tried, c.placed_songs, `${fmt(c.apple_matched)} found`, "apple_tried"],
+  ];
+  document.getElementById("stages").innerHTML = rows.map(([name, key, n, total, extra, rk]) => {
+    const pct = total ? Math.min(100, 100 * n / total) : 0, ph = r[rk];
+    const rate = ph == null ? "rate: measuring…" : `${fmt(Math.round(ph))}/hour · left: ${eta(total - n, ph)}`;
+    return `<div class="stage"><div class="name"><span class="dot ${st[key] ? "on" : ""}"></span>${name}</div>
+      <div class="nums">${fmt(n)} / ${fmt(total)} · ${pct.toFixed(0)}%</div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <div class="meta">${extra} · ${rate}</div></div>`;
+  }).join("");
+  const L = { autopilot: "Hip-hop autopilot", genius_daily: "Daily Genius run", town_search: "Town search" };
+  const M = { nyc: "New York", atlanta: "Atlanta", houston: "Houston", la: "Los Angeles", los_angeles: "Los Angeles",
+    bay: "Bay Area", bay_area: "Bay Area", chicago: "Chicago", detroit: "Detroit", memphis: "Memphis",
+    new_orleans: "New Orleans", nola: "New Orleans", philadelphia: "Philadelphia", philly: "Philadelphia", miami: "Miami" };
+  const ms = c.metros || [];
+  document.getElementById("metrocard").style.display = ms.length ? "" : "none";
+  document.getElementById("metros").innerHTML = ms.map(([m, a, n, lyr, placed]) => {
+    const pct = n ? Math.min(100, 100 * lyr / n) : 0;
+    return `<div class="stage"><div class="name">${M[m] || m}</div>
+      <div class="nums">${fmt(placed)} songs on the map</div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <div class="meta">${fmt(a)} artists · ${fmt(n)} songs · ${fmt(lyr)} with lyrics</div></div>`;
+  }).join("");
+  document.getElementById("loops").innerHTML = Object.entries(s.loops).map(([k, on]) =>
+    `<span><span class="dot ${on ? "on" : ""}"></span>${L[k] || k}: ${on ? "running" : "off"}</span>`).join("");
+  chart(s.history || []);
+  drawMap(s.pins);
+}
+let map, layer, fitted = false;
+function drawMap(pins) {
+  if (!window.L || !pins) return;
+  if (!map) {
+    map = L.map("map", { worldCopyJump: true }).setView([40.73, -73.95], 10);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      { maxZoom: 18, attribution: "&copy; OpenStreetMap contributors" }).addTo(map);
+    layer = L.layerGroup().addTo(map);
+  }
+  layer.clearLayers();
+  const esc = t => String(t).replace(/[&<>"]/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
+  const color = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#2f6f5e";
+  for (const [lat, lon, name, type, n, songs] of pins) {
+    const more = n > songs.length ? `<div class="now">+ ${n - songs.length} more</div>` : "";
+    L.circleMarker([lat, lon], { radius: Math.min(4 + 2.2 * Math.sqrt(n), 18), color: "#fff", weight: 1,
+        fillColor: color, fillOpacity: 0.8 })
+      .bindPopup(`<b>${esc(name)}</b> <span class="now">${esc(type)} · ${n} song${n === 1 ? "" : "s"}</span>
+        <ul class="pop-list">${songs.map(([t, a]) => `<li>${esc(t)} — ${esc(a)}</li>`).join("")}</ul>${more}`)
+      .addTo(layer);
+  }
+  document.getElementById("mapnote").textContent = `${pins.length.toLocaleString()} places with songs. ` +
+    "Each pin is a place named in a hip-hop song; bigger pins have more songs. Tap a pin for the songs. The map opens on New York City; zoom out for the rest of the country.";
+}
+function chart(h) {
+  const el = document.getElementById("chart");
+  if (h.length < 2) { el.innerHTML = `<p class="sub">The chart fills in after a few updates.</p>`; return; }
+  const W = 800, H = 200, P = 34, t0 = h[0].t, t1 = h[h.length - 1].t;
+  const max = Math.max(...h.map(p => Math.max(p.extracted || 0, p.placed_songs || 0))) * 1.05 || 1;
+  const x = t => P + (W - P - 8) * (t - t0) / Math.max(1, t1 - t0), y = v => H - 22 - (H - 34) * v / max;
+  const line = (k, col) => `<polyline fill="none" stroke="${col}" stroke-width="2.2" stroke-linejoin="round"
+    points="${h.map(p => `${x(p.t).toFixed(1)},${y(p[k] || 0).toFixed(1)}`).join(" ")}"/>`;
+  const ticks = [0, .5, 1].map(f => `<text x="${P - 6}" y="${y(max * f) + 4}" text-anchor="end" font-size="11" fill="var(--muted)">${fmt(Math.round(max * f))}</text>
+    <line x1="${P}" x2="${W - 8}" y1="${y(max * f)}" y2="${y(max * f)}" stroke="var(--line)"/>`).join("");
+  const lab = t => new Date(t * 1000).toLocaleString([], { weekday: "short", hour: "numeric" });
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Songs extracted and placed over time">${ticks}
+    ${line("extracted", "var(--accent)")}${line("placed_songs", "var(--accent2)")}
+    <text x="${P}" y="${H - 4}" font-size="11" fill="var(--muted)">${lab(t0)}</text>
+    <text x="${W - 8}" y="${H - 4}" font-size="11" fill="var(--muted)" text-anchor="end">${lab(t1)}</text></svg>`;
+}
+async function load() {
+  try {
+    const res = await fetch("status.json?t=" + Date.now(), { cache: "no-store" });
+    render(await res.json());
+  } catch (e) {
+    document.getElementById("updated").textContent = "Status not available yet.";
+  }
+}
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>
