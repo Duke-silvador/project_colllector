@@ -1,0 +1,24 @@
+---
+layout: null
+permalink: /search.json
+---
+{%- assign _all = site.pages -%}
+{%- if site.book and site.book.size > 0 -%}{%- assign _all = _all | concat: site.book -%}{%- endif -%}
+[
+{%- assign first_item = true -%}
+{%- for p in _all -%}
+  {%- if p.path contains ".md" and p.path != "search.md" and p.path != "404.md" and p.path != "README.md" and p.title -%}
+    {%- unless first_item -%},{%- endunless -%}
+    {%- assign first_item = false -%}
+    {%- capture n -%}{%- if p.num -%}{{ p.num }}{%- else -%}{%- include num.html path=p.path -%}{%- endif -%}{%- endcapture -%}
+    {
+      "title": {{ p.title | jsonify }},
+      "url": {{ p.url | relative_url | jsonify }},
+      "num": {{ n | strip | jsonify }},
+      "layout": {{ p.layout | jsonify }},
+      "date": {{ p.date | default: site.book_timestamp | jsonify }},
+      "content": {{ p.content | strip_html | strip_newlines | replace: '"', ' ' | truncate: 300 | jsonify }}
+    }
+  {%- endif -%}
+{%- endfor -%}
+]

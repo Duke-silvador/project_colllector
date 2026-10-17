@@ -19,12 +19,12 @@ function statusInfo(code){const m={OPEN:['ABERTO','open'],READY:['PRONTO','ready
 function environmentData(data,env){
   const groups=data.system?.groups?.[env]||{};
   const spot=groups.spot||{}, futures=groups.futures||{};
-  const strategies=(data.system?.strategies||[]).filter(x=>(x.mode||'demo')===env);
-  const trades=(data.system?.trades_today||[]).filter(x=>(x.mode||'demo')===env).sort((a,b)=>new Date(a.closed_at||0)-new Date(b.closed_at||0));
-  const open=(data.system?.open_positions||[]).filter(x=>(x.mode||'demo')===env);
+  const strategies=(data.system?.strategies||[]).filter(x=>(x.mode||'demo')===env&&x.market==='futures');
+  const trades=(data.system?.trades_today||[]).filter(x=>(x.mode||'demo')===env&&x.market==='futures').sort((a,b)=>new Date(a.closed_at||0)-new Date(b.closed_at||0));
+  const open=(data.system?.open_positions||[]).filter(x=>(x.mode||'demo')===env&&x.market==='futures');
   const active=strategies.filter(x=>x.cron_enabled);
   const account=data.accounts?.[env]||(env==='demo'?data.account:{});
-  return {env,groups,spot,futures,strategies,trades,open,account,summary:{operations_today:Number(spot.operations_today||0)+Number(futures.operations_today||0),wins_today:Number(spot.wins_today||0)+Number(futures.wins_today||0),losses_today:Number(spot.losses_today||0)+Number(futures.losses_today||0),gross_profit_usdt:Number(spot.gross_profit_usdt||0)+Number(futures.gross_profit_usdt||0),gross_loss_usdt:Number(spot.gross_loss_usdt||0)+Number(futures.gross_loss_usdt||0),net_pnl_usdt:Number(spot.net_pnl_usdt||0)+Number(futures.net_pnl_usdt||0),open_positions:open.length,active_strategies:active.length,healthy_strategies:active.filter(x=>x.health==='healthy').length}}
+  return {env,groups,spot,futures,strategies,trades,open,account,summary:{operations_today:Number(futures.operations_today||0),wins_today:Number(futures.wins_today||0),losses_today:Number(futures.losses_today||0),gross_profit_usdt:Number(futures.gross_profit_usdt||0),gross_loss_usdt:Number(futures.gross_loss_usdt||0),net_pnl_usdt:Number(futures.net_pnl_usdt||0),open_positions:open.length,active_strategies:active.length,healthy_strategies:active.filter(x=>x.health==='healthy').length}}
 }
 function strategyRow(s){
   const st=s.stats||{}, quarantined=!s.cron_enabled||/quarentena/i.test(s.label||'');
@@ -49,7 +49,7 @@ function renderSummary(ctx){
   setText('grossProfit',money(s.gross_profit_usdt),'pos');
   setText('grossLoss',s.gross_loss_usdt?`-${money(s.gross_loss_usdt)}`:'0',s.gross_loss_usdt?'neg':'');
   setText('openCount',String(s.open_positions));
-  const spot=ctx.open.filter(x=>x.market==='spot').length,fut=ctx.open.filter(x=>x.market==='futures').length;setText('openMarketHint',`${spot} Spot • ${fut} Futures`);
+  setText('openMarketHint','Futures');
   setText('strategyCount',String(s.active_strategies));setText('healthyCount',`${s.healthy_strategies} saudáveis`);
 }
 function renderOpenPositions(ctx,labels){
@@ -79,12 +79,12 @@ function renderTrades(ctx,labels){const body=$('historyBody');setText('historyCo
 function renderEnvironmentNotice(ctx,data){const box=$('environmentNotice');if(ctx.env==='live'&&!data.system?.live_enabled){box.hidden=false;box.innerHTML='<strong>Ambiente LIVE desativado</strong><p>Nenhuma estratégia LIVE está autorizada. A seleção LIVE permanece separada e não exibe métricas DEMO.</p>'}else if(!ctx.strategies.length){box.hidden=false;box.innerHTML=`<strong>Sem dados para ${ctx.env.toUpperCase()}</strong><p>Nenhuma estratégia ou atividade foi publicada para este ambiente.</p>`}else{box.hidden=true;box.innerHTML=''}}
 function updateEnvironmentChrome(env){document.querySelectorAll('.env-tab').forEach(b=>b.classList.toggle('active',b.dataset.env===env));const i=$('envIndicator');i.className=`env-indicator ${env}`;setText('environmentName',env.toUpperCase());setText('marketSectionNote',`Ambiente ${env.toUpperCase()}`);localStorage.setItem('trading-monitor-env',env);const u=new URL(location.href);u.searchParams.set('env',env);history.replaceState({},'',u)}
 function render(data){
-  lastData=data;const ctx=environmentData(data,selectedEnv),labels=Object.fromEntries((data.system?.strategies||[]).map(x=>[x.id,x.label]));updateEnvironmentChrome(selectedEnv);renderEnvironmentNotice(ctx,data);renderSummary(ctx);renderMarket('spot',ctx.spot,ctx.strategies);renderMarket('futures',ctx.futures,ctx.strategies);renderOpenPositions(ctx,labels);renderTrades(ctx,labels);
+  lastData=data;const ctx=environmentData(data,selectedEnv),labels=Object.fromEntries((data.system?.strategies||[]).map(x=>[x.id,x.label]));updateEnvironmentChrome(selectedEnv);renderEnvironmentNotice(ctx,data);renderSummary(ctx);renderMarket('futures',ctx.futures,ctx.strategies);renderOpenPositions(ctx,labels);renderTrades(ctx,labels);
   const charts=deriveCharts(ctx);drawPnlCurve(charts.pnl_curve);drawWinLoss(charts.wins_losses);drawStrategyPnl(charts.pnl_by_strategy,labels);const last=charts.pnl_curve.at(-1);setText('curveHint',last?`${money(last.pnl_usdt)} USDT`:'sem fechamentos',last?cls(last.pnl_usdt):'');
-  const showGrids=selectedEnv==='demo'&&data.grids&&Object.keys(data.grids).length>0;$('gridSection').hidden=!showGrids;if(showGrids){renderGrid('eth',data.grids?.ETHUSDT||{});renderGrid('btc',data.grids?.BTCUSDT||{})}
+  const gridSection=$('gridSection');if(gridSection)gridSection.hidden=true;
   const ts=data.updated_at?new Date(data.updated_at):null;setText('updatedAt',ts&&!Number.isNaN(ts.getTime())?ts.toLocaleString('pt-PT'):'—');const age=ts?(Date.now()-ts.getTime())/60000:Infinity,h=$('health');if(age<=3){h.textContent='● Dados recentes';h.className='health good'}else if(age<=15){h.textContent=`● ${Math.round(age)} min sem atualização`;h.className='health warn'}else{h.textContent='● Dados desatualizados';h.className='health bad'}
 }
-async function refresh(){try{const r=await fetch(`data/grid-status.json?t=${Date.now()}`,{cache:'no-store'});if(!r.ok)throw new Error(`HTTP ${r.status}`);render(await r.json());$('errorBox').hidden=true}catch(e){$('errorBox').textContent=`Não foi possível carregar os dados: ${e.message}`;$('errorBox').hidden=false}}
+async function refresh(){try{const dataUrl=`./data/grid-status.json?t=${Date.now()}`;const r=await fetch(dataUrl,{cache:'no-store'});if(!r.ok)throw new Error(`HTTP ${r.status}`);render(await r.json());$('errorBox').hidden=true}catch(e){$('errorBox').textContent=`Não foi possível carregar os dados: ${e.message}`;$('errorBox').hidden=false}}
 document.querySelectorAll('.env-tab').forEach(btn=>btn.addEventListener('click',()=>{selectedEnv=btn.dataset.env;updateEnvironmentChrome(selectedEnv);if(lastData)render(lastData)}));
 let resizeTimer;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(lastData)render(lastData)},120)});
 updateEnvironmentChrome(selectedEnv);refresh();setInterval(refresh,30000);
