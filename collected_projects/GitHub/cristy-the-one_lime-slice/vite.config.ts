@@ -1,0 +1,55 @@
+import fs from "node:fs";
+import path from "node:path";
+import { defineConfig, type Plugin, type Connect } from "vite";
+
+function serveSamples(): Plugin {
+  const root = path.resolve(__dirname, "samples");
+  const handler: Connect.NextHandleFunction = (req, res, next) => {
+    const raw = (req.url ?? "/").split("?")[0];
+    const file = path.join(root, decodeURIComponent(raw));
+    if (!file.startsWith(root) || !fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+      next();
+      return;
+    }
+    res.setHeader("Content-Type", "application/octet-stream");
+    fs.createReadStream(file).pipe(res);
+  };
+  return {
+    name: "serve-samples",
+    configureServer(server) {
+      server.middlewares.use("/samples", handler);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use("/samples", handler);
+    },
+    writeBundle() {
+      const dest = path.resolve(__dirname, "dist/samples");
+      fs.cpSync(root, dest, { recursive: true });
+    },
+  };
+}
+
+const appVersion: string = JSON.parse(fs.readFileSync(path.resolve(__dirname, "package.json"), "utf8")).version;
+const devHost = process.env.LIME_DEV_HOST || "127.0.0.1";
+
+export default defineConfig({
+  clearScreen: false,
+  plugins: [serveSamples()],
+  server: {
+    host: devHost,
+    port: 43117,
+    strictPort: true,
+  },
+  preview: {
+    host: devHost,
+    port: 43117,
+    strictPort: true,
+  },
+  define: { __APP_VERSION__: JSON.stringify(appVersion) },
+  envPrefix: ["VITE_", "TAURI_"],
+  build: {
+    target: "es2022",
+    outDir: "dist",
+    emptyOutDir: true,
+  },
+});

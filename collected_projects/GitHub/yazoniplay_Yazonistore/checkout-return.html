@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Confirming your payment · Yazonistore</title>
+<link rel="stylesheet" href="styles.css?v=premium-20261016a">
+<style>
+.checkout-state{max-width:680px;margin:12vh auto;padding:36px 24px;text-align:center;background:#fff;border:1px solid #e8e4dc;border-radius:20px}.checkout-state h1{font-size:clamp(2rem,6vw,3rem);letter-spacing:-.04em}.checkout-state p{line-height:1.65;color:#625f58}.checkout-state .button{display:inline-flex;margin:10px 5px}.checkout-state[aria-busy=true] .status-dot{animation:pulse 1s infinite}@keyframes pulse{50%{opacity:.25}}
+</style>
+<link rel="stylesheet" href="store.css?v=dog-bottle-20261018">
+<link rel="stylesheet" href="motion.css?v=1">
+</head>
+<body>
+<main class="checkout-state" id="checkoutState" aria-busy="true">
+<p class="eyebrow">YAZONISTORE / PAYPAL</p>
+<h1>Confirming your payment</h1>
+<p id="checkoutMessage">Please keep this page open while PayPal confirms the order.</p>
+<span class="status-dot" aria-hidden="true">●</span>
+</main>
+<script>
+(async()=>{
+const root=document.getElementById("checkoutState");
+const message=document.getElementById("checkoutMessage");
+const params=new URLSearchParams(location.search);
+const orderID=params.get("token");
+if(!orderID){
+ root.setAttribute("aria-busy","false");
+ root.querySelector("h1").textContent="No order to confirm";
+ message.textContent="PayPal did not return an order ID. Check your PayPal activity before trying again.";
+ root.insertAdjacentHTML("beforeend",'<p><a class="button button-dark" href="shop.html">Return to shop ↗</a></p>');
+ return;
+}
+try{
+ const response=await fetch("https://ppaknwuwiublxogclqdw.supabase.co/functions/v1/paypal-capture-order",{
+  method:"POST",
+  headers:{"Content-Type":"application/json","apikey":"sb_publishable_3_4_b-tj5VnnD-OR2bgX_g_8mktyac9"},
+  body:JSON.stringify({orderID})
+ });
+ const data=await response.json().catch(()=>({}));
+ if(!response.ok||data.status!=="COMPLETED")throw new Error(data.error||"Payment could not be confirmed.");
+ localStorage.removeItem("offcut.bag.v2");
+ root.setAttribute("aria-busy","false");
+ root.querySelector("h1").textContent="Payment confirmed";
+ message.textContent=data.orderRecorded===false?"PayPal confirmed your payment, but the store could not save the order record automatically. Do not pay again. Save your PayPal receipt and contact Yazonistore support.":"PayPal confirmed your payment. Your Yazonistore order is complete. Save your PayPal receipt for your records.";
+ root.insertAdjacentHTML("beforeend",'<p><a class="button button-dark" href="shop.html">Continue shopping ↗</a></p>');
+}catch(error){
+ root.setAttribute("aria-busy","false");
+ root.querySelector("h1").textContent="Payment not confirmed yet";
+ message.textContent=(error&&error.message?error.message:"We could not verify the payment.")+" Check your PayPal activity before retrying or paying again.";
+ root.insertAdjacentHTML("beforeend",'<p><a class="button button-dark" href="bag.html">Back to your bag ↗</a> <a class="button button-outline" href="faq.html">Get help ↗</a></p>');
+}
+})();
+</script>
+<script src="motion.js?v=1" defer></script>
+</body>
+</html>
