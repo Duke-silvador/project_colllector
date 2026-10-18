@@ -1,0 +1,2375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rev 4 Patch Engine for Prophet-5 and Prophet-10</title>
+<style>
+    :root { --amber:#e8a33d; --cream:#ece6d6; --ink:#b9b3a5; --panel:#1a1918; --line:#363330; --led:#ff4a2b; }
+    * { box-sizing:border-box; }
+    [hidden] { display:none !important; }
+    body { margin:0; padding:28px 10px; background:#0d0b0a; color:var(--cream); font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; }
+    .synth { display:flex; max-width:1120px; margin:0 auto; box-shadow:0 18px 50px rgba(0,0,0,.7); border-radius:10px; }
+    .cheek { width:40px; flex:none; background:linear-gradient(90deg,rgba(0,0,0,.35),transparent 30%,transparent 70%,rgba(0,0,0,.35)),repeating-linear-gradient(93deg,#4f2e19 0 3px,#432610 3px 8px,#583420 8px 12px); }
+    .cheek:first-child { border-radius:10px 0 0 10px; }
+    .cheek:last-child { border-radius:0 10px 10px 0; }
+    .panel { flex:1; min-width:0; padding:26px 30px 30px; background:#1b1a18; border-top:2px solid #0a0908; border-bottom:2px solid #0a0908; }
+    .masthead { display:flex; flex-wrap:wrap; justify-content:space-between; align-items:flex-end; gap:16px; padding-bottom:18px; }
+    h1 { margin:0; font-size:34px; font-weight:300; letter-spacing:.02em; line-height:1.1; }
+    .masthead p { margin:10px 0 0; color:var(--amber); font-size:14px; }
+    .ports { display:flex; flex-wrap:wrap; gap:12px; }
+    .ports label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--ink); }
+    select { background:#121110; color:var(--cream); border:1px solid #4a4640; padding:8px 10px; font-size:14px; border-radius:5px; max-width:260px; }
+    select:focus-visible { outline:2px solid var(--amber); }
+    input[type="file"] { display:none; }
+
+    .actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin-top:20px; }
+    .btn { background:#262422; color:var(--cream); border:1px solid #4a4640; padding:10px 16px; font-size:14px; border-radius:6px; cursor:pointer; font-family:inherit; }
+    .btn:hover { background:#34312e; }
+    .btn:focus-visible, .file-label:focus-within { outline:2px solid var(--amber); outline-offset:2px; }
+    .hero { background:linear-gradient(#f2ad45,#d6801b); color:#1c1005; border:0; font-weight:700; font-size:17px; padding:14px 38px; box-shadow:0 0 22px rgba(232,163,61,.35),inset 0 1px 0 rgba(255,255,255,.4); }
+    .hero:hover { background:linear-gradient(#f7b957,#e08a24); }
+    .mutate { display:flex; align-items:center; gap:12px; padding:6px 12px; border:1px solid var(--line); border-radius:8px; background:#141312; }
+    .mutate .btn { border-color:var(--amber); color:var(--amber); font-weight:600; }
+    .mutate label { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--ink); }
+    .mutate input[type=range] { width:110px; min-width:0; }
+    @media (max-width:400px) { .mutate { gap:8px; padding:6px 8px; } .mutate input[type=range] { width:80px; } }
+    .mutate b { color:var(--amber); font-weight:600; min-width:34px; }
+    .spacer { flex:1; }
+    .keepopt { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink); cursor:pointer; }
+    .keepopt input { accent-color:var(--amber); width:16px; height:16px; cursor:pointer; }
+
+    #status { margin-top:16px; font-size:13px; color:var(--ink); min-height:18px; }
+    #last-sent, #last-recv { margin-top:2px; font-size:12px; color:#6f6a60; font-family:Consolas,monospace; min-height:16px; }
+
+    #dashboard-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:28px 18px; margin-top:28px; }
+    @media (max-width:760px) { #dashboard-grid { grid-template-columns:1fr; } }
+    .sect { position:relative; border:1.5px solid #b9b5ab; border-radius:10px; padding:20px 16px 22px; background-color:rgba(0,0,0,.2); background-image:linear-gradient(135deg,rgba(255,255,255,.035) 0%,rgba(255,255,255,0) 35%,rgba(255,255,255,0) 65%,rgba(255,255,255,.02) 100%),url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .8  0 0 0 0 .8  0 0 0 0 .82  0 0 0 .9 -.25'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.3'/%3E%3C/svg%3E"); background-size:auto,180px 180px; }
+    .sect h2 { position:absolute; top:-.75px; left:50%; transform:translate(-50%,-50%); margin:0; padding:0 10px; background:#1b1a18; color:var(--cream); font-size:12px; font-weight:700; line-height:1; white-space:nowrap; }
+    .ctls { display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:14px 16px; }
+    .row { display:flex; justify-content:space-between; font-size:12px; color:var(--ink); margin-bottom:5px; }
+    .row b { color:var(--cream); font-weight:500; font-variant-numeric:tabular-nums; }
+    .ctl select { width:100%; padding:5px 8px; font-size:12px; }
+
+    input[type=range] { -webkit-appearance:none; appearance:none; width:100%; height:18px; margin:0; background:transparent; cursor:pointer; }
+    input[type=range]::-webkit-slider-runnable-track { height:4px; border-radius:2px; background:linear-gradient(90deg,var(--amber) var(--pct,0%),#38352f var(--pct,0%)); }
+    input[type=range]::-moz-range-track { height:4px; border-radius:2px; background:linear-gradient(90deg,var(--amber) var(--pct,0%),#38352f var(--pct,0%)); }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:14px; height:14px; margin-top:-5px; border-radius:50%; background:var(--cream); border:2px solid #0d0b0a; box-shadow:0 1px 3px rgba(0,0,0,.6); }
+    input[type=range]::-moz-range-thumb { width:10px; height:10px; border-radius:50%; background:var(--cream); border:2px solid #0d0b0a; }
+    input[type=range]:focus-visible { outline:2px solid var(--amber); outline-offset:2px; border-radius:4px; }
+
+    .namebar { display:flex; align-items:center; gap:10px; margin-top:18px; }
+    .namebar label { font-size:12px; color:var(--ink); }
+    #patch-name { flex:1; min-width:0; max-width:340px; background:#121110; color:var(--cream); border:1px solid #4a4640; border-radius:5px; padding:8px 10px; font-size:16px; font-family:inherit; }
+    #patch-name:focus-visible { outline:2px solid var(--amber); }
+    .sws { display:grid; grid-template-columns:repeat(auto-fit,minmax(70px,1fr)); gap:14px 8px; margin-top:16px; padding-top:6px; }
+    .sws:empty { display:none; }
+    .cap { display:flex; align-items:center; gap:8px; margin-top:10px; font-size:9.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--cream); }
+    .cap::before, .cap::after { content:''; flex:1; height:1px; background:#5a564e; }
+    .sws .ctl { display:flex; justify-content:center; }
+    .sw { position:relative; display:flex; flex-direction:column; align-items:center; gap:9px; font-size:11px; line-height:1.15; text-align:center; color:var(--ink); cursor:pointer; }
+    .sw input { position:absolute; opacity:0; }
+    .led { position:relative; width:21px; height:21px; border-radius:5px; background:#0b0a0a; border:1px solid #000; box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 2px 3px rgba(0,0,0,.7); transition:box-shadow .12s, border-color .12s; }
+    .led::before { content:''; position:absolute; inset:1px; border-radius:3px; background:#403e3c; transition:background .12s, box-shadow .12s; }
+    .led::after { content:''; position:absolute; inset:1px; border-radius:3px; pointer-events:none; background:linear-gradient(90deg,var(--grid,#0b0a0a) 0 1px,transparent 1px) 0 0/20% 100%,linear-gradient(0deg,var(--grid,#0b0a0a) 0 1px,transparent 1px) 0 0/100% 20%; }
+    .sw input:checked + .led, .stepb.on .led { --grid:#5c0a12; background:#1a0507; border-color:#4a1016; box-shadow:0 0 7px rgba(255,40,50,.3); }
+    .sw input:checked + .led::before, .stepb.on .led::before { background:radial-gradient(circle at 50% 45%,#ffb9ae 0%,#ff3d3d 48%,#c4121f 100%); box-shadow:0 0 6px rgba(255,70,70,.8); }
+    .sw input:focus-visible + .led { outline:2px solid var(--amber); outline-offset:2px; }
+    .sw:has(input:checked) { color:var(--cream); }
+
+    #raw-log { margin-top:10px; font-size:12px; color:var(--ink); }
+    #raw-log summary { cursor:pointer; font-size:11px; font-weight:400; color:#6f6a60; text-transform:none; letter-spacing:0; }
+    #raw-pre { user-select:text; -webkit-user-select:text; max-height:220px; overflow:auto; margin:8px 0 0; padding:10px; background:#121110; border:1px solid var(--line); border-radius:5px; font-size:11px; color:#9d978a; }
+    .env { width:100%; height:auto; display:block; margin-bottom:18px; background:#121110; border:1px solid #7a766c; border-radius:4px; }
+    .env path { vector-effect:non-scaling-stroke; }
+    .env-line { fill:none; stroke:var(--amber); stroke-width:1.2; stroke-linejoin:round; }
+    .env-fill { fill:rgba(232,163,61,.14); stroke:none; }
+    .ctl { padding:3px 5px; margin:-3px -5px; border-radius:4px; }
+    .knob.flash .kg circle { animation:flashring 1.6s ease-out; }      /* only the knob's inner white ring flashes amber */
+    @keyframes flashring { 0%, 30% { stroke:#e8a33d; } 100% { stroke:#d2d2d2; } }
+    .led.flash, select.flash { animation:flashbox 1.6s ease-out; }      /* a button flashes an amber ring round its LED and its label turns amber */
+    @keyframes flashbox { 0%, 30% { box-shadow:0 0 0 calc(var(--k, 76px) * 1.6 / 64) rgba(232,163,61,.95); } 100% { box-shadow:0 0 0 calc(var(--k, 76px) * 1.6 / 64) rgba(232,163,61,0); } }      /* the ring is as thick as the knob's inner ring (1.6 units of its 64-unit drawing) */
+    .sw:has(.led.flash) span, .stepb:has(.led.flash) span { animation:flashtext 1.6s ease-out; }
+    @keyframes flashtext { 0%, 30% { color:#e8a33d; } }
+    @media (prefers-reduced-motion:reduce) { .knob.flash .kg circle, .led.flash, select.flash, .sw:has(.led.flash) span, .stepb:has(.led.flash) span { animation:none; } }
+    .steps { display:flex; flex-wrap:wrap; gap:6px; }
+    select { -webkit-appearance:none; appearance:none; padding-right:32px; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23b9b3a5' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 12px center; }
+    .ctl select { padding-right:26px; background-position:right 9px center; }
+    .lock { position:absolute; top:-.75px; right:10px; transform:translateY(-50%); background:#1b1a18; border:0; padding:0 6px; color:var(--ink); font-size:12px; line-height:1; font-family:inherit; cursor:pointer; }
+    .lockicon { display:flex; align-items:center; height:18px; }
+    .lockicon svg { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round; }
+    .lockicon rect { fill:#1b1a18; }
+    .lockicon .shk-open { display:inline; } .lockicon .shk { display:none; }
+    .lockicon[aria-pressed="true"] .shk { display:inline; } .lockicon[aria-pressed="true"] .shk-open { display:none; }
+    .lockicon[aria-pressed="true"] rect { fill:currentColor; }
+    .lockicon:hover { color:var(--cream); }
+    .syncbtn { right:auto; left:10px; }
+    .lock[aria-pressed="true"] { color:var(--amber); font-weight:600; }
+    .lock:focus-visible { outline:2px solid var(--amber); }
+    .tabs { display:flex; gap:8px; margin-left:auto; }
+    .tabs button { background:#121110; border:1px solid #4a4640; border-radius:5px; color:var(--ink); padding:10px 26px; font:800 16px 'Helvetica Neue',Helvetica,Arial,sans-serif; text-transform:uppercase; letter-spacing:.06em; cursor:pointer; }
+    .tabs button:hover { border-color:var(--amber); }
+    .tabs button[aria-selected="true"] { color:#1a1208; background:var(--amber); border-color:var(--amber); }
+    .tabs button:focus-visible { outline:2px solid var(--amber); outline-offset:-2px; }
+    #library { margin-top:6px; }
+    .libbar { display:flex; flex-wrap:wrap; align-items:center; gap:10px 12px; margin-top:14px; }
+    .libbar input[type="search"], .libbar input[type="number"], .ldetail input[type="text"], .ldetail textarea { background:#121110; color:var(--cream); border:1px solid #4a4640; border-radius:5px; padding:8px 10px; font-size:14px; font-family:inherit; }
+    .libbar input[type="search"] { flex:1; min-width:180px; }
+    .libbar input[type="number"] { width:72px; }
+    .capf { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--ink); text-transform:uppercase; letter-spacing:.04em; font-weight:700; }
+    .capbox { margin-top:14px; padding:10px 14px 14px; border:1px solid var(--line); border-radius:8px; background:#141312; }
+    .capbox summary { cursor:pointer; color:var(--amber); font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
+    .capbox p { margin:10px 0 0; line-height:1.4; }
+    #cap-bar { width:100%; margin-top:10px; accent-color:var(--amber); }
+    .warn { margin:14px 0 0; padding:8px 12px; border:1px solid #7a4a1a; border-radius:6px; background:#2a1c10; color:#e8c48a; font-size:13px; }
+    #lib-list { margin-top:10px; }
+    .libcols { display:grid; grid-template-columns:minmax(0,1fr); gap:0 28px; align-items:start; }
+    .libhead { font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--amber); padding:8px 4px 6px; border-bottom:1px solid var(--line); }
+    .libother { margin-top:16px; }
+    @media (min-width:1100px) { .libcols:not(.single) { grid-template-columns:repeat(2,minmax(0,1fr)); } .libcols .libother { grid-column:1 / -1; } }
+    .lrow { display:flex; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid var(--line); }
+    .lname { flex:1; min-width:0; font-size:14px; display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; }
+    .lname b { font-weight:600; overflow-wrap:anywhere; }
+    .lslot { font-size:11px; font-weight:700; letter-spacing:.04em; color:var(--amber); border:1px solid var(--line); border-radius:10px; padding:1px 8px; background:#141312; }
+    .tagrow { display:contents; }
+    .lstate { display:contents; }
+    .lrow.now { background:#1d1a14; box-shadow:inset 3px 0 0 var(--amber); }
+    .lmark { font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:#1c1005; background:var(--amber); border-radius:10px; padding:1px 8px; }
+    .lmark.alt { background:#ece6d6; }
+    .ledit { font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:#ff4d4d; }
+    .chg { font-size:10px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:#1c1005; background:var(--amber); border-radius:10px; padding:1px 8px; }
+    .tagc { font-size:11px; color:var(--ink); border-radius:10px; padding:1px 8px; background:#2a2724; }
+    .star { background:none; border:0; color:#5b564d; font-size:20px; line-height:1; cursor:pointer; padding:2px 4px; }
+    .star[aria-pressed="true"] { color:var(--amber); }
+    .star:focus-visible { outline:2px solid var(--amber); }
+    .btn.sm { padding:6px 12px; font-size:11px; }
+    .ldetail { display:grid; gap:10px; padding:10px 4px 16px 34px; border-bottom:1px solid var(--line); background:#161514; }
+    .ldetail label { display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--ink); text-transform:uppercase; letter-spacing:.04em; font-weight:700; }
+    .ldetail textarea { resize:vertical; text-transform:none; letter-spacing:0; font-weight:400; }
+    .ldetail input[type="text"] { text-transform:none; letter-spacing:0; font-weight:400; }
+    .lact { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+    .capturing .actions, .capturing #dashboard-grid, .capturing .namebar { pointer-events:none; opacity:.5; }
+    @media (max-width:560px) { .lrow { flex-wrap:wrap; } .lname { flex-basis:calc(100% - 44px); } .ldetail { padding-left:4px; } }
+    .favs { margin-top:16px; }
+    .favhead { display:flex; align-items:center; gap:12px; font-size:13px; color:var(--amber); font-weight:600; }
+    .favhead .btn { padding:6px 12px; font-size:12px; font-weight:400; }
+    #fav-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .muted { font-size:12px; color:#6f6a60; }
+    .chip { display:inline-flex; border:1px solid #4a4640; border-radius:14px; overflow:hidden; background:#262422; }
+    .chip button { background:none; border:0; color:var(--cream); font-family:inherit; font-size:12px; padding:5px 10px; cursor:pointer; }
+    .chip button:hover { background:#34312e; }
+    .chip .chipx { color:var(--ink); padding:5px 8px; border-left:1px solid #3a3733; }
+    .chip button:focus-visible { outline:2px solid var(--amber); outline-offset:-2px; }
+    .ctl.kc { display:flex; flex-direction:column; align-items:center; text-align:center; }
+    .lock + .ctls:not(.uni), .lock + svg.env { margin-top:10px; }     /* a little air between a section title and its first row of dials */
+    .knob { width:76px; height:76px; border-radius:50%; cursor:ns-resize; touch-action:none; }
+    .knob svg { width:100%; height:100%; display:block; }
+    .knob:focus-visible { outline:2px solid var(--amber); outline-offset:2px; }
+    .knob .tick { stroke:#d8d2c2; stroke-width:1; }
+    .knob text { fill:#d8d2c2; font:600 6.5px 'Helvetica Neue',Helvetica,Arial,sans-serif; text-anchor:middle; }
+    .klabel { margin-top:7px; font-size:10.5px; line-height:1.15; color:var(--cream); }
+    .kval { margin-top:2px; font-size:11px; font-weight:500; color:var(--amber); font-variant-numeric:tabular-nums; }
+    h2, .sw span, .row span, .klabel, .ports label, .namebar label, .favhead span, .lock, .btn, .keepopt, .masthead p { text-transform:uppercase; letter-spacing:.04em; font-weight:700; }
+    .btn { font-size:12px; }
+    .sw span { font-size:10.5px; }
+    .sw.below { flex-direction:column-reverse; }
+    .sw.below span { white-space:nowrap; }        /* keep RELEASE and its HOLD pill on one line, even on a narrow phone screen */
+    .btn.hero { font-size:16px; letter-spacing:.06em; }
+    .pill { font-style:normal; color:#121110; padding:1px 6px 0; margin-left:2px; font-size:10px; letter-spacing:.03em; position:relative; isolation:isolate; }
+    .pill::before { content:''; position:absolute; inset:0; transform:translateY(var(--pill-drop,1px)); background:#ece6d6; border-radius:9px; z-index:-1; }   /* the pill shape sits a little lower than its text; the text itself stays put. --pill-drop is the amount (1px = two pixels on a Retina display) */
+    .ctl .sw span, .ctl .row span { font-weight:700; color:var(--cream); }
+    .chip button { text-transform:none; letter-spacing:0; font-weight:400; }
+    .led { display:block; }
+    .steps { gap:10px 8px; }
+    .stepb { display:flex; flex-direction:column; align-items:center; gap:9px; min-width:30px; background:none; border:0; padding:0; cursor:pointer; font-family:inherit; font-size:10.5px; font-weight:700; color:var(--ink); }
+    .stepb.on { color:var(--cream); }
+    .stepb:focus-visible .led { outline:2px solid var(--amber); outline-offset:2px; }
+    .ctls.uni { display:flex; flex-wrap:wrap; align-items:flex-end; gap:16px 30px; }
+    .ctls.uni .ctl.us { width:70px; flex:none; }
+    .ctls.uni .ctl.vox { align-self:flex-start; margin-top:-6px; }
+    .ctls.uni .ctl.vox select { width:auto; min-width:104px; padding:6px 30px 6px 10px; font-size:12px; }
+    .ctls.uni .ctl.det { flex-basis:100%; padding-left:0; box-sizing:border-box; display:flex; flex-direction:column-reverse; gap:9px; }
+    .ctls.uni .ctl.det .row { margin:0; width:70px; justify-content:center; }
+    .ctls.uni .ctl.det .steps { padding-left:20px; gap:10px 4px; }          /* the first detune step sits under the Unison button, centred on it */
+    .ctls.uni .ctl.vox .row { display:none; }
+    .ctls.uni .ctl.det .row span { font-size:10.5px; }
+    .stack { display:flex; flex-direction:column; gap:28px; }
+    .stack .sect { flex:1; }
+    .ctl.us { display:flex; flex-direction:column-reverse; justify-content:flex-end; align-items:center; }
+    .ctl.us .sw { flex-direction:column-reverse; }
+    .ctl[hidden], .ctls.uni .ctl[hidden] { display:none; }
+    .toprow { display:flex; flex-wrap:wrap; align-items:flex-start; justify-content:space-between; gap:16px 18px; margin-top:16px; }
+    .toprow .favs { flex:1; min-width:240px; margin-top:0; }
+    .vintbox { display:flex; align-items:center; justify-content:center; padding:20px 16px 14px; }
+    .stack .sect { display:flex; flex-direction:column; justify-content:center; }
+    .cmb { display:flex; flex-direction:column; align-items:center; }
+    .cmb-leds { display:flex; gap:0; margin-bottom:10px; }
+    .cl { display:flex; flex-direction:column; align-items:center; gap:5px; width:26px; white-space:nowrap; }
+    .cl em { font-style:normal; font-size:9.5px; font-weight:700; text-transform:uppercase; color:var(--ink); }
+    .dot { display:block; width:14px; height:14px; border-radius:50%; border:1px solid #000; box-shadow:inset 0 1px 1px rgba(255,255,255,.15); }
+    .dot.red { background:#4b1a14; } .dot.amber { background:#4a3a12; }
+    .dot.red.on { background:#ff4a2b; box-shadow:0 0 9px 3px rgba(255,60,40,.8); }
+    .dot.amber.on { background:#ffc21f; box-shadow:0 0 9px 3px rgba(255,190,30,.8); }
+    .cbtn { background:none; border:0; padding:0; cursor:pointer; }
+    .cbtn:active .led { transform:translateY(1px); }
+    .cbtn:focus-visible .led { outline:2px solid var(--amber); outline-offset:2px; }
+    .cmb-label { margin-top:9px; font-size:10.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--cream); }
+    .btn.step { display:inline-flex; align-items:center; justify-content:center; width:38px; height:32px; padding:0; }
+    .btn.step svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round; }
+    .storebar { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; margin-top:8px; padding:6px 12px; border:1px solid var(--line); border-radius:8px; background:#141312; font-size:12px; }
+    .storebar .sb-q { color:var(--amber); font-weight:700; letter-spacing:.04em; text-transform:uppercase; font-size:11px; }
+    .storebar label { display:flex; align-items:center; gap:6px; color:var(--ink); }
+    .storebar select { width:auto; min-width:0; padding:3px 24px 3px 8px; font-size:12px; background-position:right 8px center; }
+    .storebar[hidden] { display:none; }
+    .ldetail .inl { display:inline-flex; flex-direction:row; align-items:center; gap:6px; margin:0; }
+    .ldetail .inl select { width:auto; min-width:0; padding:3px 22px 3px 8px; font-size:12px; background-position:right 7px center; }
+    .btn:disabled { opacity:.4; cursor:default; pointer-events:none; }
+    .mutadv { margin-top:10px; font-size:12px; }
+    .mutadv summary { cursor:pointer; color:var(--amber); font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; padding:4px 0; }
+    .mutadv .muted { margin:6px 0 8px; color:#6f6a60; }
+    #mutadv-rows { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:4px 22px; }
+    .mrow { display:flex; align-items:center; gap:8px; }
+    .mrow .mname { flex:0 0 112px; text-align:left; background:none; border:0; padding:2px 0; color:var(--ink); font:inherit; cursor:pointer; }
+    .mrow input[type=range] { flex:1; min-width:0; }
+    .mrow b { min-width:34px; text-align:right; font-weight:600; color:var(--amber); }
+    .mrow.follow b, .mrow.follow .mname { color:#6f6a60; }
+    .mrow.follow input[type=range] { opacity:.55; }
+    .mrow .mpad { flex:0 0 auto; background:none; border:0; padding:2px; color:#6f6a60; cursor:pointer; }
+    .mrow .mpad rect { fill:transparent; }
+    .mrow .mpad[aria-pressed="true"] { color:var(--amber); }
+    .mrow .mpad[aria-pressed="true"] rect { fill:currentColor; }
+    .mrow .mpad:hover { color:var(--cream); }
+    .mrow .mpad:focus-visible { outline:2px solid var(--amber); }
+    .progtag .edited { color:#ff4d4d; }
+    .progtag { font-size:12px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--amber); border:1px solid var(--line); border-radius:12px; padding:5px 12px; background:#141312; white-space:nowrap; }
+    .foot { margin-top:30px; padding-top:16px; font-size:12px; line-height:1.5; color:#8b8578; }
+    .foot p { margin:0 0 6px; }
+
+    /* ---- compact layout: on screens wide enough, fit the whole editor on one screen ---- */
+    .midbar { display:flex; flex-direction:column; }
+    .midbar .toprow { order:-1; }
+    .mutadv[open] { flex-basis:100%; margin-bottom:10px; }
+    @media (min-width:1100px) {
+      body { padding:10px 10px; --k:clamp(58px, calc(58px + (100vh - 800px) * .05), 80px); --pad:clamp(10px, calc(10px + (100vh - 800px) * .02), 20px); --gap:clamp(16px, calc(16px + (100vh - 800px) * .012), 22px); --envh:clamp(28px, calc(28px + (100vh - 800px) * .05), 52px); --lab:clamp(9.5px, calc(9.5px + (100vh - 800px) * .002), 10.5px); }
+      .synth { max-width:1560px; }
+      .cheek { width:20px; }
+      .panel { padding:12px 22px 12px; }
+      h1 { font-size:26px; }
+      .masthead { padding-bottom:8px; gap:10px; }
+      .masthead p { margin-top:3px; font-size:12px; }
+      .namebar { margin-top:8px; }
+      .actions { margin-top:8px; gap:6px 5px; flex-wrap:nowrap; }
+      @media (max-width:1399px) { .actions { flex-wrap:wrap; } }      /* a narrower window lets the buttons run onto a second line rather than off the edge */
+      .actions .btn { padding:6px 6px; font-size:11px; white-space:nowrap; }
+      .actions .btn.hero { padding:8px 18px; font-size:14px; }
+      .actions .keepopt { font-size:11px; white-space:nowrap; }
+      .spacer { flex:1 1 0; min-width:0; }
+      .mutate { gap:8px; padding:3px 8px; }
+      .mutate input[type=range] { width:80px; }
+      .infobar { display:flex; flex-wrap:wrap; align-items:center; gap:2px 18px; margin-top:8px; }
+      .infobar > * { margin-top:0; min-height:0; }
+      #status { margin-top:0; }
+      .midbar { flex-direction:row; align-items:flex-end; gap:18px; margin-top:8px; }
+      .midbar .toprow { order:0; flex:1; margin:0; padding-bottom:4px; min-width:0; }
+      .tabs button { padding:8px 22px; font-size:14px; }
+      .favs { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; }
+      #fav-list { margin-top:0; }
+      #dashboard-grid { container-type:inline-size; grid-template-columns:repeat(24,minmax(0,1fr)); gap:0 14px; grid-template-rows:repeat(12,auto); margin-top:16px; }
+      .stack { display:contents; }
+      .sect { padding:var(--pad) 12px calc(var(--pad) - 2px); }
+      [data-g="oscillatora"] { grid-column:span 4; order:1; }
+      [data-g="oscillatorb"] { grid-column:span 7; order:2; }
+      [data-g="mixer"] { grid-column:span 7; order:3; }
+      [data-g="unison"] { grid-column:span 6; order:4; }
+      [data-g="filter"] { grid-column:span 7; order:5; }
+      [data-g="filterenvelope"] { grid-column:span 7; order:6; }
+      [data-g="ampenvelope"] { grid-column:span 7; order:7; }
+      [data-g="vintage"] { grid-column:span 3; order:8; }
+      [data-g="lfo"] { grid-column:span 8; order:9; }
+      [data-g="wheelmod"] { grid-column:span 9; order:10; }
+      [data-g="polymod"] { grid-column:span 7; order:11; }
+      .ctls { grid-template-columns:repeat(auto-fill,calc((7 * ((100cqw - 322px) / 24) + 84px - 28px) / 4)); justify-content:start; gap:calc(var(--pad) - 2px) 0; }
+      svg.env { display:none; }
+      .knob { width:var(--k); height:var(--k); }
+      .klabel { margin-top:3px; font-size:var(--lab); white-space:nowrap; }
+      .stack .sect { justify-content:flex-start; }
+      .sws { grid-template-columns:repeat(auto-fit,minmax(54px,1fr)); }
+      .kval { font-size:10px; }
+      .env { height:var(--envh); margin-bottom:6px; }
+      .sws { margin-top:14px; padding-top:0; gap:6px 6px; }
+      .libother .libbody { column-count:2; column-gap:28px; }
+      .libother .libbody .lrow { break-inside:avoid; }
+      .libother .libbody .ldetail { column-span:all; }
+      .libtop { display:flex; flex-wrap:wrap; align-items:center; gap:8px 10px; position:sticky; top:0; z-index:5; margin-top:8px; padding:8px 0; background:#1b1a18; }
+      .libtop > .libbar { display:contents; }
+      .libtop input[type="search"] { flex:1 1 240px; max-width:340px; min-width:200px; }
+      .libtop select { padding:6px 28px 6px 8px; font-size:13px; }
+      .libtop .keepopt { font-size:11px; }
+
+      /* every section in a row shares its row lines, so knobs, captions and switches line up across the page */
+      #dashboard-grid > .sect:not(.vintbox), #dashboard-grid > .stack > .sect { display:grid; grid-template-rows:subgrid; grid-template-columns:minmax(0,1fr); grid-row:span 4; row-gap:0; align-content:start; }
+      #dashboard-grid .sect > .ctls { grid-row:1; }
+      #dashboard-grid .sect > .ctls + .cap { grid-row:2; }
+      #dashboard-grid .sect > .sws { grid-row:3; }
+      #dashboard-grid .sect > .sws + .cap { grid-row:4; }
+      #dashboard-grid .sect > .ctls:not(.uni) { margin-top:10px; }
+      /* Unison: its controls take part in the shared row lines, so DETUNE lines up with the switch labels (SAW, SQUARE...) in the neighbouring sections */
+      #dashboard-grid .sect[data-g="unison"] { grid-template-columns:70px auto minmax(0,1fr); }
+      #dashboard-grid .sect[data-g="unison"] > .ctls.uni { display:contents; }
+      #dashboard-grid .sect[data-g="unison"] .ctl.us { grid-column:1; grid-row:1; align-self:start; margin-top:6px; }
+      #dashboard-grid .sect[data-g="unison"] .ctl.vox { grid-column:2; grid-row:1; align-self:start; margin:3px 0 0 24px; }
+      #dashboard-grid .sect[data-g="unison"] .ctl.det { grid-column:1 / -1; grid-row:3; margin-top:11px; align-self:start; }
+      #dashboard-grid .sect[data-g="unison"] .stepb { gap:6px; min-width:26px; }
+      #dashboard-grid .sect[data-g="unison"] .ctl.det .steps { gap:10px 3px; padding-left:22px; }
+      @media (min-width:1300px) {       /* wide enough for one row: the buttons sit above the DETUNE word, which lines up with the switch labels */
+        #dashboard-grid .sect[data-g="unison"] .ctl.det { position:relative; flex-direction:column; }
+        #dashboard-grid .sect[data-g="unison"] .ctl.det .steps { position:absolute; left:0; right:0; bottom:calc(100% + 4px); flex-wrap:nowrap; }
+      }
+      #dashboard-grid .sect.sect:is([data-g="oscillatora"],[data-g="oscillatorb"],[data-g="mixer"],[data-g="unison"]) { grid-row:1 / span 4; }
+      #dashboard-grid .sect.sect:is([data-g="filter"],[data-g="filterenvelope"],[data-g="ampenvelope"],[data-g="vintage"]) { grid-row:5 / span 4; margin-top:var(--gap); }
+      #dashboard-grid .sect.sect:is([data-g="lfo"],[data-g="wheelmod"],[data-g="polymod"]) { grid-row:9 / span 4; margin-top:var(--gap); }
+      #dashboard-grid [data-g="unison"] > .ctls { grid-row:1 / span 4; }
+      .foot { margin-top:12px; padding-top:8px; }
+      .foot p { margin-bottom:2px; }
+    }
+    @media (max-width:640px) { .cheek { width:12px; } .panel { padding:18px 14px 22px; } .spacer { display:none; } }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><radialGradient id="kcap" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#4a4a4a"/><stop offset="1" stop-color="#0e0e0e"/></radialGradient></defs></svg>
+<div class="synth">
+  <div class="cheek"></div>
+  <main class="panel">
+    <div id="topstick">
+    <header class="masthead">
+      <div>
+        <h1>Rev 4 Patch Engine</h1>
+        <p>Random patch generator for Prophet-5 &amp; Prophet-10</p>
+      </div>
+      <div class="ports">
+        <label>Synth
+          <select id="synth-model" onchange="setModel(this.value)"><option value="p5">Prophet-5</option><option value="p10">Prophet-10</option></select>
+        </label>
+        <label>MIDI output
+          <select id="midi-out-selector" onchange="selectMidiOutput()"><option value="">Scanning for MIDI ports...</option></select>
+        </label>
+        <label>Channel
+          <select id="midi-channel" onchange="changeChannel()"></select>
+        </label>
+      </div>
+    </header>
+
+    <div class="namebar">
+      <label for="patch-name">Patch name</label>
+      <input id="patch-name" type="text" maxlength="32" oninput="patchName = this.value; markEdited()">
+      <button class="btn" onclick="setName(randomName()); markEdited()">New name</button>
+      <span id="prog-info" class="progtag" hidden></span>
+      <button class="btn step" onclick="stepProgram(-1)" title="Previous program on the synth ( [ )" aria-label="Previous program"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M10.5 2.5 5 8l5.5 5.5"/></svg></button>
+      <button class="btn step" onclick="stepProgram(1)" title="Next program on the synth ( ] )" aria-label="Next program"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 2.5 11 8l-5.5 5.5"/></svg></button>
+      <div class="tabs" role="tablist">
+        <button id="tab-editor" role="tab" aria-selected="true" onclick="showTab('editor')">Editor</button>
+        <button id="tab-library" role="tab" aria-selected="false" onclick="showTab('library')">Library <span id="lib-count"></span></button>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn hero" onclick="generatePatch()">Generate</button>
+      <label class="keepopt" title="When ticked, Generate leaves unison on/off, voice count and detune as they are"><input type="checkbox" id="keep-unison" checked> Keep unison</label>
+      <div class="mutate">
+        <button class="btn" onclick="mutatePatch()">Mutate</button>
+        <label>Amount
+          <input type="range" id="mutate-amount" min="5" max="60" value="20"
+                 oninput="$('mutate-val').innerText=this.value+'%'; paint(this); syncMutAdv()">
+          <b id="mutate-val">20%</b>
+        </label>
+      </div>
+      <button class="btn" id="back-btn" onclick="undoPatch()" title="Undo the last Generate or Mutate" disabled>Back</button>
+      <button class="btn" id="fwd-btn" onclick="redoPatch()" title="Redo what Back undid" disabled>Forward</button>
+      <button class="btn" onclick="readFromSynth()">Read from synth</button>
+      <button class="btn" onclick="pingSynth()">Ping</button>
+      <span class="spacer"></span>
+      <button class="btn" onclick="testNote()">Test note</button>
+      <button class="btn" id="store-open" title="Save this patch into a user program slot on the synth" onclick="openStoreBar()">Save to synth…</button>
+      <button class="btn" title="Export this program as a small file" onclick="downloadPresetFile()">Export program</button>
+      <label class="btn file-label" for="load-file-input" tabindex="0" title="Import a program file">Import program</label>
+      <input type="file" id="load-file-input" accept=".json" onchange="loadPresetFile(this)">
+      <button class="btn" onclick="resetSynth()">Reset</button>
+    </div>
+    <div class="storebar" id="store-bar" hidden>
+      <span class="sb-q">Save to user slot</span>
+      <label>Group <select id="st-group" aria-label="Group"></select></label>
+      <label>Bank <select id="st-bank" aria-label="Bank"></select></label>
+      <label>Program <select id="st-prog" aria-label="Program"></select></label>
+      <button class="btn sm" id="st-store" onclick="storeToSlot()" title="Save this patch, with its name and chord, into this user program on the synth, replacing what is there. The app then selects the slot and reads it back to check it was saved.">Save</button>
+      <button class="btn sm" onclick="hideStoreBar()" aria-label="Dismiss" title="Dismiss">×</button>
+    </div>
+
+    <div class="infobar">
+    <details id="mutadv" class="mutadv">
+      <summary>Mutate by section</summary>
+      <p class="muted">Each section follows the main Mutate amount until you move its slider. 0% leaves a section as it is. Click a section's name to make it follow the main amount again.</p>
+      <div id="mutadv-rows"></div>
+    </details>
+    <div id="status">Initializing Web MIDI...</div>
+    <div id="last-sent"></div>
+    <div id="last-recv"></div>
+    </div>
+    <details id="raw-log" hidden><summary>Last dump received from the Prophet</summary>
+      <button class="btn" style="margin-top:8px" onclick="copyDump()">Copy to clipboard</button><pre id="raw-pre"></pre></details>
+
+    <div class="midbar">
+    <div class="toprow">
+    <div class="favs">
+      <div class="favhead"><span>Favourites</span><button class="btn" onclick="addFav()">Save current</button></div>
+      <div id="fav-list"></div>
+    </div>
+    </div>
+
+    </div>
+    </div>
+    <div id="dashboard-grid"></div>
+
+    <section id="library" hidden>
+      <p id="lib-warn" class="warn" hidden></p>
+      <div class="libtop">
+      <div class="libbar">
+        <input id="lib-q" type="search" placeholder="Search name, tag, notes or slot" aria-label="Search the library" oninput="libUI.q=this.value; libUI.limit=150; renderLib()">
+        <select id="lib-sort" aria-label="Sort" onchange="libUI.sort=this.value; renderLib()">
+          <option value="slot">Sort: synth slot</option><option value="name">Sort: name</option><option value="newest">Sort: newest</option>
+        </select>
+      </div>
+      <div class="libbar">
+        <select id="lib-set" aria-label="Filter by set" onchange="libFilter('set', this.value)">
+          <option value="">All sets</option><option value="F">Factory</option><option value="U">User</option><option value="none">Not from the synth</option>
+        </select>
+        <select id="lib-group" aria-label="Filter by group" onchange="libFilter('group', this.value)">
+          <option value="">All groups</option><option value="1">Group 1</option><option value="2">Group 2</option><option value="3">Group 3</option><option value="4">Group 4</option><option value="5">Group 5</option>
+        </select>
+        <select id="lib-origin" aria-label="Filter by origin" onchange="libFilter('origin', this.value)">
+          <option value="">Any origin</option><option value="captured">Captured from the synth</option><option value="saved">Saved from the editor</option><option value="imported">Imported</option>
+        </select>
+        <select id="lib-tag" aria-label="Filter by tag" onchange="libFilter('tag', this.value)"></select>
+      </div>
+      <div class="libbar">
+        <label class="keepopt"><input type="checkbox" id="lib-favonly" onchange="libFilter('favOnly', this.checked)"> Favourites only</label>
+        <label class="keepopt"><input type="checkbox" id="lib-changedonly" onchange="libFilter('changedOnly', this.checked)"> Changed on synth</label>
+        <label class="keepopt" title="Patches you have renamed, tagged or added notes to"><input type="checkbox" id="lib-annotated" onchange="libFilter('annotated', this.checked)"> Renamed or annotated</label>
+        <label class="keepopt" title="Hides user patches that are identical to the factory patch in the same position (unless you have starred, renamed, tagged or annotated them)"><input type="checkbox" id="lib-hidecopies" onchange="libFilter('hideCopies', this.checked)"> Hide user copies of factory</label>
+        <button class="btn sm" onclick="libClearFilters()">Clear filters</button>
+      </div>
+      <div class="libbar">
+        <button class="btn" onclick="libSaveCurrent()">Save current patch</button>
+        <button class="btn" onclick="findCurrent()" title="Clears the filters and scrolls to the patch that is on the synth or loaded in the editor">Find current</button>
+        <button class="btn" onclick="libExport()">Export library</button>
+        <label class="btn file-label" for="lib-import" tabindex="0">Import library</label>
+        <input type="file" id="lib-import" accept=".json" onchange="libImport(this)">
+        <span class="spacer"></span>
+        <span id="lib-summary" class="muted"></span>
+      </div>
+      </div>
+      <details class="capbox" id="cap">
+        <summary>Capture patches from the synth</summary>
+        <p class="muted">Steps the synth through its programs with Bank Select and Program Change, reads each one, and adds it to the library. The synth's program changes while it runs, and its Program Change receive setting must be on. Each set has 5 groups, and a group is 5 banks of 8 programs (40 patches).</p>
+        <div class="libbar">
+          <label class="capf">Set <select id="cap-set"><option value="F">Factory</option><option value="U">User</option></select></label>
+          <label class="capf">From group <input type="number" id="cap-from" min="1" max="5" value="1"></label>
+          <label class="capf">To group <input type="number" id="cap-to" min="1" max="5" value="1"></label>
+          <label class="keepopt"><input type="checkbox" id="cap-restore" checked> Put the synth back afterwards (same program, editor's patch)</label>
+        </div>
+        <div class="libbar">
+          <button class="btn" id="cap-go" onclick="startCapture()">Start capture</button>
+          <button class="btn" id="cap-stop" onclick="stopCapture()" hidden>Cancel</button>
+          <button class="btn" id="cap-clear" onclick="libClearCaptured()">Delete captured patches in this selection</button>
+          <span id="cap-status" class="muted" aria-live="polite"></span>
+        </div>
+        <progress id="cap-bar" max="1" value="0" hidden></progress>
+      </details>
+      <div id="lib-list"></div>
+      <button class="btn" id="lib-more" hidden onclick="libUI.limit+=150; renderLib()">Show more</button>
+    </section>
+    <footer class="foot">
+      <p>Works in Chrome and Edge. Safari and Firefox don't support Web MIDI, so they can't connect to a synth.</p>
+      <p>Unofficial tool, not affiliated with or endorsed by Sequential. Prophet is a trademark of Sequential, LLC. Controller numbers come from Sequential's published Prophet-5 MIDI Implementation.</p>
+    </footer>
+  </main>
+  <div class="cheek"></div>
+</div>
+
+<script>
+let midiAccess = null;
+let midiOutput = null;
+let midiChannel = 1;
+let midiInput = null, sysexOk = false, pendingRead = null, sysexBuf = null, quietRefresh = false, lastDumpId = null;
+try { const v = localStorage.getItem('p5_dumpid'); if (v !== null && +v >= 0x30 && +v <= 0x35) lastDumpId = +v; } catch (e) {}
+const DUMP_IDS = [0x32, 0x33, 0x31, 0x34, 0x30, 0x35];
+let dumpToken = 0;
+function requestDump(gap) {                  // ask for the edit buffer; once the device ID is known, only that ID is sent unless it goes unanswered
+  const token = ++dumpToken;                  // a newer request cancels the leftover sends of an older one
+  const send = (ids, g) => ids.forEach((id, i) => setTimeout(() => {
+    if (token === dumpToken && pendingRead && midiOutput) { try { midiOutput.send([0xF0, 0x01, id, 0x06, 0xF7]); } catch (e) {} }
+  }, i * g));
+  if (lastDumpId === null) return send(DUMP_IDS, gap);
+  send([lastDumpId], gap);
+  setTimeout(() => send(DUMP_IDS.filter(x => x !== lastDumpId), gap), 1200);   // no answer to the known ID: fall back to the full list
+}
+let patchName = '', lastDump = null, lastDumpFull = null, perfKnown = false;
+let currentActivePatch = {};
+
+/*
+  CC map taken from the official Sequential "Prophet-5 MIDI Implementation" (v1.4).
+  The synth must have Param Rcv = CC in Globals.
+  type: 'range' (0..max), 'switch' (0/1) or 'tri' (0..2).
+  Most knobs top out at 120, not 127. Switches only accept 0 or 1.
+*/
+let chordNotes = [];   // semitone offsets above the lowest key, from the chord slots in the dump
+const CHORD_TYPES = [['major triad', [0,4,7]], ['minor triad', [0,3,7]], ['diminished triad', [0,3,6]], ['augmented triad', [0,4,8]],
+  ['suspended 4th', [0,5,7]], ['suspended 2nd', [0,2,7]], ['major 7th', [0,4,7,11]], ['dominant 7th', [0,4,7,10]], ['minor 7th', [0,3,7,10]],
+  ['half-diminished 7th', [0,3,6,10]], ['diminished 7th', [0,3,6,9]], ['major 6th', [0,4,7,9]], ['minor 6th', [0,3,7,9]],
+  ['major add 9', [0,2,4,7]], ['minor add 9', [0,2,3,7]], ['power chord', [0,7]], ['octave', [0]]];
+function describeChord(offs) {               // name the shape from its intervals; the root note itself depends on which keys you hold
+  if (!offs.length) return '';
+  const pcs = [...new Set(offs.map(x => x % 12))].sort((a, b) => a - b);
+  const key = a => a.join(',');
+  for (const [name, iv] of CHORD_TYPES) for (const r of pcs) {
+    if (key(pcs.map(x => (x - r + 12) % 12).sort((a, b) => a - b)) !== key(iv)) continue;
+    const bass = (12 - r) % 12;
+    const inv = bass === 0 ? 'root position' : iv.length === 2 ? '' : [3, 4].includes(bass) ? 'first inversion' : [5, 6, 7, 8].includes(bass) ? 'second inversion' : 'third inversion';
+    return name + (inv ? ', ' + inv : '');
+  }
+  return '';
+}
+function chordLabel() { return chordNotes.length ? 'Chord ' + chordNotes.join('\u00b7') : 'Chord'; }
+function updateChordLabel() {
+  const sel = $('input-unison_voices'), o = sel && sel.querySelector(`option[value="${CHORD}"]`);
+  if (!o) return;
+  o.textContent = chordLabel();
+  const d = describeChord(chordNotes);
+  sel.title = chordNotes.length ? `Chord notes above the lowest key: ${chordNotes.join(', ')} semitones` + (d ? ` (${d})` : '') : '';
+}
+const CHORD = 11;      // voice-count setting meaning unison chord mode (the dump and CC 113 use 10 for it)
+const PARAMS = [
+  // group,           key,                label,              cc,  type,    max, init
+  ['Oscillator A',   'oscA_freq',        'Frequency',          3, 'range', 120, 24],
+  ['Oscillator A',   'oscA_saw',         'Saw',               15, 'switch',  1, 1],
+  ['Oscillator A',   'oscA_square',      'Square',            20, 'switch',  1, 0],
+  ['Oscillator A',   'oscA_pw',          'Pulse width',       21, 'range', 120, 60],
+
+  ['Oscillator B',   'oscB_freq',        'Frequency',          9, 'range', 120, 24],
+  ['Oscillator B',   'oscB_fine',        'Fine tune',         14, 'range', 127, 64],
+  ['Oscillator B',   'oscB_saw',         'Saw',               30, 'switch',  1, 0],
+  ['Oscillator B',   'oscB_tri',         'Triangle',          52, 'switch',  1, 0],
+  ['Oscillator B',   'oscB_square',      'Square',           116, 'switch',  1, 0],
+  ['Oscillator B',   'oscB_pw',          'Pulse width',       22, 'range', 120, 60],
+  ['Oscillator B',   'oscB_lowfreq',     'Low freq',          24, 'switch',  1, 0],
+  ['Oscillator B',   'oscB_keyboard',    'Keyboard',          25, 'switch',  1, 1],
+  ['Oscillator A',   'osc_sync',         'Sync',              23, 'switch',  1, 0],
+
+  ['Mixer', 'mix_oscA',         'Osc A level',       27, 'range', 120, 100],
+  ['Mixer', 'mix_oscB',         'Osc B level',       28, 'range', 120, 0],
+  ['Mixer', 'mix_noise',        'Noise level',       29, 'range', 120, 0],
+  ['Mixer', 'glide',            'Glide rate',        26, 'range', 120, 0],
+  ['Unison', 'unison',        'Unison',            112, 'switch',  1, 0],
+  ['Unison', 'unison_voices', 'Voices',     113, 'select', 11, 0],
+  ['Unison', 'unison_detune', 'Detune',     114, 'steps',   7, 0],
+
+  ['Filter',         'cutoff',           'Cutoff',            73, 'range', 120, 120],
+  ['Filter',         'resonance',        'Resonance',         31, 'range', 120, 0],
+  ['Filter',         'filter_env_amount','Env amount',        89, 'range', 120, 0],
+  ['Filter',         'filter_kbd',       'Keyboard track',    35, 'steps',     2, 1],
+  ['Filter',         'filter_rev',       'Rev',               41, 'switch',  1, 0],
+  ['Vintage',         'vintage',          'Vintage',           85, 'range', 127, 64],
+
+  ['Filter envelope','filter_attack',    'Attack',           103, 'range', 120, 0],
+  ['Filter envelope','filter_decay',     'Decay',            105, 'range', 120, 60],
+  ['Filter envelope','filter_sustain',   'Sustain',          107, 'range', 120, 120],
+  ['Filter envelope','filter_release',   'Release',          109, 'range', 120, 0],
+
+  ['Amp envelope',   'amp_attack',       'Attack',           104, 'range', 120, 0],
+  ['Amp envelope',   'amp_decay',        'Decay',            106, 'range', 120, 60],
+  ['Amp envelope',   'amp_sustain',      'Sustain',          108, 'range', 120, 120],
+  ['Amp envelope',   'amp_release',      'Release',          110, 'range', 120, 10],
+    ['Amp envelope',   'release_switch',   'Release hold',     111, 'switch',  1, 1],
+  ['Amp envelope',   'vel_filter',       'Velocity to filter', 90, 'switch',  1, 0],
+  ['Amp envelope',   'vel_amp',          'Velocity to amp',   102, 'switch',  1, 0],
+  ['Amp envelope',   'at_filter',        'Aftertouch to filter', 86, 'switch', 1, 0],
+  ['Amp envelope',   'at_lfo',           'Aftertouch to LFO',  87, 'switch',  1, 0],
+
+  ['LFO',            'lfo_freq',         'Frequency',         46, 'range', 120, 30],
+  ['LFO',            'lfo_amount',       'Initial amount',    47, 'range', 120, 0],
+  ['Wheel-mod',            'lfo_mix',          'Source mix',        53, 'range', 120, 0],
+  ['LFO',            'lfo_saw',          'Saw',              117, 'switch',  1, 0],
+  ['LFO',            'lfo_tri',          'Triangle',         118, 'switch',  1, 1],
+  ['LFO',            'lfo_square',       'Square',           119, 'switch',  1, 0],
+  ['Wheel-mod',            'lfo_to_freqA',     'Freq A',         54, 'switch',  1, 0],
+  ['Wheel-mod',            'lfo_to_freqB',     'Freq B',         55, 'switch',  1, 0],
+  ['Wheel-mod',            'lfo_to_pwA',       'PW A',           56, 'switch',  1, 0],
+  ['Wheel-mod',            'lfo_to_pwB',       'PW B',           57, 'switch',  1, 0],
+  ['Wheel-mod',            'lfo_to_filter',    'Filter',         58, 'switch',  1, 0],
+
+  ['Poly-mod',       'pm_filtenv',       'Filt env', 59, 'range', 127, 0],
+  ['Poly-mod',       'pm_oscB',          'Osc B',      60, 'range', 120, 0],
+  ['Poly-mod',       'pm_to_freqA',      'Freq A',         61, 'switch',  1, 0],
+  ['Poly-mod',       'pm_to_pw',         'PW A',           62, 'switch',  1, 0],
+  ['Poly-mod',       'pm_to_filter',     'Filter',         63, 'switch',  1, 0]
+];
+
+const STEPS = {
+  unison_detune: { from: 0, to: 7, label: v => v + 1 },   // panel buttons 1-8 = values 0-7
+  unison_voices: { from: 1, to: 5, label: v => v },       // Prophet-5 has five voices
+  filter_kbd: { from: 0, to: 2, label: v => ['Off', 'Half', 'Full'][v] }
+};
+const LOCKED = new Set();
+const CAPTIONS = { 'Wheel-mod': { sws: 'Destination' }, 'Poly-mod': { ctls: 'Source amount', sws: 'Destination' } };
+const COMBO_KEYS = new Set(['filter_rev', 'filter_kbd', 'vel_filter', 'vel_amp', 'at_filter', 'at_lfo']);
+const PERF_KEYS = new Set(['filter_rev', 'vel_filter', 'vel_amp', 'at_filter', 'at_lfo']);
+const COMBOS = [
+  { group: 'Filter', label: 'Rev',
+    leds: [{ t: '1/2', c: 'red', on: P => !P.filter_rev }, { t: '3', c: 'amber', on: P => !!P.filter_rev }],
+    press: P => ({ filter_rev: 1 - P.filter_rev }) },
+  { group: 'Filter', label: 'Keyboard',
+    leds: [{ t: 'Half', c: 'red', dx: -5, on: P => P.filter_kbd === 1 }, { t: 'Full', c: 'amber', dx: 5, on: P => P.filter_kbd === 2 }],
+    press: P => ({ filter_kbd: (P.filter_kbd + 1) % 3 }) },
+  { group: 'Amp envelope', label: 'Velocity',
+    leds: [{ t: 'Filt', c: 'red', dx: -3, on: P => P.vel_filter }, { t: 'Amp', c: 'amber', dx: 3, on: P => P.vel_amp }],
+    press: P => { const n = (P.vel_filter + 2 * P.vel_amp + 1) % 4; return { vel_filter: n & 1, vel_amp: n >> 1 }; } },
+  { group: 'Amp envelope', label: 'Aftertouch',
+    leds: [{ t: 'Filt', c: 'red', dx: -3, on: P => P.at_filter }, { t: 'LFO', c: 'amber', dx: 3, on: P => P.at_lfo }],
+    press: P => { const n = (P.at_filter + 2 * P.at_lfo + 1) % 4; return { at_filter: n & 1, at_lfo: n >> 1 }; } }
+];
+const PARAM_BY_KEY = {};
+const INIT_PATCH = {};
+PARAMS.forEach(p => {
+  PARAM_BY_KEY[p[1]] = { group:p[0], key:p[1], label:p[2], cc:p[3], type:p[4], max:p[5], init:p[6] };
+  INIT_PATCH[p[1]] = p[6];
+});
+currentActivePatch = { ...INIT_PATCH };
+
+const $ = id => document.getElementById(id);
+const setStatus = t => { $('status').innerText = t; };
+
+// ---------- UI ----------
+function buildChannelSelector() {
+  const sel = $('midi-channel');
+  for (let i = 1; i <= 16; i++) {
+    const o = document.createElement('option');
+    o.value = i; o.innerText = 'Channel ' + i;
+    sel.appendChild(o);
+  }
+  sel.value = midiChannel;
+}
+function changeChannel() { midiChannel = parseInt($('midi-channel').value); }
+
+function paint(el) {
+  const pct = (el.value - el.min) / (el.max - el.min) * 100;
+  el.style.setProperty('--pct', pct + '%');
+}
+
+function buildDashboard() {
+  const root = $('dashboard-grid');
+  root.innerHTML = '';
+  const vintRow = document.createElement('div');
+  vintRow.className = 'sect vintbox'; vintRow.dataset.g = 'vintage';
+  let stack = null;
+  [...new Set(PARAMS.map(p => p[0]))].forEach(g => {
+    const sect = document.createElement('section');
+    sect.className = 'sect'; sect.dataset.g = g.toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const GFX = {};                       // the envelope, filter and LFO graphics were removed; the draw functions skip a graphic that is not on the page
+    const gid = GFX[g];
+    sect.innerHTML = `<h2>${g}</h2><button type="button" class="lock lockicon" aria-pressed="false" data-lock="${g}" aria-label="Lock ${g}" title="Lock this section, so Generate and Mutate leave it alone" onclick="toggleLock('${g}')"><svg viewBox="0 0 16 16" aria-hidden="true"><path class="shk" d="M5 7V5a3 3 0 0 1 6 0v2"/><path class="shk-open" d="M5 7V5a3 3 0 0 1 5.6-1.5"/><rect x="3" y="7" width="10" height="7" rx="1.5"/></svg></button>` + (g === 'Unison' ? '<button type="button" class="lock syncbtn" title="Read the voice count, chord and detune from the synth" onclick="syncUnison()">Sync</button>' : '') + (gid ? `<svg class="env" id="${gid}" viewBox="0 0 240 72" preserveAspectRatio="none" role="img" aria-label="${g} graphic"><path class="env-fill"/><path class="env-line"/></svg>` : '') + '<div class="ctls"></div>' + ((CAPTIONS[g] || {}).ctls ? `<div class="cap"><span>${CAPTIONS[g].ctls}</span></div>` : '') + '<div class="sws"></div>' + ((CAPTIONS[g] || {}).sws ? `<div class="cap"><span>${CAPTIONS[g].sws}</span></div>` : '');
+    if (g === 'Unison') {
+      sect.querySelector('.ctls').classList.add('uni');    }
+    const box = sect.querySelector('.ctls'), sws = sect.querySelector('.sws'), later = [];
+    Object.values(PARAM_BY_KEY).filter(p => p.group === g).forEach(p => {
+      if (COMBO_KEYS.has(p.key)) return;
+      const v = currentActivePatch[p.key];
+      const c = document.createElement('div');
+      c.className = 'ctl';
+      if (p.type === 'range') {
+        c.classList.add('kc');
+        c.innerHTML = `<div class="knob" id="input-${p.key}" role="slider" tabindex="0" aria-label="${p.label}" aria-valuemin="0" aria-valuemax="${p.max}" aria-valuenow="${v}" data-key="${p.key}" data-max="${p.max}">${knobSvg(p.key)}</div><div class="klabel">${p.label}</div><b class="kval" id="val-${p.key}">${displayVal(p.key, v)}</b>`;
+      } else if (p.type === 'select') {
+        c.innerHTML = `<select id="input-${p.key}" aria-label="${p.label}" onchange="updateParam('${p.key}', this.value)">${voiceOptions(v)}</select>`;
+      } else if (p.type === 'steps') {
+        c.style.gridColumn = '1 / -1';
+        c.innerHTML = `<div class="row"><span>${p.label}</span></div><div class="steps" id="input-${p.key}">` +
+          Array.from({ length: STEPS[p.key].to - STEPS[p.key].from + 1 }, (_, k) => {
+            const i = STEPS[p.key].from + k;
+            return `<button type="button" class="stepb${i === v ? ' on' : ''}" data-v="${i}" onclick="updateParam('${p.key}', ${i})"><i class="led"></i><span>${STEPS[p.key].label(i)}</span></button>`;
+          }).join('') + '</div>';
+      } else if (p.type === 'switch') {
+        c.innerHTML = `<label class="sw${p.key === 'release_switch' ? ' below' : ''}"><span>${p.key === 'release_switch' ? 'Release <em class="pill">Hold</em>' : p.label}</span>
+          <input type="checkbox" id="input-${p.key}" ${v ? 'checked' : ''}
+                 onchange="updateParam('${p.key}', this.checked ? 1 : 0)"><i class="led"></i></label>`;
+      } else {
+        c.innerHTML = `<div class="row"><span>${p.label}</span></div>
+          <select id="input-${p.key}" onchange="updateParam('${p.key}', this.value)">
+            <option value="0">Off</option><option value="1">Half</option><option value="2">Full</option>
+          </select>`;
+      }
+      if (p.key === 'unison_detune') c.classList.add('det');
+      if (p.key === 'unison_voices') c.classList.add('vox');
+      if (p.key === 'unison') { c.classList.add('us'); box.appendChild(c); }
+      else if (p.key === 'vintage') vintRow.appendChild(c);
+      else if (p.type === 'steps') later.push(c);
+      else (p.type === 'switch' ? sws : box).appendChild(c);
+    });
+    later.forEach(c => box.appendChild(c));
+    if (g === 'Vintage') {
+      vintRow.insertAdjacentHTML('afterbegin', '<h2>Vintage</h2>');
+      vintRow.insertAdjacentHTML('beforeend', `<button type="button" class="lock lockicon" aria-pressed="false" data-lock="Vintage" aria-label="Lock Vintage" title="Lock this section, so Generate and Mutate leave it alone" onclick="toggleLock('Vintage')"><svg viewBox="0 0 16 16" aria-hidden="true"><path class="shk" d="M5 7V5a3 3 0 0 1 6 0v2"/><path class="shk-open" d="M5 7V5a3 3 0 0 1 5.6-1.5"/><rect x="3" y="7" width="10" height="7" rx="1.5"/></svg></button>`);
+      return;
+    }
+    COMBOS.forEach((c, i) => {
+      if (c.group !== g) return;
+      const d = document.createElement('div');
+      d.className = 'ctl cmb';
+      d.innerHTML = `<div class="cmb-leds">` + c.leds.map((l, j) =>
+        `<span class="cl"><i class="dot ${l.c}" id="cmb-${i}-${j}"></i><em${l.dx ? ` style="transform:translateX(${l.dx}px)"` : ''}>${l.t}</em></span>`).join('') +
+        `</div><button type="button" class="cbtn" aria-label="${c.label}" onclick="pressCombo(${i})"><i class="led"></i></button><span class="cmb-label">${c.label}</span>`;
+      sws.appendChild(d);
+    });
+    if (g === 'Mixer') { stack = document.createElement('div'); stack.className = 'stack'; stack.dataset.g = 'stack'; stack.appendChild(sect); root.appendChild(stack); }
+    else if (g === 'Unison' && stack) stack.appendChild(sect);
+    else root.appendChild(sect);
+   });
+  root.appendChild(vintRow);
+  document.querySelectorAll('#dashboard-grid input[type=range]').forEach(paint);
+  paint($('mutate-amount'));
+  buildMutAdv();
+  document.querySelectorAll('.knob').forEach(k => setKnob(k, currentActivePatch[k.dataset.key]));
+  refreshCombos();
+  drawEnvelopes();
+}
+
+function updateParam(key, value) {
+  const p = PARAM_BY_KEY[key];
+  const v = Math.max(0, Math.min(p.max, parseInt(value)));
+  currentActivePatch[key] = v;
+  if (p.type === 'steps' || p.type === 'select') syncControls();     // keep the dropdown showing a value set from code
+  refreshCombos();
+  const disp = $('val-' + key);
+  if (disp) disp.innerText = displayVal(key, v);
+  if (p.type === 'range') setKnob($('input-' + key), v);
+  drawEnvelopes();
+  sendCC(p.cc, wireValue(key, v));
+  refreshLibMarks();
+  if (!quiet && key === 'unison' && v && currentActivePatch.unison_voices < 1) updateParam('unison_voices', 1);   // unison needs at least one voice
+}
+
+function syncSlidersToUI() { syncControls(); refreshCombos(); drawEnvelopes(); }
+function syncControls() {
+  for (const key in PARAM_BY_KEY) {
+    const p = PARAM_BY_KEY[key];
+    const input = $('input-' + key);
+    if (!input) continue;
+    const v = currentActivePatch[key];
+    if (p.type === 'steps') input.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.v === v));
+    else if (p.type === 'switch') input.checked = !!v;
+    else if (p.type === 'range') setKnob(input, v);
+    else input.value = v;
+    const disp = $('val-' + key);
+    if (disp) disp.innerText = displayVal(key, v);
+  }
+  updateChordLabel();
+}
+
+function drawEnvelopesOnly() {
+  ['filter', 'amp'].forEach(pre => {
+    const svg = $('env-' + pre);
+    if (!svg) return;
+    const g = k => Math.min(1, currentActivePatch[pre + '_' + k] / 120);
+    const top = 6, bot = 64, x0 = 6;
+    const x1 = x0 + 6 + g('attack') * 52, x2 = x1 + 6 + g('decay') * 52;
+    const x3 = x2 + 36, x4 = x3 + 6 + g('release') * 52;
+    const sy = bot - g('sustain') * (bot - top);
+    const d = `M${x0} ${bot} L${x1} ${top} L${x2} ${sy} L${x3} ${sy} L${x4} ${bot}`;
+    svg.querySelector('.env-line').setAttribute('d', d);
+    svg.querySelector('.env-fill').setAttribute('d', d + ' Z');
+  });
+}
+
+const KNOB_SCALE = {                           // numbers printed around the dial, as on the panel (everything else is 0 to 10)
+  vintage: ['4', '3', '2', '1'],
+  lfo_mix: ['5', '4', '3', '2', '1', '0', '1', '2', '3', '4', '5']
+};
+const KNOB_MINOR = { vintage: 2 };              // unnumbered ticks between each pair of numbers
+const KNOB_DEFAULT = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10'];
+const displayVal = (key, v) => v;               // the readout under each knob stays the synth's own value
+function knobSvg(key) {
+  const labels = KNOB_SCALE[key] || KNOB_DEFAULT, n = labels.length - 1;
+  let t = '';
+  labels.forEach((lab, i) => {
+    const a = (-135 + i * 270 / n) * Math.PI / 180, sx = Math.sin(a), sy = -Math.cos(a);
+    t += `<line class="tick" x1="${(32 + sx * 20.5).toFixed(1)}" y1="${(32 + sy * 20.5).toFixed(1)}" x2="${(32 + sx * 24).toFixed(1)}" y2="${(32 + sy * 24).toFixed(1)}"/>` +
+         `<text x="${(32 + sx * 28.8).toFixed(1)}" y="${(32 + sy * 28.8 + 2.3).toFixed(1)}">${lab}</text>`;
+    const m = KNOB_MINOR[key] || 0;
+    if (i < n) for (let j = 1; j <= m; j++) {       // short unnumbered ticks between this number and the next
+      const b = (-135 + (i + j / (m + 1)) * 270 / n) * Math.PI / 180, bx = Math.sin(b), by = -Math.cos(b);
+      t += `<line class="tick" x1="${(32 + bx * 21.5).toFixed(1)}" y1="${(32 + by * 21.5).toFixed(1)}" x2="${(32 + bx * 24).toFixed(1)}" y2="${(32 + by * 24).toFixed(1)}"/>`;
+    }
+  });
+  return `<svg viewBox="0 0 64 64" aria-hidden="true">${t}
+    <circle cx="32" cy="32" r="15.7" fill="none" stroke="#5a5a5a" stroke-width="2.6" stroke-dasharray="1.5 1.1"/>
+        <g class="kg"><circle cx="32" cy="32" r="13.6" fill="url(#kcap)" stroke="#d2d2d2" stroke-width="1.6"/><line x1="32" y1="20.3" x2="32" y2="30" stroke="#f4f4f4" stroke-width="1.8"/></g></svg>`;
+}
+
+function setKnob(el, v) {
+  if (!el) return;
+  const frac = v / +el.dataset.max;      // full sweep; the dead zones at each end of the unit's knobs are in the hardware
+  el.querySelector('.kg').setAttribute('transform', `rotate(${(-135 + frac * 270).toFixed(1)} 32 32)`);
+  el.setAttribute('aria-valuenow', v);
+}
+
+function initKnobs() {                      // drag up/down, wheel or arrow keys when focused, double-click to reset
+  const root = document.body;
+  const bump = (k, nv) => { nv = clamp(nv, 0, +k.dataset.max); if (nv !== currentActivePatch[k.dataset.key]) updateParam(k.dataset.key, nv); };
+  let drag = null;
+  root.addEventListener('pointerdown', e => {
+    const k = e.target.closest('.knob');
+    if (!k) return;
+    drag = { k, y: e.clientY, v: currentActivePatch[k.dataset.key] };
+    k.setPointerCapture(e.pointerId); k.focus(); e.preventDefault();
+  });
+  root.addEventListener('pointermove', e => {
+    if (!drag) return;
+    bump(drag.k, Math.round(drag.v + (drag.y - e.clientY) / (e.shiftKey ? 600 : 160) * +drag.k.dataset.max));
+  });
+  root.addEventListener('pointerup', () => { drag = null; });
+  root.addEventListener('pointercancel', () => { drag = null; });
+  root.addEventListener('wheel', e => {
+    const k = e.target.closest('.knob');
+    if (!k || document.activeElement !== k) return;
+    e.preventDefault(); bump(k, currentActivePatch[k.dataset.key] + (e.deltaY < 0 ? 1 : -1));
+  }, { passive: false });
+  root.addEventListener('keydown', e => {
+    const k = e.target.closest('.knob');
+    const d = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: 10, PageDown: -10 }[e.key];
+    if (!k || !d) return;
+    e.preventDefault(); bump(k, currentActivePatch[k.dataset.key] + d);
+  });
+  root.addEventListener('dblclick', e => {
+    const k = e.target.closest('.knob');
+    if (k) bump(k, PARAM_BY_KEY[k.dataset.key].init);
+  });
+}
+
+function refreshCombos() {
+  ['unison_voices', 'unison_detune'].forEach(k => {
+    const el = $('input-' + k) && $('input-' + k).closest('.ctl');
+    if (el) el.style.visibility = currentActivePatch.unison ? '' : 'hidden';   // keep the space so the Unison button never moves
+  });
+  COMBOS.forEach((c, i) => c.leds.forEach((l, j) => {
+    const el = $(`cmb-${i}-${j}`);
+    if (el) el.classList.toggle('on', !!l.on(currentActivePatch));
+  }));
+}
+
+function pressCombo(i) {
+  const ch = COMBOS[i].press(currentActivePatch);
+  perfKnown = true;
+  for (const k in ch) updateParam(k, ch[k]);
+}
+
+function drawEnvelopes() { drawEnvelopesOnly(); drawFilter(); drawLfo(); }
+
+function setPath(svg, d, closeTo) {
+  svg.querySelector('.env-line').setAttribute('d', d);
+  svg.querySelector('.env-fill').setAttribute('d', d + closeTo);
+}
+
+function drawFilter() {            // schematic low-pass response: cutoff position and resonance peak
+  const svg = $('gfx-filter');
+  if (!svg) return;
+  const P = currentActivePatch;
+  const cx = 24 + (P.cutoff / 120) * 180, q = P.resonance / 120;
+  const pts = [];
+  for (let x = 0; x <= 240; x += 2) {
+    const f = Math.pow(2, (x - cx) / 28);
+    const db = -10 * Math.log10(1 + Math.pow(f, 8)) + q * q * 14 * Math.exp(-Math.pow((x - cx) / 9, 2));
+    pts.push(x + ' ' + Math.max(4, Math.min(68, 22 - db * 1.1)).toFixed(1));
+  }
+  setPath(svg, 'M' + pts.join(' L'), ' L240 72 L0 72 Z');
+}
+
+function drawLfo() {               // selected waveforms, rate = number of cycles, amount = height
+  const svg = $('gfx-lfo');
+  if (!svg) return;
+  const P = currentActivePatch, waves = [];
+  if (P.lfo_saw) waves.push(p => 2 * p - 1);
+  if (P.lfo_tri) waves.push(p => p < 0.5 ? 4 * p - 1 : 3 - 4 * p);
+  if (P.lfo_square) waves.push(p => p < 0.5 ? 1 : -1);
+  const cycles = 1 + (P.lfo_freq / 120) * 5, amp = 0.3 + 0.7 * (P.lfo_amount / 120);
+  const pts = [];
+  for (let i = 0; i <= 240; i++) {
+    const p = (i / 240 * cycles) % 1;
+    const v = waves.length ? waves.reduce((s, w) => s + w(p), 0) / waves.length : 0;
+    pts.push(i + ' ' + (36 - v * amp * 28).toFixed(1));
+  }
+  setPath(svg, 'M' + pts.join(' L'), ' L240 36 L0 36 Z');
+}
+
+const NAME_WORDS = ["Amber","Anchor","Ash","Atlas","Aurora","Autumn","Azure","Badger","Balsam","Basalt","Beacon","Birch","Blossom","Bramble","Breeze","Bronze","Cactus","Canyon","Cedar","Cherry","Cinder","Clover","Cobalt","Comet","Copper","Coral","Cricket","Crimson","Dawn","Delta","Desert","Dune","Dusk","Eagle","Ember","Emerald","Falcon","Fern","Fjord","Flint","Fog","Forest","Fox","Frost","Garnet","Geyser","Ginger","Glacier","Granite","Harbor","Hazel","Heron","Hickory","Honey","Horizon","Indigo","Iris","Island","Ivory","Jade","Jasper","Jungle","Juniper","Kestrel","Lagoon","Lantern","Larch","Laurel","Lava","Lemon","Lichen","Lilac","Linden","Lotus","Magnet","Maple","Marble","Meadow","Mercury","Meteor","Mist","Moss","Moth","Nebula","Nectar","Nickel","Oasis","Obsidian","Ocean","Olive","Onyx","Opal","Orchid","Otter","Pebble","Pepper","Pine","Planet","Plum","Pollen","Poppy","Prairie","Prism","Puma","Quartz","Quill","Raven","Reef","Ridge","River","Robin","Rowan","Ruby","Saffron","Sage","Sand","Sapphire","Scarlet","Shadow","Sierra","Slate","Sparrow","Spruce","Storm","Summit","Sunset","Swallow","Tangerine","Teal","Thistle","Thunder","Timber","Topaz","Tundra","Twilight","Umber","Valley","Velvet","Violet","Walnut","Willow","Winter","Wren","Yarrow","Zephyr","Zinc","Marsh","Mirror","Monsoon","Mulberry","Orbit","Paper","Pewter","Pillar","Pixel","Rocket","Rust","Satin","Silk","Tidal","Tulip","Vapor","Vortex","Wander","Wheat","Lunar","Solar","Cosmic","Gentle","Hollow","Glass","Smoky","Frozen","Dusty","Silver","Neon","Crystal","Midnight","Electric","Burning","Distant","Wobbly","Mirage","Signal","Ghost","Engine","Rain","Tide","Whisper","Drift"];      // 190 words of at most 9 letters, so any two fit the synth's 20-character name
+const randomName = () => { const a = pick(NAME_WORDS); let b; do b = pick(NAME_WORDS); while (b === a); return a + ' ' + b; };      // 190 x 189 = 35,910 names
+function setName(n) { patchName = n; $('patch-name').value = n; }
+
+const LOCK_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path class="shk" d="M5 7V5a3 3 0 0 1 6 0v2"/><path class="shk-open" d="M5 7V5a3 3 0 0 1 5.6-1.5"/><rect x="3" y="7" width="10" height="7" rx="1.5"/></svg>';
+function syncLockButtons() {                  // every padlock for a section (on the section itself and in Mutate by section) shows the same state
+  document.querySelectorAll('button[data-lock]').forEach(btn => {
+    const g = btn.dataset.lock, on = LOCKED.has(g);
+    btn.setAttribute('aria-pressed', on);
+    btn.setAttribute('aria-label', (on ? 'Unlock ' : 'Lock ') + g);
+    btn.title = on ? 'Locked: Generate and Mutate leave this section alone. Click to unlock.' : 'Lock this section, so Generate and Mutate leave it alone';
+  });
+}
+function toggleLock(g) {
+  if (LOCKED.has(g)) LOCKED.delete(g); else LOCKED.add(g);
+  syncLockButtons();
+  syncMutAdv();
+}
+
+function applyLocks(next, prev) {            // locked sections keep their previous values
+  for (const key in PARAM_BY_KEY) if (LOCKED.has(PARAM_BY_KEY[key].group)) next[key] = prev[key];
+}
+
+// ---------- Library ----------
+// Patches live in the browser's IndexedDB. Favourites are library entries with the star on.
+const LIB_DB = 'rev4-patch-engine', LIB_STORE = 'patches';
+let lib = [], libDb = null;
+let capturing = false, captureCancel = false, captureCb = null;
+let capSweep = false;                             // true only while Capture from synth steps through programs (capturing is also set briefly while Send to synth checks its work)
+const libUI = { q: '', tag: '', set: '', group: '', origin: '', favOnly: false, changedOnly: false, annotated: false, hideCopies: false, sort: 'slot', limit: 150, open: new Set() };
+
+function libOpen() {
+  return new Promise(res => {
+    try {
+      const rq = indexedDB.open(LIB_DB, 1);
+      rq.onupgradeneeded = () => rq.result.createObjectStore(LIB_STORE, { keyPath: 'id' });
+      rq.onsuccess = () => { libDb = rq.result; res(true); };
+      rq.onerror = rq.onblocked = () => res(false);
+    } catch (e) { res(false); }
+  });
+}
+function libTx(fn) {
+  return new Promise(res => {
+    if (!libDb) return res(false);
+    try {
+      const tx = libDb.transaction(LIB_STORE, 'readwrite');
+      fn(tx.objectStore(LIB_STORE));
+      tx.oncomplete = () => res(true);
+      tx.onerror = tx.onabort = () => res(false);
+    } catch (e) { res(false); }
+  });
+}
+function libReadAll() {
+  return new Promise(res => {
+    if (!libDb) return res([]);
+    try {
+      const rq = libDb.transaction(LIB_STORE).objectStore(LIB_STORE).getAll();
+      rq.onsuccess = () => res(rq.result || []);
+      rq.onerror = () => res([]);
+    } catch (e) { res([]); }
+  });
+}
+async function libPersist(...entries) {
+  const ok = await libTx(st => entries.forEach(e => st.put(e)));
+  if (!ok) libWarn(true);
+  return ok;
+}
+async function libDrop(id) { const ok = await libTx(st => st.delete(id)); if (!ok) libWarn(true); }
+function libWarn(on) {
+  const w = $('lib-warn');
+  w.hidden = !on;
+  w.textContent = 'This browser is not letting the library be stored (private window or blocked site data?). Patches will last only until you close the page, so use Export to keep them.';
+}
+
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+function makeEntry(o) {
+  const now = Date.now();
+  return { id: newId(), name: 'Untitled', patch: {}, chord: [], tags: [], notes: '', fav: false, changed: false, slot: null, perf: false, dump: null, source: 'saved', added: now, updated: now, ...o };
+}
+const slotLabel = s => !s ? '' : (s.set === 'U' ? 'U' : 'F') + (s.group > 9 ? `${s.group}-${s.bank}-${s.prog}` : `${s.group}${s.bank}${s.prog}`);
+const slotKey = s => s ? `${s.set}:${s.group}:${s.bank}:${s.prog}` : null;
+const slotOrder = s => s ? (s.set === 'F' ? 0 : 1e6) + s.group * 100 + s.bank * 10 + s.prog : 2e6;
+const parseTags = t => [...new Set(String(t).split(/[,;]/).map(x => x.trim().toLowerCase()).filter(Boolean))];
+
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const k in attrs || {}) {
+    if (k === 'class') e.className = attrs[k];
+    else if (k.startsWith('on')) e[k] = attrs[k];
+    else if (attrs[k] !== false && attrs[k] !== null && attrs[k] !== undefined) e.setAttribute(k, attrs[k] === true ? '' : attrs[k]);
+  }
+  kids.flat().forEach(k => e.append(k));
+  return e;
+}
+
+// --- saving the editor's current patch ---
+function saveCurrentEntry() {                    // updates the entry of the same name that was saved from the editor, otherwise adds one
+  const name = (patchName || '').trim() || 'Untitled';
+  const at = lib.find(e => e.source === 'saved' && e.name === name);
+  const fields = { name, patch: { ...currentActivePatch }, chord: chordNotes.slice(), perf: perfKnown, updated: Date.now() };
+  if (at) { Object.assign(at, fields); return { entry: at, replaced: true }; }
+  const entry = makeEntry(fields);
+  lib.push(entry);
+  return { entry, replaced: false };
+}
+async function addFav() {
+  const { entry, replaced } = saveCurrentEntry();
+  entry.fav = true;
+  await libPersist(entry);
+  renderFavs(); renderLib();
+  setStatus(`Saved "${entry.name}" to favourites${replaced ? ' (replaced the one with that name)' : ''}.`);
+}
+async function libSaveCurrent() {
+  const { entry, replaced } = saveCurrentEntry();
+  await libPersist(entry);
+  renderFavs(); renderLib();
+  setStatus(`Saved "${entry.name}" to the library${replaced ? ' (replaced the one with that name)' : ''}.`);
+}
+
+// --- sending a library patch to the editor and the synth ---
+function loadEntry(id, toEditor) {
+  const e = lib.find(x => x.id === id);
+  if (!e || !requirePort()) return;
+  if (toEditor && e.slot && !capturing && !pendingRead && selectSlot(e.slot)) {      // a patch with a synth slot: go to that program first, then load the patch into it
+    clearHistory(); newProgram = false;
+    setStatus(`Selected ${slotLabel(e.slot)} on the synth. Loading "${e.name}"...`);
+    setTimeout(() => applyEntry(e, toEditor, !e.changed), 300);
+    return;
+  }
+  pushHistory();
+  applyEntry(e, toEditor);
+}
+function applyEntry(e, toEditor, clean) {
+  currentActivePatch = { ...INIT_PATCH, ...e.patch };
+  chordNotes = (e.chord || []).slice();
+  setName(e.name);
+  syncSlidersToUI();
+  libLoadedId = e.id;
+  const chordMode = currentActivePatch.unison && currentActivePatch.unison_voices === CHORD;
+  transmitCurrentPatch(`Loaded "${e.name}".` + (chordMode ? " Its unison chord notes can't be sent, so the synth keeps whichever chord it already has." : '') + (toEditor ? '' : ' Switch to the Editor tab to tweak it.'), !!e.perf, clean);
+  if (toEditor) showTab('editor'); else refreshLibMarks();
+}
+
+// --- favourites chips on the main page ---
+function renderFavs() {
+  const box = $('fav-list');
+  box.innerHTML = '';
+  const favs = lib.filter(e => e.fav).sort((a, b) => a.added - b.added);
+  if (!favs.length) { box.innerHTML = '<span class="muted">No favourites yet. Save the current patch, or star one in the Library.</span>'; return; }
+  favs.forEach(f => {
+    const load = el('button', { title: 'Load and send to the synth', onclick: () => loadEntry(f.id) }, f.name);
+    const del = el('button', { class: 'chipx', 'aria-label': 'Remove ' + f.name + ' from favourites', title: 'Remove from favourites (stays in the Library)', onclick: () => toggleFav(f.id) }, '×');
+    box.appendChild(el('span', { class: 'chip' }, load, del));
+  });
+}
+async function toggleFav(id) {
+  const e = lib.find(x => x.id === id);
+  if (!e) return;
+  e.fav = !e.fav; e.updated = Date.now();
+  await libPersist(e);
+  renderFavs(); renderLib();
+  setStatus(e.fav ? `"${e.name}" added to favourites.` : `"${e.name}" removed from favourites (it is still in the Library).`);
+}
+
+// --- library view ---
+function showTab(t) {
+  const isLib = t === 'library';
+  $('dashboard-grid').hidden = isLib;
+  $('library').hidden = !isLib;
+  $('tab-editor').setAttribute('aria-selected', String(!isLib));
+  $('tab-library').setAttribute('aria-selected', String(isLib));
+  if (isLib) renderLib();
+}
+
+
+function libFilter(k, v) { libUI[k] = v; libUI.limit = 150; if (k === 'set') $('lib-group').disabled = v === 'none'; renderLib(); }
+function libClearFilters() {
+  Object.assign(libUI, { q: '', tag: '', set: '', group: '', origin: '', favOnly: false, changedOnly: false, annotated: false, hideCopies: false, limit: 150 });
+  $('lib-q').value = '';
+  ['lib-set', 'lib-group', 'lib-origin'].forEach(id => { $(id).value = ''; });
+  ['lib-favonly', 'lib-changedonly', 'lib-annotated', 'lib-hidecopies'].forEach(id => { $(id).checked = false; });
+  $('lib-group').disabled = false;
+  renderLib();
+}
+const isRenamed = e => !!e.dump && e.name !== patchFromDump(e.dump, 0).name;
+function libVisible() {
+  const q = libUI.q.trim().toLowerCase();
+  const factory = {};                              // factory dumps by position, for spotting user patches that are still copies
+  if (libUI.hideCopies) lib.forEach(e => { if (e.slot && e.slot.set === 'F' && e.dump) factory[`${e.slot.group}:${e.slot.bank}:${e.slot.prog}`] = e.dump; });
+  const r = lib.filter(e => {
+    if (libUI.favOnly && !e.fav) return false;
+    if (libUI.changedOnly && !e.changed) return false;
+    if (libUI.tag && !e.tags.includes(libUI.tag)) return false;
+    if (libUI.set === 'none' ? e.slot : (libUI.set && (!e.slot || e.slot.set !== libUI.set))) return false;
+    if (libUI.group && (!e.slot || String(e.slot.group) !== libUI.group)) return false;
+    if (libUI.origin && e.source !== libUI.origin) return false;
+    if (libUI.annotated && !(isRenamed(e) || e.tags.length || e.notes)) return false;
+    if (libUI.hideCopies && e.slot && e.slot.set === 'U' && e.dump) {
+      const f = factory[`${e.slot.group}:${e.slot.bank}:${e.slot.prog}`];
+      if (f && sameDump(f, e.dump) && !(isRenamed(e) || e.tags.length || e.notes || e.fav)) return false;   // a copy you have starred, renamed, tagged or annotated stays visible
+    }
+    return !q || (e.name + ' ' + e.tags.join(' ') + ' ' + e.notes + ' ' + slotLabel(e.slot)).toLowerCase().includes(q);
+  });
+  const by = {
+    slot: (a, b) => slotOrder(a.slot) - slotOrder(b.slot) || a.name.localeCompare(b.name),
+    name: (a, b) => a.name.localeCompare(b.name),
+    newest: (a, b) => b.added - a.added
+  };
+  return r.sort(by[libUI.sort] || by.slot);
+}
+function refreshTagSelect() {
+  const sel = $('lib-tag'), all = [...new Set(lib.flatMap(e => e.tags))].sort();
+  if (libUI.tag && !all.includes(libUI.tag)) libUI.tag = '';
+  sel.innerHTML = '';
+  sel.append(el('option', { value: '' }, 'All tags'));
+  all.forEach(t => sel.append(el('option', { value: t }, t)));
+  sel.value = libUI.tag;
+}
+function tagChips(e) { return e.tags.map(t => el('span', { class: 'tagc' }, t)); }
+
+function libRow(e) {
+  const nameEl = el('b', {}, e.name);
+  const tagsEl = el('span', { class: 'tagrow' }, tagChips(e));
+  const star = el('button', { class: 'star', 'aria-pressed': String(e.fav), 'aria-label': 'Favourite', title: 'Favourite', onclick: () => toggleFav(e.id) }, '★');
+  const open = libUI.open.has(e.id);
+  const row = el('div', { class: 'lrow', 'data-id': e.id }, star,
+    el('div', { class: 'lname' }, nameEl, e.slot ? el('span', { class: 'lslot' }, slotLabel(e.slot)) : '', el('span', { class: 'lstate' }), e.changed ? el('span', { class: 'chg', title: 'This slot was different the last time it was captured from the synth' }, 'changed') : '', tagsEl),
+    el('button', { class: 'btn sm', onclick: () => loadEntry(e.id, true) }, 'Load'),
+    el('button', { class: 'btn sm', 'aria-expanded': String(open), onclick: ev => {
+      if (libUI.open.has(e.id)) libUI.open.delete(e.id); else libUI.open.add(e.id);
+      renderLib(); } }, open ? 'Close' : 'Details'));
+  const out = [row];
+  if (open) {
+    const nm = el('input', { type: 'text', maxlength: 32, value: e.name, 'aria-label': 'Name' });
+    nm.onchange = async () => { e.name = nm.value.trim() || e.name; nm.value = e.name; nameEl.textContent = e.name; e.updated = Date.now(); await libPersist(e); renderFavs(); };
+    const tg = el('input', { type: 'text', value: e.tags.join(', '), placeholder: 'e.g. pad, bass, lead', 'aria-label': 'Tags' });
+    tg.onchange = async () => { e.tags = parseTags(tg.value); tg.value = e.tags.join(', '); tagsEl.replaceChildren(...tagChips(e)); e.updated = Date.now(); await libPersist(e); refreshTagSelect(); };
+    const nt = el('textarea', { rows: 2, placeholder: 'Notes', 'aria-label': 'Notes' }); nt.value = e.notes;
+    nt.onchange = async () => { e.notes = nt.value; e.updated = Date.now(); await libPersist(e); };
+    const meta = [e.source === 'captured' ? 'Captured from the synth' : e.source === 'imported' ? 'Imported' : 'Saved from the editor', new Date(e.added).toLocaleDateString()];
+    const unitName = e.dump ? patchFromDump(e.dump, 0).name : '';
+    const extra = [];
+    if (unitName && unitName !== e.name) extra.push(el('div', { class: 'lact' }, el('span', { class: 'muted' }, `Name on the synth: ${unitName}`),
+      el('button', { class: 'btn sm', onclick: async () => { e.name = unitName; e.updated = Date.now(); await libPersist(e); renderFavs(); renderLib(); } }, 'Use that name')));
+    if (e.changed) extra.push(el('div', { class: 'lact' }, el('span', { class: 'muted' }, 'This slot was different the last time it was captured.'),
+      el('button', { class: 'btn sm', onclick: async () => { e.changed = false; await libPersist(e); renderLib(); } }, 'Mark as seen')));
+    const dg = el('select', { 'aria-label': 'Group' }), db = el('select', { 'aria-label': 'Bank' }), dp = el('select', { 'aria-label': 'Program' });
+    [[dg, 5], [db, 5], [dp, 8]].forEach(([sel, n]) => { for (let i = 1; i <= n; i++) sel.append(el('option', { value: String(i) }, String(i))); });
+    if (e.slot) { dg.value = String(e.slot.group); db.value = String(e.slot.bank); dp.value = String(e.slot.prog); }      // the same numbers in the user memory
+    const store = el('div', { class: 'lact' }, el('span', { class: 'muted' }, 'Save in user slot'), el('label', { class: 'inl' }, 'Group', dg), el('label', { class: 'inl' }, 'Bank', db), el('label', { class: 'inl' }, 'Program', dp),
+      el('button', { class: 'btn sm', title: 'Copy this patch, with this name, into that user program on the synth, replacing what is there, then read it back to check', onclick: () => storeEntryToSlot(e.id, { set: 'U', group: +dg.value, bank: +db.value, prog: +dp.value }) }, 'Save'));
+    out.push(el('div', { class: 'ldetail' },
+      el('label', {}, 'Name', nm), el('label', {}, 'Tags (comma separated)', tg), el('label', {}, 'Notes', nt), extra, store,
+      el('div', { class: 'lact' },
+        el('button', { class: 'btn sm', onclick: () => loadEntry(e.id, true) }, 'Load and open in editor'),
+        el('button', { class: 'btn sm', title: "Sends this patch, with its name and chord, to the synth's working patch and checks it arrived. It is not saved: use Save in user slot to keep it.", onclick: () => sendEntryWithName(e.id) }, 'Send to synth'),
+        el('button', { class: 'btn sm', onclick: () => libDelete(e.id) }, 'Delete'),
+        el('span', { class: 'muted' }, meta.join(' \u00b7 ')))));
+  }
+  return out;
+}
+async function libDelete(id) {
+  const e = lib.find(x => x.id === id);
+  if (!e || !confirm(`Delete "${e.name}" from the library?`)) return;
+  lib = lib.filter(x => x.id !== id);
+  libUI.open.delete(id);
+  await libDrop(id);
+  renderFavs(); renderLib();
+}
+
+// --- marking what is on the synth and in the editor ---
+let libLoadedId = null;                           // the library patch most recently loaded or sent from here
+function currentSlotKey() {                       // the program the synth last reported or the app last selected, as a library slot key
+  if (progState.pc === null || progState.lsb === null) return null;
+  const bankNo = Math.floor(progState.pc / 8) + 1;
+  if (bankNo > 5) return null;
+  const factory = progState.lsb >= 5;
+  return `${factory ? 'F' : 'U'}:${factory ? progState.lsb - 4 : progState.lsb + 1}:${bankNo}:${(progState.pc % 8) + 1}`;
+}
+function entryDiffers(e) { for (const k in e.patch) if (k in currentActivePatch && currentActivePatch[k] !== e.patch[k]) return true; return false; }
+function refreshLibMarks() {                      // light update of the badges only, so it is cheap enough to run on every knob move
+  const lst = $('library');
+  if (!lst || lst.hidden) return;
+  const cur = capSweep ? null : currentSlotKey();      // no On synth mark while a capture is stepping through programs
+  lst.querySelectorAll('.lrow[data-id]').forEach(row => {
+    const e = lib.find(x => x.id === row.dataset.id), box = row.querySelector('.lstate');
+    if (!e || !box) return;
+    const onSynth = !!cur && slotKey(e.slot) === cur, loaded = libLoadedId === e.id;
+    const edited = (onSynth && progEdited) || (loaded && entryDiffers(e));
+    const sig = [onSynth, loaded && !onSynth, edited].join();
+    row.classList.toggle('now', onSynth || loaded);
+    if (box.dataset.sig === sig) return;
+    box.dataset.sig = sig;
+    box.replaceChildren();
+    if (onSynth) box.append(el('span', { class: 'lmark', title: 'The program the synth last reported, or the last one this app selected' }, 'On synth'));
+    else if (loaded) box.append(el('span', { class: 'lmark alt', title: 'Loaded into the editor and sent to the synth from this library' }, 'Loaded'));
+    if (edited) box.append(el('span', { class: 'ledit', title: 'The sound has been changed since' }, 'edited'));
+  });
+}
+function findCurrent() {                          // clear the filters and bring the marked row into view
+  libClearFilters(); libUI.limit = 1e9; renderLib();
+  const row = document.querySelector('#lib-list .lrow.now');
+  if (row) row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  else setStatus('Nothing in the library matches the program on the synth. Select a program on the synth, or load a patch from the library.');
+}
+
+function renderLib() {
+  $('lib-count').textContent = lib.length ? `(${lib.length})` : '';
+  if ($('library').hidden) return;
+  refreshTagSelect();
+  const rows = libVisible(), box = $('lib-list');
+  box.replaceChildren();
+  if (!lib.length) box.append(el('p', { class: 'muted' }, 'The library is empty. Save the current patch, capture patches from the synth below, or import a library file.'));
+  else if (!rows.length) box.append(el('p', { class: 'muted' }, 'Nothing matches that search.'));
+  const sets = [['F', 'Factory'], ['U', 'User'], [null, 'Saved and imported']];     // factory on the left, user on the right, anything from outside the synth underneath
+  const groups = sets.map(([k, label]) => ({ k, label, all: rows.filter(e => (e.slot ? e.slot.set : null) === k), list: rows.filter(e => (e.slot ? e.slot.set : null) === k).slice(0, libUI.limit) })).filter(g => g.all.length || (!libUI.set && g.k && lib.length && !libUI.q));
+  if (groups.length) {
+    const cols = el('div', { class: 'libcols' + (libUI.set ? ' single' : '') });
+    groups.forEach(g => {
+      const body = el('div', { class: 'libbody' });
+      g.list.forEach(e => libRow(e).forEach(n => body.append(n)));
+      if (!g.all.length) body.append(el('p', { class: 'muted libnone' }, g.k === 'F' ? 'No factory patches yet. Capture them from the synth below.' : 'No user patches yet. Capture them from the synth below.'));
+      cols.append(el('div', { class: 'libcol' + (g.k ? '' : ' libother'), 'data-set': g.k || 'other' }, el('div', { class: 'libhead' }, `${g.label} (${g.all.length})`), body));
+    });
+    box.append(cols);
+  }
+  $('lib-more').hidden = !groups.some(g => g.all.length > libUI.limit);      // the limit applies to each column, so a long Factory list can never push the User patches off the page
+  $('lib-summary').textContent = lib.length ? `${rows.length} of ${lib.length} patches` : '';
+  refreshLibMarks();
+}
+
+// --- export and import ---
+function libExport() {
+  if (!lib.length) return setStatus('The library is empty, so there is nothing to export.');
+  const data = { format: 'rev4-patch-engine-library', version: 1, exported: new Date().toISOString(), patches: lib };
+  const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  const a = el('a', { href: url, download: `rev4-library-${new Date().toISOString().slice(0, 10)}.json` });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  setStatus(`Exported ${lib.length} patches.`);
+}
+function cleanEntry(o, source) {
+  if (!o || typeof o !== 'object') return null;
+  const src = o.patch && typeof o.patch === 'object' ? o.patch : o;      // also accepts a single patch file saved with the Save button
+  const patch = {};
+  let n = 0;
+  for (const k in PARAM_BY_KEY) {
+    const v = parseInt(src[k]);
+    if (src[k] !== undefined && !isNaN(v)) { patch[k] = clamp(v, 0, PARAM_BY_KEY[k].max); n++; }
+  }
+  if (!n) return null;
+  const s = o.slot && typeof o.slot === 'object' ? { set: o.slot.set === 'U' ? 'U' : 'F', group: clamp(+o.slot.group | 0, 1, 99), bank: clamp(+o.slot.bank | 0, 1, 99), prog: clamp(+o.slot.prog | 0, 1, 99) } : null;
+  const now = Date.now();
+  return makeEntry({
+    id: typeof o.id === 'string' && o.id ? o.id.slice(0, 40) : newId(),
+    name: String(o.name || o._name || 'Untitled').slice(0, 32),
+    patch,
+    chord: Array.isArray(o.chord) ? o.chord.map(x => clamp(+x | 0, 0, 127)).slice(0, 10) : [],
+    tags: Array.isArray(o.tags) ? parseTags(o.tags.join(',')) : [],
+    notes: typeof o.notes === 'string' ? o.notes.slice(0, 2000) : '',
+    fav: !!o.fav, changed: !!o.changed, slot: s, perf: !!o.perf,
+    dump: Array.isArray(o.dump) && o.dump.length <= 256 ? o.dump.map(x => clamp(+x | 0, 0, 255)) : null,
+    source: ['captured', 'saved', 'imported'].includes(o.source) ? o.source : source,
+    added: +o.added || now, updated: +o.updated || now
+  });
+}
+function libImport(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    try {
+      const parsed = JSON.parse(ev.target.result);
+      const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed.patches) ? parsed.patches : [parsed];
+      let added = 0, updated = 0, skipped = 0, bad = 0;
+      const touched = [];
+      list.forEach(o => {
+        const e = cleanEntry(o, 'imported');
+        if (!e) { bad++; return; }
+        const same = lib.find(x => x.id === e.id);
+        const twin = !same && lib.find(x => x.name === e.name && JSON.stringify(x.patch) === JSON.stringify(e.patch) && slotKey(x.slot) === slotKey(e.slot));
+        if (same) { if (e.updated > same.updated) { Object.assign(same, e); touched.push(same); updated++; } else skipped++; }
+        else if (twin) skipped++;
+        else { lib.push(e); touched.push(e); added++; }
+      });
+      if (!added && !updated && !skipped) throw new Error('nothing usable');
+      if (touched.length) await libPersist(...touched);
+      renderFavs(); renderLib();
+      setStatus(`Imported: ${added} added, ${updated} updated, ${skipped} already there${bad ? `, ${bad} not recognised` : ''}.`);
+    } catch (err) {
+      alert('Could not read that file as a patch or a library from this app.');
+      console.error(err);
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
+// --- sending a whole patch, name included, to the synth's edit buffer ---
+function packDSI(vals) {                         // inverse of unpackDSI
+  const out = [];
+  for (let i = 0; i < vals.length; i += 7) {
+    const g = vals.slice(i, i + 7);
+    let msb = 0;
+    g.forEach((x, j) => { if (x & 0x80) msb |= 1 << j; });
+    out.push(msb, ...g.map(x => x & 0x7F));
+  }
+  return out;
+}
+function buildDump(patch, name, chord, tpl) {      // start from a real dump so the bytes this app doesn't know about stay as they were
+  const vals = tpl.slice();
+  while (vals.length < 133) vals.push(0);
+  const same = patchFromDump(vals, 0).next;          // a value that already matches the template keeps its exact original byte (the 0-127 to 0-120 conversion is not exactly reversible)
+  NRPN_MAP.forEach(([n, key], i) => {
+    const p = key && PARAM_BY_KEY[key], v = key && patch[key];
+    if (!p || v === undefined || same[key] === v) return;
+    vals[i] = key === 'unison_voices' ? (v === CHORD ? 10 : Math.max(0, v - 1))
+      : (p.max === 120 && !UNSCALED.has(key)) ? Math.round(v * 127 / 120) : v;
+  });
+  if (patch.unison_detune !== undefined) vals[DETUNE_OFFSET] = patch.unison_detune;
+  for (let i = 0; i < 10; i++) vals[55 + i] = i < chord.length ? chord[i] : 0x7F;
+  const pad = vals[84] === 32 ? 32 : 0, text = String(name).slice(0, 20);
+  for (let i = 0; i < 20; i++) { const c = text.charCodeAt(i); vals[65 + i] = i >= text.length ? pad : (c >= 32 && c < 127 ? c : 63); }
+  return vals;
+}
+async function sendWithName(patch, name, chord, tpl, perf, label) {
+  if (!sysexOk) return alert('SysEx permission was not granted. Reload the page and click Allow when Chrome asks.');
+  if (!requirePort() || pendingRead || capturing) return;
+  if (!tpl) return setStatus('Read the patch from the synth once first (or capture some patches), so the parts of a patch this app does not edit can be copied.');
+  const vals = buildDump(patch, name, chord, tpl);
+  capturing = true;                                // keeps the synth's own messages from changing the editor while this runs
+  try {
+    midiOutput.send([0xF0, 0x01, lastDumpId === null ? DUMP_IDS[0] : lastDumpId, 0x03, ...packDSI(vals), 0xF7]);
+    setStatus(`Sent "${label}" to the synth. Checking it arrived...`);
+    await sleep(500);
+    const back = await readEditBuffer();
+    const got = back && sameDump(back.slice(0, 65), vals.slice(0, 65)) && patchFromDump(back, 0).name === String(name).slice(0, 20).trim();
+    if (back) showDumpLog(back);                 // the panel shows what the synth reported back
+    if (got) {
+      lastDump = back.slice(0, 128); lastDumpFull = back; perfKnown = true; markEdited();
+      showStoreBar();
+      setStatus(`The synth now holds "${label}" in its working patch. To keep it, use Save to synth below, or press Record on the synth once and then the program button of the slot you want (pressing Record twice stores nothing).`);
+    } else {
+      transmitCurrentPatch(back ? `The synth did not take the patch dump (it still reports "${patchFromDump(back, 0).name}"), so the controller values were sent instead and the name was not changed.`
+                                : 'No reply when checking the patch dump, so I could not confirm it arrived. The controller values were sent as a fallback.', perf);
+    }
+  } finally { capturing = false; }
+}
+function sendEntryWithName(id) {
+  const e = lib.find(x => x.id === id);
+  if (!e || !requirePort()) return;
+  const tpl = e.dump && e.dump.length >= 133 ? e.dump : (lastDumpFull || (e.dump ? e.dump.concat(new Array(Math.max(0, 133 - e.dump.length)).fill(0)) : null));
+  pushHistory();
+  currentActivePatch = { ...INIT_PATCH, ...e.patch };
+  chordNotes = (e.chord || []).slice();
+  setName(e.name);
+  syncSlidersToUI();
+  libLoadedId = e.id;
+  sendWithName(currentActivePatch, e.name, chordNotes, tpl, !!e.perf, e.name);
+}
+
+// --- capture from the synth ---
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function selectSlot(slot) {                       // Bank Select (MSB 0, LSB = group) then Program Change (bank and program); factory groups are LSB 5 upwards, user groups LSB 0 upwards
+  const ch = midiChannel - 1;
+  const lsb = slot.set === 'F' ? 4 + slot.group : slot.group - 1;
+  const pc = (slot.bank - 1) * 8 + (slot.prog - 1);
+  try {
+    midiOutput.send([0xB0 | ch, 0, 0]);
+    midiOutput.send([0xB0 | ch, 32, lsb]);
+    midiOutput.send([0xC0 | ch, pc]); lastOwnSelect = Date.now(); newProgram = true;
+    Object.assign(progState, { msb: 0, lsb, pc }); progEdited = false; showProgTag();      // the synth may not report a program the app selected, so note it here
+    return true;
+  } catch (e) { setStatus('Send failed: ' + e.message); return false; }
+}
+function captureSlot(slot) {                      // select a program on the synth, then read it; resolves with the unpacked dump or null
+  return new Promise(res => {
+    if (!selectSlot(slot)) return res(null);
+    setTimeout(() => readEditBuffer().then(res), 350);
+  });
+}
+function readEditBuffer() {                        // ask for the edit buffer and resolve with the unpacked dump, or null if it is not answered
+  return new Promise(res => {
+    oddLog.length = 0;
+    const guard = setTimeout(() => { captureCb = null; clearTimeout(pendingRead); pendingRead = null; res(null); }, 3000);
+    captureCb = vals => { clearTimeout(guard); res(vals.length >= NRPN_MAP.length ? vals : null); };
+    pendingRead = setTimeout(() => { pendingRead = null; }, 3000);
+    requestDump(300);
+  });
+}
+const sameDump = (a, b) => { for (let i = 0; i < 85; i++) if (a[i] !== b[i]) return false; return true; };
+function capProgress(text, frac) {
+  $('cap-status').textContent = text;
+  const bar = $('cap-bar');
+  bar.hidden = frac === null;
+  if (frac !== null) bar.value = frac;
+}
+async function startCapture() {
+  if (capturing) return;
+  if (!sysexOk) return alert('SysEx permission was not granted. Reload the page and click Allow when Chrome asks.');
+  if (!requirePort() || pendingRead) return;
+  const set = $('cap-set').value, from = clamp(parseInt($('cap-from').value) || 1, 1, 5), to = clamp(parseInt($('cap-to').value) || from, from, 5);
+  const slots = [];
+  for (let g = from; g <= to; g++) for (let b = 1; b <= 5; b++) for (let p = 1; p <= 8; p++) slots.push({ set, group: g, bank: b, prog: p });
+  const mins = Math.max(1, Math.round(slots.length * 0.7 / 60));
+  if (!confirm(`This steps the synth through ${slots.length} programs (${set === 'F' ? 'factory' : 'user'} group${to > from ? 's ' + from + ' to ' + to : ' ' + from}), about ${mins} minute${mins > 1 ? 's' : ''}. It changes the program on the synth, so any edits on the synth you haven't saved are lost` + ($('cap-restore').checked ? ", although afterwards the synth is put back on " + (progState.pc !== null ? 'the program it is on now (' + progLabel(progState) + (progEdited ? ', as last reported by the synth; if you have saved a patch into a different slot since, select that program on the synth first' : '') + ')' : 'the last program captured, because I don\'t know which program it is on (select a program on the synth first so the app can see it)') + " and the patch currently in the editor is sent back." : ".") + ' Continue?')) return;
+  capturing = true; captureCancel = false; capSweep = true; hideStoreBar();
+  document.body.classList.add('capturing');
+  $('cap-go').hidden = true; $('cap-clear').hidden = true; $('cap-stop').hidden = false;
+  const keep = { patch: { ...currentActivePatch }, chord: chordNotes.slice(), name: patchName }, wasEdited = progEdited;
+  const prog = progState.pc !== null ? { msb: progState.msb, lsb: progState.lsb, pc: progState.pc } : null;      // the program the synth was on, as last reported by the synth
+  const touched = [];
+  let done = 0, failed = 0, streak = 0, added = 0, refreshed = 0, nChanged = 0, abort = '';
+  capProgress('Checking that the synth changes program...', null);      // read the first and last program of the range: they must differ, or the synth is ignoring Program Change
+  const first = await captureSlot(slots[0]);
+  const last = first ? await captureSlot(slots[slots.length - 1]) : null;
+  if (!first || !last) abort = 'Nothing was captured: the synth did not answer the patch request.';
+  else if (slots.length > 1 && JSON.stringify(first.slice(0, 128)) === JSON.stringify(last.slice(0, 128)) &&
+           (set === 'F' || !confirm('The first and last programs in this range read back identical. Either the synth is ignoring Program Change, or both are the same patch (for example Init). Capture anyway?')))
+    abort = 'Nothing was captured: the synth returned the same patch for the first and last program, so it does not seem to be changing program. Check that Program Change receive is on in its Globals, that the MIDI channel matches, and that nothing in the Midihub filters Program Change or Bank Select.';
+  for (const slot of abort ? [] : slots) {
+    if (captureCancel) break;
+    capProgress(`Reading ${slotLabel(slot)} (${done + 1} of ${slots.length})...`, done / slots.length);
+    let vals = await captureSlot(slot);
+    if (!vals && !captureCancel) vals = await captureSlot(slot);          // one retry
+    if (vals) {
+      streak = 0;
+      const parsed = patchFromDump(vals, 0);
+      const fields = { name: parsed.name || 'Untitled ' + slotLabel(slot), patch: parsed.next, chord: parsed.chord, perf: true, slot, dump: vals.slice(0, 256), source: 'captured', updated: Date.now() };
+      const at = lib.find(e => slotKey(e.slot) === slotKey(slot));
+      if (at) {
+        if (at.dump) {
+          if (at.name !== patchFromDump(at.dump, 0).name) fields.name = at.name;          // renamed in the app: keep that name
+          if (!sameDump(at.dump, vals)) { fields.changed = true; nChanged++; }              // the synth's version of this slot is different now
+        }
+        Object.assign(at, fields); touched.push(at); refreshed++;
+      }
+      else { const n = makeEntry(fields); lib.push(n); touched.push(n); added++; }
+    } else if (!captureCancel) {
+      failed++;
+      if (++streak >= 3) { capProgress('Stopped: the synth did not answer three times in a row.', null); break; }
+    }
+    done++;
+    if (touched.length && done % 8 === 0) { await libPersist(...touched.splice(0)); renderLib(); }
+  }
+  if (touched.length) await libPersist(...touched);
+  perfKnown = true;
+  let backOn = '';
+  if ($('cap-restore').checked && midiOutput) {
+    if (prog) {                                    // go back to the program the synth was on before the capture
+      const ch = midiChannel - 1;
+      try {
+        if (prog.msb !== null) midiOutput.send([0xB0 | ch, 0, prog.msb]);
+        if (prog.lsb !== null) midiOutput.send([0xB0 | ch, 32, prog.lsb]);
+        midiOutput.send([0xC0 | ch, prog.pc]); lastOwnSelect = Date.now();
+        backOn = ` The synth is back on ${progLabel(prog)}.`;
+        Object.assign(progState, prog); progEdited = false; showProgTag();
+      } catch (e) {}
+      await sleep(300);
+    }
+    currentActivePatch = keep.patch; chordNotes = keep.chord; setName(keep.name);
+    syncSlidersToUI();
+    transmitCurrentPatch('', true, !!prog && !wasEdited);      // putting the patch back is not an edit, unless it already was one
+  }
+  capturing = false; capSweep = false;
+  document.body.classList.remove('capturing');
+  showProgTag();
+  $('cap-go').hidden = false; $('cap-clear').hidden = false; $('cap-stop').hidden = true;
+  const msg = abort || `${captureCancel ? 'Capture cancelled' : 'Capture finished'}: ${added} added, ${refreshed} refreshed${nChanged ? `, ${nChanged} changed on the synth` : ''}${failed ? `, ${failed} not read` : ''}.${backOn}`;
+  capProgress(msg, null);
+  renderFavs(); renderLib();
+  setStatus(msg);
+}
+async function libClearCaptured() {            // removes patches that were captured from the chosen set (saved, imported and other set's patches stay)
+  const set = $('cap-set').value, from = clamp(parseInt($('cap-from').value) || 1, 1, 5), to = clamp(parseInt($('cap-to').value) || from, from, 5);
+  const name = (set === 'F' ? 'factory' : 'user') + (to > from ? ` group ${from} to ${to}` : ` group ${from}`);
+  const doomed = lib.filter(e => e.source === 'captured' && e.slot && e.slot.set === set && e.slot.group >= from && e.slot.group <= to);
+  if (!doomed.length) return setStatus(`There are no captured ${name} patches to delete.`);
+  const starred = doomed.filter(e => e.fav || e.tags.length || e.notes).length;
+  if (!confirm(`Delete ${doomed.length} captured ${name} patches from the library?` + (starred ? ` ${starred} of them have a star, tags or notes, which will be lost.` : '') + ' The synth is not touched.')) return;
+  const ids = new Set(doomed.map(e => e.id));
+  lib = lib.filter(e => !ids.has(e.id));
+  await libTx(st => ids.forEach(id => st.delete(id)));
+  renderFavs(); renderLib();
+  setStatus(`Deleted ${doomed.length} captured ${name} patches.`);
+  $('cap-status').textContent = '';
+}
+
+function stopCapture() { captureCancel = true; $('cap-status').textContent = 'Stopping...'; }
+
+async function libInit() {
+  const ok = await libOpen();
+  lib = await libReadAll();
+  libWarn(!ok);
+  try {                                            // bring across favourites saved by older versions (the old list is left in place as a backup)
+    if (localStorage.getItem('p5_favs_migrated') !== '1') {
+      const old = JSON.parse(localStorage.getItem('p5_favs') || '[]'), add = [];
+      old.forEach(f => {
+        if (!f || !f.patch || lib.some(e => e.source === 'saved' && e.name === f.name)) return;
+        const n = makeEntry({ name: String(f.name || 'Untitled').slice(0, 32), patch: { ...f.patch }, fav: true });
+        lib.push(n); add.push(n);
+      });
+      if (add.length) await libPersist(...add);
+      localStorage.setItem('p5_favs_migrated', '1');
+    }
+  } catch (e) {}
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+  renderFavs(); renderLib();
+}
+
+function flashChanged(keys) {
+  keys.forEach(k => {
+    const input = $('input-' + k);
+    if (!input) return;
+    const el = input.type === 'checkbox' ? input.nextElementSibling : input.classList.contains('steps') ? input.querySelector('.stepb.on .led') : input;      // the knob, the LED, the chosen step or the dropdown itself
+    if (!el) return;
+    el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+    el.addEventListener('animationend', () => el.classList.remove('flash'), { once: true });
+  });
+}
+
+// ---------- Web MIDI ----------
+if (navigator.requestMIDIAccess) {
+  navigator.requestMIDIAccess({ sysex: true }).then(
+    a => { sysexOk = true; onMIDISuccess(a); },
+    () => navigator.requestMIDIAccess({ sysex: false }).then(a => {
+      sysexOk = false; onMIDISuccess(a);
+      setStatus('MIDI ready, but SysEx permission was refused, so Read from synth is unavailable. Reload and click Allow.');
+    }, onMIDIFailure));
+} else {
+  setStatus('Web MIDI API not supported. Use Chrome or Edge.');
+}
+
+function onMIDISuccess(access) {
+  midiAccess = access;
+  midiAccess.onstatechange = () => { populatePortSelector(); populateInputSelector(); };
+  populatePortSelector();
+  populateInputSelector();
+}
+
+function onMIDIFailure(err) {
+  setStatus('MIDI access was refused or failed: ' + (err && err.message ? err.message : err));
+}
+
+function populatePortSelector() {
+  const sel = $('midi-out-selector');
+  let wanted = sel.value;
+  if (!wanted) { try { wanted = localStorage.getItem('p5_port') || ''; } catch (e) {} }
+
+  sel.innerHTML = '<option value="">-- Select MIDI output port --</option>';
+  let count = 0;
+  midiAccess.outputs.forEach(output => {
+    count++;
+    const o = document.createElement('option');
+    o.value = output.id;
+    o.innerText = output.name;
+    if (output.id === wanted) o.selected = true;
+    sel.appendChild(o);
+  });
+
+  if (midiOutput && !midiAccess.outputs.has(midiOutput.id)) midiOutput = null;
+
+  if (count === 0) {
+    setStatus('No MIDI output ports found. Check the Midihub is connected and not in use by another app.');
+  } else if (sel.value) {
+    selectMidiOutput();
+  } else if (!midiOutput) {
+    setStatus(count + ' MIDI output port(s) found. Select the one your Midihub pipe listens on.');
+  }
+}
+
+let synthModel = 'p5';
+function voiceOptions(v) {
+  return Array.from({ length: STEPS.unison_voices.to }, (_, k) => `<option value="${k + 1}"${k + 1 === v ? ' selected' : ''}>${k + 1} voice${k ? 's' : ''}</option>`).join('') +
+    `<option value="${CHORD}"${v === CHORD ? ' selected' : ''}>${chordLabel()}</option>`;
+}
+
+function stepButtons(key, v) {
+  const S = STEPS[key];
+  return Array.from({ length: S.to - S.from + 1 }, (_, k) => {
+    const i = S.from + k;
+    return `<button type="button" class="stepb${i === v ? ' on' : ''}" data-v="${i}" onclick="updateParam('${key}', ${i})"><i class="led"></i><span>${S.label(i)}</span></button>`;
+  }).join('');
+}
+
+function setModel(m, silent) {
+  synthModel = m === 'p10' ? 'p10' : 'p5';
+  STEPS.unison_voices.to = synthModel === 'p10' ? 10 : 5;
+  if (currentActivePatch.unison_voices !== CHORD && currentActivePatch.unison_voices > STEPS.unison_voices.to) currentActivePatch.unison_voices = STEPS.unison_voices.to;
+  const box = $('input-unison_voices');
+  if (box) box.innerHTML = voiceOptions(currentActivePatch.unison_voices);
+  if ($('synth-model')) $('synth-model').value = synthModel;
+  try { localStorage.setItem('p5_model', synthModel); } catch (e) {}
+}
+
+let inquiredPort = null;
+function selectMidiOutput() {
+  const sel = $('midi-out-selector');
+  if (!sel.value) {
+    midiOutput = null;
+    setStatus('No active port selected.');
+    return;
+  }
+  midiOutput = midiAccess.outputs.get(sel.value) || null;
+  if (midiOutput) {
+    try { localStorage.setItem('p5_port', sel.value); } catch (e) {}
+    setStatus('Active port: ' + midiOutput.name);
+    if (sysexOk && inquiredPort !== midiOutput.id) {          // quietly ask which synth this is
+      inquiredPort = midiOutput.id;
+      try { midiOutput.send([0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7]); } catch (e) {}
+    }
+  }
+}
+
+function requirePort() {
+  if (!midiOutput) { alert('Select a MIDI output port first.'); return false; }
+  return true;
+}
+
+const wireValue = (key, v) => key === 'unison_voices' ? (v === CHORD ? 10 : Math.max(0, v - 1)) : v;   // the synth counts voices from zero, and 10 means chord
+let quiet = false;     // true while applying a change that came from the synth, so it is never sent back
+function sendCC(cc, value) {
+  if (!midiOutput || quiet) return;
+  const status = 0xB0 | (midiChannel - 1);
+  try {
+    midiOutput.send([status, cc & 0x7F, value & 0x7F]);
+    if (cc !== 0 && cc !== 32) markEdited();
+    $('last-sent').innerText = `Sent: ch ${midiChannel}  CC ${cc} = ${value}`;
+  } catch (e) {
+    setStatus('Send failed: ' + e.message);
+  }
+}
+
+function testNote() {
+  if (!requirePort()) return;
+  const on = 0x90 | (midiChannel - 1), off = 0x80 | (midiChannel - 1);
+  midiOutput.send([on, 60, 100]);
+  setTimeout(() => midiOutput.send([off, 60, 0]), 600);
+  $('last-sent').innerText = `Sent: ch ${midiChannel}  note C3/60`;
+}
+
+function transmitCurrentPatch(statusMsg, sendPerf, clean) {
+  let delay = 0;
+  if (clean) holdEdited = true;
+  for (const key in PARAM_BY_KEY) {
+    const p = PARAM_BY_KEY[key];
+    if (PERF_KEYS.has(key) && !perfKnown && !sendPerf) continue;
+    const v = currentActivePatch[key];
+    setTimeout(() => sendCC(p.cc, wireValue(key, v)), delay);
+    delay += 8;
+  }
+  setTimeout(() => { setStatus(statusMsg); if (clean) holdEdited = false; }, delay);
+}
+
+// ---------- Random generation ----------
+const rnd  = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
+const chance = p => Math.random() < p ? 1 : 0;
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+
+function generatePatch() {
+  if (!requirePort()) return;
+  pushHistory(); libLoadedId = null;
+  setStatus('Generating...');
+
+  const oscA_saw = chance(0.6);
+  const oscA_square = (oscA_saw === 0) ? 1 : chance(0.4);
+
+  // Osc B: at least one waveform
+  let bSaw = chance(0.4), bTri = chance(0.3), bSq = chance(0.4);
+  if (!bSaw && !bTri && !bSq) bSq = 1;
+
+  const base = currentActivePatch.oscA_freq;
+  const bFreq = Math.max(0, Math.min(120, base + pick([-24, -12, 0, 0, 7, 12])));
+
+  const lfoWave = pick(['saw', 'tri', 'square']);
+  const keepU = $('keep-unison').checked;
+
+  const prevPatch = { ...currentActivePatch };
+  currentActivePatch = {
+    ...INIT_PATCH,
+    unison: keepU ? currentActivePatch.unison : 0,
+    unison_voices: keepU ? currentActivePatch.unison_voices : 0,
+    unison_detune: keepU ? currentActivePatch.unison_detune : 0,
+    filter_rev: currentActivePatch.filter_rev,
+    vel_filter: currentActivePatch.vel_filter,
+    vel_amp: currentActivePatch.vel_amp,
+    at_filter: currentActivePatch.at_filter,
+    at_lfo: currentActivePatch.at_lfo,
+    oscA_freq: base,
+    oscA_saw: oscA_saw,
+    oscA_square: oscA_square,
+    oscA_pw: rnd(15, 105),
+
+    oscB_freq: bFreq,
+    oscB_fine: rnd(56, 72),
+    oscB_saw: bSaw, oscB_tri: bTri, oscB_square: bSq,
+    oscB_pw: rnd(15, 105),
+    oscB_lowfreq: 0,
+    oscB_keyboard: 1,
+    osc_sync: chance(0.15),
+
+    mix_oscA: rnd(70, 120),
+    mix_oscB: rnd(0, 120),
+    mix_noise: chance(0.25) ? rnd(0, 25) : 0,
+    glide: 0,
+
+    cutoff: rnd(30, 105),
+    resonance: rnd(0, 75),
+    filter_env_amount: rnd(0, 100),
+    filter_kbd: pick([0, 1, 1, 2]),
+    vintage: rnd(0, 127),
+
+    filter_attack: rnd(0, 40),
+    filter_decay: rnd(0, 80),
+    filter_sustain: rnd(0, 120),
+    filter_release: rnd(0, 80),
+
+    amp_attack: rnd(0, 30),
+    amp_decay: rnd(40, 90),
+    amp_sustain: rnd(40, 120),
+    amp_release: rnd(15, 70),
+    release_switch: 1,
+
+    lfo_freq: rnd(0, 80),
+    lfo_amount: rnd(0, 40),
+    lfo_mix: 0,
+    lfo_saw: lfoWave === 'saw' ? 1 : 0,
+    lfo_tri: lfoWave === 'tri' ? 1 : 0,
+    lfo_square: lfoWave === 'square' ? 1 : 0,
+    lfo_to_freqA: chance(0.1),
+    lfo_to_freqB: chance(0.1),
+    lfo_to_pwA: chance(0.3),
+    lfo_to_pwB: chance(0.3),
+    lfo_to_filter: chance(0.3),
+
+    pm_filtenv: rnd(0, 50),
+    pm_oscB: rnd(0, 50),
+    pm_to_freqA: chance(0.25),
+    pm_to_pw: chance(0.25),
+    pm_to_filter: chance(0.4)
+  };
+
+  applyLocks(currentActivePatch, prevPatch);
+  syncSlidersToUI();
+  setName(randomName());
+  transmitCurrentPatch('New patch sent.');
+}
+
+function resetSynth() {
+  if (!requirePort()) return;
+  pushHistory(); libLoadedId = null;
+  currentActivePatch = { ...INIT_PATCH };
+  syncSlidersToUI();
+  setName('Init');
+  transmitCurrentPatch('Reset to init values.', true);
+}
+
+// ---------- Read patch from the synth (SysEx) ----------
+// Order of the program parameters in the edit-buffer dump (same order as the NRPN list).
+const NRPN_MAP = [
+ ['Osc A frequency','oscA_freq'],['Osc B frequency','oscB_freq'],['Osc B fine tune','oscB_fine'],['Osc A saw','oscA_saw'],
+ ['Osc A square','oscA_square'],['Osc B saw','oscB_saw'],['Osc B triangle','oscB_tri'],['Osc B square','oscB_square'],
+ ['Osc A pulse width','oscA_pw'],['Osc B pulse width','oscB_pw'],['Osc sync','osc_sync'],['Osc B low freq','oscB_lowfreq'],
+ ['Osc B keyboard','oscB_keyboard'],['Glide rate','glide'],['Osc A level','mix_oscA'],['Osc B level','mix_oscB'],
+ ['Noise level','mix_noise'],['Cutoff','cutoff'],['Resonance','resonance'],['Filter keyboard track','filter_kbd'],
+ ['Filter rev select','filter_rev'],['LFO frequency','lfo_freq'],['LFO initial amount','lfo_amount'],['LFO saw','lfo_saw'],
+ ['LFO triangle','lfo_tri'],['LFO square','lfo_square'],['LFO source mix','lfo_mix'],['LFO to freq A','lfo_to_freqA'],
+ ['LFO to freq B','lfo_to_freqB'],['LFO to PW A','lfo_to_pwA'],['LFO to PW B','lfo_to_pwB'],['LFO to filter','lfo_to_filter'],
+ ['Poly mod filter env amt','pm_filtenv'],['Poly mod osc B amt','pm_oscB'],['Poly mod to freq A','pm_to_freqA'],
+ ['Poly mod to PW','pm_to_pw'],['Poly mod to filter','pm_to_filter'],['Vintage','vintage'],['Aftertouch to filter','at_filter'],
+ ['Aftertouch to LFO','at_lfo'],['Filter env amount','filter_env_amount'],['Velocity to filter','vel_filter'],['Velocity to amp','vel_amp'],
+ ['Filter attack','filter_attack'],['Amp attack','amp_attack'],['Filter decay','filter_decay'],['Amp decay','amp_decay'],
+ ['Filter sustain','filter_sustain'],['Amp sustain','amp_sustain'],['Filter release','filter_release'],
+ ['Amp release','amp_release'],['Release switch','release_switch'],['Unison','unison'],['Unison voice count','unison_voices']
+];
+
+const seenPorts = new Set();
+let lastRecv = '', flushTimer = null;
+
+const DETUNE_OFFSET = 54;     // Unison Detune sits right after the voice count in the dump (found by comparing reads)
+const UNSCALED = new Set(['oscA_freq', 'oscB_freq']);   // pitch values look like plain 0-120 steps
+
+function populateInputSelector() {        // listen on every input so the right port can't be missed
+  midiAccess.inputs.forEach(inp => { inp.onmidimessage = ev => handleMidiIn(ev, inp); });
+}
+
+const progState = { msb: null, lsb: null, pc: null };
+function progLabel(p) {                           // a program as the synth numbers it, for example 113 or U558
+  const bankNo = Math.floor(p.pc / 8) + 1, prog = (p.pc % 8) + 1;
+  if (p.lsb === null || bankNo > 5) return 'program ' + p.pc;
+  const factory = p.lsb >= 5;
+  return (factory ? 'F' : 'U') + (factory ? p.lsb - 4 : p.lsb + 1) + bankNo + prog;
+}
+let progEdited = false;                          // true once the sound has been changed since the synth last reported its program
+function noteProgramMsg(d) {                 // bank select (CC 0 / 32) and program change sent by the synth
+  const t = d[0] & 0xF0;
+  if (t === 0xB0 && d[1] === 0) progState.msb = d[2];
+  else if (t === 0xB0 && d[1] === 32) progState.lsb = d[2];
+  else if (t === 0xC0) { progState.pc = d[1]; progEdited = false; hideStoreBar(); showProgTag(); scheduleAutoRead(); return; }
+  else return;
+  showProgTag();
+}
+let pendingStore = null;                         // set while the Save to user slot line is open
+(function buildStoreBar() {
+  const fill = (id, n) => { const sel = $(id); for (let i = 1; i <= n; i++) sel.append(el('option', { value: String(i) }, String(i))); };
+  fill('st-group', 5); fill('st-bank', 5); fill('st-prog', 8);
+})();
+function currentDump() {                           // the patch in the editor, with its name and chord, as a full dump (null if no template to start from)
+  const name = ((patchName || '').trim() || 'Untitled').slice(0, 20).trim();
+  const tpl = lastDumpFull || (lib.find(e => e.dump && e.dump.length >= 133) ? lib.find(e => e.dump && e.dump.length >= 133).dump : null);
+  if (!tpl) { setStatus('Read the patch from the synth once first (or capture some patches), so the parts of a patch this app does not edit can be copied.'); return null; }
+  return { vals: buildDump(currentActivePatch, name, chordNotes, tpl), name };
+}
+function openStoreBar() { if ($('store-bar').hidden) showStoreBar(); else hideStoreBar(); }
+function showStoreBar() {
+  pendingStore = true;
+  const [, g, b, p] = (currentSlotKey() || 'U:1:1:1').split(':');      // starts on the numbers of the program the synth was last on (a factory program starts on the same numbers in the user memory)
+  $('st-group').value = g; $('st-bank').value = b; $('st-prog').value = p;
+  $('store-bar').hidden = false;
+}
+function hideStoreBar() { pendingStore = null; $('store-bar').hidden = true; }
+const storeSlot = () => ({ set: 'U', group: +$('st-group').value, bank: +$('st-bank').value, prog: +$('st-prog').value });
+async function putStoredInLibrary(slot, vals, name, fromBar) {      // file the patch that was stored under the slot, and note that the synth is now on it
+  const parsed = patchFromDump(vals, 0);
+  const fields = { name: name || parsed.name || 'Untitled ' + slotLabel(slot), patch: parsed.next, chord: parsed.chord, perf: true, slot, dump: vals.slice(0, 256), source: 'captured', updated: Date.now() };
+  const at = lib.find(e => slotKey(e.slot) === slotKey(slot));
+  let entry, what;
+  if (at) {
+    if (at.dump && !sameDump(at.dump, vals)) fields.changed = true;
+    Object.assign(at, fields); entry = at; what = 'updated in the Library';
+  } else { entry = makeEntry(fields); lib.push(entry); what = 'added to the Library'; }
+  await libPersist(entry);
+  const lsb = slot.set === 'F' ? 4 + slot.group : slot.group - 1;
+  Object.assign(progState, { msb: 0, lsb, pc: (slot.bank - 1) * 8 + (slot.prog - 1) }); progEdited = false;      // storing leaves the synth on that program
+  if (fromBar) hideStoreBar();
+  showProgTag(); renderFavs(); renderLib();
+  return `${slotLabel(slot)} ${what} as "${entry.name}".`;
+}
+async function writeProgram(vals, name, slot) {     // send a Program Data Dump for the slot, select the slot and read it back; resolves with { ok, message }
+  capturing = true;                                // keeps the synth's own messages from changing the editor while this runs
+  try {
+    const group = slot.set === 'F' ? 4 + slot.group : slot.group - 1, prog = (slot.bank - 1) * 8 + (slot.prog - 1);
+    midiOutput.send([0xF0, 0x01, lastDumpId === null ? DUMP_IDS[0] : lastDumpId, 0x02, group, prog, ...packDSI(vals), 0xF7]);
+    setStatus(`Sent the program dump for ${slotLabel(slot)}. Checking...`);
+    await sleep(700);
+    if (!selectSlot(slot)) return { ok: false, message: 'Could not select the slot.' };
+    await sleep(500);
+    const back = await readEditBuffer();
+    if (back && sameDump(back.slice(0, 65), vals.slice(0, 65)) && patchFromDump(back, 0).name === name) return { ok: true };
+    return { ok: false, message: back ? `The synth did not save it: ${slotLabel(slot)} still holds "${patchFromDump(back, 0).name}".` + (slot.set === 'F' ? ' Factory programs are protected.' : '')
+                                      : 'No reply when reading the slot back, so I could not confirm the save. Nothing was added to the Library.' };
+  } finally { capturing = false; }
+}
+function occupantNote(slot) {                     // what the Library believes the slot holds now, so the warning can say what is about to be replaced
+  const at = lib.find(e => slotKey(e.slot) === slotKey(slot));
+  if (!at) return `The Library has nothing for ${slotLabel(slot)}, so I can't tell what it holds now. If you might want it, cancel and capture the user set first.`;
+  return `${slotLabel(slot)} currently holds "${at.name}" in your Library` + (at.changed ? ' (the synth had a different version when it was last captured, so what is there now may be newer)' : '') + '. That program will be replaced for good.';
+}
+async function storeToSlot() {
+  if (!pendingStore || !requirePort() || !sysexOk || capturing || pendingRead) return;
+  const slot = storeSlot(), d = currentDump();
+  if (!d) return;
+  const { vals, name } = d;
+  if (!confirm(`Save "${name}" into ${slotLabel(slot)} on the synth?\n\n${occupantNote(slot)}`)) return;
+  const r = await writeProgram(vals, name, slot);
+  setStatus(r.ok ? 'Saved. ' + await putStoredInLibrary(slot, vals, name, true) : r.message + ' The patch is still in the editor, so you can try again, or save it on the synth with Record.');
+}
+async function storeEntryToSlot(id, slot) {         // copy a Library patch into a user slot on the synth
+  const e = lib.find(x => x.id === id);
+  if (!e || !requirePort() || !sysexOk || capturing || pendingRead) return;
+  if (slot.set === 'F') return setStatus('Factory programs are protected on the synth.');
+  const tpl = e.dump && e.dump.length >= 133 ? e.dump : lastDumpFull;
+  if (!tpl) return setStatus('Read the patch from the synth once first (or capture some patches), so the parts of a patch this app does not edit can be copied.');
+  const name = String(e.name).slice(0, 20).trim(), vals = buildDump(e.patch, name, e.chord || [], tpl);
+  if (!confirm(`Save "${name}" into ${slotLabel(slot)} on the synth?\n\n${occupantNote(slot)}`)) return;
+  const r = await writeProgram(vals, name, slot);
+  setStatus(r.ok ? 'Saved. ' + await putStoredInLibrary(slot, vals, name, false) : r.message);
+}
+let autoReadTimer = null, lastOwnSelect = 0, newProgram = false;      // newProgram: the app chose a program, so the next read starts a fresh Back history
+function scheduleAutoRead(retry) {               // a program was chosen on the synth: wait for the knob to settle, then read it
+  clearTimeout(autoReadTimer);
+  if (!sysexOk || !midiOutput || capSweep) return;
+  if (Date.now() - lastOwnSelect < 2000) return;   // the app chose this program itself and reads it separately
+  autoReadTimer = setTimeout(autoReadProgram, retry ? 700 : 450);
+}
+async function autoReadProgram() {
+  if (capSweep || !midiOutput) return;
+  if (capturing || pendingRead) return scheduleAutoRead(true);
+  const key = currentSlotKey(), wanted = progState.pc;
+  const vals = await readEditBuffer();
+  if (progState.pc !== wanted) return;            // another program was chosen meanwhile; that change reads its own
+  if (!vals) return setStatus('The synth changed program but did not answer the patch request, so the editor and Library were not updated.');
+  const parsed = patchFromDump(vals, currentActivePatch.unison_detune);
+  newProgram = false; clearHistory(); libLoadedId = null;        // a new program starts a new history: Back is for undoing Generate and Mutate, and would otherwise send the previous program's sound to this one
+  currentActivePatch = parsed.next;
+  chordNotes = vals.slice(55, 65).filter(x => x !== 0x7F).sort((a, b) => a - b);
+  if (vals.length >= NRPN_MAP.length) showDumpLog(vals);
+  lastDump = vals.slice(0, 128); lastDumpFull = vals.slice();
+  syncSlidersToUI();
+  perfKnown = true; progEdited = false;
+  setName(parsed.name || randomName());
+  let note = '';
+  if (key) {                                      // keep the Library copy of this slot up to date
+    const [set, group, bank, prog] = key.split(':'), slot = { set, group: +group, bank: +bank, prog: +prog };
+    const fields = { name: parsed.name || 'Untitled ' + slotLabel(slot), patch: parsed.next, chord: parsed.chord, perf: true, slot, dump: vals.slice(0, 256), source: 'captured', updated: Date.now() };
+    const at = lib.find(e => slotKey(e.slot) === key);
+    let touched;
+    if (at) {
+      if (at.dump) {
+        if (at.name !== patchFromDump(at.dump, 0).name) fields.name = at.name;      // renamed in the app: keep that name
+        if (!sameDump(at.dump, vals)) { fields.changed = true; note = ' The Library copy was different, so it is marked changed.'; }
+      }
+      Object.assign(at, fields); touched = at;
+    } else { touched = makeEntry(fields); lib.push(touched); note = ' Added to the Library.'; }
+    await libPersist(touched);
+    renderFavs(); renderLib();
+  }
+  showProgTag();
+  setStatus(`Read ${progLabel(progState)} from the synth.${note}`);
+}
+function showProgTag() {
+  const el = $('prog-info');
+  if (progState.pc === null) return;
+  refreshLibMarks();
+  el.hidden = false;
+  if (capSweep) {                                 // the capture steps through every program: show that instead of flashing each one
+    el.textContent = 'Synth: capturing programs…';
+    el.title = 'The app is stepping the synth through its programs to read them. The program tag returns when it finishes.';
+    return;
+  }
+  const bankNo = Math.floor(progState.pc / 8) + 1, prog = (progState.pc % 8) + 1;
+  if (progState.lsb !== null && bankNo <= 5) {
+    // bank-select LSB 5 = group 1, 6 = group 2, ... (checked against 113, 118, 121 and 211); LSB 0-4 is assumed to be user memory
+    const factory = progState.lsb >= 5, group = factory ? progState.lsb - 4 : progState.lsb + 1;
+    el.textContent = `Synth: ${factory ? 'Factory' : 'User'} ${group}${bankNo}${prog} \u00b7 Group ${group} \u00b7 Bank ${bankNo} \u00b7 Program ${prog}`;
+  } else {
+    const bank = [progState.msb, progState.lsb].some(v => v !== null) ? `Bank ${progState.msb ?? '-'}/${progState.lsb ?? '-'} \u00b7 ` : '';
+    el.textContent = `Synth: ${bank}Program ${progState.pc}`;
+  }
+  if (progEdited) { const w = document.createElement('span'); w.className = 'edited'; w.textContent = 'edited'; el.append(' \u00b7 ', w); }
+  el.title = progEdited
+    ? "The synth last reported this program, and the sound has been changed since. The synth does not tell the app when you save a patch with Record, so if you saved it into a different slot this number is out of date. Select a program on the synth to refresh it."
+    : 'The program the synth last reported or the app last selected.';
+}
+let stepTimer = null;
+function stepProgram(dir) {                       // move to the next or previous program in the current set, wrapping round: 200 programs per set
+  if (!requirePort() || capturing || pendingRead) return;
+  if (progState.pc === null || progState.lsb === null || Math.floor(progState.pc / 8) + 1 > 5) {
+    setStatus('The app does not know which program the synth is on yet. Select a program on the synth (or use Load on a Library entry) first.');
+    return;
+  }
+  const factory = progState.lsb >= 5;
+  const group = factory ? progState.lsb - 4 : progState.lsb + 1;
+  let n = (group - 1) * 40 + progState.pc;        // 0 to 199: group, then bank, then program
+  n = (n + dir + 200) % 200;
+  const slot = { set: factory ? 'F' : 'U', group: Math.floor(n / 40) + 1, bank: Math.floor((n % 40) / 8) + 1, prog: (n % 8) + 1 };
+  if (!selectSlot(slot)) return;
+  clearTimeout(stepTimer);
+  if (sysexOk) {
+    setStatus(`Selected ${slotLabel(slot)}. Reading it into the editor...`);
+    stepTimer = setTimeout(readFromSynth, 400);   // wait until the clicking stops
+  } else setStatus(`Selected ${slotLabel(slot)} on the synth.`);
+}
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey || (e.key !== '[' && e.key !== ']')) return;
+  const t = e.target, tag = t && t.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable) || $('library').hidden === false) return;
+  e.preventDefault(); stepProgram(e.key === ']' ? 1 : -1);
+});
+let holdEdited = false;   // true while a library patch is loaded into its own slot, so the loading is not counted as an edit
+function markEdited() { if (!holdEdited && progState.pc !== null && !progEdited) { progEdited = true; showProgTag(); } }
+
+const PARAM_BY_CC = {};
+for (const k in PARAM_BY_KEY) PARAM_BY_CC[PARAM_BY_KEY[k].cc] = PARAM_BY_KEY[k];
+let unisonRefreshTimer = null, quietManual = false;
+function syncUnison() {                      // read just the unison fields (voices, chord, detune) from the synth
+  if (!sysexOk) return alert('SysEx permission was not granted. Reload the page and click Allow when Chrome asks.');
+  if (!requirePort()) return;
+  if (pendingRead) return;
+  quietManual = true;
+  refreshUnisonFromSynth(true);
+}
+function refreshUnisonFromSynth(now) {          // the synth doesn't send its voice count when Unison is switched on, so ask for the patch and take just the unison fields
+  if (!sysexOk || !midiOutput || pendingRead) return;
+  clearTimeout(unisonRefreshTimer);
+  unisonRefreshTimer = setTimeout(() => {
+    if (pendingRead) return;
+    quietRefresh = true;
+    pendingRead = setTimeout(() => {
+      pendingRead = null; quietRefresh = false;
+      if (quietManual) setStatus('No reply from the Prophet, so the unison settings were not read.');
+      quietManual = false;
+    }, 2500);
+    requestDump(80);
+  }, now ? 0 : 300);
+}
+function followSynthCC(d) {                  // a knob or button moved on the Prophet: show it here without sending it back
+  if (capturing || (d[0] & 0xF0) !== 0xB0) return;
+  const p = PARAM_BY_CC[d[1]], raw = d[2];
+  if (!p) return;
+  const v = p.type === 'switch' ? (raw ? 1 : 0) : p.key === 'unison_voices' ? (raw === 10 ? CHORD : Math.max(1, Math.min(STEPS.unison_voices.to, raw + 1))) : Math.min(p.max, raw);
+  if (currentActivePatch[p.key] === v) { if (p.key === 'unison' && v) refreshUnisonFromSynth(); return; }
+  quiet = true;
+  try {
+    updateParam(p.key, v);
+    markEdited();
+    if (p.key === 'unison' && v && currentActivePatch.unison_voices < 1) currentActivePatch.unison_voices = 1;   // a new unison starts on one voice
+    syncControls();
+  } finally { quiet = false; }
+  if (p.key === 'unison' && v) refreshUnisonFromSynth();
+}
+
+function describeMsg(d) {
+  if ((d[0] & 0xF0) === 0xC0) return `Program change ${d[1]} (ch ${(d[0] & 0x0F) + 1})`;
+  const t = d[0] & 0xF0, ch = (d[0] & 0x0F) + 1;
+  if (d[0] === 0xF0) return `SysEx (${d.length} bytes)`;
+  if (t === 0xB0) return `CC ${d[1]} = ${d[2]} (ch ${ch})`;
+  if (t === 0x90) return `Note on ${d[1]} (ch ${ch})`;
+  if (t === 0x80) return `Note off ${d[1]} (ch ${ch})`;
+  return d.map(x => x.toString(16)).join(' ');
+}
+
+function handleMidiIn(ev, port) {
+  const d = Array.from(ev.data);
+  if (d[0] === 0xF8 || d[0] === 0xFE) return;          // ignore clock / active sensing
+  if (d[0] === 0xF0 && d[1] === 0x00) return;   // other makers' SysEx (e.g. the RME card): ignore
+  noteProgramMsg(d);
+  followSynthCC(d);
+  seenPorts.add(port.name);
+  lastRecv = `${port.name}: ${describeMsg(d)}`;
+  $('last-recv').innerText = 'Received from ' + lastRecv;
+  if (sysexBuf) {                                      // reassemble a SysEx message split across events
+    sysexBuf.push(...d);
+    if (d.includes(0xF7)) { clearTimeout(flushTimer); const b = sysexBuf; sysexBuf = null; finishSysex(b); }
+  } else if (d[0] === 0xF0) {
+    if (d.includes(0xF7)) finishSysex(d);
+    else {
+      sysexBuf = d;
+      clearTimeout(flushTimer);
+      flushTimer = setTimeout(() => { const b = sysexBuf; sysexBuf = null; if (b && pendingRead) reportOdd(b, 'incomplete'); }, 1000);
+    }
+  }
+}
+
+function unpackDSI(data) {              // 8-byte packets: first byte holds the top bits of the next 7
+  const out = [];
+  for (let i = 0; i < data.length; i += 8) {
+    const msb = data[i];
+    for (let j = 0; j < 7 && i + 1 + j < data.length; j++) {
+      out.push((data[i + 1 + j] & 0x7F) | (((msb >> j) & 1) << 7));
+    }
+  }
+  return out;
+}
+
+function patchFromDump(vals, detuneKeep) {          // turn an unpacked edit-buffer dump into an app patch (no side effects)
+  const next = { ...INIT_PATCH, unison_detune: detuneKeep };
+  let oddSwitches = 0;
+  NRPN_MAP.forEach(([name, key], i) => {
+    const raw = vals[i];
+    if (!key) return;
+    const p = PARAM_BY_KEY[key];
+    if (p.type === 'switch' && raw > 1) oddSwitches++;
+    let v = raw;
+    if (p.max === 120 && !UNSCALED.has(key)) v = Math.round(raw * 120 / 127);   // dump 0-127 -> CC 0-120
+    if (key === 'unison_voices') v = raw === 10 ? CHORD : raw + 1;      // the dump counts voices from zero (0 = one voice, 2 = three); 10 = chord mode
+    next[key] = clamp(v, key === 'unison_voices' ? 1 : 0, p.max);
+  });
+  if (DETUNE_OFFSET !== null) next.unison_detune = Math.max(0, Math.min(7, vals[DETUNE_OFFSET]));
+  const chord = vals.slice(55, 65).filter(x => x !== 0x7F).sort((a, b) => a - b);
+  const nb = vals.slice(65, 85);
+  const nameOk = nb.every(x => x === 0 || (x >= 32 && x < 127));
+  const name = nameOk ? String.fromCharCode(...nb.filter(x => x >= 32)).trim() : '';
+  return { next, oddSwitches, chord, name };
+}
+
+let lastRawInfo = { id: 0, packed: 0 };
+function showDumpLog(vals) {                     // the "Last dump received" panel; compares with the previous read, so call it before lastDump is replaced
+  const lines = [`Device ID: 0x${lastRawInfo.id.toString(16)}`, `Packed bytes: ${lastRawInfo.packed}, decoded values: ${vals.length}`];
+  NRPN_MAP.forEach(([name, key], i) => {
+    lines.push(`${String(i).padStart(2)}  ${name}: ${vals[i]}${key ? '' : '  (not used by this app)'}`);
+  });
+  lines.push('', 'Bytes 54-127 (likely: 54 unison detune, 55-64 unison chord notes, 65-84 patch name, rest unknown):');
+  for (let i = 54; i < 128; i += 16) {
+    const row = vals.slice(i, Math.min(i + 16, 128));
+    lines.push(String(i).padStart(3) + '  ' + row.map(x => x.toString(16).padStart(2, '0')).join(' ').padEnd(47) + '  ' +
+      row.map(x => (x >= 32 && x < 127) ? String.fromCharCode(x) : '.').join(''));
+  }
+  if (lastDump) {
+    const diffs = [];
+    for (let i = 0; i < 128; i++) if (vals[i] !== lastDump[i]) diffs.push(`${i}: ${lastDump[i]} -> ${vals[i]}`);
+    lines.push('', 'Changed since the previous read: ' + (diffs.length ? diffs.join(',  ') : 'nothing'));
+  }
+  $('raw-pre').innerText = lines.join('\n');
+  $('raw-log').hidden = false;
+}
+
+function finishSysex(b) {
+  if (b[1] === 0x7E && b[3] === 0x06 && b[4] === 0x02 && b[5] === 0x01) {   // device inquiry reply from a Sequential synth
+    const manual = pendingPing !== null;
+    clearTimeout(pendingPing); pendingPing = null;
+    const fam = b[6].toString(16).padStart(2, '0') + b[7].toString(16).padStart(2, '0'), os = `${b[10]}.${b[11]}.${b[12]}`;
+    if (b[6] === 0x33) {
+      setModel('p5');
+      setStatus(`Prophet-5 detected (OS ${os}).` + (manual ? ' SysEx is getting through both ways.' : ''));
+    } else {
+      setStatus(`A Sequential synth answered (family code ${fam}, OS ${os}). If it is a Prophet-10, choose Prophet-10 in the Synth menu.`);
+    }
+    return;
+  }
+  if (!pendingRead) return;
+  if (b[1] !== 0x01 || (b[2] < 0x30 || b[2] > 0x35) || b[3] !== 0x03) return reportOdd(b, 'unexpected header');   // edit buffer dump only
+  clearTimeout(pendingRead); pendingRead = null;
+  lastDumpId = b[2];
+  try { localStorage.setItem('p5_dumpid', String(b[2])); } catch (e) {}
+
+  const vals = unpackDSI(b.slice(4, b.lastIndexOf(0xF7)));
+  lastRawInfo = { id: b[2], packed: b.length - 5 };
+  if (captureCb) { const cb = captureCb; captureCb = null; cb(vals); return; }   // library capture: hand the dump over without touching the editor
+  if (quietRefresh) {                       // background refresh after Unison was switched on the synth: update only the unison settings
+    quietRefresh = false;
+    if (vals.length > DETUNE_OFFSET) {
+      currentActivePatch.unison = vals[52] ? 1 : 0;
+      currentActivePatch.unison_voices = vals[53] === 10 ? CHORD : Math.max(1, Math.min(STEPS.unison_voices.to, vals[53] + 1));
+      currentActivePatch.unison_detune = Math.max(0, Math.min(7, vals[DETUNE_OFFSET]));
+      chordNotes = vals.slice(55, 65).filter(x => x !== 0x7F).sort((a, b) => a - b);
+      syncControls(); refreshCombos();
+      if (quietManual) setStatus(currentActivePatch.unison_voices === CHORD ? `Unison read from the Prophet: chord (${chordNotes.join(', ')}${describeChord(chordNotes) ? ': ' + describeChord(chordNotes) : ''}), detune ${currentActivePatch.unison_detune + 1}.` : `Unison read from the Prophet: ${currentActivePatch.unison_voices} voice${currentActivePatch.unison_voices > 1 ? 's' : ''}, detune ${currentActivePatch.unison_detune + 1}.`);
+    }
+    quietManual = false;
+    return;
+  }
+  if (vals.length < NRPN_MAP.length) return setStatus(`Reply was too short (${vals.length} values), so I ignored it.`);
+
+  const parsed = patchFromDump(vals, currentActivePatch.unison_detune);
+  const next = parsed.next, oddSwitches = parsed.oddSwitches;
+  showDumpLog(vals);
+  lastDump = vals.slice(0, 128);
+  lastDumpFull = vals.slice();
+  if (DETUNE_OFFSET !== null) next.unison_detune = Math.max(0, Math.min(7, vals[DETUNE_OFFSET]));
+
+  if (newProgram) { clearHistory(); newProgram = false; }      // a read is not an edit to undo: Back only covers Generate and Mutate (a program you have just moved to starts a fresh history)
+  libLoadedId = null;
+  currentActivePatch = next;
+  chordNotes = vals.slice(55, 65).filter(x => x !== 0x7F).sort((a, b) => a - b);
+  syncSlidersToUI();
+  perfKnown = true;
+  setName(parsed.name || randomName());
+  setStatus(oddSwitches > 3
+    ? 'Patch read, but several switches look wrong. Open the dump below and compare it with the panel.'
+    : 'Patch read from the Prophet.' + (next.unison && next.unison_voices === CHORD
+        ? ` Unison is in chord mode (${chordNotes.length} note chord${describeChord(chordNotes) ? ': ' + describeChord(chordNotes) : ''}).` : '') +
+      ' Try Mutate, or Back to return to the previous patch.');
+}
+
+let pendingPing = null;
+function pingSynth() {
+  if (!sysexOk) return alert('SysEx permission was not granted. Reload the page and click Allow when Chrome asks.');
+  if (!midiOutput) return alert('Select a MIDI output port first.');
+  clearTimeout(pendingPing);
+  pendingPing = setTimeout(() => {
+    pendingPing = null;
+    setStatus('No reply to the device inquiry either, so the SysEx is not reaching the Prophet or its reply is not coming back.');
+  }, 3000);
+  midiOutput.send([0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7]);   // universal device inquiry
+  setStatus('Pinging the Prophet...');
+}
+
+function copyDump() {
+  const t = $('raw-pre').innerText;
+  const done = () => setStatus('Dump copied to the clipboard.');
+  const fallback = () => {
+    const a = document.createElement('textarea');
+    a.value = t; document.body.appendChild(a); a.select();
+    try { document.execCommand('copy'); done(); } catch (e) { setStatus('Could not copy automatically.'); }
+    document.body.removeChild(a);
+  };
+  if (navigator.clipboard) navigator.clipboard.writeText(t).then(done, fallback); else fallback();
+}
+
+const oddLog = [];
+function reportOdd(b, why) {
+  const hex = b.slice(0, 32).map(x => x.toString(16).padStart(2, '0')).join(' ');
+  oddLog.push(`SysEx (${why}): ${b.length} bytes\n${hex}${b.length > 32 ? ' ...' : ''}`);
+  $('raw-pre').innerText = oddLog.join('\n\n');
+  $('raw-log').hidden = false; $('raw-log').open = true;
+  clearTimeout(pendingRead);   // keep this message on screen instead of the timeout text
+  setStatus(`The Prophet sent a SysEx message I couldn't use (${why}, ${b.length} bytes). Details are in the dump below.`);
+}
+
+function readFromSynth() {
+  if (!sysexOk) return alert('SysEx permission was not granted. Reload the page and click Allow when Chrome asks.');
+  if (!midiOutput) return alert('Select a MIDI output port first.');
+  seenPorts.clear(); lastRecv = '';
+  clearTimeout(pendingRead);
+  pendingRead = setTimeout(() => {
+    pendingRead = null;
+    const heard = seenPorts.size ? 'The app did hear from: ' + [...seenPorts].join(', ') + '.' : 'The app heard nothing on any MIDI input.';
+    setStatus('No reply from the Prophet. ' + heard + (lastRecv ? ' Last message: ' + lastRecv + '.' : '') + ' Check that the request can reach the Prophet (no SysEx filter on the pipe from USB A to its MIDI IN).');
+  }, 3000);
+  // Sequential's document says 0x31 for dumps but the unit answered to 0x32, so the first read tries every ID; after that only the known one.
+  oddLog.length = 0;
+  requestDump(300);
+  setStatus('Waiting for the Prophet...');
+}
+
+// ---------- Mutate / history ----------
+const HISTORY = [];
+const FORWARD = [];                                // steps that Back has undone, for the Forward button
+const syncBack = () => { const b = $('back-btn'), f = $('fwd-btn'); if (b) b.disabled = !HISTORY.length; if (f) f.disabled = !FORWARD.length; };      // each is greyed out when there is nothing to go to
+const clearHistory = () => { HISTORY.length = 0; FORWARD.length = 0; syncBack(); };
+syncBack();
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const FROZEN = ['oscA_freq', 'oscB_keyboard', 'oscB_lowfreq', 'release_switch', 'glide', 'unison', 'unison_voices', 'unison_detune', 'filter_rev', 'vel_filter', 'vel_amp', 'at_filter', 'at_lfo'];
+
+function pushHistory() {
+  HISTORY.push({ ...currentActivePatch, _name: patchName });
+  if (HISTORY.length > 20) HISTORY.shift();
+  FORWARD.length = 0;                             // a new edit ends the Forward trail
+  syncBack();
+}
+
+function undoPatch() {
+  if (!HISTORY.length) return setStatus('Nothing to go back to.');
+  if (!requirePort()) return;
+  FORWARD.push({ ...currentActivePatch, _name: patchName });
+  const prev = HISTORY.pop();
+  syncBack();
+  setName(prev._name || patchName);
+  delete prev._name;
+  currentActivePatch = prev;
+  syncSlidersToUI();
+  transmitCurrentPatch('Went back one step (' + HISTORY.length + ' more available).');
+}
+function redoPatch() {
+  if (!FORWARD.length) return setStatus('Nothing to go forward to.');
+  if (!requirePort()) return;
+  HISTORY.push({ ...currentActivePatch, _name: patchName });
+  const next = FORWARD.pop();
+  syncBack();
+  setName(next._name || patchName);
+  delete next._name;
+  currentActivePatch = next;
+  syncSlidersToUI();
+  transmitCurrentPatch('Went forward one step (' + FORWARD.length + ' more available).');
+}
+
+
+const SEC_AMT = {};                               // section name -> its own mutate amount; absent means follow the main slider
+function secAmount(g) { return g in SEC_AMT ? SEC_AMT[g] : parseInt($('mutate-amount').value); }
+function buildMutAdv() {
+  const box = $('mutadv-rows');
+  box.innerHTML = '';
+  [...new Set(PARAMS.map(p => p[0]))].forEach(g => {
+    const name = el('button', { type: 'button', class: 'mname', title: 'Click to follow the main Mutate amount' }, g);
+    const slider = el('input', { type: 'range', min: '0', max: '60', 'aria-label': 'Mutate amount for ' + g });
+    const val = el('b', {});
+    const lockBtn = el('button', { type: 'button', class: 'lockicon mpad', 'data-lock': g, 'aria-pressed': 'false' });
+    lockBtn.innerHTML = LOCK_SVG; lockBtn.onclick = () => toggleLock(g);
+    const row = el('div', { class: 'mrow' }, name, slider, val, lockBtn);
+    row._sync = () => {
+      const own = g in SEC_AMT, v = secAmount(g);
+      slider.value = v; val.textContent = v + '%'; row.classList.toggle('follow', !own);
+      syncLockButtons(); paint(slider);
+    };
+    slider.oninput = () => { SEC_AMT[g] = parseInt(slider.value); row._sync(); };
+    name.onclick = () => { delete SEC_AMT[g]; row._sync(); };
+    row.dataset.group = g;
+    box.append(row); row._sync();
+  });
+}
+function syncMutAdv() { document.querySelectorAll('#mutadv-rows .mrow').forEach(r => r._sync()); }
+
+function mutatePatch() {
+  if (!requirePort()) return;
+  pushHistory();
+  const amt = parseInt($('mutate-amount').value);
+  const custom = Object.keys(SEC_AMT).length > 0;
+  const next = { ...currentActivePatch };
+
+  for (const key in PARAM_BY_KEY) {
+    if (FROZEN.includes(key)) continue;
+    const p = PARAM_BY_KEY[key];
+    const s = secAmount(p.group) / 100;
+    if (!s) continue;
+    if (key === 'oscB_freq') {
+      if (Math.random() < s * 0.3) next[key] = clamp(next[key] + pick([-12, 12]), 0, 120);
+    } else if (p.type === 'range') {
+      if (Math.random() < 0.6) next[key] = clamp(Math.round(next[key] + (Math.random() * 2 - 1) * s * p.max), 0, p.max);
+    } else if (p.type === 'switch') {
+      if (Math.random() < s * 0.15) next[key] = 1 - next[key];
+    } else if (Math.random() < s * 0.3) {
+      next[key] = clamp(next[key] + pick([-1, 1]), 0, 2);
+    }
+  }
+
+  applyLocks(next, currentActivePatch);
+
+  // keep the patch audible
+  if (!next.oscA_saw && !next.oscA_square) next.oscA_saw = 1;
+  if (!next.oscB_saw && !next.oscB_tri && !next.oscB_square) next.oscB_square = 1;
+  next.cutoff = Math.max(next.cutoff, 25);
+  next.mix_oscA = Math.max(next.mix_oscA, 40);
+
+  const changed = Object.keys(next).filter(k => next[k] !== currentActivePatch[k]);
+  currentActivePatch = next;
+  syncSlidersToUI();
+  flashChanged(changed);
+  transmitCurrentPatch(custom ? 'Mutated, with your per-section amounts.' : 'Mutated by ' + amt + '%.');
+}
+
+// ---------- Files ----------
+function downloadPresetFile() {
+  const name = prompt('Name your patch file:', patchName.replace(/\s+/g, '_') || 'prophet_preset');
+  if (name === null) return;
+  const clean = name.trim().replace(/[^a-z0-9_-]/gi, '_') || 'preset';
+  const blob = new Blob([JSON.stringify({ _name: patchName, ...currentActivePatch }, null, 4)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = clean + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  setStatus('Exported: ' + clean + '.json');
+}
+
+function loadPresetFile(input) {
+  if (!requirePort()) { input.value = ''; return; }
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const parsed = JSON.parse(e.target.result);
+      let matched = 0;
+      const next = { ...INIT_PATCH };
+      for (const key in PARAM_BY_KEY) {
+        if (parsed[key] !== undefined) {
+          next[key] = Math.max(0, Math.min(PARAM_BY_KEY[key].max, parseInt(parsed[key])));
+          matched++;
+        }
+      }
+      if (matched === 0) throw new Error('No recognised parameters in file');
+      pushHistory();
+      currentActivePatch = next;
+      syncSlidersToUI();
+      if (typeof parsed._name === 'string') setName(parsed._name.slice(0, 32));
+      transmitCurrentPatch(`Loaded "${file.name}" (${matched} of ${PARAMS.length} parameters found).`);
+    } catch (err) {
+      alert('Could not read that file as a patch from this app.');
+      console.error(err);
+    }
+    input.value = '';
+  };
+  reader.readAsText(file);
+}
+
+buildChannelSelector();
+buildDashboard();
+initKnobs();
+try { setModel(localStorage.getItem('p5_model') || 'p5'); } catch (e) { setModel('p5'); }
+setName(randomName());
+libInit();
+</script>
+</body>
+</html>
