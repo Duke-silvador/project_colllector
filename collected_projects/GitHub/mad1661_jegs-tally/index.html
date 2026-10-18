@@ -1,0 +1,46 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Texas JEGS Event · Unofficial</title>
+<style>
+body{margin:0;background:radial-gradient(#0d1b2e,#05080f);color:#e8eef7;font-family:ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;min-height:100vh}
+.w{max-width:660px;margin:0 auto;padding:12px}
+header{text-align:right;background:#08101c;padding:10px 14px;border-bottom:3px solid #2f7de1}
+h1{color:#f5b301;font-size:clamp(14px,4vw,18px);letter-spacing:.15em;margin:0 0 4px}
+.sub{color:#6f9bc8;font-size:12px;text-transform:uppercase;margin:2px 0}
+#rb{background:#2f7de1;color:#fff;border:0;border-radius:4px;padding:6px 12px;font:inherit;font-size:13px;font-weight:700;letter-spacing:.08em;cursor:pointer;margin-top:6px}#rb:disabled{opacity:.6}
+.stale{display:none;background:#e0283a;color:#fff;padding:1px 6px;border-radius:3px;font-weight:700;margin-left:6px}
+section{background:#08101c;border:1px solid #1c2a40;margin-top:14px;padding:8px 14px}
+section.d{border-top:3px solid #2f7de1}section.r{border-top:3px solid #e0283a}
+h2{font-size:clamp(14px,4.2vw,18px);letter-spacing:.25em;margin:4px 0 6px}
+table{width:100%;border-collapse:collapse}th{color:#6f9bc8;font-size:12px;text-align:left;font-weight:600}
+td{padding:1px 0}.n{text-align:right}.rk{width:2em;color:#bcc8d8}.tm{font-size:clamp(18px,5.5vw,24px);font-weight:700;text-transform:uppercase}
+.pts{font-size:clamp(26px,8vw,36px);font-weight:800;text-align:right;padding-right:10px}.sm{color:#5f7590;width:2.6em;text-align:right}
+tr.lead .tm,tr.lead .pts{color:#3ff07a}
+footer{color:#6f9bc8;font-size:12px;text-align:center;margin:14px 0}
+</style></head><body><div class="w">
+<header><h1>TEXAS JEGS EVENT · UNOFFICIAL</h1><div class="sub">Last pair: <span id="lp"></span></div>
+<div class="sub"><span id="up">Loading…</span><span class="stale" id="st">STALE</span></div><button id="rb" onclick="refreshNow()">REFRESH POINTS</button></header>
+<section class="d"><h2>DIVISION TEAMS · SPORTSMAN</h2><table><thead><tr><th>RK</th><th>TEAM</th><th class="n">PTS</th><th class="n">DRV</th><th class="n">BLK</th></tr></thead><tbody id="dv"></tbody></table></section>
+<section class="r"><h2>REGIONAL TEAMS · ALCOHOL</h2><table><thead><tr><th>RK</th><th>TEAM</th><th class="n">PTS</th><th class="n">DRV</th><th class="n">BLK</th></tr></thead><tbody id="rg"></tbody></table></section>
+<footer>100 pts per round win · blockers not in team totals · unofficial</footer></div>
+<script>
+let upd=null;
+function g(o,...k){for(const x of k)if(o[x]!=null)return o[x];return ''}
+function fill(id,rows){const tb=document.getElementById(id);rows=rows||[];
+ while(tb.rows.length>rows.length)tb.deleteRow(-1);
+ while(tb.rows.length<rows.length){const r=tb.insertRow();['rk','tm','pts','sm','sm'].forEach(c=>{r.insertCell().className=c})}
+ const top=Math.max(...rows.map(r=>+g(r,'pts','points')||0));
+ rows.forEach((d,i)=>{const r=tb.rows[i],v=[g(d,'rk','rank'),g(d,'team','name'),g(d,'pts','points'),g(d,'drv','drivers'),g(d,'blk','blockers')];
+  v.forEach((x,j)=>{if(r.cells[j].textContent!==String(x))r.cells[j].textContent=x});
+  r.classList.toggle('lead',+v[2]===top&&top>0)})}
+function tick(){if(!upd)return;const t=new Date(upd);if(isNaN(t))return;
+ document.getElementById('up').textContent='Updated '+t.toLocaleTimeString('en-US',{timeZone:'America/Chicago',hour:'numeric',minute:'2-digit',hour12:true}).replace(/ [AP]M/,'')+' CT';
+ document.getElementById('st').style.display=(Date.now()-t>300000)?'inline':'none'}
+async function load(src){try{const d=await (await fetch(src||('totals.json?t='+Date.now()),{cache:'no-store',headers:src?{Accept:'application/vnd.github.raw'}:{}})).json();
+ const ep=d.updated_epoch?(d.updated_epoch<1e12?d.updated_epoch*1000:d.updated_epoch):0;if(ep&&typeof upd==='number'&&ep<upd)return;
+ let lp=g(d,'last_pair','lastPair');if(lp&&typeof lp==='object')lp=[lp.time_ct?lp.time_ct+' CT':'',[lp.class,lp.round].filter(Boolean).join(' ')+':',Array.isArray(lp.names)?lp.names.join(' vs '):(lp.names||'')].join(' ').trim();document.getElementById('lp').textContent=lp;upd=d.updated_epoch?(d.updated_epoch<1e12?d.updated_epoch*1000:d.updated_epoch):g(d,'updated_ct','updated','updated_at');
+ fill('dv',g(d,'divisions','division'));fill('rg',g(d,'regions','regional'));tick()}catch(e){}}
+async function refreshNow(){const b=document.getElementById('rb');b.disabled=true;b.textContent='REFRESHING…';const before=upd;
+ await load('https://api.github.com/repos/mad1661/jegs-tally/contents/totals.json?ref=main&t='+Date.now());if(upd===before)await load();
+ b.textContent='REFRESH POINTS';b.disabled=false}
+load();load('https://api.github.com/repos/mad1661/jegs-tally/contents/totals.json?ref=main&t='+Date.now());setInterval(()=>load(),20000);setInterval(()=>{if(!document.hidden)load('https://api.github.com/repos/mad1661/jegs-tally/contents/totals.json?ref=main&t='+Date.now())},90000);setInterval(tick,15000);
+</script></body></html>
