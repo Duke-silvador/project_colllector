@@ -1,0 +1,1338 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IA che impara da sola v03.3</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--tx:#1d2330;--mut:#6b7385;--ok:#1f9d55;--ko:#d64545;--ac:#2f5fd0;--bd:#dde1e8}
+  *{box-sizing:border-box}
+  body{margin:0 auto;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--tx);padding:10px;max-width:920px}
+  h1{font-size:19px;margin:4px 0 2px}
+  .sub{color:var(--mut);font-size:13px;margin-bottom:8px}
+  .stat{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+  .stat div{font-size:12px;color:var(--mut)} .stat b{display:block;font-size:18px;color:var(--tx)}
+  canvas{width:100%;height:60px;border:1px solid var(--bd);border-radius:8px;background:#fafbfd;margin-bottom:8px}
+  #chat{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:10px;height:50vh;min-height:260px;overflow-y:auto}
+  .m{max-width:88%;padding:8px 12px;border-radius:12px;margin:6px 0;line-height:1.4;font-size:15px;white-space:pre-wrap;word-wrap:break-word}
+  .u{background:var(--ac);color:#fff;margin-left:auto;border-bottom-right-radius:3px}
+  .b{background:#eef0f5;border-bottom-left-radius:3px}
+  .m small{display:block;color:var(--mut);font-size:12px;margin-top:4px}
+  .m a{color:var(--ac)}
+  .m button{margin:8px 6px 0 0}
+  button{background:var(--ac);color:#fff;border:0;border-radius:8px;padding:8px 13px;font-size:14px;cursor:pointer}
+  button.ok{background:var(--ok)} button.ko{background:var(--ko)} button.sec{background:#e8ebf2;color:var(--tx)}
+  button.run{background:var(--ok)} button.stop{background:var(--ko)}
+  .row{display:flex;gap:6px;margin-top:8px}
+  .row input{flex:1;padding:11px;border:1px solid var(--bd);border-radius:8px;font-size:16px}
+  .tools{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px}
+  #status{font-size:12px;color:var(--mut);margin-top:8px;line-height:1.5}
+  #study{font-size:12px;color:var(--ac);margin-top:4px;min-height:16px}
+  #panel{display:none;margin-top:10px;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;font-size:14px}
+  #panel h3{font-size:14px;margin:10px 0 6px}
+  details.card{border:1px solid var(--bd);border-radius:8px;margin:6px 0;background:#fafbfd}
+  details.card summary{padding:8px 10px;cursor:pointer;font-weight:600;list-style-position:inside}
+  details.card .body{padding:0 10px 10px}
+  .badge{display:inline-block;font-size:11px;padding:1px 6px;border-radius:9px;margin-right:4px;font-weight:600;white-space:nowrap}
+  .b-tuo{background:#e3ecff;color:#2f5fd0} .b-confermata{background:#dff3e7;color:#17784a} .b-autorevole{background:#eef0f5;color:#4a5263}
+  .b-fonte{background:#fff3d6;color:#8a6100} .b-contrastante{background:#fde3e3;color:#a32d2d}
+  .warn{background:#fff3d6;border:1px solid #f0d48a;border-radius:8px;padding:8px 10px;font-size:13px;margin-top:8px}
+  .it{padding:5px 0;border-bottom:1px dashed var(--bd);display:flex;gap:8px;align-items:flex-start}
+  .it span.t{flex:1;word-wrap:break-word;min-width:0} .mut{color:var(--mut);font-size:12px}
+  .it button{padding:2px 8px;background:#e8ebf2;color:var(--ko)}
+</style>
+</head>
+<body>
+<h1>IA che impara da sola <span style="font-size:13px;font-weight:400;color:var(--mut)">v03.3</span></h1>
+<div class="sub">Scrivi in italiano. Studia su Wikipedia e sul web, confronta le fonti, scarta ciò che non trova conferma e raccoglie quello che impara in schede per argomento, aggiornate a ogni studio, domanda e correzione.</div>
+
+<div class="stat">
+  <div>Valutate<b id="sTot">0</b></div>
+  <div>Giuste<b id="sOk">0</b></div>
+  <div>Ultime 20<b id="sRec">–</b></div>
+  <div>Fatti insegnati<b id="sFacts">0</b></div>
+  <div>Schede<b id="sCards">0</b></div>
+  <div>Pagine lette<b id="sNotes">0</b></div>
+  <div>Parole di calcolo<b id="sWords">0</b></div>
+</div>
+<canvas id="chart" width="900" height="60"></canvas>
+
+<div id="chat"></div>
+<div class="row">
+  <input id="inp" placeholder="Domanda, calcolo, oppure argomento da studiare…" onkeydown="if(event.key==='Enter')send()">
+  <button onclick="send()">Invia</button>
+</div>
+<div class="tools">
+  <button id="studyBtn" class="run" onclick="toggleStudy()">▶ Studia da sola</button>
+  <button id="semBtn" class="sec" onclick="toggleSem()">🧠 Comprensione avanzata: spenta</button>
+  <button class="sec" onclick="togglePanel()">📇 Schede e memoria</button>
+  <button class="sec" onclick="exportBackup()">⬇ Backup ora</button>
+  <button class="sec" onclick="testNet()">🔌 Prova internet</button>
+  <button class="sec" onclick="document.getElementById('file').click()">⬆ Carica backup</button>
+  <button class="sec" onclick="resetAll()">Cancella memoria</button>
+  <input type="file" id="file" accept=".json,application/json" multiple style="display:none" onchange="importBackup(this)">
+</div>
+<div id="study"></div>
+<div id="status"></div>
+<div id="warn"></div>
+<div id="panel"></div>
+
+<script>
+const LS='ia_lingua_v2';
+const OPN=['somma','sottrazione','moltiplicazione','divisione','massimo','minimo','resto','potenza'];
+const OPF={
+  somma:(a,b)=>a+b, sottrazione:(a,b)=>a-b, moltiplicazione:(a,b)=>a*b,
+  divisione:(a,b)=>b===0?NaN:a/b, massimo:(a,b)=>Math.max(a,b), minimo:(a,b)=>Math.min(a,b),
+  resto:(a,b)=>b===0?NaN:a%b, potenza:(a,b)=>Math.pow(a,b)
+};
+const SEED={
+  somma:['più','piu','+','somma','sommato','aggiungi','aggiungere','sommare','aggiungo','compro','comprato','trovo','ricevo','vinco','guadagno','arrivano','in tutto','totale'],
+  sottrazione:['meno','-','sottrai','sottratto','differenza','togli','tolgo','perdo','mangio','regalo','spendo','vendo','restano','rimangono','rimane','resta','consumo'],
+  moltiplicazione:['x','*','×','volte','moltiplicato','moltiplica','moltiplicato per','moltiplica per','prodotto'],
+  divisione:['diviso','diviso per','dividi','dividi per','dividere per','/',':','÷','quoziente']
+};
+const strip=s=>s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const close=(x,y)=>Math.abs(x-y)<0.005;
+const fmt=x=>Number.isFinite(x)?String(Math.round(x*100)/100).replace('.',','):'indefinito';
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+/* ---------- numeri in lettere 0-999 ---------- */
+const NUMW={};
+(function(){
+  const U=['zero','uno','due','tre','quattro','cinque','sei','sette','otto','nove','dieci','undici','dodici','tredici','quattordici','quindici','sedici','diciassette','diciotto','diciannove'];
+  const T=['','','venti','trenta','quaranta','cinquanta','sessanta','settanta','ottanta','novanta'];
+  const w=[];U.forEach((u,i)=>w[i]=u);
+  for(let t=2;t<10;t++){w[t*10]=T[t];for(let u=1;u<10;u++){let b=T[t];if(u===1||u===8)b=b.slice(0,-1);w[t*10+u]=b+U[u];}}
+  for(let n=0;n<100;n++)NUMW[w[n]]=n;
+  for(let h=1;h<10;h++){
+    const hw=(h===1?'':U[h])+'cento';
+    for(let r=0;r<100;r++){const tail=r===0?'':w[r];let hh=hw;if(tail&&tail[0]==='o')hh=hw.slice(0,-1);NUMW[hh+tail]=h*100+r;}
+  }
+  NUMW['mille']=1000;
+})();
+function toNum(w){
+  if(/^\d+(\.\d+)?$/.test(w))return parseFloat(w);
+  const k=strip(w);return Object.prototype.hasOwnProperty.call(NUMW,k)?NUMW[k]:null;
+}
+
+/* ---------- memoria ---------- */
+function uniform(){const o={};OPN.forEach(k=>o[k]=1);normW(o);return o;}
+function normW(w){const s=OPN.reduce((a,k)=>a+w[k],0);OPN.forEach(k=>w[k]=w[k]/s*OPN.length);}
+function seedCW(cw){
+  Object.keys(SEED).forEach(op=>SEED[op].forEach(p=>{
+    if(cw[p])return;
+    const w={};OPN.forEach(k=>w[k]=0.5);w[op]=6;normW(w);cw[p]=w;
+  }));
+  if(!cw['per']){const w={};OPN.forEach(k=>w[k]=0.5);w.moltiplicazione=3;normW(w);cw['per']=w;}
+}
+function freshState(){const cw={};seedCW(cw);return {v:2,qa:[],cw:cw,n:{},hist:[],notes:[],unanswered:[],study:[],studied:[],discarded:[],cards:[],changes:0,backupAt:0,savedAt:0,semantic:false,host:''};}
+function migrate(o){
+  o=o||freshState();
+  o.qa=o.qa||[];o.cw=o.cw||{};o.n=o.n||{};o.hist=o.hist||[];o.notes=o.notes||[];
+  o.unanswered=o.unanswered||[];o.study=o.study||[];o.changes=o.changes||0;o.backupAt=o.backupAt||0;o.savedAt=o.savedAt||0;o.semantic=!!o.semantic;
+  o.studied=o.studied||[];o.discarded=o.discarded||[];o.cards=o.cards||[];o.cards.forEach(c=>{c.qs=c.qs||[];c.sents=c.sents||[];c.k=c.k||cardKey(c.title||'');});
+  seedCW(o.cw);return o;
+}
+function mergeInto(A,B){
+  B=migrate(B);
+  const key=it=>(it.tk||[]).join(' ');
+  const idx={};A.qa.forEach((it,i)=>idx[key(it)]=i);
+  B.qa.forEach(it=>{
+    const k=key(it);
+    if(!(k in idx)){A.qa.push(it);idx[k]=A.qa.length-1;}
+    else{const cur=A.qa[idx[k]];if((it.ok+it.ko)>(cur.ok+cur.ko))A.qa[idx[k]]=it;}
+  });
+  Object.keys(B.cw).forEach(p=>{
+    if(!A.cw[p]){A.cw[p]=B.cw[p];A.n[p]=B.n[p]||0;}
+    else if((B.n[p]||0)>(A.n[p]||0)){A.cw[p]=B.cw[p];A.n[p]=B.n[p];}
+  });
+  const nk=n=>n.url||n.title;
+  const titles={};A.notes.forEach(n=>titles[nk(n)]=1);
+  B.notes.forEach(n=>{if(!titles[nk(n)]){A.notes.push(n);titles[nk(n)]=1;}});
+  B.studied.forEach(x=>{if(A.studied.indexOf(x)<0)A.studied.push(x);});
+  const dk={};A.discarded.forEach(x=>dk[x.t]=1);
+  B.discarded.forEach(x=>{if(!dk[x.t]){A.discarded.push(x);dk[x.t]=1;}});
+  if(A.discarded.length>300)A.discarded=A.discarded.slice(-300);
+  B.cards.forEach(bc=>{
+    const ac=A.cards.find(x=>x.id===bc.id)||A.cards.find(x=>strip(x.title)===strip(bc.title));
+    if(!ac){A.cards.push(bc);return;}
+    bc.sents.forEach(s=>{const ex=ac.sents.find(x=>x.t===s.t);if(!ex)ac.sents.push(s);else{ex.ok=Math.max(ex.ok,s.ok);ex.ko=Math.max(ex.ko,s.ko);(s.u||[]).forEach(u=>{if((ex.u=ex.u||[]).indexOf(u)<0)ex.u.push(u);});}});
+    bc.qs.forEach(q=>{if(ac.qs.indexOf(q)<0)ac.qs.push(q);});
+    ac.upd=Math.max(ac.upd||0,bc.upd||0);ac.n=Math.max(ac.n||0,bc.n||0);cardTidy(ac);
+  });
+  if(B.hist.length>A.hist.length)A.hist=B.hist;
+  B.unanswered.forEach(q=>{if(A.unanswered.indexOf(q)<0)A.unanswered.push(q);});
+  B.study.forEach(s=>{if(!A.study.some(x=>x.t===s.t))A.study.push(s);});
+  A.backupAt=Math.max(A.backupAt,B.backupAt);A.savedAt=Math.max(A.savedAt,B.savedAt);
+  IDX.dirty=true;return A;
+}
+let S=freshState();
+let state={await:null,last:null};
+let busy=false;
+
+/* ---------- archivio durevole: IndexedDB + copia in localStorage ---------- */
+const IDB={db:null,
+  open(){return new Promise(res=>{try{
+    const r=indexedDB.open('ia_lingua',1);
+    r.onupgradeneeded=()=>r.result.createObjectStore('kv');
+    r.onsuccess=()=>{IDB.db=r.result;res(true);};
+    r.onerror=()=>res(false);r.onblocked=()=>res(false);
+  }catch(e){res(false);}});},
+  get(k){return new Promise(res=>{try{
+    const q=IDB.db.transaction('kv').objectStore('kv').get(k);
+    q.onsuccess=()=>res(q.result||null);q.onerror=()=>res(null);
+  }catch(e){res(null);}});},
+  set(k,v){return new Promise(res=>{try{
+    const tx=IDB.db.transaction('kv','readwrite');tx.objectStore('kv').put(v,k);
+    tx.oncomplete=()=>res(true);tx.onerror=()=>res(false);tx.onabort=()=>res(false);
+  }catch(e){res(false);}});}
+};
+let saveT=null,persisted=false,lastSaveOK=null,reminded=false;
+function scheduleSave(){clearTimeout(saveT);saveT=setTimeout(saveNow,400);}
+async function saveNow(){
+  S.savedAt=Date.now();S.host=location.host;let ok=false;
+  if(IDB.db)ok=await IDB.set('brain',S);
+  try{localStorage.setItem(LS,JSON.stringify(S));ok=true;}catch(e){}
+  lastSaveOK=ok;renderStatus();
+}
+let embT=null;
+function touch(){
+  S.changes++;scheduleSave();renderStatus();
+  if(EMB.ready){clearTimeout(embT);embT=setTimeout(ensureEmb,1500);}
+}
+async function loadBrain(){
+  await IDB.open();
+  let a=IDB.db?await IDB.get('brain'):null,b=null;
+  try{const r=localStorage.getItem(LS)||localStorage.getItem('ia_lingua_v1');if(r)b=JSON.parse(r);}catch(e){}
+  const list=[a,b].filter(x=>x&&x.qa&&x.cw).sort((x,y)=>(y.savedAt||0)-(x.savedAt||0));
+  if(list.length){S=migrate(list[0]);if(list[1])mergeInto(S,list[1]);}
+  else S=freshState();
+  try{if(IDB.db){const e=await IDB.get('emb');if(e)EMB.vec=e;}}catch(e){}
+  try{if(navigator.storage&&navigator.storage.persist)persisted=await navigator.storage.persist();}catch(e){}
+  IDX.dirty=true;
+}
+const VER='v03.3';
+function backupName(){
+  const d=new Date(),p=n=>String(n).padStart(2,'0');
+  return 'ia_memoria_'+VER+'_'+d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'_'+p(d.getHours())+'.'+p(d.getMinutes())+'.'+p(d.getSeconds())+'.json';
+}
+/* ---------- copia di sicurezza: la memoria vive in Chrome; una volta al giorno scarico anche un file ---------- */
+const BK={timer:null};
+function downloadFile(name,text){
+  const blob=new Blob([text],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;
+  document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove();},3000);
+}
+function saveBackupFile(reason){
+  const name=backupName();
+  try{S.host=location.host;downloadFile(name,JSON.stringify(S));}catch(e){bot('Non sono riuscita a creare la copia. Riprova con «⬇ Backup ora».');return;}
+  S.backupAt=Date.now();S.changes=0;scheduleSave();renderStatus();
+  setStudy('Copia di sicurezza scaricata: '+name+(reason?' ('+reason+')':''));
+  setTimeout(()=>{const e=document.getElementById('study');if(e&&/^Copia di sicurezza/.test(e.textContent))setStudy('');},8000);
+}
+function dayOf(t){const d=new Date(t);return d.getFullYear()+'-'+d.getMonth()+'-'+d.getDate();}
+/* dopo ogni cosa imparata: la memoria è già salvata in Chrome; se oggi non c'è ancora una copia in file, la scarico */
+function markUpdate(reason){
+  clearTimeout(BK.timer);
+  BK.timer=setTimeout(()=>{if(!S.backupAt||dayOf(S.backupAt)!==dayOf(Date.now()))saveBackupFile('copia del giorno');},studying?60000:5000);
+}
+function exportBackup(){clearTimeout(BK.timer);saveBackupFile('backup manuale');}
+function readFileText(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsText(f);});}
+async function importBackup(inp){
+  const fs=Array.from(inp.files||[]);if(!fs.length)return;
+  const q0=S.qa.length,n0=S.notes.length,c0=S.cards.length;let ok=0,bad=0,other=false;
+  fs.sort((x,y)=>x.lastModified-y.lastModified);
+  for(const f of fs){
+    try{
+      const d=JSON.parse(await readFileText(f));if(!d||!d.qa||!d.cw)throw new Error('formato');
+      if(d.host&&d.host!==location.host)other=true;
+      mergeInto(S,d);ok++;
+    }catch(e){bad++;}
+  }
+  inp.value='';
+  if(ok){touch();render();markUpdate('backup caricato');}
+  let msg=ok?'Backup caricat'+(ok>1?'i ('+ok+' file)':'o')+' e unit'+(ok>1?'i':'o')+' alla memoria: +'+(S.cards.length-c0)+' schede, +'+(S.notes.length-n0)+' pagine, +'+(S.qa.length-q0)+' fatti.':'';
+  if(bad)msg+=(msg?'\n':'')+bad+' file non validi: non sono backup di questa IA.';
+  if(other)msg+='\nNota: questo backup veniva da un indirizzo diverso. Da ora la memoria resta salvata qui.';
+  bot(msg);renderWarn();
+}
+function renderStatus(){
+  const el=document.getElementById('status');if(!el)return;
+  const t=S.savedAt?new Date(S.savedAt).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}):'–';
+  const bk=S.backupAt?new Date(S.backupAt).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'mai';
+  el.innerHTML='Memoria '+(lastSaveOK===false?'<b style="color:var(--ko)">NON salvata</b>':'salvata alle '+t)+
+    ' · archivio '+(IDB.db?'IndexedDB':'solo localStorage')+(persisted?' (protetto)':' (non protetto)')+
+    ' · comprensione avanzata: '+(EMB.ready?'attiva':(EMB.loading?'in caricamento':(S.semantic?'non disponibile':'spenta')))+' · ultimo backup: '+bk+(S.changes?' · modifiche non ancora nel backup: '+S.changes:'');
+}
+function memEmpty(){return !S.notes.length&&!S.qa.length&&!S.cards.length;}
+function renderWarn(){
+  const el=document.getElementById('warn');if(!el)return;
+  el.innerHTML=memEmpty()?'<div class="warn"><b>La memoria è vuota.</b> Se avevi già lavorato con me altrove, Carica l\'ultima copia di sicurezza (si trova nei Download, nome ia_memoria_…).<br><button onclick="document.getElementById(\'file\').click()">⬆ Carica backup</button></div>':'';
+}
+function record(ok){S.hist.push(ok?1:0);if(S.hist.length>2000)S.hist.shift();}
+
+/* ---------- calcoli ---------- */
+const STOP_CALC=new Set(('quanto quanti quante fa fanno fai calcola dimmi il lo la le gli i di d da a mi puoi risultato qual quale e o che cosa c quant risolvi tra fra '+
+  'ho hai ha ne io tu poi altre altri altro ancora in nel nella con su un una al alla del dei delle dello ma se quindi allora adesso ora ti si ci cento percento = ?').split(' '));
+const TRIGGER=/\b(quanto|quanti|quante|fa|fanno|calcola|risultato|restano|rimangono|rimane|resta|totale|in tutto)\b/;
+function tokenize(text){
+  return text.toLowerCase().replace(/(\d),(\d)/g,'$1.$2').replace(/(\d)\s*x\s*(\d)/g,'$1 x $2')
+    .replace(/['’]/g,' ').replace(/([+\-*\/:×÷=])/g,' $1 ').replace(/[?!;,]/g,' ').replace(/\.(?!\d)/g,' ')
+    .split(/\s+/).filter(Boolean);
+}
+function firstNum(text){for(const w of tokenize(text)){const v=toNum(w);if(v!==null)return v;}return null;}
+function specialCalc(text){
+  const t=text.toLowerCase().replace(/(\d),(\d)/g,'$1.$2');
+  let m=/(\d+(?:\.\d+)?)\s*(?:%|per\s*cento|percento)\s*(?:di|del|della|dello|dei|delle)?\s*(\d+(?:\.\d+)?)/.exec(t);
+  if(m)return {v:parseFloat(m[1])*parseFloat(m[2])/100,txt:m[1]+'% di '+m[2]};
+  const nums=[];tokenize(text).forEach(w=>{const v=toNum(w);if(v!==null)nums.push(v);});
+  if(nums.length!==1)return null;
+  const s=strip(text),x=nums[0];
+  if(/\bradice\b/.test(s))return {v:Math.sqrt(x),txt:'radice quadrata di '+fmt(x)};
+  if(/\bdoppio\b/.test(s))return {v:2*x,txt:'il doppio di '+fmt(x)};
+  if(/\btriplo\b/.test(s))return {v:3*x,txt:'il triplo di '+fmt(x)};
+  if(/\bquadruplo\b/.test(s))return {v:4*x,txt:'il quadruplo di '+fmt(x)};
+  if(/\b(meta|mezzo)\b/.test(s))return {v:x/2,txt:'la metà di '+fmt(x)};
+  if(/\bquadrato\b/.test(s))return {v:x*x,txt:'il quadrato di '+fmt(x)};
+  if(/\bcubo\b/.test(s))return {v:x*x*x,txt:'il cubo di '+fmt(x)};
+  return null;
+}
+function segment(words){
+  const matches=[],un=[];let i=0;
+  while(i<words.length){
+    let found=null;
+    for(let len=Math.min(3,words.length-i);len>=1;len--){
+      const p=words.slice(i,i+len).join(' ');
+      if(S.cw[p]){found=p;i+=len;break;}
+    }
+    if(found)matches.push(found);else{un.push(words[i]);i++;}
+  }
+  return {matches:matches,un:un};
+}
+function parseCalc(text){
+  const tk=tokenize(text),nums=[],words=[];
+  tk.forEach(w=>{const v=toNum(w);if(v!==null)nums.push(v);else words.push(w);});
+  if(nums.length!==2)return null;
+  let a=nums[0],b=nums[1];
+  const s=strip(text),sub=s.search(/\b(sottrai|sottrarre|togli|levare|leva)\b/),da=s.search(/\bda\b/);
+  if(sub>=0&&da>sub){const t=a;a=b;b=t;}
+  const content=words.filter(w=>!STOP_CALC.has(strip(w)));
+  const seg=segment(content),trig=TRIGGER.test(s);
+  if(!content.length)return trig?{a:a,b:b,empty:true}:null;
+  if(!(seg.matches.length||trig||content.length<=2))return null;
+  if(content.length>8)return null;
+  return {a:a,b:b,matches:seg.matches,un:seg.un,words:content};
+}
+function probsFor(parts){
+  const L={};OPN.forEach(o=>L[o]=0);
+  parts.forEach(p=>OPN.forEach(o=>L[o]+=Math.log(S.cw[p][o])));
+  const m=Math.max.apply(null,OPN.map(o=>L[o]));
+  const e=OPN.map(o=>Math.exp(2*(L[o]-m))),t=e.reduce((a,b)=>a+b,0);
+  return e.map(x=>x/t);
+}
+function pickIdx(pr){let r=Math.random(),i=0;for(;i<pr.length-1;i++){r-=pr[i];if(r<=0)break;}return i;}
+function learnCalc(L,correct){
+  const parts=L.matches.concat(L.un.slice(0,4));
+  const sUn=(L.matches.length===0&&L.un.length<=2)?1:0.4;
+  parts.forEach(p=>{
+    const s=L.matches.indexOf(p)>=0?1:sUn;
+    if(!S.cw[p])S.cw[p]=uniform();
+    const W=S.cw[p];
+    OPN.forEach(o=>{
+      const v=OPF[o](L.a,L.b);
+      if(Number.isFinite(v)&&close(v,correct))W[o]=W[o]*(1+0.6*s)+0.2*s;
+      else{W[o]=Math.max(0.03,W[o]*(1-0.4*s));if(o===L.op)W[o]=Math.max(0.03,W[o]*(1-0.3*s));}
+    });
+    normW(W);S.n[p]=(S.n[p]||0)+1;
+  });
+}
+function bestOpOf(p){const W=S.cw[p];return OPN.reduce((m,o)=>W[o]>W[m]?o:m,OPN[0]);}
+function shareOf(p,o){const W=S.cw[p];return Math.round(W[o]/OPN.reduce((s,k)=>s+W[k],0)*100);}
+
+/* ---------- testo: domande, note, ricerca ---------- */
+const STOP_QA=new Set('il lo la le gli i un una uno di del dello della dei degli delle a al allo alla ai alle che cosa qual quale quali e sono sei era in nel nella nei nelle con su da dal dalla per mi dimmi puoi sai c l d quant ha hanno fu molto anche pure ne si ci'.split(' '));
+const QW=new Set('chi dove quando come perche quanto quanta quanti quante cos'.split(' '));
+function normQA(text,keepQ){
+  const w=strip(text).replace(/['’]/g,' ').replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(Boolean)
+    .filter(x=>!STOP_QA.has(x)&&(keepQ||!QW.has(x))).map(x=>(x.length>4&&/[aeio]$/.test(x))?x.slice(0,-1):x);
+  return Array.from(new Set(w));
+}
+function dice(a,b){
+  if(!a.length||!b.length)return 0;
+  const sb=new Set(b);let c=0;a.forEach(x=>{if(sb.has(x))c++;});
+  return 2*c/(a.length+b.length);
+}
+function findQA(tk){
+  let best=null;
+  S.qa.forEach((it,i)=>{
+    const sc=dice(tk,it.tk||[]);
+    if(sc>=0.6&&(!best||sc>best.score||(sc===best.score&&(it.ok-it.ko)>(best.item.ok-best.item.ko))))best={item:it,idx:i,score:sc};
+  });
+  return best;
+}
+/* verifica: le frasi confermate da più fonti salgono, quelle contestate scendono */
+function vB(st){return st.v==='tuo'?0.12:st.v==='confermata'?0.08:st.v==='autorevole'?0.04:st.v==='contrastante'?-0.08:0;}
+let IDX={dirty:true,df:{},N:0,list:[]};
+function findN(id){return S.notes.find(x=>x.id===id)||S.cards.find(x=>x.id===id);}
+function sentOfL(L){const n=findN(L.nid);if(!n)return null;return n.sents.find(x=>x.t===L.st)||n.sents[L.i]||null;}
+function buildIdx(){
+  const df={},list=[];let N=0;
+  S.notes.concat(S.cards).forEach(n=>{
+    const tt=new Set(normQA(n.title,false));
+    n.sents.forEach((s,i)=>{
+      const set=new Set(normQA(s.t,false));
+      set.forEach(t=>df[t]=(df[t]||0)+1);N++;
+      list.push({n:n,i:i,set:set,tt:tt});
+    });
+  });
+  IDX={dirty:false,df:df,N:N,list:list};
+}
+function searchNotes(qtk,onlyNotes){
+  if(IDX.dirty)buildIdx();
+  if(!qtk.length)return null;
+  const idf=t=>Math.log(1+IDX.N/(1+(IDX.df[t]||0)));
+  const qs=qtk.reduce((s,t)=>s+idf(t),0);
+  let best=null;
+  IDX.list.forEach(e=>{
+    if(onlyNotes&&onlyNotes.indexOf(e.n.id)<0)return;
+    const st=e.n.sents[e.i];if(st.ko>st.ok)return;
+    let m=0;qtk.forEach(t=>{if(e.set.has(t))m+=idf(t);else if(e.tt.has(t))m+=idf(t)*0.8;});
+    const cov=m/qs,score=cov+(e.i===0?0.03:0)+Math.min(0.1,st.ok*0.05)+vB(st);
+    if(!best||score>best.score)best={n:e.n,i:e.i,cov:cov,score:score};
+  });
+  return best&&best.cov>=0.6?best:null;
+}
+/* ---------- comprensione avanzata: modello semantico gratuito nel browser ---------- */
+const MODEL='Xenova/paraphrase-multilingual-MiniLM-L12-v2';
+const LIBS=['https://cdn.jsdelivr.net/npm/@huggingface/transformers@3/+esm','https://esm.sh/@huggingface/transformers@3'];
+const EMB={ready:false,loading:false,busy:false,pipe:null,vec:{},dirty:false,err:null,
+  async load(){
+    if(EMB.ready)return true;
+    if(EMB.loading)return false;
+    EMB.loading=true;EMB.err=null;
+    try{
+      let lib=null,last=null;
+      for(const u of LIBS){try{lib=await import(u);break;}catch(e){last=e;}}
+      if(!lib)throw last||new Error('libreria non raggiungibile');
+      if(lib.env)lib.env.allowLocalModels=false;
+      EMB.pipe=await lib.pipeline('feature-extraction',MODEL,{dtype:'q8',
+        progress_callback:d=>{if(d&&d.status==='progress'&&typeof d.progress==='number')setStudy('Scarico il modello di comprensione: '+Math.round(d.progress)+'%');}});
+      EMB.ready=true;
+    }catch(e){EMB.ready=false;EMB.err=e;}
+    EMB.loading=false;setStudy('');return EMB.ready;
+  },
+  async embed(text){
+    const o=await EMB.pipe(text,{pooling:'mean',normalize:true});
+    return Float32Array.from(o.data);
+  }
+};
+const dot=(a,b)=>{let s=0;const n=Math.min(a.length,b.length);for(let i=0;i<n;i++)s+=a[i]*b[i];return s;};
+const sk=(n,i)=>n.id+':'+i;
+function saveEmb(){try{if(IDB.db)IDB.set('emb',EMB.vec);}catch(e){}}
+async function ensureEmb(){
+  if(!EMB.ready||EMB.busy)return;
+  EMB.busy=true;
+  try{
+    const todo=[];
+    S.notes.forEach(n=>n.sents.forEach((s,i)=>{const k=sk(n,i);if(!EMB.vec[k])todo.push([k,n.title+'. '+s.t]);}));
+    S.qa.forEach(it=>{const k='q:'+it.q;if(!EMB.vec[k])todo.push([k,it.q]);});
+    for(let j=0;j<todo.length&&EMB.ready;j++){
+      EMB.vec[todo[j][0]]=await EMB.embed(todo[j][1].slice(0,400));EMB.dirty=true;
+      if(j%10===0){if(todo.length>20)setStudy('Imparo a capire le frasi salvate: '+j+'/'+todo.length);await sleep(0);}
+    }
+  }catch(e){}
+  EMB.busy=false;setStudy('');
+  if(EMB.dirty){EMB.dirty=false;saveEmb();}
+}
+async function embedNotes(ids){
+  if(!EMB.ready)return;
+  try{
+    for(const id of ids){
+      const n=S.notes.find(x=>x.id===id);if(!n)continue;
+      for(let i=0;i<n.sents.length;i++){const k=sk(n,i);if(!EMB.vec[k])EMB.vec[k]=await EMB.embed((n.title+'. '+n.sents[i].t).slice(0,400));}
+    }
+    saveEmb();
+  }catch(e){}
+}
+async function searchNotesH(qtk,qtext,onlyNotes){
+  if(!EMB.ready)return searchNotes(qtk,onlyNotes);
+  let qv;try{qv=await EMB.embed(qtext.slice(0,400));}catch(e){return searchNotes(qtk,onlyNotes);}
+  if(IDX.dirty)buildIdx();
+  const idf=t=>Math.log(1+IDX.N/(1+(IDX.df[t]||0)));
+  const qs=qtk.reduce((s,t)=>s+idf(t),0)||1;
+  let best=null;
+  IDX.list.forEach(e=>{
+    if(onlyNotes&&onlyNotes.indexOf(e.n.id)<0)return;
+    const st=e.n.sents[e.i];if(st.ko>st.ok)return;
+    let m=0;qtk.forEach(t=>{if(e.set.has(t))m+=idf(t);else if(e.tt.has(t))m+=idf(t)*0.8;});
+    const cov=qtk.length?m/qs:0,v=EMB.vec[sk(e.n,e.i)];
+    const sem=v?Math.max(0,dot(qv,v)):null;
+    const hyb=sem===null?cov:0.5*cov+0.5*sem;
+    const rel=Math.max(hyb,sem!==null&&sem>=0.6?sem:0);
+    const score=rel+(e.i===0?0.03:0)+Math.min(0.1,st.ok*0.05)+vB(st);
+    if(!best||score>best.score)best={n:e.n,i:e.i,cov:rel,score:score,lex:cov,hyb:hyb,sem:sem};
+  });
+  return best&&(best.hyb>=0.45||best.lex>=0.6||(best.sem!==null&&best.sem>=0.6))?best:null;
+}
+function entsOf(text){
+  const caps=[];const re=/(?:^|\s)([A-ZÀ-Ý][a-zà-ÿ]{2,})/g;let m;
+  while((m=re.exec(text))){if(m.index>0)caps.push(strip(m[1]));}
+  const nums=text.match(/\d+/g)||[];
+  return new Set(caps.concat(nums));
+}
+function entsClash(a,b){
+  const A=entsOf(a),B=entsOf(b);
+  if(!A.size||!B.size)return false;
+  for(const x of A)if(B.has(x))return false;
+  return true;
+}
+async function findQAsem(qtext){
+  if(!EMB.ready||!S.qa.length)return null;
+  let qv;try{qv=await EMB.embed(qtext.slice(0,400));}catch(e){return null;}
+  let best=null;
+  for(let i=0;i<S.qa.length;i++){
+    const v=EMB.vec['q:'+S.qa[i].q];if(!v)continue;
+    const sc=dot(qv,v);
+    if(sc>=0.85&&!entsClash(qtext,S.qa[i].q)&&(!best||sc>best.score))best={item:S.qa[i],idx:i,score:sc};
+  }
+  return best;
+}
+function updSem(){
+  const b=document.getElementById('semBtn');if(!b)return;
+  b.textContent=EMB.loading?'🧠 Comprensione avanzata: carico…':(EMB.ready?'🧠 Comprensione avanzata: attiva':'🧠 Comprensione avanzata: spenta');
+  b.className=EMB.ready?'run':'sec';renderStatus();
+}
+async function startSem(manual){
+  updSem();
+  const ok=await EMB.load();
+  updSem();
+  if(ok){
+    S.semantic=true;touch();
+    if(manual)bot('Comprensione avanzata attiva. Ora riconosco domande dette con parole diverse e scelgo le frasi per significato. Sto indicizzando ciò che ho già imparato.');
+    await ensureEmb();
+    if(manual)bot('Indicizzazione completata.');
+  }else{
+    if(manual)S.semantic=false;
+    bot('Non sono riuscita a caricare il modello (serve internet la prima volta, e un browser aggiornato). Continuo a funzionare come prima.');
+    updSem();
+  }
+}
+async function toggleSem(){
+  if(EMB.loading)return;
+  if(EMB.ready||S.semantic){
+    S.semantic=false;EMB.ready=false;EMB.pipe=null;touch();updSem();
+    bot('Comprensione avanzata spenta. Le informazioni già calcolate restano salvate.');return;
+  }
+  bot('Attivo la comprensione avanzata. La prima volta scarico un modello di circa 120 MB: serve internet e un po\' di pazienza. Poi resta salvato nel browser.');
+  startSem(true);
+}
+
+const QUERY_STOP=new Set(('qual quale quali chi cosa che dove quando come perche perché quanto quanti quante e è ed o sono sai dimmi mi puoi un una il lo la le gli i l '+
+  'di del della dei delle dello degli a al alla allo ai agli alle da dal dalla dallo dai in nel nella nello nei nelle su sul sulla sullo sui sugli sulle '+
+  'per con tra fra cos tutto tutta').split(' '));
+function buildQuery(t){
+  const w=t.toLowerCase().replace(/['’]/g,' ').replace(/[^a-zàèéìòù0-9 ]/g,' ').split(/\s+/).filter(x=>x&&!QUERY_STOP.has(x));
+  return w.join(' ')||t;
+}
+function rootKey(t){const w=buildQuery(t).split(' ').filter(x=>x.length>=6);return (w.length?w:buildQuery(t).split(' ')).slice(0,2).join(' ');}
+async function wikiFull(title){
+  const url='https://it.wikipedia.org/w/api.php?action=query&format=json&origin=*&redirects=1&prop=extracts&explaintext=1&exsectionformat=plain&titles='+encodeURIComponent(title);
+  const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),15000);
+  try{
+    const r=await fetch(url,{signal:ctl.signal});if(!r.ok)return '';
+    const j=await r.json(),pg=j.query&&j.query.pages?Object.values(j.query.pages):[];
+    let t=pg.length&&pg[0].extract?pg[0].extract:'';
+    t=t.split(/\n(?:Note|Bibliografia|Voci correlate|Altri progetti|Collegamenti esterni|Riferimenti normativi)\s*\n/)[0];
+    return t.slice(0,40000);
+  }finally{clearTimeout(to);}
+}
+async function wikiSearch(q,limit){
+  const url='https://it.wikipedia.org/w/api.php?action=query&format=json&origin=*&redirects=1&generator=search&gsrlimit='+limit+
+    '&gsrsearch='+encodeURIComponent(q)+'&prop=extracts|info&exintro=1&explaintext=1&exlimit=max&exsentences=10&inprop=url';
+  const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),12000);
+  try{
+    const r=await fetch(url,{signal:ctl.signal});
+    if(!r.ok)throw new Error('http '+r.status);
+    const j=await r.json();
+    const pg=j.query&&j.query.pages?Object.keys(j.query.pages).map(k=>j.query.pages[k]):[];
+    pg.sort((a,b)=>(a.index||99)-(b.index||99));
+    return pg.filter(p=>p.extract&&p.extract.length>40).map(p=>({title:p.title,extract:p.extract,url:p.fullurl}));
+  }finally{clearTimeout(to);}
+}
+
+/* ---------- ricerca sul web (servizi gratuiti, senza chiavi) ---------- */
+const MAXNOTES=1000;
+const PROXY_TEXT=[u=>'https://r.jina.ai/'+u];
+const PROXY_RAW=[u=>'https://api.allorigins.win/raw?url='+encodeURIComponent(u),u=>'https://api.codetabs.com/v1/proxy/?quest='+encodeURIComponent(u)];
+const BLOCK_DOM=/(^|\.)(duckduckgo\.com|bing\.com|bing\.net|microsoft\.com|google\.[a-z.]+|gstatic\.com|googleapis\.com|jina\.ai|allorigins\.win|codetabs\.com|w3\.org|schema\.org|youtube\.com|youtu\.be|facebook\.com|instagram\.com|twitter\.com|x\.com|tiktok\.com|pinterest\.[a-z.]+|amazon\.[a-z.]+|linkedin\.com|wikipedia\.org|wikimedia\.org|wikidata\.org|msn\.com|live\.com|apple\.com|ebay\.[a-z.]+|cloudflare\.com|doubleclick\.net)$/;
+function domainOf(u){try{return new URL(u).hostname.replace(/^www\./,'').toLowerCase();}catch(e){return '';}}
+function relOf(d){
+  if(!d)return 0.5;
+  if(/(^|\.)(gov\.it|normattiva\.it|gazzettaufficiale\.it|giustizia\.it|governo\.it|senato\.it|camera\.it|cortecostituzionale\.it|cortedicassazione\.it|inps\.it|inail\.it|istat\.it|bancaditalia\.it|consob\.it|europa\.eu|regione\.[a-z-]+\.it|comune\.[a-z-]+\.[a-z]+\.it)$/.test(d))return 1;
+  if(/(^|\.)(wikipedia\.org|treccani\.it|wikisource\.org)$/.test(d))return 0.85;
+  if(/(^|\.)(edu|ac\.uk)$/.test(d)||/^uni[a-z]*\.it$/.test(d)||/(^|\.)(altalex\.com|brocardi\.it|diritto\.it|ipsoa\.it|ilsole24ore\.com|camcom\.it|ansa\.it|ilpost\.it|corriere\.it|repubblica\.it|cnr\.it|infn\.it|iss\.it)$/.test(d))return 0.7;
+  if(/(^|\.)(laleggepertutti\.it|money\.it|studiocataldi\.it|ilfattoquotidiano\.it|lastampa\.it|ilmessaggero\.it|focus\.it|fanpage\.it|today\.it)$/.test(d))return 0.6;
+  if(/(reddit|quora|yahoo|forum|blogspot|wordpress|altervista|tumblr|medium\.com|answers)/.test(d))return 0.3;
+  return 0.5;
+}
+async function fetchT(url,ms){
+  const ctl=new AbortController(),to=setTimeout(()=>ctl.abort(),ms||20000);
+  try{const r=await fetch(url,{signal:ctl.signal});if(!r.ok)throw new Error('http '+r.status);return await r.text();}
+  finally{clearTimeout(to);}
+}
+function decodeLink(u){
+  u=u.replace(/&amp;/g,'&');
+  let m=/[?&]uddg=([^&]+)/.exec(u);if(m){try{return decodeURIComponent(m[1]);}catch(e){}}
+  m=/bing\.com\/ck\/a\?.*?[?&]u=a1([^&]+)/.exec(u);
+  if(m){try{let b=m[1].replace(/-/g,'+').replace(/_/g,'/');while(b.length%4)b+='=';return atob(b);}catch(e){}}
+  if(u.startsWith('//'))u='https:'+u;
+  return u;
+}
+function linksFrom(txt){
+  const out=[],seen=new Set(),re=/(?:https?:)?\/\/[^\s"'<>()\[\]]+/g;let m;
+  while((m=re.exec(txt))){
+    let u=decodeLink(m[0]);
+    if(!/^https?:\/\//.test(u))continue;
+    u=u.replace(/[.,;]+$/,'');
+    const d=domainOf(u);if(!d||d.indexOf('.')<0||BLOCK_DOM.test(d)||seen.has(d))continue;
+    if(/\.(png|jpe?g|gif|svg|webp|ico|css|js|woff2?|pdf|zip|mp4|mp3|xml)(\?|$)/i.test(u))continue;
+    seen.add(d);out.push(u);
+  }
+  return out;
+}
+/* tutte le combinazioni motore+servizio partono insieme: vince la prima che risponde; tempo massimo fisso */
+const NET={search:'',read:{}};
+function rankLinks(l,max){return l.map((u,i)=>({u:u,i:i,r:relOf(domainOf(u))})).sort((a,b)=>(b.r-a.r)||(a.i-b.i)).slice(0,max).map(x=>x.u);}
+function searchWeb(q,max,limitMs){
+  const e=encodeURIComponent(q);
+  const engines=[['Bing','https://www.bing.com/search?setlang=it&cc=IT&q='+e],['DuckDuckGo','https://html.duckduckgo.com/html/?kl=it-it&q='+e],['DuckDuckGo lite','https://lite.duckduckgo.com/lite/?kl=it-it&q='+e]];
+  const prox=[['jina',PROXY_TEXT[0]],['allorigins',PROXY_RAW[0]],['codetabs',PROXY_RAW[1]]];
+  return new Promise(res=>{
+    let left=engines.length*prox.length,done=false;
+    const fin=v=>{if(!done){done=true;res(v);}};
+    setTimeout(()=>fin([]),limitMs||20000);
+    engines.forEach(en=>prox.forEach(px=>{
+      (async()=>{
+        try{const l=linksFrom(await fetchT(px[1](en[1]),(limitMs||20000)-1000)).slice(0,10);if(l.length>=2){NET.search=en[0]+' tramite '+px[0];fin(rankLinks(l,max));return;}}catch(err){}
+        if(--left===0)fin([]);
+      })();
+    }));
+  });
+}
+const JUNK=/cookie|privacy|newsletter|iscriviti|registrati|accedi|login|abbonati|abbonamento|pubblicit|javascript|copyright|©|tutti i diritti|clicca|scarica l.app|condividi|whatsapp|seguici|leggi anche|potrebbe interessarti|ti potrebbe|consenso|partita iva|p\.\s?iva|contattaci|preventivo gratuito|chiamaci/i;
+function cleanMd(t){
+  return t.replace(/^(Title|URL Source|Published Time|Markdown Content):.*$/gm,'')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g,'').replace(/\[([^\]]*)\]\([^)]*\)/g,'$1')
+    .replace(/https?:\/\/\S+/g,'').replace(/^[#>*\-|=_+\s]+/gm,'').replace(/[*_`|]+/g,' ');
+}
+function htmlToText(h){
+  const doc=new DOMParser().parseFromString(h,'text/html');
+  doc.querySelectorAll('script,style,nav,header,footer,aside,form,noscript,iframe,svg,button,select').forEach(e=>e.remove());
+  const root=doc.querySelector('article,main,[role=main]')||doc.body;if(!root)return {title:'',text:''};
+  const parts=[];root.querySelectorAll('p,li,h1,h2,h3,td,blockquote').forEach(e=>{const s=e.textContent.replace(/\s+/g,' ').trim();if(s)parts.push(s);});
+  return {title:(doc.title||'').trim(),text:parts.join('\n')};
+}
+function firstOk(list,ms){
+  return new Promise(res=>{
+    let left=list.length,done=false;const fin=v=>{if(!done){done=true;res(v);}};
+    setTimeout(()=>fin(null),ms);
+    list.forEach(f=>f().then(v=>{if(v)fin(v);else if(--left===0)fin(null);},()=>{if(--left===0)fin(null);}));
+  });
+}
+async function readPage(url,ms){
+  ms=ms||15000;
+  const viaJina=async()=>{const raw=await fetchT(PROXY_TEXT[0](url),ms);if(!raw||raw.length<200)return null;const m=/^Title:\s*(.+)$/m.exec(raw);return {title:(m?m[1].trim():'')||domainOf(url),text:cleanMd(raw)};};
+  const viaRaw=px=>async()=>{const raw=await fetchT(px(url),ms);if(!raw||raw.length<200)return null;const o=htmlToText(raw);return o.text&&o.text.length>200?{title:o.title||domainOf(url),text:o.text}:null;};
+  const r=await firstOk([viaJina].concat(PROXY_RAW.map(viaRaw)),ms);
+  if(!r)throw new Error('pagina non leggibile');
+  return r;
+}
+/* frasi: protegge abbreviazioni (art., n., d.lgs.) per non spezzarle */
+const ABBR=/\b(art|artt|n|nn|lgs|d|l|c|cod|civ|proc|pen|co|lett|ss|dott|avv|sig|ecc|es|pag|cfr|p|s|reg|cost|dpr|cap|vol|ed|ca|nr|num|tel|sez|cass|trib)\.(?=\s*[\wÀ-ÿ])/gi;
+function protect(x){return x.replace(ABBR,'$1․').replace(/\b([A-Z])\.(?=[A-Z])/g,'$1․');}
+function sentsOf(text,max){
+  const out=[];
+  String(text).replace(/\([^()]{0,140}\)/g,'').split(/\n+/).forEach(par=>{
+    par=par.replace(/\s+/g,' ').trim();if(par.length<40)return;
+    (protect(par).match(/[^.!?]+[.!?]+["»”)]*(?:\s|$)|[^.!?]+$/g)||[]).forEach(s=>{
+      s=s.replace(/․/g,'.').trim();
+      if(s.length>=40&&s.length<=400&&!JUNK.test(s)&&/[a-zà-ù]{3}/.test(s)&&(s.match(/\s/g)||[]).length>=5)out.push(s);
+    });
+  });
+  return Array.from(new Set(out)).slice(0,max||300);
+}
+function numsOf(s){return new Set((s.match(/\d+(?:[.,]\d+)?/g)||[]).map(x=>x.replace(',','.')));}
+
+/* ---------- verifica incrociata ---------- */
+async function crossCheck(cands){
+  const doms=new Set(cands.map(c=>c.d));
+  let vec=null;
+  if(EMB.ready&&cands.length<=60){try{vec=[];for(const c of cands)vec.push(await EMB.embed(c.t.slice(0,400)));}catch(e){vec=null;}}
+  const sim=(i,j)=>vec?dot(vec[i],vec[j]):dice(cands[i].tk,cands[j].tk);
+  const SUP=vec?0.72:0.38,SAME=vec?0.86:0.55;
+  cands.forEach(c=>{c.sup=new Set();c.vs=[];});
+  for(let i=0;i<cands.length;i++)for(let j=i+1;j<cands.length;j++){
+    const a=cands[i],b=cands[j];if(a.d===b.d)continue;
+    const s=sim(i,j);if(s<SUP)continue;
+    let clash=false;
+    if(s>=SAME&&a.nums.size&&b.nums.size){clash=true;for(const x of a.nums)if(b.nums.has(x)){clash=false;break;}}
+    if(clash){a.vs.push(j);b.vs.push(i);}else{a.sup.add(b.d);b.sup.add(a.d);}
+  }
+  cands.forEach(c=>{c.score=c.r;c.sup.forEach(d=>c.score+=relOf(d));});
+  const multi=doms.size>=2;
+  cands.forEach(c=>{
+    let lost=false,contested=false;
+    c.vs.forEach(j=>{const o=cands[j];if(o.score>=c.score*1.5)lost=true;else if(c.score<o.score*1.5)contested=true;});
+    if(lost){c.v='scartata';c.why='smentita da fonti più affidabili';}
+    else if(contested)c.v='contrastante';
+    else if(c.sup.size)c.v='confermata';
+    else if(c.r>=0.85)c.v='autorevole';
+    else if(!multi)c.v='fonte unica';
+    else{c.v='scartata';c.why=c.r<=0.3?'fonte poco affidabile e non confermata':'non confermata da altre fonti';}
+  });
+  return cands;
+}
+function logDiscard(c,p,q){
+  if(S.discarded.some(x=>x.t===c.t))return;
+  S.discarded.push({t:c.t,d:p.d,url:p.url,why:c.why||'',q:q,ts:Date.now()});
+  if(S.discarded.length>300)S.discarded.shift();
+}
+function saveNote(p,keep){
+  const key=p.url||p.title,mk=c=>({t:c.t,ok:0,ko:0,v:c.v,sup:Array.from(c.sup||[]).slice(0,6)});
+  let n=S.notes.find(x=>(x.url||x.title)===key);
+  if(n){
+    keep.forEach(c=>{const ex=n.sents.find(s=>s.t===c.t);if(ex){ex.v=c.v;ex.sup=Array.from(c.sup||[]).slice(0,6);}else if(n.sents.length<30)n.sents.push(mk(c));});
+    n.dom=n.dom||p.d;n.ts=Date.now();return n;
+  }
+  if(S.notes.length>=MAXNOTES)return null;
+  n={id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),title:p.title,url:p.url,src:p.src,dom:p.d,ts:Date.now(),sents:keep.map(mk)};
+  S.notes.push(n);return n;
+}
+async function researchTopic(q,opt){
+  opt=opt||{};const prog=opt.progress||(()=>{});
+  const res={ids:[],kept:0,conf:0,disc:0,doms:[],err:false,wiki:0,web:0,cands:[]};
+  const pages=[];let netOK=false,wikiOK=false,webState='in corso',closed=false;
+  const say=()=>prog('Wikipedia: '+(wikiOK?res.wiki+' voci lette':'in corso…')+' · web: '+webState);
+  say();
+  /* Wikipedia e web partono insieme */
+  const wikiP=(async()=>{
+    try{
+      const w=await wikiSearch(q,opt.quick?2:3);netOK=true;
+      const full=await Promise.all(w.map((p,i)=>i<2?wikiFull(p.title).catch(()=>''):Promise.resolve('')));
+      w.forEach((p,i)=>{const t=full[i]&&full[i].length>p.extract.length?full[i]:p.extract;pages.push({title:p.title,url:p.url,d:'it.wikipedia.org',text:t,src:'wikipedia',first:i===0});});
+      res.wiki=w.length;
+    }catch(e){res.wikiErr=true;}
+    wikiOK=true;say();
+  })();
+  const webP=(async()=>{
+    let links=[];try{links=await searchWeb(q,opt.quick?4:6,opt.quick?15000:20000);}catch(e){}
+    if(!links.length){webState='nessun servizio di ricerca ha risposto';res.webErr=true;say();return;}
+    netOK=true;let k=0;webState='leggo 0/'+links.length+' siti';say();
+    await Promise.all(links.map(async u=>{
+      try{const p=await readPage(u,opt.quick?12000:15000);if(!closed&&p.text&&p.text.length>200){pages.push({title:p.title,url:u,d:domainOf(u),text:p.text,src:'web'});res.web++;}}catch(e){}
+      if(closed)return;k++;webState='leggo '+k+'/'+links.length+' siti';say();
+    }));
+    if(!closed){webState=res.web+' siti letti';say();}
+  })();
+  await wikiP;
+  /* il web ha un tempo massimo: quello che non arriva in tempo si salta */
+  await Promise.race([webP,sleep(opt.quick?30000:40000)]);
+  closed=true;res.webState=webState;
+  if(webState.indexOf('letti')<0&&!res.webErr){webState='tempo scaduto, uso quello che ho';say();}
+  if(!pages.length){res.err=!netOK;return res;}
+  const qt=normQA(q,false),strong=qt.filter(x=>x.length>=6),cands=[];
+  pages.forEach((p,pi)=>{
+    const lenient=p.src==='wikipedia'&&p.first;
+    const sc=sentsOf(p.text,400).map(t=>{
+      const tk=normQA(t,false),set=new Set(tk);let m=0,st=0;
+      qt.forEach(x=>{if(set.has(x)){m++;if(x.length>=6)st++;}});
+      return {t:t,tk:tk,m:m,st:st};
+    });
+    let rel;
+    if(lenient){const head=sc.slice(0,10),tail=sc.slice(10).filter(x=>x.m>=1);rel=head.concat(tail).slice(0,opt.quick?20:40);}
+    else{rel=sc.filter(x=>strong.length?(x.st>=1||x.m>=2):x.m>=1);rel.sort((a,b)=>(b.st-a.st)||(b.m-a.m));rel=rel.slice(0,15);}
+    rel.forEach(x=>cands.push({t:x.t,tk:x.tk,nums:numsOf(x.t),d:p.d,r:relOf(p.d),pi:pi}));
+  });
+  prog('confronto le fonti tra loro…');
+  await crossCheck(cands);
+  res.cands=cands;res.pages=pages.map(p=>({title:p.title,url:p.url,d:p.d,src:p.src}));
+  pages.forEach((p,pi)=>{
+    const mine=cands.filter(c=>c.pi===pi),keep=mine.filter(c=>c.v!=='scartata');
+    mine.filter(c=>c.v==='scartata').forEach(c=>{res.disc++;logDiscard(c,p,q);});
+    if(!keep.length)return;
+    const n=saveNote(p,keep);
+    if(n){if(res.ids.indexOf(n.id)<0)res.ids.push(n.id);if(res.doms.indexOf(p.d)<0)res.doms.push(p.d);}
+    res.kept+=keep.length;res.conf+=keep.filter(c=>c.v==='confermata').length;
+  });
+  IDX.dirty=true;
+  try{if(res.ids.length)await embedNotes(res.ids);}catch(e){}
+  return res;
+}
+/* concetti chiave che compaiono in più fonti: diventano nuovi argomenti di studio */
+const EDGE=new Set(Array.from(STOP_QA).concat(Array.from(QW)).concat(('puo possono essere stato stata stati viene vengono deve devono fare anche solo sempre tutti tutte tutto ogni questo questa questi queste quello quella cui non piu cosi tale tali altro altri altra prima dopo inoltre infatti quindi pero ovvero cioe oppure avere molto caso casi modo parte anni anno sia stesso stessa due tre essa esso loro suo sua suoi sue nostro vostro dove come quando mentre dunque').split(' ')));
+const VERBS=new Set('e sono era erano sara saranno stato stata stati state essere ha hanno aveva avevano avere puo possono deve devono viene vengono venne fu furono introdotte introdotto introdotta prevista previsto previste previsti approvato approvata entrato entrata sostituito disciplinata disciplinato confluita ottenere offrire accedere rivolgersi'.split(' '));
+function followUps(cands,root){
+  const g={};
+  cands.filter(c=>c.v!=='scartata').forEach(c=>{
+    const w=strip(c.t).replace(/['’]/g,' ').replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(Boolean);
+    for(let n=1;n<=4;n++)for(let i=0;i+n<=w.length;i++){
+      const ph=w.slice(i,i+n);
+      if(EDGE.has(ph[0])||EDGE.has(ph[n-1])||/^\d/.test(ph[0])||/^\d/.test(ph[n-1])||ph.some(x=>VERBS.has(x)))continue;
+      if(!ph.some(x=>x.length>=7))continue;
+      const s=ph.join(' ');
+      if(n===1&&s.length<12)continue;
+      (g[s]=g[s]||new Set()).add(c.d);
+    }
+  });
+  const rootTk=new Set(normQA(root||'',false));
+  const list=Object.keys(g).map(s=>({s:s,k:g[s].size,n:s.split(' ').length}))
+    .filter(x=>x.k>=(x.n===1?3:2)&&!normQA(x.s,false).every(t=>rootTk.has(t)))
+    .sort((a,b)=>(b.k-a.k)||(b.n-a.n));
+  const out=[];
+  list.forEach(x=>{if(out.length>=4)return;if(out.some(o=>o.indexOf(x.s)>=0||x.s.indexOf(o)>=0))return;out.push(x.s);});
+  const laws=[],LAW=/\b(?:legge|d\.\s?lgs\.?|decreto legislativo|decreto legge|d\.l\.|d\.p\.r\.)\s*(?:n\.\s*|nr\.\s*)?\d{1,4}\s*(?:\/\s*\d{2,4}|del\s+(?:\d{1,2}\s+[a-zà-ù]+\s+)?\d{4})/gi;
+  cands.filter(c=>c.v!=='scartata').forEach(c=>{(c.t.match(LAW)||[]).forEach(x=>{x=x.replace(/\s+/g,' ').trim();if(laws.length<3&&!laws.some(l=>strip(l)===strip(x)))laws.push(x);});});
+  return laws.concat(out).slice(0,5);
+}
+function userNote(){
+  let n=S.notes.find(x=>x.src==='utente');
+  if(!n){n={id:'utente',title:'Appreso da te',url:'',src:'utente',ts:Date.now(),sents:[]};S.notes.push(n);}
+  return n;
+}
+function vLabel(st){
+  if(!st||!st.v)return '';
+  if(st.v==='confermata')return '✔ confermata da '+((st.sup||[]).length+1)+' fonti indipendenti';
+  if(st.v==='autorevole')return 'fonte autorevole, non ancora confermata da altre';
+  if(st.v==='contrastante')return '⚠ le fonti non sono d\'accordo su questo punto';
+  if(st.v==='fonte unica')return 'fonte unica, da verificare';
+  return '';
+}
+function srcHtml(n,cov,i){
+  if(n.src==='utente')return 'Fonte: insegnato da te';
+  if(n.k){
+    const st=i!==undefined?n.sents[i]:null;
+    let s='Dalla scheda «'+esc(n.title)+'»';
+    if(st){s+=' '+badge(st.v);const l=srcLinks(st,3);if(l)s+=' · fonti: '+l;}
+    if(cov!==undefined)s+=' · pertinenza '+Math.round(Math.min(1,cov)*100)+'%';
+    return s;
+  }
+  const wiki=n.src==='wikipedia'||/wikipedia/.test(n.dom||'');
+  const name=(wiki?'Wikipedia':(n.dom||'web'))+' – '+n.title;
+  let s='Fonte: <a href="'+esc(n.url)+'" target="_blank" rel="noopener">'+esc(name.slice(0,100))+'</a>';
+  const lb=i!==undefined?vLabel(n.sents[i]):'';if(lb)s+=' · '+lb;
+  if(cov!==undefined)s+=' · pertinenza '+Math.round(Math.min(1,cov)*100)+'%';
+  return s;
+}
+
+/* ---------- schede: una per argomento, aggiornate da studio, domande e correzioni ---------- */
+const VW={'tuo':3,'confermata':2,'autorevole':1.4,'fonte unica':1,'contrastante':0.4};
+const VLAB={'tuo':'detto da te','confermata':'confermata','autorevole':'fonte autorevole','fonte unica':'da verificare','contrastante':'fonti in disaccordo'};
+const MAXCS=80;
+function cardKey(t){return normQA(buildQuery(t),false).filter(x=>x.length>=3);}
+function niceTitle(t){
+  t=String(t).trim().replace(/[?!.]+$/,'').replace(/^(il|lo|la|i|gli|le|l'|un|una|uno)\s+/i,'');
+  return t.charAt(0).toUpperCase()+t.slice(1);
+}
+function findCard(t){
+  const k=cardKey(t);if(!k.length)return null;
+  let best=null;
+  S.cards.forEach(c=>{
+    if(!c.k.length)return;
+    const inter=c.k.filter(x=>k.indexOf(x)>=0).length;if(!inter)return;
+    const sc=Math.max(2*inter/(k.length+c.k.length),inter===c.k.length?0.7+0.01*inter:0);
+    if(sc>=0.6&&(!best||sc>best.sc))best={c:c,sc:sc};
+  });
+  return best&&best.c;
+}
+function getCard(t){
+  let c=findCard(t);
+  if(!c){
+    c={id:'c'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),title:niceTitle(t),k:cardKey(t),sents:[],qs:[],ts:Date.now(),upd:Date.now(),n:0};
+    S.cards.push(c);IDX.dirty=true;
+  }
+  return c;
+}
+function cardAdd(c,x){
+  const tk=normQA(x.t,false);
+  const ex=c.sents.find(s=>s.t===x.t)||c.sents.find(s=>dice(tk,normQA(s.t,false))>=0.8);
+  if(ex){
+    if(x.u&&(ex.u=ex.u||[]).indexOf(x.u)<0){ex.u.push(x.u);(ex.d=ex.d||[]).push(x.d||domainOf(x.u));}
+    if((VW[x.v]||0)>(VW[ex.v]||0))ex.v=x.v;
+    if(ex.v!=='tuo'&&ex.v!=='contrastante'&&new Set(ex.d||[]).size>=2)ex.v='confermata';
+    return false;
+  }
+  c.sents.push({t:x.t,v:x.v,u:x.u?[x.u]:[],d:x.d?[x.d]:[],ok:0,ko:0,ts:Date.now()});
+  return true;
+}
+function cardTidy(c){
+  const k=new Set(c.k);
+  c.sents.forEach(s=>{let r=0;normQA(s.t,false).forEach(x=>{if(k.has(x))r++;});s.sc=(VW[s.v]||1)+Math.min(2,r)*0.8+((s.ok||0)-(s.ko||0))*0.7;});
+  c.sents.sort((a,b)=>b.sc-a.sc);
+  if(c.sents.length>MAXCS)c.sents=c.sents.slice(0,MAXCS);
+}
+function cardUpdate(c,res){
+  let add=0;
+  (res.cands||[]).forEach(x=>{
+    if(x.v==='scartata')return;
+    const p=res.pages[x.pi]||{};
+    if(cardAdd(c,{t:x.t,v:x.v,u:p.url,d:p.d}))add++;
+  });
+  /* una frase della scheda che ora risulta smentita viene segnata */
+  (res.cands||[]).forEach(x=>{if(x.v!=='scartata')return;const ex=c.sents.find(s=>s.t===x.t);if(ex&&ex.v!=='tuo')ex.v='contrastante';});
+  c.upd=Date.now();c.n=(c.n||0)+1;cardTidy(c);IDX.dirty=true;
+  return add;
+}
+function cardLoose(q){
+  const k=cardKey(q);let best=null;
+  S.cards.forEach(c=>{
+    let sc=0;c.k.forEach(x=>{if(k.indexOf(x)>=0)sc+=x.length>=7?2:1;});
+    if(sc>=2&&(!best||sc>best.sc))best={c:c,sc:sc};
+  });
+  return best&&best.c;
+}
+function cardForQuestion(q,res){
+  let c=findCard(q)||cardLoose(q);
+  if(!c&&res){
+    const kept=(res.cands||[]).filter(x=>x.v!=='scartata');let best=null;
+    S.cards.forEach(cc=>{
+      if(!cc.k.length)return;
+      const n=kept.filter(x=>{const set=new Set(x.tk||normQA(x.t,false));return cc.k.every(t=>set.has(t));}).length;
+      if(n&&(!best||n>best.n))best={c:cc,n:n};
+    });
+    if(best&&best.n>=Math.max(2,kept.length*0.3))c=best.c;
+  }
+  if(!c)c=getCard(buildQuery(q));
+  if(c.qs.indexOf(q)<0){c.qs.push(q);if(c.qs.length>30)c.qs.shift();}
+  return c;
+}
+function badge(v){return '<span class="badge b-'+(v==='fonte unica'?'fonte':v)+'">'+esc(VLAB[v]||v)+'</span>';}
+function srcLinks(st,max){
+  return (st.u||[]).slice(0,max||3).map((u,i)=>'<a href="'+esc(u)+'" target="_blank" rel="noopener">'+esc((st.d&&st.d[i])||domainOf(u))+'</a>').join(', ');
+}
+function cardDate(c){return new Date(c.upd||c.ts).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}
+function cardDoms(c){const s=new Set();c.sents.forEach(x=>(x.d||[]).forEach(d=>s.add(d)));return Array.from(s);}
+function cardSummaryHtml(c,n){
+  const list=c.sents.filter(s=>s.v==='tuo'||(s.ko||0)<=(s.ok||0)).slice(0,n||6);
+  const doms=cardDoms(c);
+  let h='<b>Scheda: '+esc(c.title)+'</b>\n';
+  list.forEach(s=>{h+='• '+esc(s.t)+' '+badge(s.v)+'\n';});
+  h+='<small>Aggiornata il '+cardDate(c)+' · '+c.sents.length+' informazioni · '+doms.length+' fonti'+(doms.length?': '+doms.slice(0,6).map(esc).join(', '):'')+
+    (c.sents.length>list.length?' · mostro le '+list.length+' più affidabili':'')+'</small>';
+  return h;
+}
+function cardButtons(c){
+  return '<button onclick="refreshCard(\''+c.id+'\')">🔄 Aggiorna la scheda</button>'+
+    (c.sents.length>6?'<button class="sec" onclick="showCard(\''+c.id+'\')">Mostra tutto</button>':'');
+}
+function showCard(id){
+  const c=S.cards.find(x=>x.id===id);if(!c)return;
+  bot(cardSummaryHtml(c,MAXCS));
+}
+function refreshCard(id){
+  const c=S.cards.find(x=>x.id===id);if(!c)return;
+  pushStudy(c.title,0,{root:c.title});touch();
+  bot('Aggiorno la scheda «'+esc(c.title)+'»: rileggo le fonti, aggiungo le novità e ricontrollo le informazioni già salvate.');
+  startStudy();
+}
+function delCard(id){S.cards=S.cards.filter(c=>c.id!==id);IDX.dirty=true;touch();render();markUpdate('scheda eliminata');}
+function delCardSent(id,i){const c=S.cards.find(x=>x.id===id);if(!c)return;c.sents.splice(i,1);IDX.dirty=true;touch();render();markUpdate('informazione eliminata');}
+
+/* ---------- studio autonomo ---------- */
+let studying=false;
+function setStudy(t){const e=document.getElementById('study');if(e)e.textContent=t;}
+function pushStudy(t,d,extra){
+  t=String(t||'').replace(/\b(su internet|sul web|in rete|online|su wikipedia)\b/gi,'').replace(/^[\s,;:.\-]+|[\s,;:.?!\-]+$/g,'').trim();
+  if(t.length<3)return 'vuoto';
+  if(S.study.length>=100)return 'piena';
+  const k=strip(t);
+  if(S.study.some(x=>strip(x.t)===k))return 'gia_in_coda';
+  if(d>0&&S.studied.indexOf(k)>=0)return 'gia_studiato';
+  const it={t:t,d:d,q:(extra&&extra.q)||buildQuery(t),root:(extra&&extra.root)||t};
+  if(d===0)S.study.unshift(it);else S.study.push(it);
+  return 'ok';
+}
+function nextTopic(){
+  if(S.study.length)return S.study.shift();
+  if(S.unanswered.length){const u=S.unanswered.shift();return {t:u,d:1,q:buildQuery(u),root:u,isQ:true};}
+  return null;
+}
+function selfTopics(){
+  const cands=[];
+  S.notes.forEach(n=>{if(n.src==='utente')return;n.sents.forEach(s=>cands.push({t:s.t,d:n.dom||n.title,v:s.v}));});
+  if(!cands.length)return [];
+  return followUps(cands,'').filter(x=>pushStudy(x,1,{root:x})==='ok');
+}
+function reportHtml(t,res,fu,c,add){
+  if(!res.kept)return 'Su «'+esc(t)+'» non ho trovato informazioni che superino la verifica'+(res.disc?' ('+res.disc+' frasi scartate)':'')+'.\nWikipedia: '+(res.wikiErr?'non raggiungibile':res.wiki+' voci')+' · web: '+esc(res.webState||'')+'.\nPremi «🔌 Prova internet» per vedere quali servizi rispondono.';
+  let h='Ho studiato «'+esc(t)+'».'+(c?'\n• Scheda «'+esc(c.title)+'»: '+(c.n>1?'aggiornata, ':'creata, ')+add+' informazioni nuove, '+c.sents.length+' in totale':'')+'\n• Fonti lette: '+res.wiki+' pagine Wikipedia, '+res.web+' siti web'+
+    '\n• Frasi conservate: '+res.kept+' (di cui '+res.conf+' confermate da più fonti)'+
+    '\n• Frasi scartate perché non confermate o smentite: '+res.disc;
+  if(res.doms.length)h+='\n• Fonti usate: '+res.doms.slice(0,8).map(esc).join(', ');
+  if(!res.web)h+='\n(Web: '+esc(res.webState||'nessuna risposta')+'. Ho usato Wikipedia.)';else if(NET.search)h+='\n• Ricerca web tramite '+esc(NET.search);
+  if(fu&&fu.length)h+='\n• Approfondirò anche: '+fu.map(x=>'«'+esc(x)+'»').join(', ');
+  if(c)h+='\nScrivi «cosa sai di '+esc(c.title.toLowerCase())+'» per leggere il riassunto.';
+  return h;
+}
+function studyBtn(on){const b=document.getElementById('studyBtn');b.textContent=on?'■ Ferma studio':'▶ Studia da sola';b.className=on?'stop':'run';}
+function toggleStudy(){
+  if(studying){studying=false;setStudy('Mi fermo appena finisco l\'argomento in corso…');return;}
+  const inp=document.getElementById('inp'),v=(inp.value||'').trim();
+  if(v){
+    inp.value='';
+    if(state.await&&state.await.kind==='studyTopic'){handle(v);return;}
+    handle(studyRequest(v)?v:'studia '+v);return;
+  }
+  if(state.await&&state.await.kind==='studyTopic'&&!S.study.length&&!S.unanswered.length){
+    setStudy('Scrivi l\'argomento nella casella qui sopra, poi premi «Invia» oppure «Studia da sola».');return;
+  }
+  startStudy();
+}
+async function startStudy(){
+  if(studying)return;
+  if(!S.study.length&&!S.unanswered.length){
+    const f=selfTopics();
+    if(f.length)bot('Nessun argomento in coda. Ho scelto da sola questi concetti, ricorrenti in più fonti già lette: '+f.map(x=>'«'+esc(x)+'»').join(', ')+'.');
+    else{state.await={kind:'studyTopic'};bot('Cosa devo studiare? Scrivi l\'argomento (più argomenti separati da virgola).');return;}
+  }
+  studying=true;studyBtn(true);
+  let done=0,errors=0,kept=0,disc=0,cardAdds=0;const n0=S.notes.length,touched=new Set();
+  while(studying&&done<30&&S.notes.length<MAXNOTES){
+    const tp=nextTopic();if(!tp)break;
+    const res=await researchTopic(tp.q||buildQuery(tp.t),{progress:x=>setStudy('Studio «'+tp.t+'»: '+x+'  ('+done+' fatti, '+S.study.length+' in coda)')});
+    if(res.err){
+      errors++;S.study.unshift(tp);
+      if(errors>=2){bot('Non riesco a collegarmi a internet. Lo studio riprende quando premi di nuovo «Studia da sola».');break;}
+      await sleep(3000);continue;
+    }
+    errors=0;
+    const k=strip(tp.t);if(S.studied.indexOf(k)<0){S.studied.push(k);if(S.studied.length>1000)S.studied.shift();}
+    kept+=res.kept;disc+=res.disc;
+    const root=tp.root||tp.t,dd=tp.d||0;
+    let card=null,add=0;
+    if(res.kept){card=tp.isQ?cardForQuestion(root,res):getCard(root);add=cardUpdate(card,res);cardAdds+=add;touched.add(card.title);}
+    const fu=dd<1?followUps(res.cands,root).slice(0,3).filter(x=>pushStudy(x,dd+1,{q:x+' '+rootKey(root),root:root})==='ok'):[];
+    if(dd===0)bot(reportHtml(tp.t,res,fu,card,add),card?cardButtons(card):'');
+    done++;touch();render();await sleep(1500);
+  }
+  studying=false;studyBtn(false);setStudy('');
+  if(done)bot('Studio terminato: '+done+' argomenti, '+(S.notes.length-n0)+' pagine nuove, '+kept+' frasi conservate, '+disc+' scartate. In coda: '+S.study.length+'.'+
+    (touched.size?'\nSchede aggiornate: '+Array.from(touched).map(x=>'«'+esc(x)+'»').join(', ')+' (+'+cardAdds+' informazioni).':''));
+  render();
+  if(cardAdds||kept)markUpdate('fine studio');
+}
+
+/* ---------- chat ---------- */
+function addMsg(cls,html,extra){
+  const c=document.getElementById('chat'),d=document.createElement('div');
+  d.className='m '+cls;d.innerHTML=html;
+  if(extra)d.insertAdjacentHTML('beforeend','<div>'+extra+'</div>');
+  c.appendChild(d);c.scrollTop=c.scrollHeight;return d;
+}
+const FB='<button class="ok" onclick="handle(\'Giusto\')">✓ Giusto</button><button class="ko" onclick="handle(\'Sbagliato\')">✗ Sbagliato</button>';
+const bot=(h,x)=>addMsg('b',h,x);
+function setBot(el,html,extra){
+  el.innerHTML=html;if(extra)el.insertAdjacentHTML('beforeend','<div>'+extra+'</div>');
+  const c=document.getElementById('chat');c.scrollTop=c.scrollHeight;
+}
+function parseFeedback(t){
+  const n=strip(t).replace(/[.!?,;:]+$/,'').trim(),nw=n.split(/\s+/).length;
+  if(/^(giusto|esatto|corretto|bravo|brava|ok|okay|si|perfetto|bene|vero|giustissimo|esattamente)\b/.test(n)&&nw<=4)return {pos:true};
+  if(/^(no|sbagliato|errato|sbagli|falso|errore|scorretto)\b/.test(n)){
+    const m=/^\s*(?:no|sbagliato|errato|sbagli|falso|errore|scorretto)\b[\s,.:;!-]*(?:(?:la risposta|il risultato|risposta|risultato)?\s*(?:giusta|giusto|corretta|corretto)?\s*(?:è|e'|e|sarebbe|dovrebbe essere)\s+)?([\s\S]*)$/i.exec(t);
+    return {neg:true,rest:(m&&m[1]||'').trim()};
+  }
+  return null;
+}
+function applyFixCalc(L,v){
+  learnCalc(L,v);record(false);touch();
+  const parts=L.matches.concat(L.un.slice(0,4)),shown=parts.slice(0,3).map(p=>'«'+esc(p)+'» → '+bestOpOf(p)+' ('+shareOf(p,bestOpOf(p))+'%)').join(', ');
+  bot('Capito: '+fmt(L.a)+' e '+fmt(L.b)+' danno '+fmt(v)+'.\nOra penso: '+shown+'.');
+  state.last=null;render();
+}
+function applyFixQA(L,ans){
+  if(L.kind==='note'){
+    const st=sentOfL(L);if(st)st.ko++;
+    S.qa.push({q:L.q,tk:L.tk,a:ans,ok:0,ko:0});
+  }else{
+    const it=S.qa[L.idx];if(it)it.ko++;
+    if(it&&L.score>=0.999)it.a=ans;else S.qa.push({q:L.q,tk:L.tk,a:ans,ok:0,ko:0});
+  }
+  let c=null;
+  if(L.kind==='note'){const n=findN(L.nid);if(n&&n.k)c=n;else if(L.st)c=S.cards.find(x=>x.sents.some(y=>y.t===L.st))||null;}
+  if(!c)c=cardForQuestion(L.q,null);else if(c.qs.indexOf(L.q)<0)c.qs.push(L.q);
+  cardAdd(c,{t:ans.replace(/^./,x=>x.toUpperCase()),v:'tuo'});c.upd=Date.now();cardTidy(c);IDX.dirty=true;
+  record(false);touch();
+  bot('Correzione imparata. Alla prossima risponderò: «'+esc(ans)+'».\nL\'ho aggiunta alla scheda «'+esc(c.title)+'».');markUpdate('correzione');
+  state.last=null;render();
+}
+function now(){return new Date();}
+/* verifica quali servizi internet rispondono da questo tablet */
+async function testNet(){
+  const el=bot('Provo i collegamenti, attendi fino a 20 secondi…');
+  const T=[
+    ['Wikipedia',()=>fetchT('https://it.wikipedia.org/w/api.php?action=query&format=json&origin=*&meta=siteinfo',12000).then(t=>t.indexOf('query')>=0?'ok':'risposta strana')],
+    ['Lettore pagine (jina)',()=>fetchT(PROXY_TEXT[0]('https://example.com'),18000).then(t=>/Example Domain/i.test(t)?'ok':'risposta strana')],
+    ['Servizio allorigins',()=>fetchT(PROXY_RAW[0]('https://example.com'),18000).then(t=>/Example Domain/i.test(t)?'ok':'risposta strana')],
+    ['Servizio codetabs',()=>fetchT(PROXY_RAW[1]('https://example.com'),18000).then(t=>/Example Domain/i.test(t)?'ok':'risposta strana')],
+    ['Ricerca Bing (jina)',()=>fetchT(PROXY_TEXT[0]('https://www.bing.com/search?setlang=it&q=sovraindebitamento'),18000).then(t=>{const n=linksFrom(t).length;return n>=2?'ok, '+n+' risultati':'nessun risultato'})],
+    ['Ricerca DuckDuckGo (allorigins)',()=>fetchT(PROXY_RAW[0]('https://html.duckduckgo.com/html/?q=sovraindebitamento'),18000).then(t=>{const n=linksFrom(t).length;return n>=2?'ok, '+n+' risultati':'nessun risultato'})],
+    ['Ricerca DuckDuckGo (codetabs)',()=>fetchT(PROXY_RAW[1]('https://html.duckduckgo.com/html/?q=sovraindebitamento'),18000).then(t=>{const n=linksFrom(t).length;return n>=2?'ok, '+n+' risultati':'nessun risultato'})]
+  ];
+  const out=await Promise.all(T.map(async x=>{const t0=Date.now();try{const r=await x[1]();return (r.indexOf('ok')===0?'✓ ':'✗ ')+x[0]+': '+r+' ('+((Date.now()-t0)/1000).toFixed(1)+' s)';}catch(e){return '✗ '+x[0]+': '+(e.name==='AbortError'?'nessuna risposta in tempo':(e.message||'errore'));}}));
+  setBot(el,'Risultato della prova:\n'+out.join('\n')+'\n\nSe Wikipedia ha ✓ imparo comunque. Per il web serve almeno una «Ricerca» con ✓ e un servizio con ✓. Mandami uno screenshot di questo messaggio se qualcosa non va.');
+}
+/* riconosce «studia X», «puoi studiare X», «voglio che tu approfondisca X», «informati sul X»… */
+const STUDY_PRE=new Set('per favore ti chiedo di voglio vorrei che tu puoi potresti devi dovresti vai a adesso ora ok allora ciao mi ne bene ancora anche'.split(' '));
+function studyRequest(t){
+  const re=/\b(?:studia(?:re|rti|ti|mi)?|studi|approfondisci|approfondire|approfondisca|informati|informarti|documentati|documentarti|impara(?:re)?\s+(?:tutto\s+)?su|leggi\s+su|fai\s+una\s+ricerca|fare\s+una\s+ricerca|cerca(?:re)?\s+informazioni)\b\s*(?:bene\s+|tutto\s+)?(?:(?:su|sul|sullo|sulla|sui|sugli|sulle|riguardo\s+a|riguardo\s+al|riguardo\s+alla|in\s+merito\s+a|in\s+merito\s+al|in\s+merito\s+alla|circa|di|del|della|dello|dei|degli|delle)\s+)?([\s\S]{3,})$/i;
+  const m=re.exec(t);if(!m)return null;
+  const pre=strip(t.slice(0,m.index)).replace(/[^a-z ]/g,' ').split(/\s+/).filter(Boolean);
+  if(!pre.every(w=>STUDY_PRE.has(w)))return null;
+  const topic=m[1].trim();
+  if(/^(da sol[ao]|in autonomia|per conto tuo)\b/i.test(topic))return null;
+  return topic.split(/[,;]/).map(x=>x.trim()).filter(x=>x.length>=3);
+}
+
+async function handle(raw){
+  const t=String(raw).trim();if(!t)return;
+  addMsg('u',esc(t));
+  if(busy){bot('Un momento, sto ancora cercando.');return;}
+  const aw=state.await;
+  if(aw){
+    if(/^(annulla|lascia stare|niente|stop)$/.test(strip(t))){state.await=null;bot('Annullato.');return;}
+    if(aw.kind==='teachQA'){
+      state.await=null;S.qa.push({q:aw.q,tk:aw.tk,a:t,ok:0,ko:0});
+      const c=cardForQuestion(aw.q,null);cardAdd(c,{t:t.replace(/^./,x=>x.toUpperCase()),v:'tuo'});c.upd=Date.now();cardTidy(c);IDX.dirty=true;touch();
+      bot('Imparato. Se mi richiedi questa domanda, o una simile, risponderò: «'+esc(t)+'».\nL\'ho aggiunto alla scheda «'+esc(c.title)+'».');render();markUpdate('risposta insegnata');return;
+    }
+    if(aw.kind==='fixQA'){state.await=null;applyFixQA(aw.last,t);return;}
+    if(aw.kind==='studyTopic'){
+      state.await=null;
+      const tps=(studyRequest(t)||t.split(/[,;]/)).filter(x=>pushStudy(x,0)!=='vuoto');
+      if(!tps.length){bot('Non ho capito l\'argomento.');return;}
+      touch();bot('Studio: '+tps.map(x=>'«'+esc(x)+'»').join(', ')+'. Cerco su Wikipedia e sul web, confronto le fonti e scarto ciò che non trova conferma.');
+      startStudy();return;
+    }
+    if(aw.kind==='fixCalc'){
+      const v=firstNum(t);
+      if(v===null){bot('Non vedo un numero. Scrivi il risultato giusto, oppure «annulla».');return;}
+      state.await=null;applyFixCalc(aw.last,v);return;
+    }
+  }
+  const fb=parseFeedback(t);
+  if(fb){
+    const L=state.last;
+    if(!L){bot('Non ho una risposta da valutare. Fammi prima una domanda.');return;}
+    if(fb.pos){
+      if(L.kind==='calc')learnCalc(L,L.ans);
+      else if(L.kind==='note'){
+        const st=sentOfL(L);
+        if(st){st.ok++;S.qa.push({q:L.q,tk:L.tk,a:st.t,ok:1,ko:0});const c=findCard(L.q);if(c){const cs=c.sents.find(x=>x.t===st.t);if(cs&&cs!==st)cs.ok++;}}
+      }else if(S.qa[L.idx])S.qa[L.idx].ok++;
+      record(true);touch();state.last=null;bot('Bene, ho rinforzato questa risposta.');render();markUpdate('risposta confermata');return;
+    }
+    if(L.kind==='calc'){
+      const v=fb.rest?firstNum(fb.rest):null;
+      if(v!==null){applyFixCalc(L,v);return;}
+      state.await={kind:'fixCalc',last:L};bot('Qual è il risultato giusto?');return;
+    }
+    if(fb.rest){applyFixQA(L,fb.rest);return;}
+    state.await={kind:'fixQA',last:L};bot('Qual è la risposta giusta?');return;
+  }
+  const s=strip(t).replace(/[?!.]+$/,'').trim();
+  if(/^(ciao|salve|buongiorno|buonasera|hey)\b/.test(s)){bot('Ciao. Fammi un calcolo o una domanda, oppure dimmi cosa studiare.');return;}
+  if(/^(grazie|ti ringrazio)/.test(s)){bot('Prego.');return;}
+  if(/^come stai/.test(s)){bot('Funziono. Cosa devo fare?');return;}
+  if(/\bche ore sono\b|\bche ora e\b/.test(s)){bot(now().toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'}));return;}
+  if(/\bche giorno e\b|\bche data\b|\bquanti ne abbiamo\b/.test(s)){bot(now().toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long',year:'numeric'}));return;}
+  const ms=/^(?:(?:cosa|che cosa|che) (?:sai|conosci|ricordi|hai (?:studiato|imparato|letto|capito|trovato))|(?:dimmi|fammi sapere) (?:cosa|che cosa|quello che) (?:sai|hai (?:studiato|imparato|trovato))) (?:su|sul|sullo|sulla|sui|sugli|sulle|di|del|dello|della|dei|degli|delle|riguardo (?:a|al|alla|allo|ai|agli|alle)|circa|in merito (?:a|al|alla|allo))\s+(.{3,})$/.exec(s)
+    ||/^(?:parlami|raccontami|spiegami|riassumi(?:mi)?|fammi un riassunto|mostrami la scheda|apri la scheda|scheda) (?:di |del |dello |della |dei |degli |delle |su |sul |sullo |sulla |sui |sugli |sulle )?(.{3,})$/.exec(s);
+  if(ms){
+    const topic=ms[1].replace(/^(il|lo|la|i|gli|le|l) /,'');
+    const c=findCard(topic);
+    if(c&&c.sents.length){state.last=null;bot(cardSummaryHtml(c,6),cardButtons(c));return;}
+    if(pushStudy(topic,0)!=='vuoto'){touch();bot('Non ho ancora una scheda su «'+esc(topic)+'». La preparo adesso: cerco su Wikipedia e sul web, confronto le fonti e ti riporto il risultato.');startStudy();return;}
+  }
+  if(/^(?:(?:cosa|che cosa) (?:sai|hai (?:imparato|studiato))|aiuto|(?:elenco|lista|mostrami le|quali) schede(?: hai)?|che schede hai)$/.test(s)){
+    let h='Ho '+S.cards.length+' schede, '+S.notes.length+' pagine lette, '+S.qa.length+' fatti insegnati da te e '+Object.keys(S.n).length+' parole di calcolo.';
+    if(S.cards.length)h+='\nSchede: '+S.cards.slice().sort((a,b)=>(b.upd||0)-(a.upd||0)).slice(0,20).map(c=>'«'+esc(c.title)+'» ('+c.sents.length+')').join(', ')+'.\nScrivi «cosa sai di …» per leggerne una.';
+    bot(h);return;
+  }
+  if(/\b(fai|scarica|salva)\b.*\bbackup\b/.test(s)||/^backup$/.test(s)){exportBackup();bot('Backup scaricato.');return;}
+  if(/\b(studia|impara|studiare|imparare)\s+(da sola|da solo|in autonomia|per conto tuo)\b/.test(s)){startStudy();return;}
+  if(/^(prova|controlla|verifica) (internet|collegament|la rete|connession)/.test(s)){testNet();return;}
+  if(/^(ferma|smetti|basta)\b.*\b(studi|studio|studiare)\b/.test(s)){if(studying){studying=false;bot('Mi fermo appena finisco l\'argomento in corso.');}else bot('Non sto studiando.');return;}
+  let m=/^(?:sappi che|ricorda che|ricordati che|impara che|tieni a mente che|ricorda:)\s+([\s\S]+)$/i.exec(t);
+  if(m){
+    const n=userNote();n.sents.push({t:m[1].trim().replace(/^./,c=>c.toUpperCase()),ok:0,ko:0});IDX.dirty=true;touch();markUpdate('informazione memorizzata');
+    bot('Memorizzato: «'+esc(m[1].trim())+'».');render();return;
+  }
+  const req=studyRequest(t);
+  if(req){
+    const tps=req.filter(x=>pushStudy(x,0)!=='vuoto');
+    if(!tps.length){state.await={kind:'studyTopic'};bot('Cosa devo studiare esattamente?');return;}
+    touch();
+    bot('Studio: '+tps.map(x=>'«'+esc(x)+'»').join(', ')+'. Cerco su Wikipedia e sul web, confronto le fonti e scarto ciò che non trova conferma.'+
+      (studying?' Lo metto in testa alla coda.':''));
+    startStudy();return;
+  }
+  const sp=specialCalc(t);
+  if(sp){bot('<b>'+fmt(sp.v)+'</b><small>'+esc(sp.txt)+' (regola fissa)</small>');return;}
+  const c=parseCalc(t);
+  if(c){
+    if(c.empty){bot('Non capisco che operazione vuoi tra '+fmt(c.a)+' e '+fmt(c.b)+'. Scrivi ad esempio «'+fmt(c.a)+' più '+fmt(c.b)+'».');return;}
+    const parts=c.matches.concat(c.un.slice(0,4)).filter(p=>S.cw[p]),pr=probsFor(parts),k=pickIdx(pr),op=OPN[k],ans=OPF[op](c.a,c.b);
+    state.last={kind:'calc',a:c.a,b:c.b,matches:c.matches,un:c.un,op:op,ans:ans};
+    const note=c.matches.length?'Ho interpretato '+c.matches.slice(0,3).map(p=>'«'+esc(p)+'»').join(', ')+' come '+op+' ('+Math.round(pr[k]*100)+'%)'
+      :'Parola nuova ('+c.words.slice(0,3).map(esc).join(', ')+'): ho tirato a indovinare ('+op+')';
+    bot('<b>'+fmt(ans)+'</b><small>'+note+'</small>',FB);return;
+  }
+  const tkQ=normQA(t,true),tkR=normQA(t,false);
+  if(!tkQ.length){bot('Non ho capito. Scrivi una domanda o un calcolo.');return;}
+  let hit=findQA(tkQ);
+  if(!hit&&EMB.ready){busy=true;hit=await findQAsem(t);busy=false;}
+  if(hit){
+    const it=hit.item;
+    state.last={kind:'qa',idx:hit.idx,tk:tkQ,q:t,score:hit.score};
+    let sm=hit.score<0.999?'Domanda simile a: «'+esc(it.q)+'»'+(hit.score<0.95?' (se non è la stessa, premi ✗ Sbagliato)':''):'Risposta già imparata';
+    if(it.ok||it.ko)sm+=' · confermata '+it.ok+' volte, corretta '+it.ko+' volte';
+    bot(esc(it.a)+'<small>'+sm+'</small>',FB);return;
+  }
+  busy=true;const loc=await searchNotesH(tkR,t);busy=false;
+  if(loc){
+    const st=loc.n.sents[loc.i];
+    state.last={kind:'note',nid:loc.n.id,i:loc.i,st:st.t,tk:tkQ,q:t};
+    if(!loc.n.k){const c=findCard(t);if(c&&c.qs.indexOf(t)<0)c.qs.push(t);}
+    bot(esc(st.t)+'<small>'+srcHtml(loc.n,loc.cov,loc.i)+'</small>',FB);return;
+  }
+  busy=true;
+  const el=bot('Non lo so ancora. Cerco su Wikipedia e sul web…');
+  let res;
+  try{res=await researchTopic(buildQuery(t),{quick:true,progress:x=>setBot(el,'Non lo so ancora: '+x)});}catch(e){res={err:true,ids:[]};}
+  busy=false;
+  if(res.err){
+    if(S.unanswered.indexOf(t)<0&&S.unanswered.length<50)S.unanswered.push(t);
+    state.await={kind:'teachQA',q:t,tk:tkQ};touch();
+    setBot(el,'Non riesco a collegarmi a internet. Ricorderò la domanda e riproverò quando studio da sola.\nSe vuoi, dimmi tu come rispondere (oppure «annulla»).');return;
+  }
+  let qcard=null,qadd=0;
+  if(res.kept){qcard=cardForQuestion(t,res);qadd=cardUpdate(qcard,res);markUpdate('scheda aggiornata da una domanda');}
+  touch();render();
+  const info=' · lette '+(res.wiki+res.web)+' fonti, scartate '+res.disc+' frasi non verificate'+(qcard?' · scheda «'+esc(qcard.title)+'» '+(qcard.n>1?'aggiornata':'creata')+' (+'+qadd+')':'');
+  busy=true;
+  const r=res.ids.length?await searchNotesH(tkR,t,res.ids):null;
+  busy=false;
+  if(r){
+    const st=r.n.sents[r.i];
+    state.last={kind:'note',nid:r.n.id,i:r.i,st:st.t,tk:tkQ,q:t};
+    setBot(el,esc(st.t)+'<small>'+srcHtml(r.n,r.cov,r.i)+info+'</small>',FB);return;
+  }
+  if(res.ids.length){
+    const n=S.notes.find(x=>x.id===res.ids[0]);
+    if(n&&n.sents.length){
+      state.last={kind:'note',nid:n.id,i:0,st:n.sents[0].t,tk:tkQ,q:t};
+      setBot(el,'Non ho trovato una frase che risponda con certezza. La fonte più vicina dice:\n'+esc(n.sents[0].t)+'<small>'+srcHtml(n,undefined,0)+info+'</small>',FB);return;
+    }
+  }
+  record(false);
+  if(S.unanswered.indexOf(t)<0&&S.unanswered.length<50)S.unanswered.push(t);
+  state.last=null;state.await={kind:'teachQA',q:t,tk:tkQ};touch();render();
+  setBot(el,'Non ho trovato nulla di utile. Come devo rispondere a questa domanda?\n(scrivi la risposta, oppure «annulla»)');
+}
+function send(){const i=document.getElementById('inp');const v=i.value;i.value='';handle(v);i.focus();}
+
+/* ---------- pannello e statistiche ---------- */
+function togglePanel(){const p=document.getElementById('panel');p.style.display=p.style.display==='block'?'none':'block';renderPanel();}
+function renderPanel(){
+  const p=document.getElementById('panel');if(p.style.display!=='block')return;
+  let h='<h3>Schede per argomento ('+S.cards.length+')</h3>';
+  if(!S.cards.length)h+='<div class="mut">Nessuna. Scrivi «studia …» oppure fai una domanda: le schede si creano e si aggiornano da sole.</div>';
+  S.cards.slice().sort((a,b)=>(b.upd||0)-(a.upd||0)).forEach(c=>{
+    const doms=cardDoms(c),open=openCards.has(c.id);
+    h+='<details class="card"'+(open?' open':'')+' ontoggle="cardToggle(\''+c.id+'\',this.open)"><summary>'+esc(c.title)+' <span class="mut">· '+c.sents.length+' informazioni · '+doms.length+' fonti · aggiornata il '+cardDate(c)+'</span></summary><div class="body">';
+    if(c.qs.length)h+='<div class="mut">Domande collegate: '+c.qs.slice(-5).map(esc).join(' · ')+'</div>';
+    c.sents.forEach((st,i)=>{
+      const l=srcLinks(st,4);
+      h+='<div class="it"><span class="t">'+badge(st.v)+esc(st.t)+(l?'<br><span class="mut">fonti: '+l+'</span>':'')+((st.ok||st.ko)?'<span class="mut"> · ✓ '+st.ok+' ✗ '+st.ko+'</span>':'')+'</span><button onclick="delCardSent(\''+c.id+'\','+i+')" title="Elimina questa informazione">✕</button></div>';
+    });
+    h+='<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap"><button onclick="refreshCard(\''+c.id+'\')">🔄 Aggiorna</button><button class="sec" onclick="askDelCard(\''+c.id+'\')">Elimina scheda</button></div></div></details>';
+  });
+  h+='<h3>Fatti insegnati o confermati ('+S.qa.length+')</h3>';
+  if(!S.qa.length)h+='<div class="mut">Nessuno.</div>';
+  S.qa.slice(-60).forEach((it,j)=>{
+    const i=S.qa.length-Math.min(60,S.qa.length)+j;
+    h+='<div class="it"><span class="t"><b>'+esc(it.q)+'</b><br>→ '+esc(it.a)+'<br><span class="mut">✓ '+it.ok+' · ✗ '+it.ko+'</span></span><button onclick="delQA('+i+')">✕</button></div>';
+  });
+  h+='<h3>Pagine lette ('+S.notes.length+')</h3>';
+  if(!S.notes.length)h+='<div class="mut">Nessuna. Scrivi «studia …» oppure fai una domanda.</div>';
+  S.notes.slice(-80).forEach(n=>{
+    const cf=n.sents.filter(s=>s.v==='confermata').length,ct=n.sents.filter(s=>s.v==='contrastante').length;
+    h+='<div class="it"><span class="t">'+(n.url?'<a href="'+esc(n.url)+'" target="_blank" rel="noopener">'+esc(n.title)+'</a>':esc(n.title))+
+      ' <span class="mut">· '+esc(n.dom||(n.src==='utente'?'da te':'wikipedia'))+' · '+n.sents.length+' frasi'+(cf?', '+cf+' confermate':'')+(ct?', '+ct+' in disaccordo':'')+'</span></span><button onclick="delNote(\''+n.id+'\')">✕</button></div>';
+  });
+  h+='<h3>Argomenti in coda ('+S.study.length+') e domande senza risposta ('+S.unanswered.length+')</h3>';
+  h+='<div class="mut">'+(S.study.slice(0,15).map(x=>esc(x.t)).join(' · ')||'–')+'</div>';
+  h+='<h3>Informazioni scartate ('+S.discarded.length+')</h3>';
+  if(!S.discarded.length)h+='<div class="mut">Nessuna.</div>';
+  S.discarded.slice(-20).reverse().forEach(x=>{
+    h+='<div class="it"><span class="t">'+esc(x.t)+'<br><span class="mut">'+esc(x.d)+' · '+esc(x.why)+'</span></span></div>';
+  });
+  h+='<h3>Parole di calcolo imparate</h3>';
+  const keys=Object.keys(S.n);
+  if(!keys.length)h+='<div class="mut">Nessuna ancora. Prova «7 elevato 2», poi correggi con «no, 49».</div>';
+  keys.forEach(k=>{const o=bestOpOf(k);h+='<div class="it"><span class="t"><b>'+esc(k)+'</b> → '+o+' ('+shareOf(k,o)+'%) <span class="mut">· '+S.n[k]+' esempi</span></span></div>';});
+  p.innerHTML=h;
+}
+const openCards=new Set();
+function cardToggle(id,o){if(o)openCards.add(id);else openCards.delete(id);}
+function askDelCard(id){
+  const c=S.cards.find(x=>x.id===id);if(!c)return;
+  bot('Elimino la scheda «'+esc(c.title)+'» con '+c.sents.length+' informazioni?','<button class="ko" onclick="delCard(\''+id+'\');this.parentNode.innerHTML=\'Scheda eliminata.\'">Sì, elimina</button>');
+}
+function delQA(i){S.qa.splice(i,1);touch();render();}
+function delNote(id){S.notes=S.notes.filter(n=>n.id!==id);IDX.dirty=true;touch();render();}
+async function resetAll(){
+  if(!confirm('Cancellare TUTTA la memoria? Scarica prima un backup se vuoi conservarla.'))return;
+  studying=false;studyBtn(false);S=freshState();state={await:null,last:null};IDX.dirty=true;EMB.vec={};EMB.ready=false;EMB.pipe=null;try{if(IDB.db)IDB.set('emb',{});}catch(e){}updSem();
+  document.getElementById('chat').innerHTML='';
+  await saveNow();bot('Memoria cancellata.');render();
+}
+function render(){
+  const tot=S.hist.length,ok=S.hist.reduce((a,b)=>a+b,0),rec=S.hist.slice(-20);
+  document.getElementById('sTot').textContent=tot;
+  document.getElementById('sOk').textContent=ok;
+  document.getElementById('sRec').textContent=rec.length?Math.round(rec.reduce((a,b)=>a+b,0)/rec.length*100)+'%':'–';
+  document.getElementById('sFacts').textContent=S.qa.length;
+  document.getElementById('sNotes').textContent=S.notes.length;
+  document.getElementById('sCards').textContent=S.cards.length;
+  document.getElementById('sWords').textContent=Object.keys(S.n).length;
+  drawChart();renderPanel();renderStatus();renderWarn();
+}
+function drawChart(){
+  const c=document.getElementById('chart'),g=c.getContext('2d'),W=c.width,H=c.height;
+  g.clearRect(0,0,W,H);
+  g.strokeStyle='#dde1e8';[0,.5,1].forEach(v=>{const y=H-5-v*(H-10);g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();});
+  const h=S.hist.slice(-200),pts=[];
+  for(let i=0;i<h.length;i++){const s=h.slice(Math.max(0,i-9),i+1);pts.push(s.reduce((a,b)=>a+b,0)/s.length);}
+  if(pts.length<2)return;
+  g.strokeStyle='#2f5fd0';g.lineWidth=2;g.beginPath();
+  pts.forEach((v,i)=>{const x=i/(pts.length-1)*(W-4)+2,y=H-5-v*(H-10);i?g.lineTo(x,y):g.moveTo(x,y);});
+  g.stroke();
+}
+window.addEventListener('beforeunload',()=>{try{localStorage.setItem(LS,JSON.stringify(S));}catch(e){} if(IDB.db)IDB.set('brain',S);});
+document.addEventListener('visibilitychange',()=>{if(document.hidden)saveNow();});
+
+//MAIN
+(async function main(){
+  await loadBrain();
+  render();
+  if(S.semantic)startSem(false);
+  bot('Ciao. Cosa so fare:\n• calcoli scritti a parole o in frasi: «venti meno sette», «ho 5 mele e ne mangio 2, quante restano?», «il 20% di 150», «la metà di 48»\n• domande: cerco nella mia memoria e, se non so, su Wikipedia e sul web; quello che trovo finisce nella scheda dell\'argomento\n• «cosa sai della legge sul sovraindebitamento»: ti leggo la scheda; se non ce l\'ho, la preparo\n• «studia la legge sul sovraindebitamento» (anche «puoi studiare…», «approfondisci…»): leggo più fonti, le confronto, conservo ciò che è confermato e scarto il resto; poi approfondisco da sola i concetti collegati\n• «Studia da sola» senza argomenti: scelgo io cosa approfondire da ciò che ho già letto\n• «sappi che il mio gatto si chiama Briciola»: memorizzo ciò che mi dici\n• 🧠 Comprensione avanzata (pulsante in basso): capisco meglio frasi dette con parole diverse\n\nSe sbaglio premi ✗ Sbagliato e dammi la risposta giusta: la correzione entra anche nella scheda. Tutto viene salvato nel browser; una volta al giorno scarico anche una copia di sicurezza in file; con ⬇ Backup ora ne fai una quando vuoi.'
+    +(memEmpty()?'':'\n\nMemoria ritrovata: '+S.cards.length+' schede, '+S.notes.length+' pagine, '+S.qa.length+' fatti.'));
+  renderWarn();
+  if(S.study.length||S.unanswered.length)bot('Ho '+S.study.length+' argomenti in coda e '+S.unanswered.length+' domande senza risposta. Premi «Studia da sola» per farmi lavorare.');
+})();
+</script>
+</body>
+</html>
