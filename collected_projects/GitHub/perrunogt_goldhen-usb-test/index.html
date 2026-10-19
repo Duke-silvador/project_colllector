@@ -1,0 +1,288 @@
+<html manifest="cache.appcache">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>perrunoGT</title>
+
+<style>
+html, body {
+    width: 100%;
+    height: 100%;
+}
+
+body {
+    background-color: #020604;
+    color: #dfffea;
+    font: 15px/1.5 monospace;
+    margin: 0;
+    overflow: hidden;
+    text-align: center;
+}
+
+/* Solo presentación; no cambia la estructura usada por el script. */
+body:before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+
+    background:
+        radial-gradient(circle at 50% 45%, rgba(0,255,136,0.10), transparent 45%);
+
+    pointer-events: none;
+}
+
+#console {
+    position: absolute;
+
+    top: 50%;
+    left: 50%;
+
+    width: 80%;
+    max-width: 700px;
+
+    max-height: 55%;
+
+    padding: 28px;
+
+    margin: 0;
+
+    transform: translate(-50%, -50%);
+
+    font-family: monospace;
+    font-size: 14px;
+    line-height: 1.8;
+
+    white-space: pre-wrap;
+    overflow: auto;
+
+    text-align: left;
+
+    color: #dfffea;
+
+    background-color: rgba(2,12,7,0.94);
+
+    border: 1px solid rgba(0,255,136,0.30);
+    border-radius: 16px;
+
+    box-shadow:
+        0 0 45px rgba(0,255,136,0.08),
+        0 20px 60px rgba(0,0,0,0.65);
+
+    z-index: 2;
+}
+
+#console:before {
+    content: "PERRUNOGT // PS4 HOST";
+
+    display: block;
+
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+
+    color: #00ff88;
+
+    font-size: 13px;
+    font-weight: bold;
+
+    letter-spacing: 0.14em;
+
+    border-bottom: 1px solid rgba(0,255,136,0.18);
+
+    text-shadow: 0 0 10px rgba(0,255,136,0.5);
+}
+
+.ok {
+    color: #00ff88;
+    text-shadow: 0 0 8px rgba(0,255,136,0.45);
+}
+
+.bad {
+    color: #ff405d;
+    text-shadow: 0 0 8px rgba(255,64,93,0.40);
+}
+
+.warn {
+    color: #b8ff52;
+    text-shadow: 0 0 8px rgba(184,255,82,0.35);
+}
+
+#console::-webkit-scrollbar {
+    width: 5px;
+}
+
+#console::-webkit-scrollbar-thumb {
+    background: #00b968;
+    border-radius: 10px;
+}
+
+body:after {
+    content: "";
+
+    position: fixed;
+    left: 0;
+    right: 0;
+    top: 0;
+
+    height: 1px;
+
+    background: rgba(0,255,136,0.18);
+
+    box-shadow: 0 0 10px rgba(0,255,136,0.35);
+
+    animation: scan 5s linear infinite;
+
+    pointer-events: none;
+    z-index: 5;
+}
+
+@keyframes scan {
+    0% {
+        top: 0;
+        opacity: 0;
+    }
+
+    10% {
+        opacity: 1;
+    }
+
+    90% {
+        opacity: 1;
+    }
+
+    100% {
+        top: 100%;
+        opacity: 0;
+    }
+}
+
+@media (max-width: 600px) {
+    #console {
+        width: 82%;
+        padding: 20px;
+        font-size: 12px;
+    }
+
+    #console:before {
+        font-size: 10px;
+    }
+}
+</style>
+
+<script>
+if (window.applicationCache && window.applicationCache.status == 0) {
+    window.location.replace("cache.html");
+}
+</script>
+</head>
+
+<body>
+    perrunoGT · PS4 Exploit<br>
+    © 2026 perrunoGT<br>
+    <br>
+    <pre id="console"></pre>
+</body>
+
+<script>
+(function () {
+    var con = document.getElementById("console");
+
+    function print(msg, cls) {
+        var span = document.createElement("span");
+        if (cls) span.className = cls;
+        span.textContent = msg + "\n";
+        con.appendChild(span);
+    }
+
+    var params = new URLSearchParams(location.search);
+
+    var SUPPORTED = { 1302: 1, 1304: 1, 1350: 1, 1352: 1 };
+
+    var key = null, fwnum = null;
+    var m = /PlayStation\s+4[\/ ](\d+)\.(\d+)/.exec(navigator.userAgent);
+    if (m) {
+        var ms = parseInt(m[2], 16).toString(16);
+        if (ms.length < 2) ms = "0" + ms;
+        key = m[1] + "." + ms;
+        fwnum = parseInt(m[1], 10) * 100 + parseInt(ms, 10);
+    }
+
+    var forced    = params.get("force") === "1";
+    var supported = forced || (fwnum !== null && SUPPORTED[fwnum] === 1);
+
+    print("firmware: " + (key || "unknown"));
+    print("supported: " + (supported ? "yes" : "no"), supported ? "ok" : "bad");
+
+    var target = "jb.html" + location.search;
+
+    function go() {
+        print("loading exploit...", "warn");
+        location.replace(target);
+    }
+
+    function waitForTap(msg, action) {
+        print(msg, "warn");
+        function fire() {
+            window.removeEventListener("click",   fire);
+            window.removeEventListener("keydown", fire);
+            action();
+        }
+        window.addEventListener("click",   fire);
+        window.addEventListener("keydown", fire);
+    }
+
+    if (!supported) {
+        print("UNSUPPORTED FIRMWARE — tap / press X to run anyway", "bad");
+        waitForTap("", go);
+        return;
+    }
+
+    var ac = window.applicationCache;
+    if (!ac || !document.documentElement.hasAttribute("manifest")) {
+        go();
+    } else if (!navigator.onLine) {
+        print("offline — running from cache", "ok");
+        go();
+    } else if (ac.status === ac.IDLE) {
+        print("cached", "ok");
+        go();
+    } else if (ac.status === ac.UPDATEREADY) {
+        try { ac.swapCache(); } catch (e) {}
+        print("update downloaded", "ok");
+        waitForTap("UPDATE READY — tap / press X to reload", function () { location.reload(); });
+    } else {
+        print("checking cache...");
+        ac.addEventListener("downloading",
+            function () { print("caching for offline (first run)..."); }, false);
+        ac.addEventListener("progress", function (e) {
+            if (e && e.total)
+                print("caching " + Math.round((e.loaded / e.total) * 100) + "%");
+        }, false);
+        ac.addEventListener("cached", function () {
+            print("cached for offline use", "ok");
+            waitForTap("CACHED — tap / press X to run", go);
+        }, false);
+        ac.addEventListener("updateready", function () {
+            try { ac.swapCache(); } catch (e) {}
+            print("update downloaded", "ok");
+            waitForTap("UPDATE READY — tap / press X to reload",
+                       function () { location.reload(); });
+        }, false);
+        ac.addEventListener("noupdate", function () {
+            print("cached — offline ready", "ok");
+            go();
+        }, false);
+        ac.addEventListener("error", function () {
+            print("cache unavailable");
+            waitForTap("CACHE FAILED — tap / press X to run anyway", go);
+        }, false);
+        ac.addEventListener("obsolete", function () {
+            print("cache obsolete");
+            waitForTap("CACHE OBSOLETE — tap / press X to run", go);
+        }, false);
+    }
+})();
+</script>
+</html>
