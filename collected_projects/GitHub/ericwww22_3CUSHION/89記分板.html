@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>黑馬撞球 LED 計分板</title>
+    <!-- 引入 Google Fonts 數位電子風格與中文字型 -->
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Noto+Sans+TC:wght@500;700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #09090d;
+            color: #ffffff;
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: clamp(8px, 2vw, 16px);
+            background-image: radial-gradient(circle at center, #181824 0%, #050508 100%);
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* 頂部控制列 (手機/平板通用) */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(22, 22, 32, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            padding: 10px 14px;
+            border-radius: 14px;
+            margin-bottom: 12px;
+            backdrop-filter: blur(10px);
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .header-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .app-title {
+            font-size: clamp(1rem, 2.5vw, 1.3rem);
+            font-weight: 900;
+            color: #ffcc00;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            letter-spacing: 1px;
+            white-space: nowrap;
+        }
+
+        /* YouTube 訂閱按鈕 */
+        .yt-sub-top-btn {
+            background: #cc0000;
+            color: #ffffff;
+            font-size: 0.85rem;
+            font-weight: 900;
+            padding: 8px 14px;
+            border-radius: 20px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            box-shadow: 0 0 10px rgba(204, 0, 0, 0.5);
+            transition: 0.2s;
+            border: 1px solid #ff4d4d;
+            min-height: 40px;
+        }
+        .yt-sub-top-btn:active {
+            transform: scale(0.96);
+            background: #ff0000;
+        }
+
+        .mode-selector {
+            display: flex;
+            gap: 4px;
+        }
+        .mode-selector button {
+            background: #1a1a26;
+            color: #8888a0;
+            border: 1px solid #333348;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s;
+            min-height: 40px;
+        }
+        .mode-selector button.active {
+            background: #ff5500;
+            color: #fff;
+            border-color: #ff7733;
+            box-shadow: 0 0 12px rgba(255, 85, 0, 0.4);
+        }
+
+        /* 搶局數控制區 */
+        .race-control {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: #0d0d14;
+            padding: 4px 10px;
+            border-radius: 8px;
+            border: 1px solid #ffcc00;
+            box-shadow: 0 0 8px rgba(255, 204, 0, 0.2);
+            min-height: 40px;
+        }
+        .race-label {
+            font-size: 0.8rem;
+            color: #ffcc00;
+            font-weight: 900;
+            font-family: 'Orbitron', sans-serif;
+            letter-spacing: 1px;
+        }
+        .race-input {
+            width: 48px;
+            background: #000;
+            border: 1px solid #ffcc00;
+            color: #ffcc00;
+            font-family: 'Orbitron', monospace;
+            font-size: 1.1rem;
+            font-weight: 900;
+            text-align: center;
+            border-radius: 4px;
+            padding: 2px;
+        }
+
+        .reset-btn {
+            background: #2a1215;
+            color: #ff4d4d;
+            border: 1px solid #ff4d4d;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 0.85rem;
+            min-height: 40px;
+            white-space: nowrap;
+        }
+        .reset-btn:active {
+            background: #ff4d4d;
+            color: #fff;
+        }
+
+        /* 主計分區 (手機直立1欄, 平板/橫螢幕2欄) */
+        .scoreboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: clamp(8px, 2vw, 16px);
+            flex-grow: 1;
+        }
+        .player-card {
+            background: linear-gradient(160deg, #181826, #0d0d14);
+            border-radius: 18px;
+            padding: clamp(10px, 2vw, 20px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            border: 2px solid #28283d;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+        }
+        .player-name {
+            font-size: clamp(1.1rem, 2.2vw, 1.6rem);
+            font-weight: 900;
+            color: #d0d0e6;
+            margin-bottom: 6px;
+            text-align: center;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid #33334d;
+            border-radius: 8px;
+            padding: 8px;
+        }
+
+        /* 超大 LED 數字區 (RWD 彈性字體) */
+        .led-panel {
+            background: #040407;
+            border: 3px inset #1e1e2d;
+            border-radius: 14px;
+            width: 100%;
+            padding: clamp(6px, 2vw, 16px) 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 8px 0;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.9);
+            flex-grow: 1;
+            min-height: clamp(120px, 25vh, 260px);
+        }
+        .score-display {
+            font-family: 'Orbitron', monospace;
+            font-size: clamp(5.5rem, 18vw, 13rem);
+            font-weight: 900;
+            color: #ff3333;
+            text-shadow: 0 0 15px rgba(255, 51, 51, 0.8), 0 0 35px rgba(255, 51, 51, 0.4);
+            line-height: 0.9;
+            cursor: pointer;
+            letter-spacing: -2px;
+        }
+        .score-display.led-cyan {
+            color: #00ffcc;
+            text-shadow: 0 0 15px rgba(0, 255, 204, 0.8), 0 0 35px rgba(0, 255, 204, 0.4);
+        }
+
+        /* 按鈕區 (適合手機觸控) */
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            width: 100%;
+        }
+        .score-btn {
+            flex: 1;
+            padding: clamp(12px, 2.5vw, 18px) 0;
+            font-size: clamp(1.2rem, 2.5vw, 1.8rem);
+            font-weight: 900;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: 0.1s;
+            min-height: 50px;
+        }
+        .btn-plus {
+            background: #ff5500;
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(255, 85, 0, 0.4);
+        }
+        .btn-minus {
+            background: #1c1c2b;
+            color: #aaaaa1;
+            border: 1px solid #383852;
+        }
+        .score-btn:active {
+            transform: scale(0.96);
+        }
+
+        /* 9號球顆數追蹤列 */
+        .ball-tracker {
+            display: flex;
+            gap: clamp(4px, 1vw, 8px);
+            margin-top: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            background: rgba(18, 18, 28, 0.8);
+            padding: 10px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .ball {
+            width: clamp(28px, 6vw, 40px);
+            height: clamp(28px, 6vw, 40px);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: clamp(0.75rem, 1.5vw, 1rem);
+            font-weight: 900;
+            color: #000;
+            cursor: pointer;
+            opacity: 0.25;
+            transition: 0.2s;
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.4), 0 2px 5px rgba(0,0,0,0.5);
+        }
+        .ball.pocketed {
+            opacity: 1;
+            transform: scale(1.1);
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.6), 0 0 12px rgba(255, 255, 255, 0.7);
+        }
+        .b-1 { background: #ffd700; }
+        .b-2 { background: #0066ff; color: #fff; }
+        .b-3 { background: #ff3333; color: #fff; }
+        .b-4 { background: #9933ff; color: #fff; }
+        .b-5 { background: #ff9900; }
+        .b-6 { background: #00cc44; color: #fff; }
+        .b-7 { background: #8B4513; color: #fff; }
+        .b-8 { background: #1a1a1a; color: #fff; border: 1px solid #666; }
+        .b-9 { background: #ffd700; border: 3px solid #ff3333; }
+
+        /* 最下方嵌入播放清單區塊 */
+        .bottom-playlist-section {
+            margin-top: 15px;
+            background: rgba(18, 18, 28, 0.9);
+            border: 1px solid rgba(255, 204, 0, 0.3);
+            border-radius: 14px;
+            padding: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+        }
+        .playlist-header {
+            font-size: clamp(0.85rem, 2vw, 1.1rem);
+            font-weight: 900;
+            color: #ffcc00;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+        .playlist-iframe-container {
+            width: 100%;
+            height: clamp(160px, 30vh, 260px);
+            border-radius: 10px;
+            overflow: hidden;
+            background: #000;
+        }
+        .playlist-iframe-container iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* 浮動 YouTube 音樂播放器樣式 (手機/平板適用) */
+        .floating-player {
+            position: fixed;
+            bottom: 12px;
+            right: 12px;
+            width: clamp(160px, 22vw, 240px);
+            height: clamp(90px, 13vw, 135px);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.8), 0 0 15px rgba(255, 85, 0, 0.3);
+            border: 2px solid rgba(255, 204, 0, 0.5);
+            z-index: 900;
+            background: #000;
+        }
+        .floating-player iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* 橫螢幕時自動隱藏浮動播放器，確保比賽最大視線 */
+        @media (orientation: landscape) and (max-height: 600px) {
+            .hide-on-landscape {
+                display: none !important;
+            }
+            .led-panel {
+                min-height: 100px;
+            }
+        }
+
+        /* 勝利與獲勝比分圖 Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.88);
+            backdrop-filter: blur(10px);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+            padding: 15px;
+            animation: fadeIn 0.3s ease-out;
+        }
+        .modal-card {
+            background: #12121c;
+            border: 2px solid #ffcc00;
+            box-shadow: 0 0 40px rgba(255, 204, 0, 0.4);
+            padding: clamp(16px, 4vw, 28px);
+            border-radius: 20px;
+            text-align: center;
+            max-width: 95%;
+            width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .winner-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: clamp(1.1rem, 3vw, 1.5rem);
+            color: #ffcc00;
+            letter-spacing: 2px;
+            margin-bottom: 4px;
+            font-weight: 900;
+        }
+        .winner-name {
+            font-size: clamp(1.8rem, 5vw, 2.4rem);
+            font-weight: 900;
+            color: #ffffff;
+            margin-bottom: 12px;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
+        }
+
+        /* 繪製的比分圖 Canvas 容器 */
+        .canvas-preview-box {
+            width: 100%;
+            margin: 10px 0 15px 0;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 5px 20px rgba(0,0,0,0.8);
+        }
+        canvas {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .action-btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .btn-download {
+            background: #00cc66;
+            color: #000;
+            border: none;
+            padding: 14px;
+            font-size: 1rem;
+            font-weight: 900;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 204, 102, 0.4);
+            transition: 0.2s;
+            min-height: 48px;
+        }
+        .btn-copy {
+            background: #28283d;
+            color: #fff;
+            border: 1px solid #444466;
+            padding: 12px;
+            font-size: 0.9rem;
+            font-weight: 700;
+            border-radius: 10px;
+            cursor: pointer;
+            min-height: 44px;
+        }
+        .close-modal-btn {
+            background: transparent;
+            color: #888;
+            border: none;
+            padding: 10px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            text-decoration: underline;
+        }
+
+        /* 訂閱頻道解鎖彈窗 */
+        dialog#subscribe-modal {
+            background: rgba(20, 20, 30, 0.96);
+            border: 1px solid rgba(251, 191, 36, 0.5);
+            border-radius: 20px;
+            padding: 24px;
+            max-width: 360px;
+            width: 90%;
+            color: white;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.9), 0 0 25px rgba(251, 191, 36, 0.3);
+            backdrop-filter: blur(12px);
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10000;
+        }
+        dialog::backdrop {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+        }
+        .sub-btn {
+            background: #dc2626;
+            color: white;
+            font-weight: 900;
+            padding: 14px 20px;
+            border-radius: 12px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 1rem;
+            box-shadow: 0 4px 15px rgba(220, 38, 38, 0.5);
+            transition: 0.2s;
+            min-height: 48px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* 超小螢幕手機特別最佳化 */
+        @media (max-width: 480px) {
+            .header { justify-content: center; }
+            .scoreboard { grid-template-columns: 1fr 1fr; }
+            .player-name { font-size: 0.95rem; padding: 6px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 🔴 訂閱頻道解鎖彈窗 -->
+    <dialog id="subscribe-modal">
+        <div style="font-size: 2.5rem; margin-bottom: 4px;">🐴</div>
+        <h2 style="font-size: 1.2rem; font-weight: 900; color: #fcd34d; margin-bottom: 6px;">解鎖黑馬三顆星記分板</h2>
+        <p style="font-size: 0.85rem; color: #d1fae5; opacity: 0.85; margin-bottom: 18px; line-height: 1.5;">
+            請訂閱<strong style="color: #f87171;">「黑馬音樂頻道」</strong>即可免費解鎖。
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <a href="https://www.youtube.com/@taiwan3cushion?sub_confirmation=1" target="_blank" rel="noopener noreferrer" onclick="unlockApp()" class="sub-btn">
+                <span>🔴</span>
+                <span>訂閱頻道並解鎖</span>
+            </a>
+            <button onclick="unlockApp()" style="background: none; border: none; font-size: 0.8rem; color: #9ca3af; cursor: pointer; text-decoration: underline; padding: 6px;">
+                我已訂閱，直接解鎖 ➔
+            </button>
+        </div>
+    </dialog>
+
+    <div class="header">
+        <div class="header-group">
+            <div class="app-title">🐴 黑馬撞球 LED 計分板</div>
+            
+            <!-- YouTube 訂閱按鈕 -->
+            <a href="https://www.youtube.com/@taiwan3cushion" target="_blank" rel="noopener noreferrer" class="yt-sub-top-btn">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>
+                <span>YouTube 訂閱頻道</span>
+            </a>
+
+            <div class="mode-selector">
+                <button id="mode-8" class="active" onclick="switchGameMode('8')">8 號球</button>
+                <button id="mode-9" onclick="switchGameMode('9')">9 號球</button>
+            </div>
+            <div class="race-control">
+                <span class="race-label">RACE TO</span>
+                <input type="number" id="race-to" class="race-input" value="7" min="1" max="99" onchange="updateRaceTarget()">
+            </div>
+        </div>
+        <button class="reset-btn" onclick="resetMatch()">歸零重置</button>
+    </div>
+
+    <div class="scoreboard">
+        <!-- 選手 1 -->
+        <div class="player-card" id="card-p1">
+            <input type="text" class="player-name" value="PLAYER 1" id="p1-name">
+            <div class="led-panel">
+                <div class="score-display" id="p1-score" onclick="changeScore(1, 1)">0</div>
+            </div>
+            <div class="btn-group">
+                <button class="score-btn btn-minus" onclick="changeScore(1, -1)">-1</button>
+                <button class="score-btn btn-plus" onclick="changeScore(1, 1)">+1</button>
+            </div>
+        </div>
+
+        <!-- 選手 2 -->
+        <div class="player-card" id="card-p2">
+            <input type="text" class="player-name" value="PLAYER 2" id="p2-name">
+            <div class="led-panel">
+                <div class="score-display led-cyan" id="p2-score" onclick="changeScore(2, 1)">0</div>
+            </div>
+            <div class="btn-group">
+                <button class="score-btn btn-minus" onclick="changeScore(2, -1)">-1</button>
+                <button class="score-btn btn-plus" onclick="changeScore(2, 1)">+1</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 9 號球顆數紀錄列 -->
+    <div class="ball-tracker" id="ball-tracker" style="display: none;">
+        <div class="ball b-1" onclick="toggleBall(this)">1</div>
+        <div class="ball b-2" onclick="toggleBall(this)">2</div>
+        <div class="ball b-3" onclick="toggleBall(this)">3</div>
+        <div class="ball b-4" onclick="toggleBall(this)">4</div>
+        <div class="ball b-5" onclick="toggleBall(this)">5</div>
+        <div class="ball b-6" onclick="toggleBall(this)">6</div>
+        <div class="ball b-7" onclick="toggleBall(this)">7</div>
+        <div class="ball b-8" onclick="toggleBall(this)">8</div>
+        <div class="ball b-9" onclick="toggleBall(this)">9</div>
+    </div>
+
+    <!-- 最下方 YouTube 頻道播放清單區塊 -->
+    <div class="bottom-playlist-section">
+        <div class="playlist-header">
+            <span>📺 黑馬音樂頻道 Playlists 影音播放專區</span>
+            <a href="https://www.youtube.com/@taiwan3cushion/playlists" target="_blank" rel="noopener noreferrer" style="color: #ffcc00; text-decoration: underline; font-size: 0.8rem;">開啟 YouTube 瀏覽列表 ➔</a>
+        </div>
+        <div class="playlist-iframe-container">
+            <iframe src="https://www.youtube.com/embed/videoseries?list=PLQvBYUHGQEcU" title="YouTube Playlists" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+        </div>
+    </div>
+
+    <!-- 浮動播放器 HTML 區塊 -->
+    <div class="floating-player hide-on-landscape">
+        <iframe src="https://www.youtube.com/embed/videoseries?list=PLQvBYUHGQEcU" title="YouTube video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen>
+        </iframe>
+    </div>
+
+    <!-- 勝利與獲勝比分圖 Modal -->
+    <div class="modal-overlay" id="winner-modal">
+        <div class="modal-card">
+            <div class="winner-title">🏆 VICTORY MATCH 🏆</div>
+            <div class="winner-name" id="winner-name">PLAYER 1</div>
+            
+            <div class="canvas-preview-box">
+                <canvas id="match-card-canvas" width="1200" height="675"></canvas>
+            </div>
+
+            <div class="action-btn-group">
+                <button class="btn-download" onclick="downloadMatchCard()">📥 下載獲勝比分圖 (PNG)</button>
+                <button class="btn-copy" onclick="copyMatchSummary()">📋 複製比賽文字紀錄</button>
+                <button class="close-modal-btn" onclick="closeWinnerModal()">關閉視窗 / 繼續比賽</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scores = { 1: 0, 2: 0 };
+        let currentGameMode = '8';
+        let raceTo = 7;
+        let isGameOver = false;
+
+        // 檢查訂閱解鎖狀態
+        window.addEventListener('DOMContentLoaded', () => {
+            const unlocked = localStorage.getItem('heima_scoreboard_unlocked');
+            if (!unlocked) {
+                const subModal = document.getElementById('subscribe-modal');
+                if (subModal.showModal) {
+                    subModal.showModal();
+                } else {
+                    subModal.style.display = 'block';
+                }
+            }
+        });
+
+        function unlockApp() {
+            localStorage.setItem('heima_scoreboard_unlocked', 'true');
+            const subModal = document.getElementById('subscribe-modal');
+            if (subModal.close) {
+                subModal.close();
+            } else {
+                subModal.style.display = 'none';
+            }
+        }
+
+        function changeScore(player, delta) {
+            if (isGameOver && delta > 0) return;
+
+            scores[player] = Math.max(0, scores[player] + delta);
+            document.getElementById(`p${player}-score`).innerText = String(scores[player]);
+
+            checkWinner(player);
+        }
+
+        function updateRaceTarget() {
+            const input = document.getElementById('race-to');
+            raceTo = Math.max(1, parseInt(input.value) || 1);
+            input.value = raceTo;
+        }
+
+        function checkWinner(player) {
+            if (scores[player] >= raceTo && !isGameOver) {
+                isGameOver = true;
+                const winnerName = document.getElementById(`p${player}-name`).value || `PLAYER ${player}`;
+                showWinnerModal(winnerName, player);
+            }
+        }
+
+        function showWinnerModal(winnerName, winnerPlayer) {
+            document.getElementById('winner-name').innerText = winnerName;
+            generateMatchCard(winnerName, winnerPlayer);
+            document.getElementById('winner-modal').style.display = 'flex';
+        }
+
+        function closeWinnerModal() {
+            document.getElementById('winner-modal').style.display = 'none';
+        }
+
+        function switchGameMode(mode) {
+            currentGameMode = mode;
+            document.getElementById('mode-8').classList.toggle('active', mode === '8');
+            document.getElementById('mode-9').classList.toggle('active', mode === '9');
+            
+            document.getElementById('ball-tracker').style.display = (mode === '9') ? 'flex' : 'none';
+            resetBalls();
+        }
+
+        function toggleBall(element) {
+            element.classList.toggle('pocketed');
+        }
+
+        function resetBalls() {
+            const balls = document.querySelectorAll('.ball');
+            balls.forEach(ball => ball.classList.remove('pocketed'));
+        }
+
+        function resetMatch() {
+            if (confirm("確定要將計分板全部歸零重置嗎？")) {
+                scores = { 1: 0, 2: 0 };
+                isGameOver = false;
+                document.getElementById('p1-score').innerText = '0';
+                document.getElementById('p2-score').innerText = '0';
+                resetBalls();
+                closeWinnerModal();
+            }
+        }
+
+        /* 繪製獲勝比分圖 (Canvas) */
+        function generateMatchCard(winnerName, winnerPlayer) {
+            const canvas = document.getElementById('match-card-canvas');
+            const ctx = canvas.getContext('2d');
+            const p1Name = document.getElementById('p1-name').value || 'PLAYER 1';
+            const p2Name = document.getElementById('p2-name').value || 'PLAYER 2';
+
+            // 背景漸層
+            const bgGrad = ctx.createLinearGradient(0, 0, 1200, 675);
+            bgGrad.addColorStop(0, '#0a0a12');
+            bgGrad.addColorStop(0.5, '#161626');
+            bgGrad.addColorStop(1, '#05050a');
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, 1200, 675);
+
+            // 邊框裝飾
+            ctx.strokeStyle = '#ffcc00';
+            ctx.lineWidth = 12;
+            ctx.strokeRect(20, 20, 1160, 635);
+
+            // 標題與賽制資訊
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#ffcc00';
+            ctx.font = '900 40px "Noto Sans TC", sans-serif';
+            ctx.fillText(`🐴 黑馬撞球 - ${currentGameMode}號球賽事紀錄`, 600, 90);
+
+            ctx.fillStyle = '#8888a0';
+            ctx.font = '700 28px "Orbitron", sans-serif';
+            ctx.fillText(`RACE TO ${raceTo} 局`, 600, 135);
+
+            // 勝者皇冠與提示
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 50px "Noto Sans TC", sans-serif';
+            ctx.fillText(`👑 獲勝者：${winnerName}`, 600, 220);
+
+            // 選手一卡片
+            drawCardBox(ctx, 100, 270, 460, 280, winnerPlayer === 1);
+            ctx.fillStyle = '#a0a0c0';
+            ctx.font = '700 36px "Noto Sans TC", sans-serif';
+            ctx.fillText(p1Name, 330, 330);
+            
+            ctx.fillStyle = '#ff3333';
+            ctx.font = '900 130px "Orbitron", monospace';
+            ctx.fillText(scores[1], 330, 470);
+
+            // VS 標示
+            ctx.fillStyle = '#ffcc00';
+            ctx.font = '900 48px "Orbitron", sans-serif';
+            ctx.fillText('VS', 600, 420);
+
+            // 選手二卡片
+            drawCardBox(ctx, 640, 270, 460, 280, winnerPlayer === 2);
+            ctx.fillStyle = '#a0a0c0';
+            ctx.font = '700 36px "Noto Sans TC", sans-serif';
+            ctx.fillText(p2Name, 870, 330);
+
+            ctx.fillStyle = '#00ffcc';
+            ctx.font = '900 130px "Orbitron", monospace';
+            ctx.fillText(scores[2], 870, 470);
+
+            // 底部日期與時間
+            const now = new Date();
+            const dateStr = `${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            ctx.fillStyle = '#666680';
+            ctx.font = '500 24px "Noto Sans TC", sans-serif';
+            ctx.fillText(`比賽時間：${dateStr} | 黑馬音樂頻道出品`, 600, 610);
+        }
+
+        function drawCardBox(ctx, x, y, width, height, isWinner) {
+            ctx.save();
+            ctx.fillStyle = '#0a0a10';
+            ctx.fillRect(x, y, width, height);
+            ctx.strokeStyle = isWinner ? '#ffcc00' : '#2a2a3f';
+            ctx.lineWidth = isWinner ? 6 : 2;
+            ctx.strokeRect(x, y, width, height);
+            ctx.restore();
+        }
+
+        /* 下載獲勝比分圖 */
+        function downloadMatchCard() {
+            const canvas = document.getElementById('match-card-canvas');
+            const link = document.createElement('a');
+            const p1Name = document.getElementById('p1-name').value || 'P1';
+            const p2Name = document.getElementById('p2-name').value || 'P2';
+            link.download = `撞球比賽戰報_${p1Name}_vs_${p2Name}.png`;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        /* 複製文字比分 */
+        function copyMatchSummary() {
+            const p1Name = document.getElementById('p1-name').value || 'PLAYER 1';
+            const p2Name = document.getElementById('p2-name').value || 'PLAYER 2';
+            const summary = `【黑馬撞球戰報】\n項目：${currentGameMode}號球 (搶${raceTo}局)\n對陣：${p1Name} ${scores[1]} - ${scores[2]} ${p2Name}\n結果：🏆 恭喜 ${scores[1] >= raceTo ? p1Name : p2Name} 獲勝！`;
+            
+            navigator.clipboard.writeText(summary).then(() => {
+                alert('已成功複製戰報文字至剪貼簿！');
+            });
+        }
+    </script>
+</body>
+</html>

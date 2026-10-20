@@ -1,0 +1,785 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https:; connect-src 'self' https://api.github.com;">
+  <meta name="theme-color" content="#1e2522">
+  <title>KMORAIS | Painel de Edição Visual</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='16' fill='%231e2522'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='sans-serif' font-weight='700' font-size='18' fill='%23c98f83'%3EK%3C/text%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='42' fill='%231e2522'/%3E%3Ctext x='96' y='126' text-anchor='middle' font-family='system-ui, -apple-system, sans-serif' font-weight='800' font-size='105' fill='%23c98f83'%3EK%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet"></noscript>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="admin.css">
+  <script>
+    /* Pré-aplicador instantâneo: executa de forma síncrona no head para sincronizar fotos/textos locais antes da pintura da tela */
+    (function() {
+      try {
+        var raw = localStorage.getItem('kmorais_cms_content_v1');
+        if (raw) window.__KM_EARLY_CMS__ = JSON.parse(raw);
+      } catch(e) {}
+    })();
+  </script>
+</head>
+<body>
+  <!-- TELA DE LOGIN / BLOQUEIO ADMINISTRATIVO -->
+  <div id="admin-auth-overlay" class="admin-auth-overlay">
+    <div class="admin-login-box">
+      <div class="admin-login-badge"><span class="pulse-dot"></span> KMORAIS CMS</div>
+      <h2>Painel Administrativo</h2>
+      <p>Área restrita. Digite a senha para editar o conteúdo do site diretamente na tela.</p>
+      <form id="admin-login-form" class="admin-login-form">
+        <input type="password" id="admin-password-input" class="admin-login-input" placeholder="Digite sua senha de acesso" autocomplete="current-password" required autofocus>
+        <button type="submit" class="admin-login-btn">Entrar e Editar &rarr;</button>
+        <div id="admin-login-error" class="admin-login-error">&#9888; Senha incorreta. Tente novamente.</div>
+      </form>
+    </div>
+  </div>
+
+  <!-- BARRA DE FERRAMENTAS DO ADMIN (TOOLBAR) -->
+  <div class="admin-toolbar">
+    <div class="admin-toolbar-left">
+      <span class="admin-status-tag"><span class="admin-status-dot"></span> Modo Edição</span>
+      <span class="admin-toolbar-hint">Clique nos textos para editar. Passe o mouse para trocar vídeos e fotos.</span>
+    </div>
+    <div class="admin-toolbar-actions">
+      <button type="button" id="admin-save-btn" class="admin-btn admin-btn-save" title="Salva e publica automaticamente no site oficial para todos os visitantes">&#128190; Salvar e Publicar</button>
+      <button type="button" id="admin-gh-config-btn" class="admin-btn admin-btn-secondary" title="Configurar Token do GitHub para subir direto na nuvem">&#9881;&#65039; Conectar GitHub</button>
+      <button type="button" id="admin-export-btn" class="admin-btn admin-btn-secondary" title="Baixar backup do conteúdo">&#128229; Exportar</button>
+      <button type="button" id="admin-import-btn" class="admin-btn admin-btn-secondary" title="Carregar arquivo de conteúdo">&#128228; Importar</button>
+      <input type="file" id="admin-import-file" accept=".json" style="display: none;">
+      <a href="./" target="_blank" class="admin-btn admin-btn-view" title="Abrir página pública">&#128065; Ver Site Público</a>
+      <button type="button" id="admin-reset-btn" class="admin-btn admin-btn-reset" title="Descartar alterações pendentes e carregar a publicação online">&#8617; Recarregar online</button>
+      <button type="button" id="admin-logout-btn" class="admin-btn admin-btn-logout">Sair</button>
+    </div>
+    <!-- Botão hamburguer (só aparece em mobile via CSS) -->
+    <button type="button" id="admin-mobile-menu-btn" class="admin-mobile-menu-btn" aria-label="Abrir menu de ações" title="Menu">&#9776;</button>
+  </div>
+
+  <!-- BANNER DE ALERTA: DISPOSITIVO DESCONECTADO DO GITHUB -->
+  <aside id="admin-gh-warning-bar" class="admin-gh-warning-bar is-hidden" aria-label="Alerta de Conexão">
+    <div class="admin-gh-warning-content">
+      <span class="admin-gh-warning-icon">&#9888;&#65039;</span>
+      <div class="admin-gh-warning-text">
+        <strong>Atenção: Este dispositivo não está conectado ao GitHub.</strong> Mídias e alterações salvas aqui ficarão apenas na memória deste aparelho e <em>não entrarão no ar para outros visitantes</em>.
+      </div>
+      <button type="button" id="admin-gh-warning-connect-btn" class="admin-gh-warning-btn">Conectar Token Agora</button>
+    </div>
+  </aside>
+
+  <!-- DRAWER MOBILE: painel de ações que desliza de baixo -->
+  <div id="admin-mobile-drawer-overlay" class="admin-mobile-drawer-overlay"></div>
+  <div id="admin-mobile-drawer" class="admin-mobile-drawer" aria-modal="true" role="dialog" aria-label="Menu de ações">
+    <div class="admin-mobile-drawer-handle"></div>
+    <div class="admin-mobile-drawer-title">Ações do Painel</div>
+    <div class="admin-mobile-drawer-grid">
+      <!-- Salvar: boaão em destaque -->
+      <button type="button" id="admin-save-btn-mobile" class="admin-mobile-action-btn is-primary">
+        <span class="admin-mobile-action-icon">&#128190;</span>
+        Salvar e Publicar
+      </button>
+      <!-- GitHub -->
+      <button type="button" id="admin-gh-config-btn-mobile" class="admin-mobile-action-btn">
+        <span class="admin-mobile-action-icon">&#9881;&#65039;</span>
+        GitHub
+      </button>
+      <!-- Ver site -->
+      <a href="./" target="_blank" class="admin-mobile-action-btn">
+        <span class="admin-mobile-action-icon">&#128065;</span>
+        Ver Site
+      </a>
+      <!-- Exportar -->
+      <button type="button" id="admin-export-btn-mobile" class="admin-mobile-action-btn">
+        <span class="admin-mobile-action-icon">&#128229;</span>
+        Exportar
+      </button>
+      <!-- Importar -->
+      <button type="button" id="admin-import-btn-mobile" class="admin-mobile-action-btn">
+        <span class="admin-mobile-action-icon">&#128228;</span>
+        Importar
+      </button>
+      <!-- Restaurar -->
+      <button type="button" id="admin-reset-btn-mobile" class="admin-mobile-action-btn is-danger">
+        <span class="admin-mobile-action-icon">&#8617;</span>
+        Recarregar online
+      </button>
+      <!-- Sair -->
+      <button type="button" id="admin-logout-btn-mobile" class="admin-mobile-action-btn is-danger">
+        <span class="admin-mobile-action-icon">&#x1F6AA;</span>
+        Sair
+      </button>
+    </div>
+  </div>
+
+  <!-- FAB DE SALVAR (rodapé mobile, sempre visível) -->
+  <div class="admin-mobile-fab">
+    <button type="button" id="admin-fab-save-btn" class="admin-mobile-fab-save">
+      &#128190; Salvar e Publicar
+    </button>
+  </div>
+
+  <header class="site-header" id="topo">
+    <a class="brand" href="#topo" aria-label="KMORAIS inicio">
+      <span class="brand-mark">K</span>
+      <span>KMORAIS<span class="brand-dot">.</span></span>
+    </a>
+    <div class="header-status"><span class="status-dot"></span> disponivel para novos projetos</div>
+    <nav class="main-nav" aria-label="Navegacao principal">
+      <a class="nav-link is-active" href="#marcas">Marcas</a>
+      <a class="nav-link" href="#trabalhos">Trabalhos</a>
+      <a class="nav-link" href="#cases-reais">Cases</a>
+      <a class="nav-link" href="#servicos">Serviços</a>
+      <a class="nav-link" href="#sobre">Sobre</a>
+      <a class="nav-link" href="#processo">Processo</a>
+    </nav>
+    <a class="header-cta" href="#contato" data-open-contact>Vamos criar <span aria-hidden="true">&#8599;</span></a>
+    <button class="nav-toggle" aria-label="Abrir menu" aria-expanded="false" aria-controls="mobile-nav">
+      <span></span><span></span><span></span>
+    </button>
+  </header>
+
+  <nav class="mobile-nav" id="mobile-nav" aria-label="Navegação mobile">
+    <button class="mobile-nav-close" aria-label="Fechar menu">&#10005;</button>
+    <a href="#marcas">Marcas</a>
+    <a href="#trabalhos">Trabalhos</a>
+    <a href="#cases-reais">Cases</a>
+    <a href="#servicos">Serviços</a>
+    <a href="#sobre">Sobre</a>
+    <a href="#processo">Processo</a>
+    <div class="mobile-nav-cta">
+      <a href="#contato" data-open-contact>Vamos criar juntas &#8599;</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy reveal">
+        <p class="eyebrow"><span class="eyebrow-line"></span> Kelly Morais &middot; creator + marketing</p>
+        <h1 id="hero-title">Conteúdo que<br><em>parece conversa</em><br>e gera ação.</h1>
+        <p class="hero-text">UGC com a autenticidade de uma mãe real, a visão de quem fez marketing de e-commerce e o roteiro que uma campanha precisa para performar.</p>
+        <div class="hero-actions">
+          <a class="button button-dark" href="#trabalhos">Ver meu trabalho <span aria-hidden="true">&#8595;</span></a>
+          <a class="text-link" href="#contato" data-open-contact>Falar sobre um projeto <span aria-hidden="true">&#8599;</span></a>
+        </div>
+      </div>
+      <div class="hero-visual reveal reveal-delay">
+        <div class="hero-sticker">a vibe que<br><strong>para o scroll</strong></div>
+        <div class="hero-frame">
+          <video muted loop playsinline width="600" height="1067" preload="none" poster="https://kellymorais.com.br/media/hero_poster.webp">
+            <source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_600/sea_turtle.mp4" type="video/mp4">
+          </video>
+          <div class="frame-label"><span class="pulse-dot"></span> gravando ideias</div>
+        </div>
+        <div class="hero-caption"><span>01</span> conteudo que<br>tem presenca</div>
+        <div class="hero-specs"><span>KM / 2026</span><span>UGC + DESIGN + ESTRATEGIA</span></div>
+      </div>
+      <div class="hero-scroll"><span>rola pra ver</span><span class="scroll-line"></span></div>
+    </section>
+
+    <section class="marquee" aria-label="Especialidades">
+      <div class="marquee-track">
+        <span>ugc para ads</span><b>✦</b><span>live shop</span><b>✦</b><span>aesthetic real</span><b>✦</b><span>mãe + creator</span><b>✦</b><span>hook que converte</span><b>✦</b><span>sem filtro</span><b>✦</b><span>conteúdo que vende</span><b>✦</b><span>creator economy</span><b>✦</b>
+        <span>ugc para ads</span><b>✦</b><span>live shop</span><b>✦</b><span>aesthetic real</span><b>✦</b><span>mãe + creator</span><b>✦</b><span>hook que converte</span><b>✦</b><span>sem filtro</span><b>✦</b><span>conteúdo que vende</span><b>✦</b><span>creator economy</span><b>✦</b>
+      </div>
+    </section>
+
+    <section class="agency-strip" aria-label="Resumo profissional">
+      <div class="agency-strip-label"><span class="status-dot"></span> kelly morais / creator system</div>
+      <div class="agency-strip-items"><span>01 estrategia</span><span>02 roteiro</span><span>03 producao</span><span>04 conversao</span></div>
+      <div class="agency-strip-arrow" aria-hidden="true">&#8599;</div>
+    </section>
+
+    <!-- SEÇÃO: MARCAS QUE JÁ TRABALHEI -->
+    <section class="brands-section section-wrap" id="marcas" aria-labelledby="brands-title">
+      <div class="brands-header reveal">
+        <p class="eyebrow"><span class="eyebrow-line"></span> confiança &amp; repertório</p>
+        <h2 id="brands-title">Grandes marcas <em>confiam.</em></h2>
+      </div>
+      <div class="brands-grid reveal">
+        <div class="brand-pill" title="Dove">
+          <div class="brand-pill-circle brand-dove">
+            <span class="brand-name">Dove</span>
+          </div>
+        </div>
+        <div class="brand-pill" title="Fox Cycles">
+          <div class="brand-pill-circle brand-fox">
+            <span class="brand-name">FOX</span>
+            <small class="brand-sub">CYCLES</small>
+          </div>
+        </div>
+        <div class="brand-pill" title="Seda">
+          <div class="brand-pill-circle brand-seda">
+            <span class="brand-name">seda</span>
+          </div>
+        </div>
+        <div class="brand-pill" title="Kibon">
+          <div class="brand-pill-circle brand-kibon">
+            <span class="brand-name">KIBON</span>
+          </div>
+        </div>
+        <div class="brand-pill" title="Omo">
+          <div class="brand-pill-circle brand-omo">
+            <span class="brand-name">OMO</span>
+          </div>
+        </div>
+        <div class="brand-pill" title="Avon">
+          <div class="brand-pill-circle brand-avon">
+            <span class="brand-name">AVON</span>
+          </div>
+        </div>
+        <div class="brand-pill" title="Kopenhagen">
+          <div class="brand-pill-circle brand-kopenhagen">
+            <span class="brand-name">Kopenhagen</span>
+          </div>
+        </div>
+        <div class="brand-pill" title="Cif">
+          <div class="brand-pill-circle brand-cif">
+            <span class="brand-name">Cif</span>
+          </div>
+        </div>
+        <div class="brand-pill" title="Pantene">
+          <div class="brand-pill-circle brand-pantene">
+            <span class="brand-name">PANTENE</span>
+          </div>
+        </div>
+        <div class="brand-pill" title="Eudora">
+          <div class="brand-pill-circle brand-eudora">
+            <span class="brand-name">EUDORA</span>
+          </div>
+        </div>
+        <div class="brand-pill" title="Mercado Livre">
+          <div class="brand-pill-circle brand-meli">
+            <span class="brand-name">mercado<br>livre</span>
+          </div>
+        </div>
+        <div class="brand-pill" title="Sensodyne">
+          <div class="brand-pill-circle brand-sensodyne">
+            <span class="brand-name">SENSODYNE</span>
+          </div>
+        </div>
+        <div class="brand-pill" title="Secret">
+          <div class="brand-pill-circle brand-secret">
+            <span class="brand-name">Secret.</span>
+          </div>
+        </div>
+        <div class="brand-pill" title="Upseller ERP">
+          <div class="brand-pill-circle brand-upseller">
+            <span class="brand-name">UpSeller</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="portfolio section-wrap" id="trabalhos" aria-labelledby="portfolio-title">
+      <div class="section-heading reveal">
+        <div>
+          <p class="eyebrow"><span class="eyebrow-line"></span> selecao de trabalhos</p>
+          <h2 id="portfolio-title">Cases que<br><em>fazem vender.</em></h2>
+        </div>
+        <p class="section-intro">Do roteiro ao video final, cada entrega nasce alinhada ao objetivo da marca: conectar, explicar ou converter.</p>
+      </div>
+
+      <div class="filter-bar" aria-label="Filtrar trabalhos por nicho">
+        <button class="filter-button is-active" type="button" data-filter="todos">Todos</button>
+        <button class="filter-button" type="button" data-filter="automotivo">Automotivo</button>
+        <button class="filter-button" type="button" data-filter="tech">Tech</button>
+        <button class="filter-button" type="button" data-filter="casa">Casa &amp; Decor</button>
+        <button class="filter-button" type="button" data-filter="maternidade">Maternidade</button>
+        <button class="filter-button" type="button" data-filter="beleza">Beleza &amp; Autocuidado</button>
+        <button class="filter-button" type="button" data-filter="marketplace">Marketplace &amp; Ads</button>
+      </div>
+
+      <div class="category-block reveal" data-category="automotivo" id="automotivo">
+        <div class="category-head">
+          <div><span class="category-number">01</span><h3>Automotivo</h3></div>
+          <p>produto em uso, sem enrolacao</p>
+        </div>
+        <div class="carousel-shell">
+          <button class="carousel-button prev" aria-label="Ver videos anteriores">&#8592;</button>
+          <div class="video-carousel" data-carousel>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/sea_turtle.mp4" type="video/mp4"></video><div class="video-meta"><span>get ready with me</span><span>01</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1571781926291-c477ebfd024b?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/finish_line.mp4" type="video/mp4"></video><div class="video-meta"><span>unboxing &amp; teste</span><span>02</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1611930022073-b7a4ba5fcccd?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/dog.mp4" type="video/mp4"></video><div class="video-meta"><span>rotina de cuidados</span><span>03</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1612817288484-6f916006741a?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" type="video/mp4"></video><div class="video-meta"><span>review sincera</span><span>04</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/snow_deer.mp4" type="video/mp4"></video><div class="video-meta"><span>antes &amp; depois</span><span>05</span></div></article>
+          </div>
+          <button class="carousel-button next" aria-label="Ver proximos videos">&#8594;</button>
+        </div>
+        <div class="carousel-footer"><span>arraste para explorar</span><span class="progress-track"><i></i></span><span>05 videos</span></div>
+      </div>
+
+      <div class="category-block reveal" data-category="tech" id="tech">
+        <div class="category-head">
+          <div><span class="category-number">02</span><h3>Tech</h3></div>
+          <p>explicacao simples, desejo imediato</p>
+        </div>
+        <div class="carousel-shell">
+          <button class="carousel-button prev" aria-label="Ver videos anteriores">&#8592;</button>
+          <div class="video-carousel" data-carousel>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1483985988355-763728e1935b?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/elephants.mp4" type="video/mp4"></video><div class="video-meta"><span>look do dia</span><span>01</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1485968579580-b6d095142e6e?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/finish_line.mp4" type="video/mp4"></video><div class="video-meta"><span>provador real</span><span>02</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/sea_turtle.mp4" type="video/mp4"></video><div class="video-meta"><span>street style</span><span>03</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/dog.mp4" type="video/mp4"></video><div class="video-meta"><span>unboxing fashion</span><span>04</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1509631179647-0177331693ae?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" type="video/mp4"></video><div class="video-meta"><span>styling tip</span><span>05</span></div></article>
+          </div>
+          <button class="carousel-button next" aria-label="Ver proximos videos">&#8594;</button>
+        </div>
+        <div class="carousel-footer"><span>arraste para explorar</span><span class="progress-track"><i></i></span><span>05 videos</span></div>
+      </div>
+
+      <div class="category-block reveal" data-category="casa" id="casa">
+        <div class="category-head">
+          <div><span class="category-number">03</span><h3>Casa &amp; Decor</h3></div>
+          <p>detalhes que fazem sentir</p>
+        </div>
+        <div class="carousel-shell">
+          <button class="carousel-button prev" aria-label="Ver videos anteriores">&#8592;</button>
+          <div class="video-carousel" data-carousel>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1540189549336-e6e99c3679fe?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/snow_deer.mp4" type="video/mp4"></video><div class="video-meta"><span>receita rapida</span><span>01</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1498837167922-ddd27525d352?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/sea_turtle.mp4" type="video/mp4"></video><div class="video-meta"><span>experiencia de marca</span><span>02</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/finish_line.mp4" type="video/mp4"></video><div class="video-meta"><span>meal prep</span><span>03</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/dog.mp4" type="video/mp4"></video><div class="video-meta"><span>food review</span><span>04</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" type="video/mp4"></video><div class="video-meta"><span>diario de sabores</span><span>05</span></div></article>
+          </div>
+          <button class="carousel-button next" aria-label="Ver proximos videos">&#8594;</button>
+        </div>
+        <div class="carousel-footer"><span>arraste para explorar</span><span class="progress-track"><i></i></span><span>05 videos</span></div>
+      </div>
+
+      <div class="category-block reveal" data-category="maternidade" id="maternidade">
+        <div class="category-head">
+          <div><span class="category-number">04</span><h3>Maternidade</h3></div>
+          <p>vida real que gera confianca</p>
+        </div>
+        <div class="carousel-shell">
+          <button class="carousel-button prev" aria-label="Ver videos anteriores">&#8592;</button>
+          <div class="video-carousel" data-carousel>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1544717305-2782549b5136?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/dog.mp4" type="video/mp4"></video><div class="video-meta"><span>rotina com bebe</span><span>01</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1516627145497-ae6968895b74?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/snow_deer.mp4" type="video/mp4"></video><div class="video-meta"><span>produto em familia</span><span>02</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1491013516836-7db643ee125a?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/sea_turtle.mp4" type="video/mp4"></video><div class="video-meta"><span>insight organico</span><span>03</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1504159506876-f8338247a14a?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/finish_line.mp4" type="video/mp4"></video><div class="video-meta"><span>storytelling real</span><span>04</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1522771930-78848d9293e8?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" type="video/mp4"></video><div class="video-meta"><span>unboxing + pov</span><span>05</span></div></article>
+          </div>
+          <button class="carousel-button next" aria-label="Ver proximos videos">&#8594;</button>
+        </div>
+        <div class="carousel-footer"><span>arraste para explorar</span><span class="progress-track"><i></i></span><span>05 videos</span></div>
+      </div>
+
+      <div class="category-block reveal" data-category="beleza" id="beleza-autocuidado">
+        <div class="category-head">
+          <div><span class="category-number">05</span><h3>Beleza &amp; Autocuidado</h3></div>
+          <p>textura, rotina e resultado</p>
+        </div>
+        <div class="carousel-shell">
+          <button class="carousel-button prev" aria-label="Ver videos anteriores">&#8592;</button>
+          <div class="video-carousel" data-carousel>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" type="video/mp4"></video><div class="video-meta"><span>transicao capilar</span><span>01</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/sea_turtle.mp4" type="video/mp4"></video><div class="video-meta"><span>review sincera</span><span>02</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1556228578-8c89e6adf883?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/finish_line.mp4" type="video/mp4"></video><div class="video-meta"><span>unboxing</span><span>03</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1596462502278-27bfdc403348?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/dog.mp4" type="video/mp4"></video><div class="video-meta"><span>formato sensorial</span><span>04</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1612817288484-6f916006741a?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/snow_deer.mp4" type="video/mp4"></video><div class="video-meta"><span>rotina de cuidados</span><span>05</span></div></article>
+          </div>
+          <button class="carousel-button next" aria-label="Ver proximos videos">&#8594;</button>
+        </div>
+        <div class="carousel-footer"><span>arraste para explorar</span><span class="progress-track"><i></i></span><span>05 videos</span></div>
+      </div>
+
+      <div class="category-block reveal" data-category="marketplace" id="marketplace">
+        <div class="category-head">
+          <div><span class="category-number">06</span><h3>Marketplace &amp; Ads</h3></div>
+          <p>video curto com foco no produto</p>
+        </div>
+        <div class="carousel-shell">
+          <button class="carousel-button prev" aria-label="Ver videos anteriores">&#8592;</button>
+          <div class="video-carousel" data-carousel>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/elephants.mp4" type="video/mp4"></video><div class="video-meta"><span>foco em conversao</span><span>01</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/finish_line.mp4" type="video/mp4"></video><div class="video-meta"><span>roteiro para ads</span><span>02</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/sea_turtle.mp4" type="video/mp4"></video><div class="video-meta"><span>marketplace trends</span><span>03</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1556740749-887f6717d7e4?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4" type="video/mp4"></video><div class="video-meta"><span>demonstracao</span><span>04</span></div></article>
+            <article class="video-card"><video muted loop playsinline preload="none" width="400" height="711" poster="https://images.unsplash.com/photo-1556742111-a301076d9d18?w=360&amp;q=60&amp;auto=format&amp;fit=crop"><source src="https://res.cloudinary.com/demo/video/upload/q_auto,w_400/dog.mp4" type="video/mp4"></video><div class="video-meta"><span>clips para campanha</span><span>05</span></div></article>
+          </div>
+          <button class="carousel-button next" aria-label="Ver proximos videos">&#8594;</button>
+        </div>
+        <div class="carousel-footer"><span>arraste para explorar</span><span class="progress-track"><i></i></span><span>05 videos</span></div>
+      </div>
+    </section>
+
+    <section class="real-cases section-wrap" id="cases-reais" aria-labelledby="real-cases-title">
+      <div class="section-heading reveal">
+        <div>
+          <p class="eyebrow"><span class="eyebrow-line"></span> conteudo publicado</p>
+          <h2 id="real-cases-title">Cases que<br><em>saem da tela.</em></h2>
+        </div>
+        <p class="section-intro">Uma selecao de conteudos reais publicados no Instagram e no TikTok. A campanha pode ser criada para a marca ou para o perfil.</p>
+      </div>
+      <div class="real-case-grid">
+        <a class="real-case real-case-featured reveal" href="https://www.instagram.com/kemoraiso/reel/Dc4TsgNhvXy/" target="_blank" rel="noreferrer">
+          <div class="real-case-cover cover-one"></div><div class="real-case-content"><span>01 / Instagram Reel</span><h3>Conteudo com cara de rotina</h3><p>Para aproximar produto e audiencia sem perder naturalidade.</p><strong>ver conteudo &#8599;</strong></div>
+        </a>
+        <a class="real-case reveal" href="https://www.instagram.com/kemoraiso/reel/DdFP3quBgB9/" target="_blank" rel="noreferrer">
+          <div class="real-case-cover cover-two"></div><div class="real-case-content"><span>02 / Instagram Reel</span><h3>Creator + CLT</h3><p>A vida real como contexto para uma historia que conecta.</p><strong>ver conteudo &#8599;</strong></div>
+        </a>
+        <a class="real-case reveal" href="https://www.instagram.com/foxcyclesoficial/reel/DUB0JGkkkR_/" target="_blank" rel="noreferrer">
+          <div class="real-case-cover cover-three"></div><div class="real-case-content"><span>03 / Collab de marca</span><h3>Conteudo para negocio real</h3><p>Quando a creator entra na conversa oficial da marca.</p><strong>ver conteudo &#8599;</strong></div>
+        </a>
+        <a class="real-case reveal" href="https://www.tiktok.com/@kellymoraiso" target="_blank" rel="noreferrer">
+          <div class="real-case-cover cover-four"></div><div class="real-case-content"><span>04 / TikTok</span><h3>Rotina, maternidade e dicas</h3><p>31K pessoas acompanhando conteudo que informa e acolhe.</p><strong>ver perfil &#8599;</strong></div>
+        </a>
+      </div>
+      <div class="social-proof reveal"><span class="proof-label">presenca digital</span><strong>Instagram + TikTok</strong><span>um ecossistema para marcas que querem parecer humanas.</span></div>
+    </section>
+
+    <section class="latest-posts section-wrap" id="ultimos-posts" aria-labelledby="latest-posts-title">
+      <div class="section-heading reveal">
+        <div>
+          <p class="eyebrow"><span class="eyebrow-line"></span> diario visual</p>
+          <h2 id="latest-posts-title">O que esta<br><em>no ar agora.</em></h2>
+        </div>
+        <p class="section-intro">Uma curadoria das publicacoes mais recentes do Instagram. Clique em qualquer foto para ver o post original.</p>
+      </div>
+      <div class="photo-carousel-shell">
+        <button class="photo-carousel-button prev" type="button" aria-label="Ver fotos anteriores">&#8592;</button>
+        <div class="photo-carousel" data-social-carousel aria-live="polite"></div>
+        <button class="photo-carousel-button next" type="button" aria-label="Ver proximas fotos">&#8594;</button>
+      </div>
+      <div class="photo-carousel-footer"><span>instagram / @kemoraiso</span><span class="progress-track"><i></i></span><a href="https://www.instagram.com/kemoraiso/" target="_blank" rel="noreferrer">ver perfil completo &#8599;</a></div>
+    </section>
+
+    <section class="services section-wrap" id="servicos" aria-labelledby="services-title">
+      <div class="section-heading reveal">
+        <div>
+          <p class="eyebrow"><span class="eyebrow-line"></span> formatos de entrega</p>
+          <h2 id="services-title">Conteudo para<br><em>cada objetivo.</em></h2>
+        </div>
+        <p class="section-intro">Escolha o formato ou misture tudo. Cada pacote pode ser adaptado ao momento da sua marca.</p>
+      </div>
+      <div class="service-grid">
+        <article class="service-card reveal"><span class="service-icon">01</span><h3>Videos para Ads</h3><p>Roteiro alinhado ao objetivo da campanha, com gancho, prova e CTA.</p><a href="#contato" data-open-contact>quero esse formato <span>&#8599;</span></a></article>
+        <article class="service-card reveal"><span class="service-icon">02</span><h3>Marketplace</h3><p>Videos curtos, diretos e demonstrativos para apresentar produtos e vender mais.</p><a href="#contato" data-open-contact>quero esse formato <span>&#8599;</span></a></article>
+        <article class="service-card reveal"><span class="service-icon">03</span><h3>Live Shop</h3><p>Conteudo nativo e demonstrativo para aproximar produto, creator e compra.</p><a href="#contato" data-open-contact>quero esse formato <span>&#8599;</span></a></article>
+        <article class="service-card reveal"><span class="service-icon">04</span><h3>Pacote para agencia</h3><p>Roteiros, variacoes de hook, gravacao e entregas organizadas para seus clientes.</p><a href="#contato" data-open-contact>quero esse formato <span>&#8599;</span></a></article>
+      </div>
+      <div class="stats-row reveal"><div><strong>31k+</strong><span>seguidores no TikTok</span></div><div><strong>821k</strong><span>curtidas no TikTok</span></div><div><strong>818</strong><span>seguidores no Instagram</span></div></div>
+    </section>
+
+    <section class="agency-section section-wrap" id="agencias" aria-labelledby="agency-title">
+      <div class="agency-panel reveal">
+        <div class="agency-panel-number">03<span>/04</span></div>
+        <div><p class="eyebrow"><span class="eyebrow-line"></span> para agencias e times de marketing</p><h2 id="agency-title">Sua ideia chega.<br><em>Eu faco acontecer.</em></h2><p>Voce traz o briefing, eu entro com repertorio, roteiro, presenca em camera e uma entrega pronta para campanha. Um apoio criativo que entende prazo, objetivo e linguagem de marca.</p><a class="button button-light" href="#briefing" data-open-contact>Montar um briefing <span aria-hidden="true">&#8595;</span></a></div>
+        <div class="agency-list"><span>roteiro com hook</span><span>conteudo em escala</span><span>variacoes para teste</span><span>entrega organizada</span></div>
+      </div>
+    </section>
+
+    <section class="about section-wrap" id="sobre" aria-labelledby="about-title">
+      <div class="about-number">02<span>/04</span></div>
+      <div class="about-content reveal">
+        <p class="eyebrow"><span class="eyebrow-line"></span> quem está por trás</p>
+        <h2 id="about-title">A amiga que<br>seu público <em>estava procurando.</em></h2>
+        <p>Tenho 26 anos, moro em São Paulo e sou formada em Marketing. Sou mãe, trabalho no marketing de um e-commerce e crio conteúdo com uma linguagem leve, real e sem performar.</p>
+        <a class="button button-outline" href="#contato" data-open-contact>Falar com a Kelly <span aria-hidden="true">&#8599;</span></a>
+      </div>
+      <div class="about-image reveal reveal-delay"><img loading="lazy" decoding="async" width="800" height="1067" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&amp;q=85&amp;auto=format&amp;fit=crop" alt="Retrato da Kelly Morais"></div>
+    </section>
+
+    <section class="process section-wrap" id="processo" aria-labelledby="process-title">
+      <div class="section-heading reveal">
+        <div><p class="eyebrow"><span class="eyebrow-line"></span> como a gente trabalha</p><h2 id="process-title">Do briefing ao<br><em>post.</em></h2></div>
+        <p class="section-intro">Do roteiro à câmera. Do hook à entrega. Cada etapa pensada para gerar resultado real para a sua marca.</p>
+      </div>
+      <div class="process-grid">
+        <article class="process-step reveal"><span>01</span><h3>Briefing</h3><p>Entendo produto, publico e objetivo para criar uma ideia que faz sentido para a marca.</p></article>
+        <article class="process-step reveal"><span>02</span><h3>Roteiro</h3><p>Organizo a narrativa com hook, demonstracao e CTA no tom de uma conversa real.</p></article>
+        <article class="process-step reveal"><span>03</span><h3>Entrega</h3><p>Gravo, edito e entrego o conteudo pronto para publicar, com agilidade e cuidado.</p></article>
+      </div>
+    </section>
+
+    <section class="contact" id="contato" aria-labelledby="contact-title">
+      <div class="contact-main-grid">
+        <div class="contact-inner reveal">
+          <p class="eyebrow"><span class="eyebrow-line"></span> vamos conversar</p>
+          <h2 id="contact-title">Tem uma ideia?<br><em>Vamos tirar do papel.</em></h2>
+        </div>
+        <form class="briefing-form reveal" id="briefing" method="POST">
+          <!-- Web3Forms config — não apagar -->
+          <input type="hidden" name="access_key" value="72be698d-2c19-4070-9187-73227c85fc02">
+          <input type="hidden" name="subject" value="✦ Novo briefing — KMORAIS Portfolio">
+          <input type="hidden" name="from_name" value="KMORAIS Portfolio">
+          <input type="hidden" name="redirect" value="false">
+          <!-- Campos do formulário -->
+          <label>seu nome<input name="name" type="text" placeholder="Como posso te chamar?" required></label>
+          <label>empresa ou agência<input name="company" type="text" placeholder="Nome da empresa" required></label>
+          <label>seu e-mail<input name="email" type="email" placeholder="para eu te responder" required></label>
+          <label>o que você precisa?<textarea name="message" rows="3" placeholder="Conta um pouco sobre a campanha" required></textarea></label>
+          <button class="button button-light" type="submit">Enviar briefing <span aria-hidden="true">&#8599;</span></button>
+        </form>
+      </div>
+      <div class="contact-note-bar reveal">
+        <div class="contact-note-item">
+          <span>E-mail</span>
+          <a href="mailto:marketing.kellymorais@gmail.com">marketing.kellymorais@gmail.com</a>
+        </div>
+        <span class="note-sep">✦</span>
+        <div class="contact-note-item">
+          <span>WhatsApp</span>
+          <a href="https://wa.me/5511956367834" target="_blank" rel="noreferrer">+55 11 95636-7834</a>
+        </div>
+        <span class="note-sep">✦</span>
+        <div class="contact-note-item">
+          <span>Instagram</span>
+          <a href="https://www.instagram.com/kemoraiso" target="_blank" rel="noreferrer">@kemoraiso &#8599;</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <a class="whatsapp-float" href="https://wa.me/5511956367834?text=Oi%20Kelly%2C%20vim%20pelo%20seu%20portfolio%20e%20quero%20falar%20sobre%20um%20projeto." target="_blank" rel="noreferrer" aria-label="Falar com Kelly pelo WhatsApp" title="Falar no WhatsApp"><span aria-hidden="true">&#9742;</span><b>WhatsApp</b></a>
+
+  <!-- POPUP 1: MENU DE CONTATO ESTILO LINKTREE -->
+  <div class="contact-modal" id="modal-linktree" style="display:none;" aria-hidden="true" inert role="dialog" aria-labelledby="linktree-title">
+    <div class="contact-modal-backdrop" data-close-modal></div>
+    <div class="contact-modal-box linktree-box">
+      <button class="contact-modal-close" type="button" aria-label="Fechar popup" data-close-modal>&#10005;</button>
+      <div class="linktree-header">
+        <span class="brand-mark">K</span>
+        <h3 id="linktree-title">Vamos criar juntas?</h3>
+        <p>Escolha o canal mais ágil para conversar sobre a sua marca ou campanha.</p>
+      </div>
+      <div class="linktree-actions">
+        <a class="linktree-btn whatsapp-btn" href="https://wa.me/5511956367834?text=Oi%20Kelly%2C%20vim%20pelo%20seu%20portfolio%20e%20quero%20falar%20sobre%20um%20projeto." target="_blank" rel="noreferrer">
+          <span class="btn-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+          </span>
+          <div class="btn-text">
+            <strong>Falar no WhatsApp</strong>
+            <small>Resposta rápida · +55 11 95636-7834</small>
+          </div>
+          <span class="btn-arrow">&#8599;</span>
+        </a>
+        <button class="linktree-btn email-btn" type="button" id="btn-open-email-modal">
+          <span class="btn-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+          </span>
+          <div class="btn-text">
+            <strong>Enviar briefing por e-mail</strong>
+            <small>Preencha e receba proposta personalizada</small>
+          </div>
+          <span class="btn-arrow">&#8594;</span>
+        </button>
+      </div>
+      <div class="linktree-footer">
+        <span>ou escreva para: <a href="mailto:marketing.kellymorais@gmail.com">marketing.kellymorais@gmail.com</a></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- POPUP 2: FORMULÁRIO DE BRIEFING COMPLETO -->
+  <div class="contact-modal" id="modal-email-form" style="display:none;" aria-hidden="true" inert role="dialog" aria-labelledby="email-modal-title">
+    <div class="contact-modal-backdrop" data-close-modal></div>
+    <div class="contact-modal-box email-form-box">
+      <div class="modal-nav-bar">
+        <button class="modal-back-btn" type="button" id="btn-back-to-linktree">← Voltar opções</button>
+        <button class="contact-modal-close" type="button" aria-label="Fechar formulário" data-close-modal>&#10005;</button>
+      </div>
+      <div class="email-modal-header">
+        <span class="modal-tag">briefing rápido</span>
+        <h3 id="email-modal-title">Envie seu projeto</h3>
+        <p>Preencha os dados e receba um retorno com ideias e valores.</p>
+      </div>
+      <form class="briefing-form modal-briefing-form" id="modal-briefing" method="POST">
+        <input type="hidden" name="access_key" value="72be698d-2c19-4070-9187-73227c85fc02">
+        <input type="hidden" name="subject" value="✦ Novo briefing (via Popup) — KMORAIS Portfolio">
+        <input type="hidden" name="from_name" value="KMORAIS Portfolio">
+        <input type="hidden" name="redirect" value="false">
+        <label>seu nome<input name="name" type="text" placeholder="Como posso te chamar?" required></label>
+        <label>empresa ou agência<input name="company" type="text" placeholder="Nome da empresa" required></label>
+        <label>seu e-mail<input name="email" type="email" placeholder="para eu te responder" required></label>
+        <label>o que você precisa?<textarea name="message" rows="3" placeholder="Conta um pouco sobre a campanha" required></textarea></label>
+        <button class="button button-dark" type="submit">Enviar briefing <span aria-hidden="true">&#8599;</span></button>
+      </form>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <a class="brand" href="#topo"><span class="brand-mark">K</span><span>KMORAIS<span class="brand-dot">.</span></span></a>
+    <div class="footer-social-icons">
+      <a href="https://www.instagram.com/kemoraiso/" target="_blank" rel="noreferrer" class="footer-icon-btn" aria-label="Instagram da Kelly Morais" title="Instagram">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+          <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
+        </svg>
+      </a>
+      <a href="https://www.tiktok.com/@kellymoraiso" target="_blank" rel="noreferrer" class="footer-icon-btn" aria-label="TikTok da Kelly Morais" title="TikTok">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+          <path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.29 0 .58.04.86.12V9.42a6.33 6.33 0 0 0-.86-.06 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.34-6.34V9.05a8.28 8.28 0 0 0 4.77 1.49V7.1a4.83 4.83 0 0 1-1-.41z"/>
+        </svg>
+      </a>
+      <a href="https://wa.me/5511956367834?text=Oi%20Kelly%2C%20vim%20pelo%20seu%20portfolio%20e%20quero%20falar%20sobre%20um%20projeto." target="_blank" rel="noreferrer" class="footer-icon-btn" aria-label="WhatsApp" title="WhatsApp">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+          <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2zm5.8 14.15c-.24.67-1.39 1.28-1.92 1.36-.5.08-1.15.11-3.69-.94-2.18-.9-3.59-3.13-3.7-3.28-.11-.15-.88-1.17-.88-2.23s.55-1.58.75-1.8c.2-.22.44-.28.59-.28.15 0 .3 0 .43.01.14.01.32-.05.5.38.19.45.64 1.56.7 1.68.06.12.1.26.02.42-.08.16-.12.26-.24.4-.12.14-.25.31-.36.42-.12.12-.25.25-.11.49.14.24.63 1.04 1.35 1.68.93.83 1.71 1.09 1.95 1.21.24.12.38.1.52-.06.14-.16.6-1.01.76-1.36.16-.35.32-.29.54-.21.22.08 1.41.66 1.65.78.24.12.4.18.46.28.06.1.06.58-.18 1.25z"/>
+        </svg>
+      </a>
+      <a href="#modal-email-form" class="footer-icon-btn" aria-label="E-mail / Enviar briefing" title="Enviar Briefing" data-open-email-modal>
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+          <path d="M20 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 4l-8 5-8-5V6l8 5 8-5v2z"/>
+        </svg>
+      </a>
+    </div>
+    <p>&copy; 2026 KELLY MORAIS UGC</p>
+  </footer>
+
+  
+  <!-- MODAL DE EDIÇÃO DE MÍDIA (VÍDEO / CAPA / FOTO) -->
+  <div id="admin-media-modal" class="admin-modal-overlay">
+    <div class="admin-modal-card">
+      <div class="admin-modal-header">
+        <h3 id="admin-modal-title">Editar Mídia</h3>
+        <button type="button" class="admin-modal-close" aria-label="Fechar modal">&times;</button>
+      </div>
+      <!-- Badge de status do Token GitHub: informa se o upload vai funcionar em outros dispositivos -->
+      <div id="admin-modal-gh-status"></div>
+      <div class="admin-modal-group" id="admin-modal-video-group">
+        <div class="admin-group-header">
+          <label>Vídeo do Card / Hero</label>
+          <div class="admin-tab-switch" data-tab-group="video">
+            <button type="button" class="admin-tab-btn is-active" data-tab="url">🔗 Link / URL</button>
+            <button type="button" class="admin-tab-btn" data-tab="file">📁 Subir do PC</button>
+          </div>
+        </div>
+        <div class="admin-tab-content is-active" data-tab-content="video-url">
+          <input type="url" id="admin-modal-video-url" placeholder="https://exemplo.com/video.mp4">
+          <small>Cole o link direto do arquivo MP4 da web ou link de compartilhamento (Drive, Dropbox, Instagram).</small>
+          <div id="admin-video-url-feedback" class="admin-url-feedback is-hidden"></div>
+        </div>
+        <div class="admin-tab-content" data-tab-content="video-file">
+          <div class="admin-file-dropzone" id="video-dropzone">
+            <input type="file" id="admin-modal-video-file" accept="video/mp4,video/webm,video/quicktime,video/*">
+            <div class="dropzone-empty" id="video-dropzone-empty">
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+              </svg>
+              <span>Clique ou arraste o <strong>vídeo</strong> do seu PC</span>
+              <small>Suporta MP4, WebM ou MOV</small>
+            </div>
+            <div class="dropzone-selected is-hidden" id="video-dropzone-selected">
+              <span class="file-icon">🎬</span>
+              <span class="file-name" id="video-file-name"></span>
+              <button type="button" class="file-remove-btn" id="video-file-remove" title="Remover arquivo">&times;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="admin-modal-group" id="admin-modal-poster-group">
+        <div class="admin-group-header">
+          <label id="admin-modal-poster-label">Imagem de Capa / Foto</label>
+          <div class="admin-tab-switch" data-tab-group="poster">
+            <button type="button" class="admin-tab-btn is-active" data-tab="url">🔗 Link / URL</button>
+            <button type="button" class="admin-tab-btn" data-tab="file">📁 Subir do PC</button>
+          </div>
+        </div>
+        <div class="admin-tab-content is-active" data-tab-content="poster-url">
+          <input type="url" id="admin-modal-poster-url" placeholder="https://images.unsplash.com/...">
+          <small>Cole o link da imagem que aparece na capa do card.</small>
+        </div>
+        <div class="admin-tab-content" data-tab-content="poster-file">
+          <div class="admin-file-dropzone" id="poster-dropzone">
+            <input type="file" id="admin-modal-poster-file" accept="image/jpeg,image/png,image/webp,image/gif,image/svg+xml,image/*">
+            <div class="dropzone-empty" id="poster-dropzone-empty">
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+              </svg>
+              <span>Clique ou arraste a <strong>imagem ou logotipo</strong> do seu PC</span>
+              <small>Suporta PNG, SVG, JPG ou WebP</small>
+            </div>
+            <div class="dropzone-selected is-hidden" id="poster-dropzone-selected">
+              <span class="file-icon">🖼</span>
+              <span class="file-name" id="poster-file-name"></span>
+              <button type="button" class="file-remove-btn" id="poster-file-remove" title="Remover arquivo">&times;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="admin-modal-group" id="admin-modal-label-group">
+        <label for="admin-modal-label">Rótulo / Legenda do Card</label>
+        <input type="text" id="admin-modal-label" placeholder="ex: unboxing e teste">
+      </div>
+      <div class="admin-modal-group" id="admin-modal-link-group">
+        <label for="admin-modal-link-url">Link de Destino (Instagram / TikTok / Site)</label>
+        <input type="url" id="admin-modal-link-url" placeholder="https://www.instagram.com/reel/...">
+        <small>Link que abre ao clicar no card.</small>
+      </div>
+      <div class="admin-modal-actions">
+        <button type="button" id="admin-modal-cancel" class="admin-btn admin-btn-reset">Cancelar</button>
+        <button type="button" id="admin-modal-save" class="admin-btn admin-btn-save">Aplicar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL DE CONFIGURAÇÃO / SINCRONIZAÇÃO GITHUB -->
+  <div id="admin-github-modal" class="admin-modal-overlay is-hidden" role="dialog" aria-modal="true" aria-labelledby="admin-gh-modal-title">
+    <div class="admin-modal-card admin-github-modal-box">
+      <button type="button" class="admin-modal-close" id="admin-gh-modal-close" aria-label="Fechar modal">&times;</button>
+      <div class="admin-gh-badge"><span>●</span> Publicação Oficial no GitHub</div>
+      <h3 id="admin-gh-modal-title">Conectar Repositório do GitHub</h3>
+      <p class="admin-gh-desc">
+        Ao clicar em <strong>Publicar no GitHub</strong>, as edições são salvas diretamente no arquivo <code>content.json</code> do seu repositório oficial. Isso atualiza o site na internet para qualquer pessoa no mundo.
+      </p>
+
+      <form id="admin-gh-form" onsubmit="return false;">
+        <div class="admin-modal-group">
+          <label for="admin-gh-token">Personal Access Token (PAT) do GitHub *</label>
+          <div class="admin-input-with-toggle">
+            <input type="password" id="admin-gh-token" placeholder="ghp_... ou github_pat_..." autocomplete="off" required>
+            <button type="button" id="admin-gh-token-toggle" class="admin-toggle-visibility-btn" title="Mostrar/Ocultar token" type="button">👁</button>
+          </div>
+          <small>O token fica guardado em segurança apenas no seu navegador atual.</small>
+        </div>
+
+        <div class="admin-gh-grid">
+          <div class="admin-modal-group">
+            <label for="admin-gh-repo">Repositório (owner/repo)</label>
+            <input type="text" id="admin-gh-repo" value="abreumarcelo1994/kmorais" required>
+          </div>
+          <div class="admin-modal-group">
+            <label for="admin-gh-branch">Branch</label>
+            <input type="text" id="admin-gh-branch" value="main" required>
+          </div>
+        </div>
+
+        <div class="admin-modal-group">
+          <label for="admin-gh-path">Caminho do Arquivo</label>
+          <input type="text" id="admin-gh-path" value="content.json" required>
+        </div>
+
+        <!-- Status de Conexão -->
+        <div id="admin-gh-status" class="admin-gh-status is-hidden"></div>
+
+        <div class="admin-gh-instructions">
+          <h4>Como gerar seu token no GitHub (1 minuto):</h4>
+          <p style="margin: 0 0 10px; font-size: 11px; color: var(--lime);"><strong>Atenção:</strong> sua conta do GitHub precisa ter sido adicionada como Colaboradora no repositório.</p>
+          <ol>
+            <li>Acesse <a href="https://github.com/settings/tokens" target="_blank" rel="noopener">github.com/settings/tokens</a>.</li>
+            <li>Clique em <strong>Generate new token</strong> &rarr; <strong>Generate new token (classic)</strong>.</li>
+            <li>Em <em>Note</em>, digite <code>KMORAIS CMS</code> e marque a caixa <strong>repo</strong>.</li>
+            <li>Clique em <strong>Generate token</strong> no final da página, copie o código <code>ghp_...</code> e cole aqui.</li>
+          </ol>
+        </div>
+
+        <div class="admin-modal-actions" style="flex-wrap: wrap; gap: 8px;">
+          <button type="button" id="admin-gh-test-btn" class="admin-btn admin-btn-view">🔍 Testar Conexão</button>
+          <button type="button" id="admin-gh-save-config-btn" class="admin-btn admin-btn-save">Salvar Configuração</button>
+          <button type="button" id="admin-gh-share-btn" class="admin-btn admin-btn-outline" style="width: 100%; margin-top: 4px; justify-content: center;">🔗 Gerar Link para Outro Computador / Celular</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="cms.js"></script>
+  <script src="script.js"></script>
+  <script src="admin.js"></script>
+</body>
+
+</html>

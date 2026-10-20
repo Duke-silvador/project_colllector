@@ -1,0 +1,673 @@
+這是在原有功能基礎上，為您全面升級的 **「黑馬三顆星 Pro (賽制升級版)」**！
+
+### 🏆 全新功能特色
+
+1. **比賽局數上限 (Inning Limit)**：
+* 可在設定中指定局數上限（例如：設為 `10` 局）。
+* 當達到設定局數上限時，系統將會**自動結束比賽**並判定勝負。
+
+
+2. **多盤兩勝制 (搶盤模式 / Best of N)**：
+* 可自由選擇：**單盤決勝**、**三盤兩勝 (搶 2 盤)** 或 **五盤三勝 (搶 3 盤)**。
+* 計分板下方新增了獨立的「勝場燈 / 盤數標記 (Set Counts)」，拿下該盤的選手會亮起專屬金色光芒標記。
+
+
+3. **自動結算與換盤**：
+* 當選手達到目標分數或局數上限時，系統會自動結算該盤、記錄勝場，並在完成所有盤數後宣佈總冠軍！
+
+
+4. **戰報圖全面升級**：
+* 生成的戰報圖將同步印上**總局數、賽制類型與最終盤數比分**，留存最完整的比賽紀錄。
+
+
+
+---
+
+### 📄 完整程式碼
+
+請直接複製以下程式碼並覆蓋您的 `.html` 檔案：
+
+```html
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>黑馬三顆星 Pro (Mobile Edition)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@700;900&family=Work+Sans:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b110d;
+    --panel: #121c16;
+    --gold: #e8bc70;
+    --white-ball: #ffffff;
+    --yellow-ball: #ffe066;
+  }
+  body {
+    background: var(--bg);
+    color: white;
+    font-family: 'Work Sans', sans-serif;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+  .font-display { font-family: 'Fraunces', serif; }
+  .glass-panel {
+    background: var(--panel);
+    border: 1px solid rgba(232,188,112,0.15);
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.5), 0 10px 30px rgba(0,0,0,0.8);
+  }
+  .ball-glow-white { text-shadow: 0 0 15px rgba(255,255,255,0.6); box-shadow: inset 0 0 20px rgba(255,255,255,0.2), 0 0 15px rgba(255,255,255,0.4); }
+  .ball-glow-yellow { text-shadow: 0 0 15px rgba(255,224,102,0.6); box-shadow: inset 0 0 20px rgba(255,224,102,0.2), 0 0 15px rgba(255,224,102,0.4); }
+  .btn-action:active { transform: scale(0.95); }
+  
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    height: calc(100vh - 120px);
+  }
+  
+  @media (min-width: 768px) {
+    .main-grid { grid-template-columns: 1fr 0.8fr 1fr; height: calc(100vh - 140px); }
+  }
+
+  @media (max-height: 500px) and (orientation: landscape) {
+    body { overflow: hidden; }
+    header { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+    header h1 { font-size: 1.5rem !important; }
+    header .sub-title { display: none; }
+    
+    .main-grid {
+      grid-template-columns: 1fr 0.7fr 1fr;
+      gap: 0.5rem;
+      height: calc(100vh - 90px);
+      padding: 0 0.5rem;
+    }
+    
+    .score-text { font-size: 3.8rem !important; line-height: 1; width: 6rem !important; height: 6rem !important; }
+    .panel-inner { padding: 0.5rem !important; }
+    .stat-box { padding: 0.25rem !important; }
+    .stat-label { font-size: 0.7rem !important; }
+    .stat-val { font-size: 1rem !important; }
+    
+    .bottom-bar { padding: 0.5rem !important; gap: 0.5rem !important; }
+    .bottom-btn { padding: 0.5rem !important; font-size: 0.85rem !important; }
+    
+    .center-mid { font-size: 1rem !important; }
+    .shot-clock { font-size: 2.5rem !important; }
+  }
+
+  @media (max-width: 640px) and (orientation: portrait) {
+    .main-grid { grid-template-columns: 1fr; height: auto; overflow-y: auto; }
+    .center-col { order: -1; }
+    .score-text { font-size: 5rem; width: 8rem; height: 8rem; }
+  }
+</style>
+</head>
+<body class="h-screen flex flex-col relative">
+
+<!-- Header -->
+<header class="flex justify-between items-center px-4 py-2 border-b border-[rgba(232,188,112,0.2)] bg-[#0d140f] z-20">
+  <div class="flex items-center gap-2">
+    <span class="text-3xl">🐴</span>
+    <h1 class="text-3xl font-display font-black text-[var(--gold)] tracking-wide">黑馬三顆星 <span class="text-xl">Pro</span></h1>
+    <span class="sub-title text-xs text-[var(--gold)] border border-[var(--gold)] rounded px-1 opacity-70">Mobile Edition</span>
+  </div>
+  <div class="flex items-center gap-2">
+    <button onclick="openSettings()" class="btn-action bg-[#2a2415] border border-[var(--gold)] text-[var(--gold)] px-3 py-1.5 rounded-xl font-bold text-base">⚙️ 賽制設定</button>
+    <div id="status-badge" class="bg-[#1a1f1a] border border-gray-700 text-yellow-400 px-3 py-1.5 rounded-xl font-bold text-sm">未開始</div>
+    <button onclick="toggleFullscreen()" class="btn-action bg-[var(--gold)] text-slate-900 font-black px-3 py-1.5 rounded-xl">⛶ 全螢幕</button>
+  </div>
+</header>
+
+<!-- Main Content -->
+<main class="flex-1 p-2 sm:p-4 overflow-hidden relative">
+  <div class="main-grid max-w-7xl mx-auto h-full">
+    
+    <!-- 左側：選手 1 -->
+    <section id="p1-card" class="glass-panel rounded-3xl p-3 sm:p-4 flex flex-col items-center justify-between select-none relative transition-all" onclick="setActivePlayer(0)">
+      <div class="w-full flex items-center justify-center gap-2">
+        <div id="p1-avatar-preview" class="w-10 h-10 rounded-full bg-black border border-[var(--gold)] overflow-hidden flex items-center justify-center text-sm font-bold">🐴</div>
+        <h2 id="p1-name-display" class="text-2xl sm:text-3xl font-black text-[var(--gold)] tracking-wider">林師傅 <span class="text-lg opacity-70">(白球)</span></h2>
+      </div>
+      
+      <!-- 勝場燈 (Sets Winner Badge) -->
+      <div class="flex items-center gap-1.5 bg-black/50 px-3 py-1 rounded-full border border-[rgba(232,188,112,0.3)] my-1">
+        <span class="text-xs text-gray-400 font-bold mr-1">勝盤:</span>
+        <div id="p1-sets-display" class="flex gap-1.5 text-lg"></div>
+      </div>
+
+      <div id="p1-score" class="score-text font-display text-[var(--white-ball)] ball-glow-white w-32 h-32 sm:w-40 sm:h-40 rounded-full flex items-center justify-center bg-black my-1">0</div>
+      
+      <div class="w-full grid grid-cols-3 gap-2 bg-black/40 rounded-xl p-2 mb-1">
+        <div class="text-center"><div class="stat-label text-gray-400 text-xs sm:text-sm">Inning</div><div id="p1-inning" class="stat-val font-black text-lg sm:text-xl">0</div></div>
+        <div class="text-center"><div class="stat-label text-[var(--gold)] text-xs sm:text-sm">AVG</div><div id="p1-avg" class="stat-val font-black text-lg sm:text-xl text-[var(--gold)]">0.000</div></div>
+        <div class="text-center"><div class="stat-label text-red-400 text-xs sm:text-sm">HR</div><div id="p1-hr" class="stat-val font-black text-lg sm:text-xl text-red-400">0</div></div>
+      </div>
+
+      <div class="w-full flex justify-between items-center bg-black/30 rounded-xl px-3 py-1.5 mb-1">
+        <span class="text-gray-300 font-bold text-sm">延長牌</span>
+        <span id="p1-timeout-text" class="text-[var(--gold)] font-black text-sm">剩 2 次</span>
+      </div>
+      <div class="w-full grid grid-cols-3 gap-2">
+        <button class="btn-action bg-[#1b3a2d] text-green-300 font-black text-xl py-2.5 rounded-xl border border-green-900/50" onclick="event.stopPropagation(); changeScore(0, -1)">-1</button>
+        <button id="p1-timeout-btn" class="btn-action bg-[#b9781f] text-white font-black text-base py-2.5 rounded-xl border border-[var(--gold)]" onclick="event.stopPropagation(); useTimeout(0)">🕒 延長</button>
+        <button class="btn-action bg-[#7a1f1f] text-red-200 font-black text-xl py-2.5 rounded-xl border border-red-900/50" onclick="event.stopPropagation(); changeScore(0, 1)">+1</button>
+      </div>
+    </section>
+
+    <!-- 中間：資訊 -->
+    <section class="glass-panel rounded-3xl p-3 sm:p-4 flex flex-col items-center justify-between center-col relative">
+      <div class="text-center w-full">
+        <div id="target-display" class="text-[var(--gold)] font-black text-lg sm:text-xl mb-0.5">目標 15 分</div>
+        <div id="match-format-display" class="text-gray-400 text-xs font-bold">單盤賽 | 局數限制: 無</div>
+        
+        <div class="bg-black/40 rounded-xl px-4 py-2 mt-2">
+          <div class="text-gray-400 text-xs">當前回合</div>
+          <div id="current-turn-text" class="center-mid font-display text-green-400 font-black text-xl sm:text-2xl">尚未開始</div>
+        </div>
+      </div>
+      
+      <button onclick="nextTurn()" class="btn-action w-full bg-[var(--gold)] text-slate-900 font-black text-lg sm:text-xl py-3 rounded-xl shadow-lg my-1">← 失誤 / 換人</button>
+      
+      <div class="w-full bg-black/40 rounded-xl py-2 text-center">
+        <div class="text-gray-400 text-xs">比賽時間</div>
+        <div id="match-timer" class="font-display text-[var(--gold)] font-black text-2xl">00:00</div>
+      </div>
+      
+      <div class="w-full text-center mt-auto">
+        <div class="text-gray-400 text-xs">Shot Clock</div>
+        <div id="shot-clock-display" class="shot-clock font-display text-white font-black text-4xl sm:text-5xl ball-glow-white rounded-xl py-1 bg-black/60">40</div>
+        <div class="w-full h-1.5 bg-[var(--gold)] mt-2 rounded-full opacity-50"></div>
+      </div>
+    </section>
+
+    <!-- 右側：選手 2 -->
+    <section id="p2-card" class="glass-panel rounded-3xl p-3 sm:p-4 flex flex-col items-center justify-between select-none relative transition-all" onclick="setActivePlayer(1)">
+      <div class="w-full flex items-center justify-center gap-2">
+        <div id="p2-avatar-preview" class="w-10 h-10 rounded-full bg-black border border-[var(--gold)] overflow-hidden flex items-center justify-center text-sm font-bold">🐴</div>
+        <h2 id="p2-name-display" class="text-2xl sm:text-3xl font-black text-[var(--gold)] tracking-wider">黑馬 <span class="text-lg opacity-70">(黃球)</span></h2>
+      </div>
+      
+      <!-- 勝場燈 (Sets Winner Badge) -->
+      <div class="flex items-center gap-1.5 bg-black/50 px-3 py-1 rounded-full border border-[rgba(232,188,112,0.3)] my-1">
+        <span class="text-xs text-gray-400 font-bold mr-1">勝盤:</span>
+        <div id="p2-sets-display" class="flex gap-1.5 text-lg"></div>
+      </div>
+
+      <div id="p2-score" class="score-text font-display text-[var(--yellow-ball)] ball-glow-yellow w-32 h-32 sm:w-40 sm:h-40 rounded-full flex items-center justify-center bg-black my-1">0</div>
+      
+      <div class="w-full grid grid-cols-3 gap-2 bg-black/40 rounded-xl p-2 mb-1">
+        <div class="text-center"><div class="stat-label text-gray-400 text-xs sm:text-sm">Inning</div><div id="p2-inning" class="stat-val font-black text-lg sm:text-xl">0</div></div>
+        <div class="text-center"><div class="stat-label text-[var(--gold)] text-xs sm:text-sm">AVG</div><div id="p2-avg" class="stat-val font-black text-lg sm:text-xl text-[var(--gold)]">0.000</div></div>
+        <div class="text-center"><div class="stat-label text-red-400 text-xs sm:text-sm">HR</div><div id="p2-hr" class="stat-val font-black text-lg sm:text-xl text-red-400">0</div></div>
+      </div>
+
+      <div class="w-full flex justify-between items-center bg-black/30 rounded-xl px-3 py-1.5 mb-1">
+        <span class="text-gray-300 font-bold text-sm">延長牌</span>
+        <span id="p2-timeout-text" class="text-[var(--gold)] font-black text-sm">剩 2 次</span>
+      </div>
+      <div class="w-full grid grid-cols-3 gap-2">
+        <button class="btn-action bg-[#1b3a2d] text-green-300 font-black text-xl py-2.5 rounded-xl border border-green-900/50" onclick="event.stopPropagation(); changeScore(1, -1)">-1</button>
+        <button id="p2-timeout-btn" class="btn-action bg-[#b9781f] text-white font-black text-base py-2.5 rounded-xl border border-[var(--gold)]" onclick="event.stopPropagation(); useTimeout(1)">🕒 延長</button>
+        <button class="btn-action bg-[#7a1f1f] text-red-200 font-black text-xl py-2.5 rounded-xl border border-red-900/50" onclick="event.stopPropagation(); changeScore(1, 1)">+1</button>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<!-- Bottom Bar -->
+<div class="bottom-bar flex justify-between items-center px-4 py-3 bg-[#0d140f] border-t border-[rgba(232,188,112,0.2)] gap-3">
+  <button id="start-btn" onclick="toggleMatch()" class="bottom-btn btn-action bg-[var(--gold)] text-slate-900 font-black text-lg sm:text-xl px-6 py-3 rounded-xl flex-1">開始比賽</button>
+  <button onclick="resetMatch()" class="bottom-btn btn-action bg-[#4a1c1c] text-red-200 font-bold text-base px-6 py-3 rounded-xl">重設</button>
+  <div class="flex gap-2 ml-auto">
+    <button onclick="genReport()" class="bottom-btn btn-action bg-[#1b3a2d] border border-green-900/50 text-green-300 font-bold px-4 py-3 rounded-xl">📸 戰報圖</button>
+  </div>
+</div>
+
+<!-- ⚙️ 設定對話框 (Modal) -->
+<div id="settings-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+  <div class="glass-panel w-full max-w-lg rounded-3xl p-6 flex flex-col gap-4 border border-[var(--gold)] max-h-[90vh] overflow-y-auto">
+    <div class="flex justify-between items-center border-b border-[rgba(232,188,112,0.2)] pb-3">
+      <h3 class="text-2xl font-black text-[var(--gold)] font-display">⚙️ 賽制與選手設定</h3>
+      <button onclick="closeSettings()" class="text-gray-400 hover:text-white text-xl font-bold px-2">✕</button>
+    </div>
+
+    <!-- 賽制規則設定 -->
+    <div class="bg-black/40 p-4 rounded-2xl flex flex-col gap-3 border border-[rgba(232,188,112,0.2)]">
+      <h4 class="font-bold text-lg text-[var(--gold)]">🏆 賽制規則與局數限制</h4>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs text-gray-400 mb-1 block">目標分數</label>
+          <input id="input-target-score" type="number" min="1" max="100" class="w-full bg-[#121c16] border border-[rgba(232,188,112,0.3)] rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-[var(--gold)]" value="15">
+        </div>
+        <div>
+          <label class="text-xs text-gray-400 mb-1 block">局數上限 (0 為不限)</label>
+          <input id="input-inning-limit" type="number" min="0" max="100" class="w-full bg-[#121c16] border border-[rgba(232,188,112,0.3)] rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-[var(--gold)]" value="0">
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-gray-400 mb-1 block">賽盤制度 (多盤勝負)</label>
+        <select id="input-sets-mode" class="w-full bg-[#121c16] border border-[rgba(232,188,112,0.3)] rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-[var(--gold)]">
+          <option value="1">單盤決勝 (1 盤)</option>
+          <option value="2">三盤兩勝 (搶 2 勝)</option>
+          <option value="3">五盤三勝 (搶 3 勝)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 選手 1 設定 -->
+    <div class="bg-black/40 p-4 rounded-2xl flex flex-col gap-3">
+      <h4 class="font-bold text-lg text-white">選手 1 設定 <span class="text-xs text-gray-400">(白球)</span></h4>
+      <div class="flex gap-3 items-center">
+        <div class="flex-1">
+          <label class="text-xs text-gray-400 mb-1 block">選手名稱</label>
+          <input id="input-p1-name" type="text" class="w-full bg-[#121c16] border border-[rgba(232,188,112,0.3)] rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-[var(--gold)]" value="林師傅">
+        </div>
+        <div>
+          <label class="text-xs text-gray-400 mb-1 block">頭像圖片</label>
+          <input type="file" id="input-p1-avatar" accept="image/*" class="hidden" onchange="handleAvatarUpload(event, 0)">
+          <button onclick="document.getElementById('input-p1-avatar').click()" class="bg-[#2a2415] border border-[var(--gold)] text-[var(--gold)] px-3 py-2 rounded-xl text-sm font-bold">上傳頭像</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 選手 2 設定 -->
+    <div class="bg-black/40 p-4 rounded-2xl flex flex-col gap-3">
+      <h4 class="font-bold text-lg text-white">選手 2 設定 <span class="text-xs text-gray-400">(黃球)</span></h4>
+      <div class="flex gap-3 items-center">
+        <div class="flex-1">
+          <label class="text-xs text-gray-400 mb-1 block">選手名稱</label>
+          <input id="input-p2-name" type="text" class="w-full bg-[#121c16] border border-[rgba(232,188,112,0.3)] rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-[var(--gold)]" value="黑馬">
+        </div>
+        <div>
+          <label class="text-xs text-gray-400 mb-1 block">頭像圖片</label>
+          <input type="file" id="input-p2-avatar" accept="image/*" class="hidden" onchange="handleAvatarUpload(event, 1)">
+          <button onclick="document.getElementById('input-p2-avatar').click()" class="bg-[#2a2415] border border-[var(--gold)] text-[var(--gold)] px-3 py-2 rounded-xl text-sm font-bold">上傳頭像</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex justify-end gap-3 pt-2">
+      <button onclick="closeSettings()" class="bg-gray-700 text-white font-bold px-5 py-2.5 rounded-xl">取消</button>
+      <button onclick="saveSettings()" class="bg-[var(--gold)] text-slate-900 font-black px-6 py-2.5 rounded-xl">儲存設定</button>
+    </div>
+  </div>
+</div>
+
+<!-- Canvas for Report -->
+<canvas id="repCanvas" width="1200" height="1050" class="hidden"></canvas>
+
+<script>
+  // 遊戲狀態變數
+  let gameState = 'STOPPED'; // STOPPED, RUNNING, PAUSED, MATCH_FINISHED
+  let targetScore = 15;
+  let inningLimit = 0; // 0 表示無限
+  let targetSets = 1;  // 搶 N 勝
+  
+  let scores = [0, 0];
+  let setWins = [0, 0]; // 盤數勝場紀錄
+  let innings = [0, 0];
+  let highRuns = [0, 0];
+  let timeouts = [2, 2];
+  let activePlayer = 0; // 0: 選手1, 1: 選手2
+  let names = ["林師傅", "黑馬"];
+  let ballColors = ["white", "yellow"];
+  let avatars = [null, null];
+  
+  let matchSeconds = 0;
+  let shotSeconds = 40;
+  let timerInterval = null;
+
+  function openSettings() {
+    document.getElementById('input-target-score').value = targetScore;
+    document.getElementById('input-inning-limit').value = inningLimit;
+    document.getElementById('input-sets-mode').value = targetSets;
+    document.getElementById('input-p1-name').value = names[0];
+    document.getElementById('input-p2-name').value = names[1];
+    document.getElementById('settings-modal').classList.remove('hidden');
+  }
+
+  function closeSettings() {
+    document.getElementById('settings-modal').classList.add('hidden');
+  }
+
+  function handleAvatarUpload(event, playerIdx) {
+    const file = event.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const img = new Image();
+        img.onload = function() {
+          avatars[playerIdx] = img;
+          const preview = document.getElementById(`p${playerIdx+1}-avatar-preview`);
+          preview.innerHTML = `<img src="${e.target.result}" class="w-full h-full object-cover rounded-full">`;
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  function saveSettings() {
+    targetScore = parseInt(document.getElementById('input-target-score').value) || 15;
+    inningLimit = parseInt(document.getElementById('input-inning-limit').value) || 0;
+    targetSets = parseInt(document.getElementById('input-sets-mode').value) || 1;
+    
+    const n1 = document.getElementById('input-p1-name').value.trim();
+    const n2 = document.getElementById('input-p2-name').value.trim();
+    if(n1) names[0] = n1;
+    if(n2) names[1] = n2;
+    
+    updateUI();
+    closeSettings();
+  }
+
+  function toggleMatch() {
+    const btn = document.getElementById('start-btn');
+    const badge = document.getElementById('status-badge');
+    
+    if (gameState === 'MATCH_FINISHED') {
+      alert('比賽已結束，請點擊「重設」開始新比賽。');
+      return;
+    }
+
+    if (gameState === 'STOPPED' || gameState === 'PAUSED') {
+      gameState = 'RUNNING';
+      btn.innerText = "暫停比賽";
+      badge.innerText = "進行中";
+      badge.className = "bg-[#1a1f1a] border border-green-700 text-green-400 px-3 py-1.5 rounded-xl font-bold text-sm";
+      startTimers();
+    } else {
+      gameState = 'PAUSED';
+      btn.innerText = "繼續比賽";
+      badge.innerText = "暫停中";
+      badge.className = "bg-[#1a1f1a] border border-yellow-700 text-yellow-400 px-3 py-1.5 rounded-xl font-bold text-sm";
+      clearInterval(timerInterval);
+    }
+    updateUI();
+  }
+
+  function startTimers() {
+    clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      if (gameState === 'RUNNING') {
+        matchSeconds++;
+        updateMatchTimerDisplay();
+
+        if (shotSeconds > 0) {
+          shotSeconds--;
+          document.getElementById('shot-clock-display').innerText = shotSeconds;
+          if (shotSeconds <= 5) {
+            document.getElementById('shot-clock-display').style.color = '#ef4444';
+          } else {
+            document.getElementById('shot-clock-display').style.color = '#ffffff';
+          }
+        }
+      }
+    }, 1000);
+  }
+
+  function updateMatchTimerDisplay() {
+    let m = Math.floor(matchSeconds / 60);
+    let s = matchSeconds % 60;
+    document.getElementById('match-timer').innerText = 
+      String(m).padStart(2, '0') + ":" + String(s).padStart(2, '0');
+  }
+
+  function changeScore(p, delta) {
+    if (gameState === 'MATCH_FINISHED') return;
+    scores[p] = Math.max(0, scores[p] + delta);
+    if (scores[p] > highRuns[p]) {
+      highRuns[p] = scores[p];
+    }
+    checkSetWinCondition();
+    updateUI();
+  }
+
+  function useTimeout(p) {
+    if (timeouts[p] > 0) {
+      timeouts[p]--;
+      shotSeconds = 40; 
+      document.getElementById(`p${p+1}-timeout-text`).innerText = `剩 ${timeouts[p]} 次`;
+      if (timeouts[p] === 0) {
+        document.getElementById(`p${p+1}-timeout-btn`).disabled = true;
+        document.getElementById(`p${p+1}-timeout-btn`).classList.add('opacity-50', 'cursor-not-allowed');
+      }
+    }
+  }
+
+  function setActivePlayer(p) {
+    activePlayer = p;
+    updateUI();
+  }
+
+  function nextTurn() {
+    if (gameState === 'MATCH_FINISHED') return;
+    innings[activePlayer]++;
+    
+    // 檢查局數限制
+    if (inningLimit > 0 && innings[0] >= inningLimit && innings[1] >= inningLimit) {
+      endSetByInningLimit();
+      return;
+    }
+
+    activePlayer = activePlayer === 0 ? 1 : 0;
+    shotSeconds = 40;
+    updateUI();
+  }
+
+  function checkSetWinCondition() {
+    // 分數達標判定盤勝
+    if (scores[0] >= targetScore) {
+      winSet(0);
+    } else if (scores[1] >= targetScore) {
+      winSet(1);
+    }
+  }
+
+  function endSetByInningLimit() {
+    let winner = -1;
+    if (scores[0] > scores[1]) winner = 0;
+    else if (scores[1] > scores[0]) winner = 1;
+
+    if (winner !== -1) {
+      alert(`已達到局數上限 (${inningLimit} 局)！由 ${names[winner]} 贏得本盤！`);
+      winSet(winner);
+    } else {
+      alert(`已達到局數上限 (${inningLimit} 局)！本盤平手，重新進行當前盤次。`);
+      resetCurrentSet();
+    }
+  }
+
+  function winSet(p) {
+    setWins[p]++;
+    if (setWins[p] >= targetSets) {
+      // 贏得整場比賽
+      gameState = 'MATCH_FINISHED';
+      clearInterval(timerInterval);
+      document.getElementById('status-badge').innerText = "比賽結束";
+      document.getElementById('status-badge').className = "bg-[#1a1f1a] border border-red-700 text-red-400 px-3 py-1.5 rounded-xl font-bold text-sm";
+      alert(`🎉 恭喜 ${names[p]} 贏得最終比賽總冠軍！ (勝盤: ${setWins[0]} - ${setWins[1]})`);
+    } else {
+      alert(`盤次結束！${names[p]} 贏得本盤。準備進入下一盤！`);
+      resetCurrentSet();
+    }
+    updateUI();
+  }
+
+  function resetCurrentSet() {
+    scores = [0, 0];
+    innings = [0, 0];
+    highRuns = [0, 0];
+    timeouts = [2, 2];
+    shotSeconds = 40;
+    for(let i=1; i<=2; i++) {
+      document.getElementById(`p${i}-timeout-text`).innerText = "剩 2 次";
+      const btn = document.getElementById(`p${i}-timeout-btn`);
+      btn.disabled = false;
+      btn.classList.remove('opacity-50', 'cursor-not-allowed');
+    }
+  }
+
+  function updateUI() {
+    // 賽制資訊
+    document.getElementById('target-display').innerText = `目標 ${targetScore} 分`;
+    const modeText = targetSets === 1 ? "單盤賽" : (targetSets === 2 ? "三盤兩勝" : "五盤三勝");
+    const limitText = inningLimit > 0 ? `${inningLimit} 局` : "無";
+    document.getElementById('match-format-display').innerText = `${modeText} | 局數限制: ${limitText}`;
+
+    // 選手名稱
+    document.getElementById('p1-name-display').innerHTML = `${names[0]} <span class="text-lg opacity-70">(白球)</span>`;
+    document.getElementById('p2-name-display').innerHTML = `${names[1]} <span class="text-lg opacity-70">(黃球)</span>`;
+
+    // 勝場盤數燈號
+    renderSetBadges('p1-sets-display', setWins[0], targetSets);
+    renderSetBadges('p2-sets-display', setWins[1], targetSets);
+
+    // 分數
+    document.getElementById('p1-score').innerText = scores[0];
+    document.getElementById('p2-score').innerText = scores[1];
+
+    // 統計
+    document.getElementById('p1-inning').innerText = innings[0];
+    document.getElementById('p1-avg').innerText = innings[0] > 0 ? (scores[0] / innings[0]).toFixed(3) : "0.000";
+    document.getElementById('p1-hr').innerText = highRuns[0];
+
+    document.getElementById('p2-inning').innerText = innings[1];
+    document.getElementById('p2-avg').innerText = innings[1] > 0 ? (scores[1] / innings[1]).toFixed(3) : "0.000";
+    document.getElementById('p2-hr').innerText = highRuns[1];
+
+    // 當前回合文字
+    const turnText = document.getElementById('current-turn-text');
+    turnText.innerText = gameState === 'MATCH_FINISHED' ? "比賽結束" : `${names[activePlayer]} 擊球中`;
+
+    // 卡片高亮邊框
+    const p1Card = document.getElementById('p1-card');
+    const p2Card = document.getElementById('p2-card');
+    if (activePlayer === 0) {
+      p1Card.style.borderColor = 'var(--gold)';
+      p2Card.style.borderColor = 'rgba(232,188,112,0.15)';
+    } else {
+      p2Card.style.borderColor = 'var(--gold)';
+      p1Card.style.borderColor = 'rgba(232,188,112,0.15)';
+    }
+  }
+
+  function renderSetBadges(containerId, wins, target) {
+    const el = document.getElementById(containerId);
+    let html = '';
+    for(let i=0; i<target; i++) {
+      if(i < wins) {
+        html += `<span class="text-[var(--gold)]">★</span>`;
+      } else {
+        html += `<span class="text-gray-600">☆</span>`;
+      }
+    }
+    el.innerHTML = html;
+  }
+
+  function resetMatch() {
+    if (confirm('確定要重設整場比賽（包含比分、盤數紀錄與計時）嗎？')) {
+      clearInterval(timerInterval);
+      gameState = 'STOPPED';
+      scores = [0, 0];
+      setWins = [0, 0];
+      innings = [0, 0];
+      highRuns = [0, 0];
+      timeouts = [2, 2];
+      matchSeconds = 0;
+      shotSeconds = 40;
+      activePlayer = 0;
+
+      document.getElementById('start-btn').innerText = "開始比賽";
+      const badge = document.getElementById('status-badge');
+      badge.innerText = "未開始";
+      badge.className = "bg-[#1a1f1a] border border-gray-700 text-yellow-400 px-3 py-1.5 rounded-xl font-bold text-sm";
+      document.getElementById('match-timer').innerText = "00:00";
+      
+      for(let i=1; i<=2; i++) {
+        document.getElementById(`p${i}-timeout-text`).innerText = "剩 2 次";
+        const btn = document.getElementById(`p${i}-timeout-btn`);
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+      updateUI();
+    }
+  }
+
+  function toggleFullscreen(){
+    document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  }
+
+  function genReport(){
+    const c = document.getElementById('repCanvas'), ctx = c.getContext('2d');
+    ctx.fillStyle = "#0b110d"; ctx.fillRect(0, 0, c.width, c.height);
+    
+    // 繪製頂部賽制資訊標籤
+    ctx.fillStyle = "#e8bc70"; ctx.font = "bold 28px sans-serif";
+    const formatStr = `賽制: ${targetSets===1?'單盤賽':`搶 ${targetSets} 勝`} | 目標分: ${targetScore}分 | 局數限制: ${inningLimit>0?inningLimit:'無'}`;
+    ctx.fillText(formatStr, 70, 45);
+
+    const dc = (x, name, color, score, setWin, inning, hr, isW, avatar) => {
+      ctx.fillStyle = "#121c16"; ctx.fillRect(x, 70, 460, 800);
+      
+      // 繪製頭像 (若有)
+      if (avatar) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x + 100, 140, 40, 0, Math.PI * 2, true);
+        ctx.closePath();
+        ctx.clip();
+        ctx.drawImage(avatar, x + 60, 100, 80, 80);
+        ctx.restore();
+        
+        ctx.strokeStyle = "#e8bc70"; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.arc(x + 100, 140, 40, 0, Math.PI * 2, true); ctx.stroke();
+        
+        ctx.fillStyle = "#e8bc70"; ctx.font = "bold 34px sans-serif"; 
+        ctx.fillText(`${name} (${color==='white'?'白球':'黃球'})`, x+160, 150);
+      } else {
+        ctx.fillStyle = "#e8bc70"; ctx.font = "bold 36px sans-serif"; 
+        ctx.fillText(`${name} (${color==='white'?'白球':'黃球'})`, x+40, 140);
+      }
+      
+      // 盤數標示
+      ctx.fillStyle = "#e8bc70"; ctx.font = "bold 30px sans-serif";
+      ctx.fillText(`勝盤數: ${setWin}`, x+40, 220);
+
+      // 比分
+      ctx.fillStyle = color==='yellow' ? "#ffe066" : "#ffffff"; 
+      ctx.font = "bold 100px serif"; 
+      ctx.fillText(score, x+40, 330);
+      
+      ctx.fillStyle = "#cbd5e1"; ctx.font = "28px sans-serif"; 
+      ctx.fillText(`Inning: ${inning}`, x+40, 420); 
+      ctx.fillText(`AVG: ${inning>0?(score/inning).toFixed(3):"0.000"}`, x+40, 470); 
+      ctx.fillText(`High Run: ${hr}`, x+40, 520);
+      
+      if(isW){ 
+        ctx.fillStyle = "#e8bc70"; ctx.font = "bold 36px sans-serif";
+        ctx.fillText("🏆 MATCH WINNER", x+40, 620);
+      }
+    };
+    
+    const wi = setWins[0] > setWins[1] ? 0 : (setWins[1] > setWins[0] ? 1 : (scores[0] >= scores[1] ? 0 : 1));
+    dc(70, names[0], ballColors[0], scores[0], setWins[0], innings[0], highRuns[0], wi===0, avatars[0]);
+    dc(670, names[1], ballColors[1], scores[1], setWins[1], innings[1], highRuns[1], wi===1, avatars[1]);
+    
+    ctx.fillStyle = "#e8bc70"; ctx.font = "bold 48px serif"; ctx.fillText("VS", 565, 460);
+    ctx.font = "bold 36px sans-serif"; ctx.fillText("黑馬三顆星 ‧ 就是這樣中！", 370, 960);
+    
+    const link = document.createElement('a'); 
+    link.download = `黑馬戰報_${names[0]}VS${names[1]}_${new Date().toISOString().split('T')[0]}.png`; 
+    link.href = c.toDataURL('image/png'); 
+    link.click();
+  }
+</script>
+</body>
+</html>
+
+```

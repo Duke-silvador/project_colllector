@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>專業撞球賽事管理與動態對戰表系統</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            felt: {
+              DEFAULT: '#0f5132',
+              dark: '#0a3622',
+              light: '#146c43',
+              accent: '#20c997'
+            },
+            darkbg: '#121316',
+            panelbg: '#1e2026',
+            cardbg: '#282b33',
+            bordercolor: '#3a3f4d'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbar for Bracket Overflow */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #18191c;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #3a3f4d;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #20c997;
+    }
+    .bracket-container {
+      display: flex;
+      overflow-x: auto;
+      padding: 20px 10px;
+      gap: 32px;
+      min-height: 420px;
+    }
+    .bracket-column {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-around;
+      min-width: 220px;
+      flex-shrink: 0;
+    }
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+      body {
+        background-color: #fff !important;
+        color: #000 !important;
+      }
+      .bracket-container {
+        overflow: visible !important;
+      }
+    }
+  </style>
+</head>
+<body class="bg-darkbg text-gray-100 font-sans min-h-screen flex flex-col">
+
+  <!-- Header Navigation -->
+  <header class="bg-panelbg border-b border-bordercolor sticky top-0 z-40 no-print shadow-lg">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-wrap justify-between items-center gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-full bg-felt flex items-center justify-center text-white text-xl font-bold border-2 border-felt-accent shadow">
+          8
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-wide text-white flex items-center gap-2">
+            撞球賽事管理與對戰表系統
+            <span class="text-xs font-normal px-2 py-0.5 bg-felt-accent/20 text-felt-accent rounded border border-felt-accent/30">Pro Engine</span>
+          </h1>
+          <p class="text-xs text-gray-400">支援單敗 / 雙敗淘汰制 • 自動晉級與敗部防同組轉移/重抽</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 flex-wrap">
+        <button onclick="openPreviewModal()" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm rounded-lg transition flex items-center gap-1.5 font-medium shadow">
+          <i class="fa-solid fa-eye"></i> 👁️ 預覽賽事圖
+        </button>
+        <button onclick="quickShuffleAndDraw()" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-sm rounded-lg transition flex items-center gap-1.5 font-medium shadow">
+          <i class="fa-solid fa-dice"></i> 🎲 一鍵隨機抽籤
+        </button>
+        <button id="btnLoserReshuffle" onclick="manualLosersReshuffle()" class="px-3 py-1.5 bg-rose-700 hover:bg-rose-600 text-white text-sm rounded-lg transition flex items-center gap-1.5 font-medium shadow">
+          <i class="fa-solid fa-shuffle"></i> 🎲 敗部重新抽籤
+        </button>
+        <button onclick="openModal('setupModal')" class="px-3 py-1.5 bg-felt hover:bg-felt-light text-white text-sm rounded-lg transition flex items-center gap-1.5 font-medium shadow">
+          <i class="fa-solid fa-gear"></i> 賽事設定
+        </button>
+        <button onclick="openModal('playersModal')" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-lg transition flex items-center gap-1.5 font-medium">
+          <i class="fa-solid fa-users"></i> 選手管理
+        </button>
+        <button onclick="resetTournamentScores()" class="px-3 py-1.5 bg-rose-900/60 hover:bg-rose-800 text-white text-sm rounded-lg transition flex items-center gap-1.5 font-medium" title="重置所有比分與晉級狀態">
+          <i class="fa-solid fa-rotate-left"></i> 重置比分
+        </button>
+        <button onclick="window.print()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg transition flex items-center gap-1.5 font-medium">
+          <i class="fa-solid fa-print"></i> 列印 / 匯出
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <main class="flex-grow max-w-full px-4 py-6 flex flex-col gap-6">
+
+    <!-- Tournament Overview Bar -->
+    <div class="bg-panelbg border border-bordercolor rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+      <div class="flex items-center gap-6 flex-wrap">
+        <div>
+          <span class="text-xs text-gray-400 block">賽事名稱</span>
+          <span id="displayTitle" class="font-bold text-lg text-white">2026 全國撞球公開賽</span>
+        </div>
+        <div class="h-8 w-px bg-bordercolor hidden sm:block"></div>
+        <div>
+          <span class="text-xs text-gray-400 block">賽制</span>
+          <span id="displayType" class="font-semibold text-felt-accent">雙敗淘汰賽 (Double Elimination)</span>
+        </div>
+        <div class="h-8 w-px bg-bordercolor hidden sm:block"></div>
+        <div>
+          <span class="text-xs text-gray-400 block">參賽人數 / 總籤位</span>
+          <span id="displayPlayersCount" class="font-semibold text-gray-200">16 人 (16 籤位)</span>
+        </div>
+        <div class="h-8 w-px bg-bordercolor hidden sm:block"></div>
+        <div>
+          <span class="text-xs text-gray-400 block">輪空 (BYE) 數量</span>
+          <span id="displayByeCount" class="font-semibold text-amber-400">0</span>
+        </div>
+      </div>
+
+      <!-- Quick Action Controls -->
+      <div class="flex items-center gap-4 flex-wrap">
+        <label class="text-xs text-gray-300 flex items-center gap-1.5 cursor-pointer bg-darkbg px-2.5 py-1.5 rounded border border-bordercolor">
+          <input type="checkbox" id="autoAdvanceBye" checked onchange="toggleAutoBye(this.checked)" class="rounded bg-gray-700 border-gray-600 text-felt-accent focus:ring-felt-accent">
+          自動推進輪空 (BYE)
+        </label>
+        <label id="autoReshuffleLabel" class="text-xs text-rose-300 flex items-center gap-1.5 cursor-pointer bg-darkbg px-2.5 py-1.5 rounded border border-rose-500/30">
+          <input type="checkbox" id="autoLoserReshuffle" checked onchange="toggleAutoLoserReshuffle(this.checked)" class="rounded bg-gray-700 border-gray-600 text-rose-500 focus:ring-rose-500">
+          敗部 R1 自動錯開勝部同組對手
+        </label>
+      </div>
+    </div>
+
+    <!-- Bracket Tabs (Only active in Double Elimination) -->
+    <div id="bracketTabs" class="flex border-b border-bordercolor gap-2 no-print">
+      <button onclick="switchTab('winners')" id="tab-winners" class="px-5 py-2.5 font-bold rounded-t-lg bg-felt text-white flex items-center gap-2 border-t border-x border-felt-accent">
+        <i class="fa-solid fa-trophy text-amber-300"></i> 勝部樹狀圖 (Winners)
+      </button>
+      <button onclick="switchTab('losers')" id="tab-losers" class="px-5 py-2.5 font-bold rounded-t-lg bg-cardbg text-gray-400 hover:text-white flex items-center gap-2 border-t border-x border-transparent">
+        <i class="fa-solid fa-shield-halved text-rose-400"></i> 敗部樹狀圖 (Losers)
+      </button>
+      <button onclick="switchTab('finals')" id="tab-finals" class="px-5 py-2.5 font-bold rounded-t-lg bg-cardbg text-gray-400 hover:text-white flex items-center gap-2 border-t border-x border-transparent">
+        <i class="fa-solid fa-crown text-amber-400"></i> 總決賽 (Grand Finals)
+      </button>
+      <button onclick="switchTab('all')" id="tab-all" class="px-5 py-2.5 font-bold rounded-t-lg bg-cardbg text-gray-400 hover:text-white flex items-center gap-2 border-t border-x border-transparent">
+        <i class="fa-solid fa-eye"></i> 一覽全貌
+      </button>
+    </div>
+
+    <!-- Bracket Views Container -->
+    <div id="mainBracketView" class="bg-panelbg border border-bordercolor rounded-b-xl rounded-tr-xl p-4 min-h-[600px] flex flex-col justify-between relative shadow-inner">
+      
+      <!-- Winners Bracket Section -->
+      <div id="section-winners" class="bracket-section">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-md font-bold text-felt-accent flex items-center gap-2">
+            <i class="fa-solid fa-trophy text-amber-400"></i> 勝部賽程 (Winners Bracket)
+          </h2>
+          <span class="text-xs text-gray-400">點擊選手卡片或點擊比分按鈕可直接選擇勝者晉級</span>
+        </div>
+        <div id="winnersBracket" class="bracket-container"></div>
+      </div>
+
+      <!-- Losers Bracket Section -->
+      <div id="section-losers" class="bracket-section hidden">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-md font-bold text-rose-400 flex items-center gap-2">
+            <i class="fa-solid fa-shield-halved text-rose-400"></i> 敗部賽程 (Losers Bracket)
+          </h2>
+          <div class="flex items-center gap-3">
+            <span class="text-xs text-gray-400">勝部落敗選手將進入敗部；可點擊上方「🎲 敗部重新抽籤」打散敗部籤位</span>
+          </div>
+        </div>
+        <div id="losersBracket" class="bracket-container"></div>
+      </div>
+
+      <!-- Grand Finals Section -->
+      <div id="section-finals" class="bracket-section hidden">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-md font-bold text-amber-400 flex items-center gap-2">
+            <i class="fa-solid fa-crown text-amber-400"></i> 總決賽 (Grand Finals & Reset Game)
+          </h2>
+        </div>
+        <div class="max-w-xl mx-auto bg-cardbg p-6 rounded-xl border border-amber-500/30 shadow-2xl space-y-6">
+          <div class="text-center">
+            <p class="text-sm text-gray-300">雙敗淘汰制總決賽說明：</p>
+            <p class="text-xs text-gray-400 mt-1">勝部冠軍（無敗績）對決敗部冠軍（一敗）。若敗部冠軍獲勝，將觸發「加賽 (Bracket Reset)」，雙方均為一敗，進行最後一局決勝局！</p>
+          </div>
+
+          <!-- Main Grand Final Match Card -->
+          <div id="grandFinalCard" class="bg-panelbg border border-bordercolor rounded-lg p-4"></div>
+
+          <!-- Bracket Reset Match Card (Conditionally Active) -->
+          <div id="resetMatchWrapper" class="hidden">
+            <div class="flex items-center gap-2 my-4">
+              <div class="h-px bg-rose-500/50 flex-grow"></div>
+              <span class="text-xs text-rose-400 font-bold px-2 py-0.5 bg-rose-500/10 rounded border border-rose-500/30">觸發敗部加賽 (Bracket Reset)</span>
+              <div class="h-px bg-rose-500/50 flex-grow"></div>
+            </div>
+            <div id="resetFinalCard" class="bg-panelbg border border-rose-500/40 rounded-lg p-4"></div>
+          </div>
+
+          <!-- Winner Announcement Banner -->
+          <div id="championBanner" class="hidden p-4 bg-gradient-to-r from-amber-600/30 via-amber-500/20 to-amber-600/30 border border-amber-500/50 rounded-xl text-center animate-pulse">
+            <i class="fa-solid fa-trophy text-4xl text-amber-400 mb-2"></i>
+            <h3 class="text-xl font-extrabold text-amber-300">賽事總冠軍</h3>
+            <p id="championName" class="text-2xl font-black text-white mt-1">--</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Modal 1: 賽事設定 modal -->
+  <div id="setupModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden no-print">
+    <div class="bg-panelbg border border-bordercolor rounded-xl max-w-md w-full p-6 shadow-2xl space-y-5">
+      <div class="flex justify-between items-center border-b border-bordercolor pb-3">
+        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-sliders text-felt-accent"></i> 建立 / 設定賽事
+        </h3>
+        <button onclick="closeModal('setupModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">賽事名稱</label>
+          <input type="text" id="inputTitle" value="2026 全國撞球公開賽" class="w-full bg-darkbg border border-bordercolor rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-felt-accent">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">選擇賽制</label>
+          <select id="inputType" class="w-full bg-darkbg border border-bordercolor rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-felt-accent">
+            <option value="double">雙敗淘汰制 (Double Elimination)</option>
+            <option value="single">單敗淘汰制 (Single Elimination)</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-300 mb-1">參賽人數 (籤位數需求)</label>
+          <div class="grid grid-cols-4 gap-2 mb-2">
+            <button type="button" onclick="setPlayerCountPreset(16)" class="py-1.5 bg-cardbg hover:bg-gray-700 border border-bordercolor rounded text-xs text-white">16 人</button>
+            <button type="button" onclick="setPlayerCountPreset(32)" class="py-1.5 bg-cardbg hover:bg-gray-700 border border-bordercolor rounded text-xs text-white">32 人</button>
+            <button type="button" onclick="setPlayerCountPreset(64)" class="py-1.5 bg-cardbg hover:bg-gray-700 border border-bordercolor rounded text-xs text-white">64 人</button>
+            <button type="button" onclick="setPlayerCountPreset(128)" class="py-1.5 bg-cardbg hover:bg-gray-700 border border-bordercolor rounded text-xs text-white">128 人</button>
+          </div>
+          <input type="number" id="inputPlayerCount" value="16" min="4" max="128" class="w-full bg-darkbg border border-bordercolor rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-felt-accent" placeholder="自訂人數 (如: 20, 50...)">
+          <p class="text-[11px] text-gray-400 mt-1">若輸入非 2 的次方（如 20 人），系統會自動補齊至 32 籤位並排入「輪空 (BYE)」。</p>
+        </div>
+
+        <div class="pt-2 border-t border-bordercolor/60">
+          <label class="text-xs text-rose-300 flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="modalAutoLoserReshuffle" checked class="rounded bg-gray-700 border-gray-600 text-rose-500 focus:ring-rose-500">
+            開啟「敗部第一輪自動避開勝部同組」重新排籤
+          </label>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 pt-3 border-t border-bordercolor">
+        <button onclick="closeModal('setupModal')" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium">取消</button>
+        <button onclick="applySetupChanges()" class="px-4 py-2 bg-felt hover:bg-felt-light text-white rounded-lg text-sm font-medium">確認並套用</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 2: 選手名單管理 modal -->
+  <div id="playersModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden no-print">
+    <div class="bg-panelbg border border-bordercolor rounded-xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+      <div class="flex justify-between items-center border-b border-bordercolor pb-3">
+        <h3 class="text-lg font-bold text-white flex items-center gap-2">
+          <i class="fa-solid fa-users text-felt-accent"></i> 選手名單管理
+        </h3>
+        <button onclick="closeModal('playersModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+      </div>
+
+      <div class="space-y-3">
+        <div class="flex justify-between items-center flex-wrap gap-2">
+          <label class="text-xs font-medium text-gray-300">快速輸入名單 (一行一位選手)</label>
+          <div class="flex gap-2 flex-wrap">
+            <button onclick="generateDemoPlayers(16)" class="text-xs px-2 py-1 bg-cardbg border border-bordercolor hover:border-felt-accent text-felt-accent rounded transition">⚡ 16人範例</button>
+            <button onclick="generateDemoPlayers(32)" class="text-xs px-2 py-1 bg-cardbg border border-bordercolor hover:border-felt-accent text-felt-accent rounded transition">⚡ 32人範例</button>
+            <button onclick="clearPlayersInput()" class="text-xs px-2 py-1 bg-rose-900/50 hover:bg-rose-800 text-rose-300 rounded transition"><i class="fa-solid fa-trash"></i> 🗑️ 清空</button>
+          </div>
+        </div>
+        <textarea id="inputPlayersList" rows="10" class="w-full bg-darkbg border border-bordercolor rounded-lg p-3 text-sm font-mono text-gray-200 focus:outline-none focus:border-felt-accent" placeholder="選手 1&#10;選手 2&#10;選手 3&#10;..."></textarea>
+        <div class="flex justify-between items-center">
+          <p class="text-xs text-gray-400">名單數量若不足籤位，其餘位置會自動以「BYE (輪空)」補足並推進晉級。</p>
+          <button onclick="shufflePlayersInput()" class="text-xs px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded font-medium transition flex items-center gap-1">
+            <i class="fa-solid fa-shuffle"></i> 洗牌打散名單
+          </button>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 pt-3 border-t border-bordercolor">
+        <button onclick="closeModal('playersModal')" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-medium">取消</button>
+        <button onclick="savePlayersList()" class="px-4 py-2 bg-felt hover:bg-felt-light text-white rounded-lg text-sm font-medium">儲存並重新抽籤</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: 輸入/修改比分 modal -->
+  <div id="scoreModal" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden no-print">
+    <div class="bg-panelbg border border-bordercolor rounded-xl max-w-xs w-full p-5 shadow-2xl space-y-4">
+      <div class="flex justify-between items-center border-b border-bordercolor pb-2">
+        <h3 class="text-sm font-bold text-white">對戰局數比分記錄</h3>
+        <button onclick="closeModal('scoreModal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <input type="hidden" id="modalMatchBracket">
+      <input type="hidden" id="modalMatchRound">
+      <input type="hidden" id="modalMatchIndex">
+
+      <div class="space-y-3">
+        <div class="bg-cardbg p-3 rounded-lg flex items-center justify-between border border-bordercolor">
+          <span id="scoreP1Name" class="text-sm font-semibold truncate max-w-[120px]">選手 A</span>
+          <input type="number" id="scoreP1Input" min="0" value="0" class="w-16 bg-darkbg border border-bordercolor rounded px-2 py-1 text-center text-sm font-bold text-felt-accent">
+        </div>
+
+        <div class="bg-cardbg p-3 rounded-lg flex items-center justify-between border border-bordercolor">
+          <span id="scoreP2Name" class="text-sm font-semibold truncate max-w-[120px]">選手 B</span>
+          <input type="number" id="scoreP2Input" min="0" value="0" class="w-16 bg-darkbg border border-bordercolor rounded px-2 py-1 text-center text-sm font-bold text-felt-accent">
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-bordercolor">
+        <button onclick="closeModal('scoreModal')" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs font-medium">取消</button>
+        <button onclick="submitMatchScore()" class="px-3 py-1.5 bg-felt hover:bg-felt-light text-white rounded text-xs font-medium">儲存比分並晉級</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 4: 👁️ 賽事圖預覽 Modal與 Zoom 控制項 -->
+  <div id="previewModal" class="fixed inset-0 bg-black/85 backdrop-blur-md flex flex-col z-50 hidden no-print overflow-hidden">
+    <div class="bg-panelbg border-b border-bordercolor px-6 py-3 flex items-center justify-between gap-4 flex-shrink-0">
+      <div class="flex items-center gap-3">
+        <i class="fa-solid fa-circle-nodes text-felt-accent text-xl"></i>
+        <div>
+          <h2 class="text-lg font-bold text-white flex items-center gap-2">
+            賽事圖全覽預覽 (Preview View)
+          </h2>
+          <p class="text-xs text-gray-400">可使用下方按鈕進行 ➕ 放大、➖ 縮小或平移檢視</p>
+        </div>
+      </div>
+
+      <!-- Zoom Controls -->
+      <div class="flex items-center gap-2 bg-cardbg px-3 py-1.5 rounded-lg border border-bordercolor">
+        <button onclick="zoomPreview(0.1)" class="px-2.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-bold transition flex items-center gap-1">
+          <i class="fa-solid fa-magnifying-glass-plus"></i> ➕ 放大
+        </button>
+        <button onclick="zoomPreview(-0.1)" class="px-2.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-bold transition flex items-center gap-1">
+          <i class="fa-solid fa-magnifying-glass-minus"></i> ➖ 縮小
+        </button>
+        <button onclick="resetZoom()" class="px-2.5 py-1 bg-gray-700 hover:bg-gray-600 rounded text-xs text-white font-bold transition flex items-center gap-1">
+          <i class="fa-solid fa-rotate"></i> 🔄 重置
+        </button>
+        <span id="zoomLevelDisplay" class="text-xs font-mono text-felt-accent px-2">100%</span>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <button onclick="window.print()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs rounded-lg transition flex items-center gap-1.5 font-medium">
+          <i class="fa-solid fa-print"></i> 列印本圖
+        </button>
+        <button onclick="closePreviewModal()" class="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs rounded-lg transition flex items-center gap-1 font-medium">
+          <i class="fa-solid fa-xmark text-sm"></i> 關閉
+        </button>
+      </div>
+    </div>
+
+    <!-- Scalable Bracket Container inside Modal -->
+    <div class="flex-grow overflow-auto p-8 flex justify-center items-start bg-darkbg cursor-grab active:cursor-grabbing" id="previewCanvasArea">
+      <div id="previewZoomWrapper" class="transition-transform duration-150 origin-top-left p-4">
+        <div id="previewBracketContent" class="space-y-8 min-w-max">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JavaScript App Logic -->
+  <script>
+    // --- State Management ---
+    let config = {
+      title: "2026 全國撞球公開賽",
+      type: "double", // 'single' or 'double'
+      playerCount: 16,
+      bracketSize: 16,
+      autoBye: true,
+      autoLoserReshuffle: true // 開啟敗部避開勝部首輪同組
+    };
+
+    let currentZoom = 1.0;
+    let players = [];
+    let state = {
+      winners: [], // Array of rounds -> matches
+      losers: [],  // Array of rounds -> matches
+      finals: null,// Final match
+      resetFinal: null // Reset match if loser champion beats winner champion
+    };
+
+    // 紀錄敗部第1輪的手動重抽 mapping override
+    let loserR1CustomMapping = null;
+
+    // Initialize application
+    window.onload = function() {
+      initDefaultPlayers(config.playerCount);
+      buildTournamentEngine();
+    };
+
+    function initDefaultPlayers(count) {
+      players = [];
+      for (let i = 1; i <= count; i++) {
+        players.push(`選手 ${i}`);
+      }
+    }
+
+    // Calc nearest higher power of 2 for brackets
+    function getNextPowerOfTwo(n) {
+      let p = 1;
+      while (p < n) p <<= 1;
+      return p;
+    }
+
+    // Helper: Fisher-Yates Shuffle
+    function shuffleArray(arr) {
+      const copy = [...arr];
+      for (let i = copy.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [copy[i], copy[j]] = [copy[j], copy[i]];
+      }
+      return copy;
+    }
+
+    // --- Tournament Engine Setup & Tree Generation ---
+    function buildTournamentEngine() {
+      config.bracketSize = getNextPowerOfTwo(config.playerCount);
+      const byeCount = config.bracketSize - config.playerCount;
+      loserR1CustomMapping = null; // 重置敗部手動對調狀態
+
+      // Update UI Header Stats
+      document.getElementById('displayTitle').innerText = config.title;
+      document.getElementById('displayType').innerText = config.type === 'double' ? '雙敗淘汰賽 (Double Elimination)' : '單敗淘汰制 (Single Elimination)';
+      document.getElementById('displayPlayersCount').innerText = `${config.playerCount} 人 (${config.bracketSize} 籤位)`;
+      document.getElementById('displayByeCount').innerText = byeCount;
+
+      // Update Reshuffle Button Visibility
+      const btnLoserReshuffle = document.getElementById('btnLoserReshuffle');
+      const autoReshuffleLabel = document.getElementById('autoReshuffleLabel');
+      
+      const loserTab = document.getElementById('tab-losers');
+      const finalTab = document.getElementById('tab-finals');
+      if (config.type === 'single') {
+        loserTab.classList.add('hidden');
+        finalTab.classList.add('hidden');
+        if (btnLoserReshuffle) btnLoserReshuffle.classList.add('hidden');
+        if (autoReshuffleLabel) autoReshuffleLabel.classList.add('hidden');
+        switchTab('winners');
+      } else {
+        loserTab.classList.remove('hidden');
+        finalTab.classList.remove('hidden');
+        if (btnLoserReshuffle) btnLoserReshuffle.classList.remove('hidden');
+        if (autoReshuffleLabel) autoReshuffleLabel.classList.remove('hidden');
+      }
+
+      // 1. Build Winners Bracket Structures
+      const winnersRoundCount = Math.log2(config.bracketSize);
+      state.winners = [];
+
+      // Generate First Round Seedings
+      let currentSeedList = [...players];
+      while (currentSeedList.length < config.bracketSize) {
+        currentSeedList.push('BYE');
+      }
+
+      // Round 1
+      let r1Matches = [];
+      for (let i = 0; i < config.bracketSize / 2; i++) {
+        r1Matches.push({
+          id: `w-1-${i}`,
+          p1: currentSeedList[i * 2] || 'BYE',
+          p2: currentSeedList[i * 2 + 1] || 'BYE',
+          s1: 0,
+          s2: 0,
+          winner: null,
+          loser: null
+        });
+      }
+      state.winners.push(r1Matches);
+
+      // Subsequent Rounds for Winners
+      for (let r = 1; r < winnersRoundCount; r++) {
+        let matchCount = config.bracketSize / Math.pow(2, r + 1);
+        let roundMatches = [];
+        for (let m = 0; m < matchCount; m++) {
+          roundMatches.push({
+            id: `w-${r+1}-${m}`,
+            p1: null,
+            p2: null,
+            s1: 0,
+            s2: 0,
+            winner: null,
+            loser: null
+          });
+        }
+        state.winners.push(roundMatches);
+      }
+
+      // 2. Build Losers Bracket Structures (Double Elimination)
+      state.losers = [];
+      if (config.type === 'double') {
+        const losersRoundCount = 2 * (winnersRoundCount - 1);
+        let currentLMatchCount = config.bracketSize / 4;
+
+        for (let r = 0; r < losersRoundCount; r++) {
+          let roundMatches = [];
+          for (let m = 0; m < currentLMatchCount; m++) {
+            roundMatches.push({
+              id: `l-${r+1}-${m}`,
+              p1: null,
+              p2: null,
+              s1: 0,
+              s2: 0,
+              winner: null,
+              loser: null
+            });
+          }
+          state.losers.push(roundMatches);
+          if (r % 2 === 1) {
+            currentLMatchCount /= 2;
+          }
+        }
+
+        // Grand Final Structure
+        state.finals = {
+          id: 'gf-1',
+          p1: null,
+          p2: null,
+          s1: 0,
+          s2: 0,
+          winner: null
+        };
+
+        state.resetFinal = {
+          id: 'gf-reset',
+          p1: null,
+          p2: null,
+          s1: 0,
+          s2: 0,
+          winner: null,
+          active: false
+        };
+      }
+
+      // Auto Advance BYEs if enabled
+      if (config.autoBye) {
+        processAutoByes();
+      }
+
+      renderBrackets();
+    }
+
+    // Automatically handle BYE advancement in R1
+    function processAutoByes() {
+      state.winners[0].forEach((match) => {
+        if (match.p1 === 'BYE' && match.p2 === 'BYE') {
+          match.winner = 'BYE';
+          match.loser = 'BYE';
+        } else if (match.p1 === 'BYE') {
+          match.winner = match.p2;
+          match.loser = 'BYE';
+        } else if (match.p2 === 'BYE') {
+          match.winner = match.p1;
+          match.loser = 'BYE';
+        }
+      });
+      recalculateTournamentState();
+    }
+
+    // --- Core Progression Engine ---
+    function recalculateTournamentState() {
+      // 1. Advance Winners Bracket
+      for (let r = 0; r < state.winners.length - 1; r++) {
+        const currentRound = state.winners[r];
+        const nextRound = state.winners[r + 1];
+
+        currentRound.forEach((match, idx) => {
+          if (match.winner) {
+            const targetMatchIdx = Math.floor(idx / 2);
+            if (idx % 2 === 0) {
+              nextRound[targetMatchIdx].p1 = match.winner;
+            } else {
+              nextRound[targetMatchIdx].p2 = match.winner;
+            }
+          }
+        });
+      }
+
+      // 2. Feed into Losers Bracket (If Double Elimination)
+      if (config.type === 'double' && state.losers.length > 0) {
+        
+        // --- 敗部第 1 輪 (Loser R1) 轉移安排 ---
+        const wR1Losers = state.winners[0].map(m => m.loser);
+        const lR1MatchesCount = state.losers[0].length; // N/4 Matches
+
+        if (loserR1CustomMapping && loserR1CustomMapping.length === lR1MatchesCount * 2) {
+          // 使用手動隨機抽籤結果
+          for (let m = 0; m < lR1MatchesCount; m++) {
+            state.losers[0][m].p1 = loserR1CustomMapping[m * 2] || null;
+            state.losers[0][m].p2 = loserR1CustomMapping[m * 2 + 1] || null;
+          }
+        } else if (config.autoLoserReshuffle) {
+          // 預設演算法：將勝部前半組與後半組落敗者交叉組合（對開防同組對決）
+          // 例如勝部 Match i 與 Match (i + N/4) 的敗者放在敗部同一場，防勝部原本同一場的人在敗部R1碰頭
+          for (let i = 0; i < lR1MatchesCount; i++) {
+            const w1Idx = i;                     // 前半場
+            const w2Idx = i + lR1MatchesCount;   // 後半場
+            
+            state.losers[0][i].p1 = wR1Losers[w1Idx] || null;
+            state.losers[0][i].p2 = wR1Losers[w2Idx] || null;
+          }
+        } else {
+          // 直送（舊式按順序每兩組入敗部一組，有機會同組再撞）
+          state.winners[0].forEach((match, idx) => {
+            const targetMatchIdx = Math.floor(idx / 2);
+            const targetSlot = (idx % 2 === 0) ? 'p1' : 'p2';
+            state.losers[0][targetMatchIdx][targetSlot] = match.loser;
+          });
+        }
+
+        // Loop Losers Rounds Flow
+        let wDropRound = 1; // Winner round whose losers drop into losers bracket
+        for (let lr = 0; lr < state.losers.length; lr++) {
+          const currentLRound = state.losers[lr];
+          const isMajorDropRound = (lr % 2 === 1); // Odd index rounds receive drops from Winners
+
+          // Propagate within Losers Bracket
+          if (lr < state.losers.length - 1) {
+            const nextLRound = state.losers[lr + 1];
+
+            currentLRound.forEach((match, idx) => {
+              if (match.winner) {
+                if (isMajorDropRound) {
+                  nextLRound[idx].p1 = match.winner;
+                } else {
+                  const targetMatchIdx = Math.floor(idx / 2);
+                  const targetSlot = (idx % 2 === 0) ? 'p1' : 'p2';
+                  nextLRound[targetMatchIdx][targetSlot] = match.winner;
+                }
+              }
+            });
+          }
+
+          // Receive Drops from Winner Bracket if applicable
+          if (isMajorDropRound && wDropRound < state.winners.length) {
+            const wRound = state.winners[wDropRound];
+            wRound.forEach((match, idx) => {
+              if (match.loser && match.loser !== 'BYE') {
+                if (currentLRound[idx]) {
+                  currentLRound[idx].p2 = match.loser;
+                }
+              }
+            });
+            wDropRound++;
+          }
+        }
+
+        // Grand Finals Candidates
+        const winnerChampMatch = state.winners[state.winners.length - 1][0];
+        const loserChampMatch = state.losers[state.losers.length - 1][0];
+
+        if (winnerChampMatch && winnerChampMatch.winner) {
+          state.finals.p1 = winnerChampMatch.winner;
+        }
+        if (loserChampMatch && loserChampMatch.winner) {
+          state.finals.p2 = loserChampMatch.winner;
+        }
+
+        // Check Grand Final Reset Logic
+        if (state.finals.winner) {
+          if (state.finals.winner === state.finals.p2) {
+            state.resetFinal.active = true;
+            state.resetFinal.p1 = state.finals.p1;
+            state.resetFinal.p2 = state.finals.p2;
+          } else {
+            state.resetFinal.active = false;
+          }
+        }
+      }
+    }
+
+    // 🎲 敗部重新抽籤 (Losers Bracket Reshuffle)
+    function manualLosersReshuffle() {
+      if (config.type !== 'double') {
+        alert("單敗淘汰制無敗部賽程。");
+        return;
+      }
+
+      // 獲取目前進入敗部第 1 輪的選手名單
+      const wR1Losers = state.winners[0].map(m => m.loser).filter(p => p !== null);
+
+      if (wR1Losers.length < 2) {
+        alert("目前進入敗部的選手不足，請先進行或完成勝部第一輪比賽！");
+        return;
+      }
+
+      // 將現有進入敗部的選手名單進行隨機打散 (Fisher-Yates Shuffle)
+      const reshuffled = shuffleArray(wR1Losers);
+
+      // 補足位數至籤位 demand
+      const targetSlotsCount = state.losers[0].length * 2;
+      while (reshuffled.length < targetSlotsCount) {
+        reshuffled.push(null);
+      }
+
+      loserR1CustomMapping = reshuffled;
+      recalculateTournamentState();
+      renderBrackets();
+
+      // 切換至敗部頁籤方便預覽
+      switchTab('losers');
+    }
+
+    // Select Winner on Click or Touch
+    function selectWinner(bracket, round, matchIdx, playerSlot) {
+      let match;
+      if (bracket === 'winners') match = state.winners[round][matchIdx];
+      else if (bracket === 'losers') match = state.losers[round][matchIdx];
+      else if (bracket === 'finals') match = state.finals;
+      else if (bracket === 'reset') match = state.resetFinal;
+
+      if (!match) return;
+
+      const winnerName = playerSlot === 1 ? match.p1 : match.p2;
+      const loserName = playerSlot === 1 ? match.p2 : match.p1;
+
+      if (!winnerName || winnerName === 'BYE') return;
+
+      match.winner = winnerName;
+      match.loser = loserName || 'BYE';
+
+      recalculateTournamentState();
+      renderBrackets();
+    }
+
+    // --- Rendering Logic ---
+    function renderBrackets() {
+      renderWinnersBracket();
+      if (config.type === 'double') {
+        renderLosersBracket();
+        renderGrandFinals();
+      }
+    }
+
+    function renderWinnersBracket() {
+      const container = document.getElementById('winnersBracket');
+      container.innerHTML = '';
+
+      state.winners.forEach((round, rIdx) => {
+        const col = document.createElement('div');
+        col.className = 'bracket-column';
+
+        const roundTitle = document.createElement('div');
+        roundTitle.className = 'text-xs font-bold text-gray-400 mb-3 text-center uppercase tracking-wider bg-cardbg/50 py-1 rounded border border-bordercolor/50';
+        roundTitle.innerText = rIdx === state.winners.length - 1 ? '勝部決賽' : `勝部第 ${rIdx + 1} 輪`;
+        col.appendChild(roundTitle);
+
+        round.forEach((match, mIdx) => {
+          col.appendChild(createMatchCard('winners', rIdx, mIdx, match));
+        });
+
+        container.appendChild(col);
+      });
+    }
+
+    function renderLosersBracket() {
+      const container = document.getElementById('losersBracket');
+      container.innerHTML = '';
+
+      state.losers.forEach((round, rIdx) => {
+        const col = document.createElement('div');
+        col.className = 'bracket-column';
+
+        const roundTitle = document.createElement('div');
+        roundTitle.className = 'text-xs font-bold text-rose-400/80 mb-3 text-center uppercase tracking-wider bg-cardbg/50 py-1 rounded border border-bordercolor/50';
+        roundTitle.innerText = rIdx === state.losers.length - 1 ? '敗部決賽' : `敗部第 ${rIdx + 1} 輪`;
+        col.appendChild(roundTitle);
+
+        round.forEach((match, mIdx) => {
+          col.appendChild(createMatchCard('losers', rIdx, mIdx, match));
+        });
+
+        container.appendChild(col);
+      });
+    }
+
+    function renderGrandFinals() {
+      const cardContainer = document.getElementById('grandFinalCard');
+      cardContainer.innerHTML = '';
+      cardContainer.appendChild(createMatchCard('finals', 0, 0, state.finals, true));
+
+      const resetWrapper = document.getElementById('resetMatchWrapper');
+      const resetContainer = document.getElementById('resetFinalCard');
+      resetContainer.innerHTML = '';
+
+      if (state.resetFinal.active) {
+        resetWrapper.classList.remove('hidden');
+        resetContainer.appendChild(createMatchCard('reset', 0, 0, state.resetFinal, true));
+      } else {
+        resetWrapper.classList.add('hidden');
+      }
+
+      // Update Champion Banner
+      const banner = document.getElementById('championBanner');
+      const champName = document.getElementById('championName');
+
+      let finalWinner = null;
+      if (state.resetFinal.active && state.resetFinal.winner) {
+        finalWinner = state.resetFinal.winner;
+      } else if (!state.resetFinal.active && state.finals.winner && state.finals.winner === state.finals.p1) {
+        finalWinner = state.finals.p1;
+      }
+
+      if (finalWinner) {
+        banner.classList.remove('hidden');
+        champName.innerText = finalWinner;
+      } else {
+        banner.classList.add('hidden');
+      }
+    }
+
+    // Helper: Create Component DOM Card for Match
+    function createMatchCard(bracket, round, matchIdx, match, isFinal = false) {
+      const card = document.createElement('div');
+      card.className = `bg-cardbg border ${match.winner ? 'border-felt-accent/50' : 'border-bordercolor'} rounded-lg shadow-md p-2.5 my-2 text-sm flex flex-col gap-1.5 hover:border-felt-accent transition relative`;
+
+      const createPlayerRow = (pName, score, isWinner, slotNum) => {
+        const row = document.createElement('div');
+        const isBye = pName === 'BYE';
+        const isEmpty = !pName;
+
+        row.className = `flex justify-between items-center px-2 py-1.5 rounded cursor-pointer transition ${
+          isWinner ? 'bg-felt/40 text-felt-accent font-bold border border-felt-accent/30' : 'hover:bg-darkbg/50 text-gray-200'
+        } ${isEmpty ? 'opacity-40' : ''}`;
+
+        row.onclick = () => {
+          if (!isEmpty && !isBye) selectWinner(bracket, round, matchIdx, slotNum);
+        };
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'truncate max-w-[130px] flex items-center gap-1.5';
+        nameSpan.innerHTML = `${isWinner ? '<i class="fa-solid fa-check text-xs text-felt-accent"></i>' : ''}${pName || '待定'}`;
+
+        const scoreSpan = document.createElement('span');
+        scoreSpan.className = 'text-xs font-mono bg-darkbg/80 px-1.5 py-0.5 rounded text-gray-300 border border-bordercolor/50';
+        scoreSpan.innerText = score || 0;
+
+        row.appendChild(nameSpan);
+        row.appendChild(scoreSpan);
+        return row;
+      };
+
+      const slot1 = createPlayerRow(match.p1, match.s1, match.winner && match.winner === match.p1, 1);
+      const slot2 = createPlayerRow(match.p2, match.s2, match.winner && match.winner === match.p2, 2);
+
+      card.appendChild(slot1);
+      card.appendChild(slot2);
+
+      // Score Edit Button Footer
+      if (match.p1 && match.p2 && match.p1 !== 'BYE' && match.p2 !== 'BYE') {
+        const scoreBtn = document.createElement('button');
+        scoreBtn.className = 'text-[11px] text-gray-400 hover:text-white flex items-center justify-center gap-1 mt-1 pt-1 border-t border-bordercolor/40 w-full transition';
+        scoreBtn.innerHTML = `<i class="fa-solid fa-pen-to-square"></i> 輸入比分 (${match.s1} : ${match.s2})`;
+        scoreBtn.onclick = (e) => {
+          e.stopPropagation();
+          openScoreModal(bracket, round, matchIdx, match);
+        };
+        card.appendChild(scoreBtn);
+      }
+
+      return card;
+    }
+
+    // --- Tab Switcher Logic ---
+    function switchTab(tab) {
+      const tabs = ['winners', 'losers', 'finals', 'all'];
+      tabs.forEach(t => {
+        const btn = document.getElementById(`tab-${t}`);
+        const sec = document.getElementById(`section-${t}`);
+
+        if (t === tab) {
+          if (btn) {
+            btn.className = 'px-5 py-2.5 font-bold rounded-t-lg bg-felt text-white flex items-center gap-2 border-t border-x border-felt-accent';
+          }
+          if (sec) sec.classList.remove('hidden');
+        } else {
+          if (btn) {
+            btn.className = 'px-5 py-2.5 font-bold rounded-t-lg bg-cardbg text-gray-400 hover:text-white flex items-center gap-2 border-t border-x border-transparent';
+          }
+          if (sec && tab !== 'all') sec.classList.add('hidden');
+        }
+      });
+
+      if (tab === 'all') {
+        document.getElementById('section-winners').classList.remove('hidden');
+        if (config.type === 'double') {
+          document.getElementById('section-losers').classList.remove('hidden');
+          document.getElementById('section-finals').classList.remove('hidden');
+        }
+      }
+    }
+
+    // --- Modal Controls & Input Actions ---
+    function openModal(id) {
+      document.getElementById(id).classList.remove('hidden');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    function setPlayerCountPreset(count) {
+      document.getElementById('inputPlayerCount').value = count;
+    }
+
+    function applySetupChanges() {
+      config.title = document.getElementById('inputTitle').value || '撞球賽事';
+      config.type = document.getElementById('inputType').value;
+      config.playerCount = parseInt(document.getElementById('inputPlayerCount').value) || 16;
+      config.autoLoserReshuffle = document.getElementById('modalAutoLoserReshuffle').checked;
+      
+      const autoLoserCB = document.getElementById('autoLoserReshuffle');
+      if (autoLoserCB) autoLoserCB.checked = config.autoLoserReshuffle;
+
+      if (players.length !== config.playerCount) {
+        initDefaultPlayers(config.playerCount);
+      }
+      buildTournamentEngine();
+      closeModal('setupModal');
+    }
+
+    // Quick Auto Shuffle & Draw from Header Button
+    function quickShuffleAndDraw() {
+      if (players.length === 0) {
+        initDefaultPlayers(config.playerCount);
+      }
+      players = shuffleArray(players);
+      buildTournamentEngine();
+    }
+
+    function generateDemoPlayers(count = 16) {
+      const demoPool = [
+        "柯秉逸", "鄭喻軒", "張榮麟", "吉岡正登", "郭柏成", "趙豐邦", 
+        "楊清順", "吳珈慶", "陳信廷", "謝佳臻", "許睿安", "劉政杰", 
+        "傅哲偉", "張裴偉", "王華風", "江水淨", "李赫文", "土方隼斗",
+        "莊智淵", "林昀儒", "張玉龍", "謝勝迪", "呂輝展", "汪洋",
+        "陳強", "王燦", "黨金虎", "韓雨", "劉莎莎", "陳思明", "周婕妤", "魏子茜"
+      ];
+      const selected = demoPool.slice(0, count);
+      document.getElementById('inputPlayersList').value = selected.join('\n');
+    }
+
+    function clearPlayersInput() {
+      document.getElementById('inputPlayersList').value = '';
+    }
+
+    function shufflePlayersInput() {
+      const textarea = document.getElementById('inputPlayersList');
+      let list = textarea.value.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+      if (list.length === 0) return;
+      textarea.value = shuffleArray(list).join('\n');
+    }
+
+    function savePlayersList() {
+      const textarea = document.getElementById('inputPlayersList');
+      let list = textarea.value.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+      
+      if (list.length > 0) {
+        players = list;
+        config.playerCount = list.length;
+        buildTournamentEngine();
+      }
+      closeModal('playersModal');
+    }
+
+    // --- Score Input Modal Engine ---
+    function openScoreModal(bracket, round, matchIdx, match) {
+      document.getElementById('modalMatchBracket').value = bracket;
+      document.getElementById('modalMatchRound').value = round;
+      document.getElementById('modalMatchIndex').value = matchIdx;
+
+      document.getElementById('scoreP1Name').innerText = match.p1;
+      document.getElementById('scoreP2Name').innerText = match.p2;
+
+      document.getElementById('scoreP1Input').value = match.s1 || 0;
+      document.getElementById('scoreP2Input').value = match.s2 || 0;
+
+      openModal('scoreModal');
+    }
+
+    function submitMatchScore() {
+      const bracket = document.getElementById('modalMatchBracket').value;
+      const round = parseInt(document.getElementById('modalMatchRound').value);
+      const matchIdx = parseInt(document.getElementById('modalMatchIndex').value);
+
+      const s1 = parseInt(document.getElementById('scoreP1Input').value) || 0;
+      const s2 = parseInt(document.getElementById('scoreP2Input').value) || 0;
+
+      let match;
+      if (bracket === 'winners') match = state.winners[round][matchIdx];
+      else if (bracket === 'losers') match = state.losers[round][matchIdx];
+      else if (bracket === 'finals') match = state.finals;
+      else if (bracket === 'reset') match = state.resetFinal;
+
+      if (match) {
+        match.s1 = s1;
+        match.s2 = s2;
+
+        if (s1 > s2) {
+          match.winner = match.p1;
+          match.loser = match.p2;
+        } else if (s2 > s1) {
+          match.winner = match.p2;
+          match.loser = match.p1;
+        }
+
+        recalculateTournamentState();
+        renderBrackets();
+      }
+
+      closeModal('scoreModal');
+    }
+
+    function toggleAutoBye(checked) {
+      config.autoBye = checked;
+      if (checked) {
+        processAutoByes();
+        renderBrackets();
+      }
+    }
+
+    function toggleAutoLoserReshuffle(checked) {
+      config.autoLoserReshuffle = checked;
+      loserR1CustomMapping = null;
+      recalculateTournamentState();
+      renderBrackets();
+    }
+
+    function resetTournamentScores() {
+      buildTournamentEngine();
+    }
+
+    // --- 👁️ Preview Modal & Zoom Engine ---
+    function openPreviewModal() {
+      const previewContent = document.getElementById('previewBracketContent');
+      previewContent.innerHTML = '';
+
+      // Clone winners section
+      const wClone = document.getElementById('section-winners').cloneNode(true);
+      wClone.classList.remove('hidden');
+      previewContent.appendChild(wClone);
+
+      // Clone losers section if double elimination
+      if (config.type === 'double') {
+        const lClone = document.getElementById('section-losers').cloneNode(true);
+        lClone.classList.remove('hidden');
+        previewContent.appendChild(lClone);
+
+        const fClone = document.getElementById('section-finals').cloneNode(true);
+        fClone.classList.remove('hidden');
+        previewContent.appendChild(fClone);
+      }
+
+      openModal('previewModal');
+      resetZoom();
+    }
+
+    function closePreviewModal() {
+      closeModal('previewModal');
+    }
+
+    function zoomPreview(delta) {
+      currentZoom += delta;
+      if (currentZoom < 0.4) currentZoom = 0.4;
+      if (currentZoom > 2.5) currentZoom = 2.5;
+      applyZoom();
+    }
+
+    function resetZoom() {
+      currentZoom = 1.0;
+      applyZoom();
+    }
+
+    function applyZoom() {
+      const wrapper = document.getElementById('previewZoomWrapper');
+      const display = document.getElementById('zoomLevelDisplay');
+      if (wrapper) {
+        wrapper.style.transform = `scale(${currentZoom})`;
+      }
+      if (display) {
+        display.innerText = `${Math.round(currentZoom * 100)}%`;
+      }
+    }
+  </script>
+</body>
+</html>

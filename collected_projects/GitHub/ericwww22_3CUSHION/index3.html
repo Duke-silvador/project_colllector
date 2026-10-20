@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>黑馬三顆星 - 旗艦賽事記分板 (Pro Handheld)</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;600;700;800&family=Fraunces:wght@700;900&display=swap" rel="stylesheet">
+  <style>
+    :root { --dark-bg: #071b19; --surface: rgba(19, 40, 37, 0.85); --gold: #e8bc70; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--dark-bg); color: #edf5eb; font-family: 'Work Sans', sans-serif; min-height: 100vh; overflow-x: hidden; }
+    .glass { background: var(--surface); border: 1px solid rgba(192, 231, 209, 0.15); border-radius: 16px; backdrop-filter: blur(12px); }
+    .display-font { font-family: 'Fraunces', serif; }
+    .gold-text { color: var(--gold); }
+    .active-player { border: 3px solid var(--gold); box-shadow: 0 0 25px rgba(232, 188, 112, 0.4); }
+    .led-score { font-variant-numeric: tabular-nums; line-height: 1; text-shadow: 0 0 12px rgba(255,255,255,0.6); }
+    .led-yellow { color: #ffe066 !important; text-shadow: 0 0 12px rgba(255, 224, 102, 0.7); }
+    .led-white { color: #ffffff !important; }
+    .btn-action { transition: all 0.15s ease; }
+    .btn-action:active { transform: scale(0.95); }
+    dialog::backdrop { background: rgba(0, 10, 10, 0.85); backdrop-filter: blur(8px); }
+
+    .wp-container {
+      transform-origin: top center;
+      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      margin: 0 auto;
+    }
+
+    /* 📱 iPhone / 手機橫向專屬高度壓縮樣式 (Landscape Mode) */
+    @media screen and (max-height: 500px) and (orientation: landscape) {
+      body { padding: 4px !important; }
+      .hide-on-landscape { display: none !important; }
+      header { padding: 6px 12px !important; margin-bottom: 6px !important; }
+      main { grid-template-columns: 1fr 180px 1fr !important; gap: 6px !important; margin-bottom: 6px !important; }
+      
+      .player-panel { padding: 8px !important; }
+      .score-display { font-size: 4rem !important; }
+      .stats-grid { padding: 4px !important; margin-bottom: 6px !important; }
+      .stats-grid strong { font-size: 0.9rem !important; }
+      
+      .center-panel { padding: 8px !important; }
+      .target-score-text { font-size: 0.95rem !important; }
+      .timer-display { font-size: 2.2rem !important; }
+      .switch-btn-text { padding-top: 6px !important; padding-bottom: 6px !important; font-size: 0.85rem !important; }
+      
+      .control-row { padding: 6px 12px !important; margin-bottom: 6px !important; }
+      .floating-player { width: 140px !important; bottom: 5px !important; right: 5px !important; }
+    }
+
+    /* 浮動播放器外容器 */
+    .floating-player {
+      position: fixed;
+      bottom: 15px;
+      right: 15px;
+      width: 240px;
+      aspect-ratio: 16 / 9;
+      z-index: 9999;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      border-radius: 12px;
+      overflow: hidden;
+      background-color: #000;
+      border: 1px solid rgba(232, 188, 112, 0.3);
+    }
+    .floating-player iframe { width: 100%; height: 100%; border: none; }
+  </style>
+</head>
+<body class="p-2 sm:p-4 pb-24">
+
+  <!-- WordPress 內頁專用 80% 縮排外容器 -->
+  <div id="app-container" class="wp-container w-[95%] sm:w-[80%] max-w-[1200px]">
+    
+    <!-- Header: 品牌標題與頻道連結 -->
+    <header class="flex flex-wrap justify-between items-center gap-2 mb-3 glass p-3">
+      <div class="flex items-center gap-2">
+        <div class="text-xl sm:text-2xl">🐴</div>
+        <div>
+          <div class="flex items-baseline gap-1.5 flex-wrap">
+            <h1 class="text-base sm:text-xl font-extrabold tracking-wider text-amber-400 display-font">黑馬三顆星 Pro</h1>
+            <span class="text-[9px] sm:text-xs font-semibold text-emerald-300/90 bg-emerald-950/60 border border-emerald-500/30 px-1.5 py-0.5 rounded">(Mobile Edition)</span>
+          </div>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <a href="https://www.youtube.com/@taiwan3cushion" target="_blank" rel="noopener noreferrer" class="btn-action hide-on-landscape px-2.5 py-1 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-500 text-white shadow-lg border border-red-400/40">
+          🔴 訂閱
+        </a>
+        <button onclick="toggleSettingsModal()" class="btn-action px-2 py-1 text-xs font-bold rounded-lg bg-amber-400/20 text-amber-300 hover:bg-amber-400/30 border border-amber-400/40">
+          ⚙️ 設定
+        </button>
+
+        <!-- 🔍 畫面縮放控制區 -->
+        <div class="flex items-center bg-black/50 border border-amber-400/30 rounded-lg overflow-hidden shadow-inner">
+          <button onclick="zoomUI(-0.1)" title="縮小畫面" class="btn-action px-2 py-0.5 text-xs font-extrabold bg-white/5 hover:bg-white/20 text-amber-300 border-r border-white/10">-</button>
+          <button onclick="resetZoomUI()" title="重置為 100%" class="px-1.5 text-[10px] font-mono font-bold text-emerald-200 hover:text-amber-300">
+            <span id="zoom-level-display">100%</span>
+          </button>
+          <button onclick="zoomUI(0.1)" title="放大畫面" class="btn-action px-2 py-0.5 text-xs font-extrabold bg-white/5 hover:bg-white/20 text-amber-300 border-l border-white/10">+</button>
+        </div>
+
+        <span id="match-status" class="px-2 py-0.5 text-[10px] sm:text-xs rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">未開始</span>
+        <button onclick="toggleFullscreen()" class="px-2 py-1 text-xs font-bold rounded-lg bg-amber-400 text-slate-950 hover:bg-amber-300 shadow-md">⛶ 全螢幕</button>
+      </div>
+    </header>
+
+    <!-- 主比賽記分板 (三欄式橫向優化排版) -->
+    <main class="grid grid-cols-1 md:grid-cols-[1fr_200px_1fr] gap-3 mb-3">
+      
+      <!-- Player 1 Panel -->
+      <article id="player-card-0" class="player-panel glass p-3 flex flex-col justify-between bg-black/60 relative overflow-hidden transition-all duration-300">
+        <div class="flex justify-between items-center mb-1">
+          <span id="name-display-0" class="text-sm sm:text-base font-bold gold-text truncate">選手一 (白球)</span>
+          <span id="turn-tag-0" class="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-400 text-black font-bold hidden whitespace-nowrap">● 擊球</span>
+        </div>
+        
+        <div class="my-1 text-center">
+          <div id="score-0" class="score-display led-score display-font text-6xl sm:text-8xl font-black led-white">0</div>
+        </div>
+
+        <div class="stats-grid grid grid-cols-3 gap-1 text-center text-[10px] text-emerald-100/70 mb-2 bg-white/5 p-1.5 rounded-lg">
+          <div>Inning<br><strong id="inning-0" class="text-sm text-white font-bold">0</strong></div>
+          <div>AVG<br><strong id="avg-0" class="text-sm text-amber-300 font-bold">0.000</strong></div>
+          <div>HR<br><strong id="hr-0" class="text-sm text-red-400 font-bold">0</strong></div>
+        </div>
+
+        <div class="flex justify-between items-center bg-black/40 px-2 py-0.5 rounded mb-2 border border-white/10 text-[10px]">
+          <span class="text-emerald-200/60">延長牌</span>
+          <span id="timeout-count-0" class="font-bold text-amber-300">剩 2 次</span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-1">
+          <button id="undo-0" onclick="addScore(0, -1)" class="btn-action bg-emerald-800 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg text-xs">-1</button>
+          <button id="timeout-btn-0" onclick="useTimeout(0)" class="btn-action bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 rounded-lg text-[10px]">⏱ 延長</button>
+          <button id="add-0" onclick="addScore(0, 1)" class="btn-action bg-red-600 hover:bg-red-500 text-white font-extrabold py-2 rounded-lg text-lg">+1</button>
+        </div>
+      </article>
+
+      <!-- Center Control / Timer -->
+      <section class="center-panel glass p-2.5 flex flex-col justify-between text-center items-center">
+        <div>
+          <div id="target-display" class="target-score-text text-base sm:text-lg font-black text-amber-300 tracking-wide">目標 15 分</div>
+        </div>
+
+        <div class="bg-black/40 border border-white/10 rounded-lg px-1.5 py-0.5 w-full text-center my-0.5">
+          <span class="text-[8px] text-emerald-200/60 block">當前進程</span>
+          <span id="current-inning-display" class="text-xs sm:text-sm font-bold text-emerald-200">第 1 桿</span>
+        </div>
+
+        <button id="switch-btn" onclick="switchTurn()" class="switch-btn-text btn-action w-full bg-amber-400 hover:bg-amber-300 text-slate-900 font-extrabold py-2 rounded-lg text-xs sm:text-sm my-0.5 shadow-md">
+          ⇦ 失誤 / 換人
+        </button>
+
+        <div class="bg-black/40 border border-white/10 rounded-lg px-1.5 py-0.5 w-full text-center my-0.5">
+          <span class="text-[8px] text-emerald-200/60 block">比賽時間</span>
+          <span id="elapsed-time" class="text-xs sm:text-base font-bold text-amber-300 font-mono">00:00</span>
+        </div>
+
+        <!-- Shot Clock -->
+        <div class="w-full my-0.5">
+          <span class="text-[9px] text-emerald-200/60 block">Shot Clock</span>
+          <div id="timer" class="timer-display display-font text-3xl sm:text-4xl font-black led-score text-white my-0.5">40</div>
+          <div class="w-full bg-white/10 h-1 rounded-full overflow-hidden">
+            <div id="timer-bar" class="bg-amber-400 h-full w-full transition-all duration-200"></div>
+          </div>
+        </div>
+
+        <p class="text-[8px] text-emerald-100/50 mt-0.5 hide-on-landscape">黑馬三顆星 ‧ 就是這樣中！</p>
+      </section>
+
+      <!-- Player 2 Panel -->
+      <article id="player-card-1" class="player-panel glass p-3 flex flex-col justify-between bg-black/60 relative overflow-hidden transition-all duration-300">
+        <div class="flex justify-between items-center mb-1">
+          <span id="name-display-1" class="text-sm sm:text-base font-bold gold-text truncate">選手二 (黃球)</span>
+          <span id="turn-tag-1" class="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-400 text-black font-bold hidden whitespace-nowrap">● 擊球</span>
+        </div>
+
+        <div class="my-1 text-center">
+          <div id="score-1" class="score-display led-score display-font text-6xl sm:text-8xl font-black led-yellow">0</div>
+        </div>
+
+        <div class="stats-grid grid grid-cols-3 gap-1 text-center text-[10px] text-emerald-100/70 mb-2 bg-white/5 p-1.5 rounded-lg">
+          <div>Inning<br><strong id="inning-1" class="text-sm text-white font-bold">0</strong></div>
+          <div>AVG<br><strong id="avg-1" class="text-sm text-amber-300 font-bold">0.000</strong></div>
+          <div>HR<br><strong id="hr-1" class="text-sm text-red-400 font-bold">0</strong></div>
+        </div>
+
+        <div class="flex justify-between items-center bg-black/40 px-2 py-0.5 rounded mb-2 border border-white/10 text-[10px]">
+          <span class="text-emerald-200/60">延長牌</span>
+          <span id="timeout-count-1" class="font-bold text-amber-300">剩 2 次</span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-1">
+          <button id="undo-1" onclick="addScore(1, -1)" class="btn-action bg-emerald-800 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg text-xs">-1</button>
+          <button id="timeout-btn-1" onclick="useTimeout(1)" class="btn-action bg-amber-600 hover:bg-amber-500 text-white font-bold py-2 rounded-lg text-[10px]">⏱ 延長</button>
+          <button id="add-1" onclick="addScore(1, 1)" class="btn-action bg-red-600 hover:bg-red-500 text-white font-extrabold py-2 rounded-lg text-lg">+1</button>
+        </div>
+      </article>
+
+    </main>
+
+    <!-- Controls Row -->
+    <section class="control-row glass p-2.5 mb-3">
+      <div class="flex flex-wrap gap-2 items-center justify-between">
+        <div class="flex gap-1.5 flex-wrap">
+          <button id="start-btn" onclick="startMatch()" class="btn-action bg-amber-400 hover:bg-amber-300 text-slate-950 font-extrabold px-4 py-1.5 rounded-lg text-xs shadow-md">開始比賽</button>
+          <button id="pause-btn" onclick="pauseMatch()" class="btn-action bg-white/10 hover:bg-white/20 px-4 py-1.5 rounded-lg text-xs" disabled>暫停</button>
+          <button onclick="resetMatch()" class="btn-action bg-red-900/60 hover:bg-red-800/80 text-red-200 px-3 py-1.5 rounded-lg text-xs">重設</button>
+        </div>
+        <div class="flex gap-1.5 flex-wrap">
+          <button onclick="resetSubscriptionLock()" class="btn-action bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg text-[10px]">🔒 重設鎖定</button>
+          <button onclick="generateReport()" class="btn-action bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs">📸 戰報圖</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 黑馬音樂頻道 完整播放清單 (橫向模式時自動隱藏節省空間) -->
+    <section class="glass p-3 mb-3 hide-on-landscape">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="text-base">🎵</span>
+        <h2 class="text-sm font-bold text-amber-400">黑馬音樂頻道 ‧ 完整播放清單</h2>
+      </div>
+      <div class="relative w-full overflow-hidden rounded-xl bg-black/80 shadow-2xl border border-white/10" style="padding-top: 56.25%;">
+        <iframe 
+          class="absolute top-0 left-0 w-full h-full rounded-xl"
+          src="https://www.youtube.com/@taiwan3cushion/playlists" 
+          title="黑馬音樂頻道播放清單" 
+          frameborder="0" 
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+          allowfullscreen>
+        </iframe>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- 浮動播放器 HTML 區塊 -->
+  <div class="floating-player hide-on-landscape">
+    <iframe src="https://www.youtube.com/embed/videoseries?list=PLQvBYUHGQEcU" title="YouTube video player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen>
+    </iframe>
+  </div>
+
+  <!-- ⚙️ 系統設定 Dialog -->
+  <dialog id="settings-modal" class="p-4 text-white glass border border-amber-400/50 rounded-2xl max-w-xl w-full shadow-2xl">
+    <div class="flex justify-between items-center border-b border-white/10 pb-2 mb-2.5">
+      <h2 class="text-base font-bold text-amber-300 flex items-center gap-1.5">⚙️ 賽事與系統設定</h2>
+      <button onclick="toggleSettingsModal()" class="text-gray-400 hover:text-white text-lg font-bold">&times;</button>
+    </div>
+
+    <div class="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+      <div>
+        <h3 class="text-[11px] font-bold text-emerald-300 mb-1">👤 選手與母球管理</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-black/40 p-2 rounded-lg border border-white/10">
+          <div>
+            <label class="block text-[10px] text-emerald-200/70 mb-0.5">選手一 姓名</label>
+            <input id="name-input-0" type="text" value="林師傅" class="w-full bg-slate-900 border border-white/20 rounded-md p-1 text-xs font-bold" onchange="updateNames()">
+          </div>
+          <div>
+            <label class="block text-[10px] text-emerald-200/70 mb-0.5">選手一 母球</label>
+            <select id="ball-color-0" class="w-full bg-slate-900 border border-white/20 rounded-md p-1 text-xs font-bold" onchange="onBallColorChange()">
+              <option value="white" selected>⚪ 白球</option>
+              <option value="yellow">🟡 黃球</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] text-emerald-200/70 mb-0.5">選手二 姓名</label>
+            <input id="name-input-1" type="text" value="黑馬" class="w-full bg-slate-900 border border-white/20 rounded-md p-1 text-xs font-bold" onchange="updateNames()">
+          </div>
+          <div>
+            <label class="block text-[10px] text-emerald-200/70 mb-0.5">選手二 母球</label>
+            <select id="ball-color-1" class="w-full bg-slate-900/60 border border-white/10 rounded-md p-1 text-xs font-bold text-gray-400" disabled>
+              <option value="yellow" selected>🟡 黃球</option>
+              <option value="white">⚪ 白球</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="text-[11px] font-bold text-emerald-300 mb-1">🎯 賽制規則設定</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-black/40 p-2 rounded-lg border border-white/10">
+          <div>
+            <label class="block text-[10px] text-emerald-200/70 mb-0.5">目標分數</label>
+            <select id="target-score" class="w-full bg-slate-900 border border-white/20 rounded-md p-1 text-xs" onchange="updateTargetDisplay()">
+              <option value="15" selected>15 分</option>
+              <option value="25">25 分</option>
+              <option value="30">30 分</option>
+              <option value="40">40 分</option>
+              <option value="50">50 分</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] text-emerald-200/70 mb-0.5">Shot Clock</label>
+            <select id="shot-duration" class="w-full bg-slate-900 border border-white/20 rounded-md p-1 text-xs">
+              <option value="30">30 秒</option>
+              <option value="40" selected>40 秒</option>
+              <option value="50">50 秒</option>
+              <option value="60">60 秒</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] text-emerald-200/70 mb-0.5">延長牌次數</label>
+            <select id="timeout-limit" class="w-full bg-slate-900 border border-white/20 rounded-md p-1 text-xs" onchange="updateTimeoutSettings()">
+              <option value="0">0 次</option>
+              <option value="1">1 次</option>
+              <option value="2" selected>2 次</option>
+              <option value="3">3 次</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="text-[11px] font-bold text-emerald-300 mb-1">🔊 聲音與警示</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-black/40 p-2 rounded-lg border border-white/10">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-emerald-200">啟用音效/語音</span>
+            <input id="sound-enable" type="checkbox" class="w-4 h-4 accent-amber-400" checked>
+          </div>
+          <div>
+            <label class="block text-[10px] text-emerald-200/70 mb-0.5">警示模式</label>
+            <select id="warning-mode" class="w-full bg-slate-900 border border-white/20 rounded-md p-1 text-xs">
+              <option value="tts" selected>TTS 語音</option>
+              <option value="beep">Beep 嗶聲</option>
+              <option value="none">靜音</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] text-emerald-200/70 mb-0.5">警示秒數</label>
+            <select id="warning-sec" class="w-full bg-slate-900 border border-white/20 rounded-md p-1 text-xs">
+              <option value="5">最後 5 秒</option>
+              <option value="10" selected>最後 10 秒</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 class="text-[11px] font-bold text-emerald-300 mb-1">📊 結算與自動匯出</h3>
+        <div class="space-y-1.5 bg-black/40 p-2 rounded-lg border border-white/10 text-xs">
+          <div class="flex items-center justify-between">
+            <span class="text-emerald-200">自動下載戰報圖</span>
+            <input id="auto-screenshot" type="checkbox" class="w-4 h-4 accent-amber-400" checked>
+          </div>
+          <div class="flex items-center justify-between">
+            <span class="text-emerald-200">自動導出 CSV</span>
+            <input id="auto-csv" type="checkbox" class="w-4 h-4 accent-amber-400">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3 text-right">
+      <button onclick="toggleSettingsModal()" class="bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold px-4 py-1 rounded-lg text-xs">儲存並關閉</button>
+    </div>
+  </dialog>
+
+  <!-- 🔴 訂閱頻道解鎖彈窗 -->
+  <dialog id="subscribe-modal" class="p-4 text-center text-white glass border border-amber-400/50 rounded-2xl max-w-sm w-full shadow-2xl">
+    <div class="text-3xl mb-1">🐴</div>
+    <h2 class="text-lg font-black text-amber-300 mb-1">解鎖黑馬三顆星記分板</h2>
+    <p class="text-xs text-emerald-100/80 mb-4 leading-relaxed">
+      請訂閱<strong class="text-red-400 font-bold">「黑馬音樂頻道」</strong>即可免費解鎖。
+    </p>
+    <div class="flex flex-col gap-2">
+      <a href="https://www.youtube.com/@taiwan3cushion?sub_confirmation=1" target="_blank" rel="noopener noreferrer" onclick="unlockApp()" class="btn-action bg-red-600 hover:bg-red-500 text-white font-extrabold py-2 px-4 rounded-xl text-xs shadow-lg flex items-center justify-center gap-1.5">
+        <span>🔴</span>
+        <span>訂閱頻道並解鎖</span>
+      </a>
+      <button onclick="unlockApp()" class="text-[11px] text-gray-400 hover:text-white underline">
+        我已訂閱，直接解鎖 ➔
+      </button>
+    </div>
+  </dialog>
+
+  <!-- Winner Modal -->
+  <dialog id="win-modal" class="p-4 text-center text-white glass border border-amber-400/40 rounded-2xl max-w-sm w-full">
+    <div class="text-3xl mb-1">🏆</div>
+    <h2 class="text-lg font-black text-amber-300 mb-1">MATCH COMPLETE</h2>
+    <p id="win-summary" class="text-sm font-bold text-white mb-3"></p>
+    <div class="flex justify-center gap-2">
+      <button onclick="generateReport()" class="bg-amber-400 text-slate-950 font-extrabold px-3 py-1.5 rounded-lg text-xs">匯出 1:1 戰報圖</button>
+      <button onclick="document.getElementById('win-modal').close()" class="bg-white/10 px-3 py-1.5 rounded-lg text-xs">關閉</button>
+    </div>
+  </dialog>
+
+  <canvas id="report-canvas" width="1080" height="1080" class="hidden"></canvas>
+
+  <script>
+    // State management
+    let scores = [0, 0], innings = [0, 0], currentRuns = [0, 0], highRuns = [0, 0];
+    let timeouts = [2, 2];
+    let maxTimeouts = 2;
+    let names = ["林師傅", "黑馬"];
+    let ballColors = ["white", "yellow"]; 
+    let activePlayer = 0, phase = 'idle', targetScore = 15, duration = 40, remaining = 40;
+    let timer = null;
+
+    let totalElapsedSeconds = 0;
+    let matchClockTimer = null;
+    let currentZoom = 1.0;
+
+    let audioCtx = null;
+
+    function safeGetValue(id, fallback) {
+      const el = document.getElementById(id);
+      if (el && el.value !== undefined && el.value !== "") {
+        const val = parseInt(el.value);
+        return isNaN(val) ? fallback : val;
+      }
+      return fallback;
+    }
+
+    function applyZoom() {
+      const container = document.getElementById('app-container');
+      container.style.transform = `scale(${currentZoom})`;
+      
+      const baseHeight = container.offsetHeight;
+      container.style.marginBottom = `${(baseHeight * (currentZoom - 1))}px`;
+
+      document.getElementById('zoom-level-display').textContent = `${Math.round(currentZoom * 100)}%`;
+    }
+
+    function zoomUI(delta) {
+      currentZoom = Math.min(Math.max(0.5, currentZoom + delta), 1.6);
+      applyZoom();
+    }
+
+    function resetZoomUI() {
+      currentZoom = 1.0;
+      applyZoom();
+    }
+
+    function checkSubscriptionLock() {
+      const isSubscribed = localStorage.getItem('darkhorse_subscribed');
+      const modal = document.getElementById('subscribe-modal');
+      if (!isSubscribed) {
+        modal.showModal();
+      }
+    }
+
+    function unlockApp() {
+      localStorage.setItem('darkhorse_subscribed', 'true');
+      const modal = document.getElementById('subscribe-modal');
+      modal.close();
+    }
+
+    function resetSubscriptionLock() {
+      localStorage.removeItem('darkhorse_subscribed');
+      alert('已重設鎖定狀態！網頁將重新載入。');
+      location.reload();
+    }
+
+    function toggleSettingsModal() {
+      const modal = document.getElementById('settings-modal');
+      if (modal.open) modal.close();
+      else modal.showModal();
+    }
+
+    function formatTime(seconds) {
+      const mins = Math.floor(seconds / 60);
+      const secs = seconds % 60;
+      return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    }
+
+    function onBallColorChange() {
+      const p1Elem = document.getElementById('ball-color-0');
+      const p1Color = p1Elem ? p1Elem.value : 'white';
+      const p2Select = document.getElementById('ball-color-1');
+
+      if (p1Color === 'white') {
+        ballColors = ['white', 'yellow'];
+        if (p2Select) p2Select.value = 'yellow';
+      } else {
+        ballColors = ['yellow', 'white'];
+        if (p2Select) p2Select.value = 'white';
+      }
+
+      for (let i = 0; i < 2; i++) {
+        const scoreElem = document.getElementById(`score-${i}`);
+        if (scoreElem) {
+          scoreElem.classList.toggle('led-white', ballColors[i] === 'white');
+          scoreElem.classList.toggle('led-yellow', ballColors[i] === 'yellow');
+        }
+      }
+
+      updateNames();
+    }
+
+    function updateNames() {
+      const p1Name = document.getElementById('name-input-0');
+      const p2Name = document.getElementById('name-input-1');
+      names[0] = (p1Name && p1Name.value) ? p1Name.value : "選手一";
+      names[1] = (p2Name && p2Name.value) ? p2Name.value : "選手二";
+
+      const c1Text = ballColors[0] === 'white' ? '白球' : '黃球';
+      const c2Text = ballColors[1] === 'white' ? '白球' : '黃球';
+
+      document.getElementById('name-display-0').textContent = `${names[0]} (${c1Text})`;
+      document.getElementById('name-display-1').textContent = `${names[1]} (${c2Text})`;
+    }
+
+    function updateTargetDisplay() {
+      targetScore = safeGetValue('target-score', 15);
+      document.getElementById('target-display').textContent = `目標 ${targetScore} 分`;
+    }
+
+    function updateTimeoutSettings() {
+      maxTimeouts = safeGetValue('timeout-limit', 2);
+      timeouts = [maxTimeouts, maxTimeouts];
+      render();
+    }
+
+    function render() {
+      for (let i = 0; i < 2; i++) {
+        document.getElementById(`score-${i}`).textContent = scores[i];
+        document.getElementById(`inning-${i}`).textContent = innings[i];
+        document.getElementById(`hr-${i}`).textContent = highRuns[i];
+        document.getElementById(`timeout-count-${i}`).textContent = `剩 ${timeouts[i]} 次`;
+        const avg = innings[i] > 0 ? (scores[i] / innings[i]).toFixed(3) : "0.000";
+        document.getElementById(`avg-${i}`).textContent = avg;
+
+        const isCurrent = (phase === 'running' && activePlayer === i);
+        document.getElementById(`player-card-${i}`).classList.toggle('active-player', isCurrent);
+        document.getElementById(`turn-tag-${i}`).classList.toggle('hidden', !isCurrent);
+      }
+      document.getElementById('timer').textContent = remaining;
+      document.getElementById('timer-bar').style.width = `${(remaining / duration) * 100}%`;
+      document.getElementById('elapsed-time').textContent = formatTime(totalElapsedSeconds);
+
+      const currentInning = Math.max(innings[0], innings[1]) + 1;
+      document.getElementById('current-inning-display').textContent = `第 ${currentInning} 桿`;
+
+      const switchBtn = document.getElementById('switch-btn');
+      switchBtn.textContent = activePlayer === 0 ? '⇦ 失誤 / 換人' : '失誤 / 換人 ⇨';
+    }
+
+    function startMatch() {
+      if (phase === 'finished') resetMatch();
+      updateNames();
+      updateTargetDisplay();
+      
+      duration = safeGetValue('shot-duration', 40);
+      remaining = duration;
+      phase = 'running';
+      
+      document.getElementById('start-btn').disabled = true;
+      document.getElementById('pause-btn').disabled = false;
+      document.getElementById('match-status').textContent = '進行中';
+      
+      startTimer();
+      startMatchClock();
+      render();
+    }
+
+    function pauseMatch() {
+      phase = 'paused';
+      clearInterval(timer);
+      clearInterval(matchClockTimer);
+      document.getElementById('start-btn').disabled = false;
+      document.getElementById('pause-btn').disabled = true;
+      document.getElementById('match-status').textContent = '暫停中';
+    }
+
+    function resetMatch() {
+      pauseMatch();
+      scores = [0, 0]; innings = [0, 0]; currentRuns = [0, 0]; highRuns = [0, 0];
+      timeouts = [maxTimeouts, maxTimeouts];
+      activePlayer = 0; phase = 'idle'; 
+      duration = safeGetValue('shot-duration', 40);
+      remaining = duration;
+      totalElapsedSeconds = 0;
+      render();
+      document.getElementById('match-status').textContent = '未開始';
+    }
+
+    function playBeepSound() {
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.frequency.value = 880;
+        gain.gain.value = 0.1;
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.15);
+      } catch (e) { console.log(e); }
+    }
+
+    function speakText(text) {
+      if (!('speechSynthesis' in window)) return;
+      window.speechSynthesis.cancel();
+      const msg = new SpeechSynthesisUtterance(text);
+      msg.lang = 'zh-TW';
+      msg.rate = 1.2;
+      window.speechSynthesis.speak(msg);
+    }
+
+    function triggerWarning(sec) {
+      const soundEnableEl = document.getElementById('sound-enable');
+      const warningModeEl = document.getElementById('warning-mode');
+      const isSoundEnabled = soundEnableEl ? soundEnableEl.checked : true;
+      const warningMode = warningModeEl ? warningModeEl.value : 'tts';
+      if (!isSoundEnabled || warningMode === 'none') return;
+
+      if (warningMode === 'tts') {
+        speakText(String(sec));
+      } else if (warningMode === 'beep') {
+        playBeepSound();
+      }
+    }
+
+    function startTimer() {
+      clearInterval(timer);
+      timer = setInterval(() => {
+        if (phase !== 'running') return;
+        remaining--;
+
+        const warnSec = safeGetValue('warning-sec', 10);
+        if (remaining <= warnSec && remaining > 0) {
+          triggerWarning(remaining);
+        }
+
+        if (remaining <= 0) {
+          switchTurn();
+        }
+        render();
+      }, 1000);
+    }
+
+    function startMatchClock() {
+      clearInterval(matchClockTimer);
+      matchClockTimer = setInterval(() => {
+        if (phase !== 'running') return;
+        totalElapsedSeconds++;
+        document.getElementById('elapsed-time').textContent = formatTime(totalElapsedSeconds);
+      }, 1000);
+    }
+
+    function useTimeout(playerIndex) {
+      if (phase !== 'running' || activePlayer !== playerIndex) return;
+      if (timeouts[playerIndex] > 0) {
+        timeouts[playerIndex]--;
+        remaining += duration;
+        render();
+      } else {
+        alert('延長牌已全數用完！');
+      }
+    }
+
+    function addScore(playerIndex, delta) {
+      if (phase !== 'running' || activePlayer !== playerIndex) return;
+      
+      if (delta > 0) {
+        scores[playerIndex] += delta;
+        currentRuns[playerIndex] += delta;
+        if (currentRuns[playerIndex] > highRuns[playerIndex]) {
+          highRuns[playerIndex] = currentRuns[playerIndex];
+        }
+        remaining = duration;
+      } else if (scores[playerIndex] > 0) {
+        scores[playerIndex] += delta;
+      }
+
+      render();
+
+      if (scores[playerIndex] >= targetScore) {
+        finishMatch(names[playerIndex]);
+      }
+    }
+
+    function switchTurn() {
+      if (phase !== 'running') return;
+      innings[activePlayer]++;
+      currentRuns[activePlayer] = 0;
+      activePlayer = 1 - activePlayer;
+      remaining = duration;
+      render();
+    }
+
+    function exportToCSV(winnerName) {
+      const today = new Date().toISOString().split('T')[0];
+      const csvData = [
+        ["Match Date", today],
+        ["Target Score", targetScore],
+        ["Total Duration", formatTime(totalElapsedSeconds)],
+        ["Winner", winnerName],
+        [],
+        ["Player", "Ball Color", "Score", "Inning", "AVG", "High Run"],
+        [names[0], ballColors[0], scores[0], innings[0], (innings[0] > 0 ? (scores[0]/innings[0]).toFixed(3) : "0.000"), highRuns[0]],
+        [names[1], ballColors[1], scores[1], innings[1], (innings[1] > 0 ? (scores[1]/innings[1]).toFixed(3) : "0.000"), highRuns[1]]
+      ];
+
+      let csvContent = "data:text/csv;charset=utf-8,\uFEFF" + csvData.map(e => e.join(",")).join("\n");
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `黑馬三顆星對局紀錄_${today}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function finishMatch(winnerName) {
+      pauseMatch();
+      phase = 'finished';
+      document.getElementById('match-status').textContent = '比賽結束';
+      document.getElementById('win-summary').textContent = `🏆 勝者：${winnerName}！ (${formatTime(totalElapsedSeconds)})`;
+      document.getElementById('win-modal').showModal();
+
+      const autoScreenshotEl = document.getElementById('auto-screenshot');
+      const autoCsvEl = document.getElementById('auto-csv');
+
+      if (autoScreenshotEl && autoScreenshotEl.checked) {
+        generateReport();
+      }
+      if (autoCsvEl && autoCsvEl.checked) {
+        exportToCSV(winnerName);
+      }
+    }
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+      } else {
+        document.exitFullscreen();
+      }
+    }
+
+    function generateReport() {
+      const canvas = document.getElementById('report-canvas');
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = "#0c1815";
+      ctx.fillRect(0, 0, 1080, 1080);
+
+      ctx.strokeStyle = "#e8bc70";
+      ctx.lineWidth = 12;
+      ctx.strokeRect(20, 20, 1040, 1040);
+
+      ctx.fillStyle = "#e8bc70";
+      ctx.font = "bold 52px Fraunces, sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("🐴 黑馬三顆星 MATCH REPORT", 540, 100);
+
+      const today = new Date().toISOString().split('T')[0];
+      const timeStr = formatTime(totalElapsedSeconds);
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "28px Work Sans, sans-serif";
+      ctx.fillText(`${today}  |  ${targetScore} PTS MATCH  |  TIME: ${timeStr}`, 540, 145);
+
+      const drawPlayerCard = (x, name, ballColor, score, inning, hr, isWinner) => {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.05)";
+        ctx.roundRect(x, 200, 420, 680, 20);
+        ctx.fill();
+        ctx.strokeStyle = isWinner ? "#e8bc70" : "rgba(255,255,255,0.1)";
+        ctx.lineWidth = isWinner ? 6 : 2;
+        ctx.stroke();
+
+        const colorLabel = ballColor === 'white' ? ' (白球)' : ' (黃球)';
+
+        ctx.fillStyle = "#e8bc70";
+        ctx.font = "bold 38px Work Sans, sans-serif";
+        ctx.fillText(name + colorLabel, x + 210, 270);
+
+        ctx.fillStyle = ballColor === 'yellow' ? "#ffe066" : "#ffffff";
+        ctx.font = "bold 110px Fraunces, sans-serif";
+        ctx.fillText(score, x + 210, 420);
+
+        const avg = inning > 0 ? (score / inning).toFixed(3) : "0.000";
+
+        ctx.fillStyle = "#cbd5e1";
+        ctx.font = "28px Work Sans, sans-serif";
+        ctx.fillText(`Inning: ${inning}`, x + 210, 520);
+        ctx.fillText(`AVG: ${avg}`, x + 210, 580);
+        ctx.fillText(`High Run: ${hr}`, x + 210, 640);
+
+        if (isWinner) {
+          ctx.fillStyle = "#e8bc70";
+          ctx.font = "bold 36px Work Sans, sans-serif";
+          ctx.fillText("🏆 WINNER", x + 210, 780);
+        }
+      };
+
+      const winnerIdx = scores[0] >= scores[1] ? 0 : 1;
+      drawPlayerCard(70, names[0], ballColors[0], scores[0], innings[0], highRuns[0], winnerIdx === 0);
+      drawPlayerCard(590, names[1], ballColors[1], scores[1], innings[1], highRuns[1], winnerIdx === 1);
+
+      ctx.fillStyle = "#e8bc70";
+      ctx.font = "bold 48px Fraunces, sans-serif";
+      ctx.fillText("VS", 540, 460);
+
+      ctx.fillStyle = "#e8bc70";
+      ctx.font = "bold 36px Work Sans, sans-serif";
+      ctx.fillText("黑馬三顆星 ‧ 就是這樣中！", 540, 980);
+
+      const link = document.createElement('a');
+      link.download = `黑馬三顆星戰報_${names[0]}VS${names[1]}_${today}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    // Initialize display & Lock Check
+    onBallColorChange();
+    updateTargetDisplay();
+    render();
+    checkSubscriptionLock();
+  </script>
+</body>
+</html>
