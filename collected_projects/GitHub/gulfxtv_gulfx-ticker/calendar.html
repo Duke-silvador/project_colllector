@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GulfX TV &mdash; Community Calendar</title>
+</head>
+<body>
+<style>
+:root{
+    --hatch-widget-surface:#16213a; --hatch-widget-surface-muted:#1f2c4d;
+    --hatch-widget-text:#f1f5f9; --hatch-widget-muted:#94a3b8;
+    --hatch-widget-border:#2d3d5f; --hatch-widget-accent:#e8b923;
+    --hatch-widget-on-accent:#16213a;
+  }
+  body{background:#0b1226;color:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;justify-content:center;padding:20px;margin:0}
+  .gx-cal{width:100%;max-width:640px}
+.gx-cal{box-sizing:border-box;max-width:100%;background:var(--hatch-widget-surface);border:1px solid var(--hatch-widget-border);border-radius:14px;padding:14px 16px;color:var(--hatch-widget-text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.gx-cal *{box-sizing:border-box}
+.gx-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:10px}
+.gx-brand{font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--hatch-widget-accent)}
+.gx-title{font-size:18px;font-weight:700}
+.gx-btn{background:var(--hatch-widget-accent);color:var(--hatch-widget-on-accent,#fff);border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;flex:none}
+.gx-btn.ghost{background:var(--hatch-widget-surface-muted);color:var(--hatch-widget-text);border:1px solid var(--hatch-widget-border)}
+.gx-monthnav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.gx-monthnav button{background:var(--hatch-widget-surface-muted);border:1px solid var(--hatch-widget-border);color:var(--hatch-widget-text);border-radius:8px;width:32px;height:32px;font-size:16px;cursor:pointer}
+.gx-month-label{font-size:15px;font-weight:700}
+.gx-weekdays,.gx-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.gx-weekdays{margin-bottom:4px}
+.gx-weekdays div{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--hatch-widget-muted);text-align:center;padding:4px 0}
+.gx-day{min-height:54px;border:1px solid var(--hatch-widget-border);border-radius:8px;padding:4px 6px;font-size:12px;cursor:pointer;background:var(--hatch-widget-surface);position:relative}
+.gx-daytop{display:flex;justify-content:space-between;align-items:center}
+.gx-wx{display:inline-flex;align-items:center;gap:2px;font-size:10px;color:var(--hatch-widget-muted)}
+.gx-wx svg{width:14px;height:14px;flex:none}
+.gx-forecast{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--hatch-widget-muted);margin-bottom:10px}
+.gx-forecast svg{width:22px;height:22px;flex:none;color:var(--hatch-widget-accent)}
+.gx-day:hover{border-color:var(--hatch-widget-accent)}
+.gx-day.other{opacity:.35;cursor:default}
+.gx-day.today{border-color:var(--hatch-widget-accent);border-width:2px}
+.gx-day.sel{background:var(--hatch-widget-surface-muted);border-color:var(--hatch-widget-accent)}
+.gx-daynum{font-weight:600}
+.gx-dots{display:flex;gap:3px;margin-top:4px;flex-wrap:wrap}
+.gx-dot{width:7px;height:7px;border-radius:50%}
+.gx-daypanel{margin-top:12px;border-top:1px solid var(--hatch-widget-border);padding-top:10px}
+.gx-daypanel-title{font-size:14px;font-weight:700;margin-bottom:8px}
+.gx-event{border:1px solid var(--hatch-widget-border);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--hatch-widget-surface)}
+.gx-event-top{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.gx-chip{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#fff;border-radius:6px;padding:2px 8px}
+.gx-event-title{font-size:14px;font-weight:700}
+.gx-event-meta{font-size:12px;color:var(--hatch-widget-muted);margin-bottom:4px}
+.gx-event-desc{font-size:13px;line-height:1.45}
+.gx-empty{font-size:13px;color:var(--hatch-widget-muted);text-align:center;padding:16px 8px;border:1px dashed var(--hatch-widget-border);border-radius:10px}.gx-caladd{font-size:11px;color:var(--hatch-widget-muted);margin-top:6px}.gx-caladd a{color:var(--hatch-widget-accent);text-decoration:none}
+.gx-formwrap{margin-top:12px;border:1px solid var(--hatch-widget-border);border-radius:12px;padding:14px;background:var(--hatch-widget-surface-muted)}
+.gx-form-title{font-size:15px;font-weight:700;margin-bottom:10px}
+.gx-formwrap input,.gx-formwrap select,.gx-formwrap textarea{width:100%;margin-bottom:8px;padding:9px 10px;font-size:13px;border:1px solid var(--hatch-widget-border);border-radius:8px;background:var(--hatch-widget-surface);color:var(--hatch-widget-text);font-family:inherit}
+.gx-formwrap textarea{min-height:70px;resize:vertical}
+.gx-form-row{display:flex;gap:8px}
+.gx-form-row>*{flex:1}
+.gx-form-err{font-size:12px;color:#ef4444;margin-bottom:8px;min-height:16px}
+.gx-form-btns{display:flex;gap:8px;justify-content:flex-end}
+</style>
+<div class="gx-cal">
+  <div class="gx-head">
+    <div><div class="gx-brand">GulfX TV</div><div class="gx-title">Community Calendar</div></div>
+    <button class="gx-btn" id="gx-open-form">+ Submit Event</button>
+  </div>
+  <div class="gx-monthnav" id="gx-monthnav">
+    <button id="gx-prev" aria-label="Previous month">&#8249;</button>
+    <div class="gx-month-label" id="gx-month-label"></div>
+    <button id="gx-next" aria-label="Next month">&#8250;</button>
+  </div>
+  <div class="gx-weekdays" id="gx-weekdays"><div>Sun</div><div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div></div>
+  <div class="gx-grid" id="gx-grid"></div>
+  <div class="gx-daypanel" id="gx-daypanel">
+    <div class="gx-daypanel-title" id="gx-day-title"></div>
+    <div class="gx-forecast" id="gx-forecast" hidden></div>
+    <div id="gx-day-events"></div>
+  </div>
+  <div class="gx-formwrap" id="gx-formwrap" hidden>
+    <div class="gx-form-title">Submit an Event</div>
+    <input id="gx-f-title" maxlength="80" placeholder="Event name *">
+    <div class="gx-form-row">
+      <input id="gx-f-date" type="date">
+      <input id="gx-f-time" type="time">
+    </div>
+    <input id="gx-f-location" maxlength="80" placeholder="Location (venue, address)">
+    <div class="gx-form-row">
+      <select id="gx-f-category"></select>
+      <input id="gx-f-submitter" maxlength="40" placeholder="Your name">
+    </div>
+    <textarea id="gx-f-desc" maxlength="500" placeholder="Description (what, cost, who it's for&hellip;)"></textarea>
+    <div class="gx-form-err" id="gx-form-err"></div>
+    <div class="gx-form-btns">
+      <button class="gx-btn ghost" id="gx-cancel">Cancel</button>
+      <button class="gx-btn" id="gx-save">Submit Event</button>
+    </div>
+    <div style="font-size:11px;color:var(--hatch-widget-muted);margin-top:8px">Submitting opens your email app with the details addressed to our team for review.</div>
+  </div>
+</div>
+<script>
+(function(){
+var CATS={
+  'Festival':'#f59e0b','Music':'#8b5cf6','Food & Drink':'#ef4444',
+  'Fundraiser':'#ec4899','Sports':'#22c55e','Arts':'#38bdf8','Community':'#64748b'
+};
+/* ---- Shared events: EVERYONE sees these ----
+   Add approved events here, one per line:
+   {title:'Event name', date:'2026-11-15', time:'6:00 PM', location:'Venue', category:'Music', desc:'Details', submitter:'GulfX TV'},
+   Categories: Festival, Music, Food & Drink, Fundraiser, Sports, Arts, Community */
+var SHARED_EVENTS=[
+{title:'Gulf Coast Equality Fest', date:'2026-10-17', time:'', location:'The Great Lawn at Harrah\u2019s Gulf Coast, Biloxi', category:'Festival', desc:'10th annual \u2018A Decade of Diversity.\u2019 Free, family-friendly: live music, drag performances, local vendors, food.', submitter:'GulfX TV'},
+{title:'Tunnels to Towers Hernando 5K', date:'2026-10-17', time:'9:00 AM', location:'Hernando Hills Elementary, 570 McIngvale Rd, Hernando', category:'Fundraiser', desc:'5K run/walk supporting the Tunnel to Towers Foundation. GulfX TV on-site producing event video.', submitter:'GulfX TV'},
+{title:'Jackson County Blue Ribbon Fair', date:'2026-10-18', time:'', location:'Pascagoula Fairgrounds', category:'Festival', desc:'Runs Oct 18\u201325: midway rides, livestock shows, church and civic food booths, Old Settlers Day. A century-old Coast tradition.', submitter:'GulfX TV'},
+{title:'Kroctoberfest 2026', date:'2026-10-23', time:'', location:'Salvation Army Kroc Center, Biloxi', category:'Festival', desc:'Free family fall tradition: trunk-or-treating, costume contest, live music, food trucks, community vendors.', submitter:'GulfX TV'},
+{title:'Smokin the Coast', date:'2026-10-31', time:'10:00 AM', location:'Point Cadet Plaza, Biloxi', category:'Food & Drink', desc:'10 AM\u20136 PM. Presented by the Trident Foundation.', submitter:'GulfX TV'},
+{title:'Haunted Hangar', date:'2026-10-31', time:'4:00 PM', location:'Mississippi Aviation Heritage Museum, Gulfport', category:'Community', desc:'4\u20136:30 PM. $10 per person.', submitter:'GulfX TV'},
+{title:'Fall-O-Ween Festival', date:'2026-10-31', time:'10:00 AM', location:'Gautier Public Library, 2100 Library Ln', category:'Community', desc:'10 AM\u20132 PM. Free family festival.', submitter:'GulfX TV'},
+{title:'Peter Anderson Arts & Crafts Festival', date:'2026-11-07', time:'', location:'Downtown Ocean Springs', category:'Arts', desc:'48th annual, Nov 7\u20138. Mississippi\u2019s largest fine arts festival: 400+ artists, craft and food booths.', submitter:'GulfX TV'},
+{title:'Bud & Burgers in the Bay', date:'2026-11-08', time:'', location:'Historic Hancock County Courthouse, Bay St. Louis', category:'Food & Drink', desc:'Burger cook-off paired with Port Air Space Day. Proceeds benefit community causes.', submitter:'GulfX TV'},
+];
+/* ---- Google Sheet auto-feed (needs Luke's Google storage fixed first) ----
+   Once the sheet exists, set this to its published CSV URL and events
+   with Approved=TRUE appear for everyone automatically:
+   var SHEET_CSV_URL='https://docs.google.com/spreadsheets/d/SHEET_ID/gviz/tq?tqx=out:csv&sheet=Events'; */
+var SHEET_CSV_URL='';
+var sheetEvents=[],sheetLoading=false;
+function parseCSV(text){
+  var rows=[],row=[],cur='',q=false;
+  for(var i=0;i<text.length;i++){
+    var c=text[i];
+    if(q){
+      if(c==='"'){if(text[i+1]==='"'){cur+='"';i++;}else q=false;}
+      else cur+=c;
+    }else{
+      if(c==='"')q=true;
+      else if(c===','){row.push(cur);cur='';}
+      else if(c==='\n'){row.push(cur);rows.push(row);row=[];cur='';}
+      else if(c==='\r'){}
+      else cur+=c;
+    }
+  }
+  if(cur!==''||row.length){row.push(cur);rows.push(row);}
+  return rows;
+}
+function fetchSheet(){
+  if(!SHEET_CSV_URL||sheetLoading)return;
+  sheetLoading=true;
+  fetch(SHEET_CSV_URL).then(function(r){if(!r.ok)throw 0;return r.text();})
+    .then(function(csv){
+      var rows=parseCSV(csv),evs=[];
+      for(var i=1;i<rows.length;i++){
+        var c=rows[i];
+        if(c.length<8)continue;
+        var ap=String(c[7]||'').toLowerCase();
+        if(ap!=='true'&&ap!=='yes'&&ap!=='x')continue;
+        if(!c[0]||!/^\d{4}-\d{2}-\d{2}$/.test(c[1]))continue;
+        evs.push({title:c[0],date:c[1],time:c[2],location:c[3],category:c[4]||'Community',desc:c[5],submitter:c[6]});
+      }
+      sheetEvents=evs;sheetLoading=false;render();
+    }).catch(function(){sheetLoading=false;});
+}
+function allEvents(){
+  var seen={},out=[];
+  state.events.concat(SHARED_EVENTS).concat(sheetEvents).forEach(function(e){
+    if(!e||!e.date||!e.title)return;
+    var k=String(e.title+'|'+e.date).toLowerCase();
+    if(!seen[k]){seen[k]=1;out.push(e);}
+  });
+  return out;
+}
+var Store={
+  load:function(){try{var s=JSON.parse(localStorage.getItem("gulfx-community-events"));return (s&&s.events)?s:{events:[]};}catch(e){return {events:[]};}},
+  save:function(s){try{localStorage.setItem("gulfx-community-events",JSON.stringify(s));}catch(e){}},
+  onChange:function(cb){}
+};
+var today=new Date();
+var viewY=today.getFullYear(),viewM=today.getMonth();
+var sel=iso(today);
+var state=Store.load();
+
+function iso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function parseIso(s){var p=s.split('-');return new Date(+p[0],+p[1]-1,+p[2]);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];});}
+function pretty(s){return parseIso(s).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});}
+function fmtTime(t){if(!t)return '';if(!/^\d{1,2}:\d{2}(:\d{2})?$/.test(t))return t;var p=t.split(':'),h=+p[0],m=p[1],ap=h>=12?'PM':'AM';h=h%12||12;return h+':'+m+' '+ap;}
+var WXAPI_KEY='e12f91dbf73240af9c4214751260910';
+function wapiIcon(code){
+  code=+code;
+  if(code===1000)return 'sun';
+  if(code===1003)return 'partly';
+  if(code===1006||code===1009)return 'cloud';
+  if(code===1030||code===1135||code===1147)return 'fog';
+  if(code===1087||code===1273||code===1276||code===1279||code===1282)return 'storm';
+  if([1063,1150,1153,1168,1171,1180,1183,1186,1189,1192,1195,1198,1201,1240,1243,1246,1069,1072].indexOf(code)>=0)return 'rain';
+  if([1066,1114,1117,1204,1207,1210,1213,1216,1219,1222,1225,1237,1249,1252,1255,1258,1261,1264].indexOf(code)>=0)return 'snow';
+  return 'cloud';
+}
+var wxCache={};
+function wmo(code){
+  var d={0:['Clear sky','sun'],1:['Mainly clear','sun'],2:['Partly cloudy','partly'],3:['Overcast','cloud'],45:['Fog','fog'],48:['Fog','fog'],51:['Light drizzle','rain'],53:['Drizzle','rain'],55:['Heavy drizzle','rain'],56:['Freezing drizzle','rain'],57:['Freezing drizzle','rain'],61:['Light rain','rain'],63:['Rain','rain'],65:['Heavy rain','rain'],66:['Freezing rain','rain'],67:['Freezing rain','rain'],71:['Light snow','snow'],73:['Snow','snow'],75:['Heavy snow','snow'],77:['Snow grains','snow'],80:['Light showers','rain'],81:['Showers','rain'],82:['Heavy showers','rain'],85:['Snow showers','snow'],86:['Snow showers','snow'],95:['Thunderstorm','storm'],96:['Storm w/ hail','storm'],99:['Storm w/ hail','storm']};
+  return d[code]||['\u2014','cloud'];
+}
+function icon(kind,sz){
+  var s='width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
+  var p={sun:'<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5 5l1.7 1.7M17.3 17.3L19 19M19 5l-1.7 1.7M6.7 17.3L5 19"/>',
+  partly:'<circle cx="8" cy="8" r="3"/><path d="M8 2.8v1.6M2.8 8h1.6M4.3 4.3l1.1 1.1M11.7 4.3l-1.1 1.1"/><path d="M9 20h9.5a3.5 3.5 0 0 0 .6-6.95A5.5 5.5 0 0 0 8.3 14.6 3.2 3.2 0 0 0 9 20z"/>',
+  cloud:'<path d="M7 20h10a4 4 0 0 0 .8-7.92A6 6 0 0 0 6.2 13.7 3.4 3.4 0 0 0 7 20z"/>',
+  fog:'<path d="M4 10h16M6 14h12M8 18h8"/>',
+  rain:'<path d="M7 16h10a4 4 0 0 0 .8-7.92A6 6 0 0 0 6.2 9.7 3.4 3.4 0 0 0 7 16z"/><path d="M8 18.5v2M12 18.5v2M16 18.5v2"/>',
+  snow:'<path d="M7 16h10a4 4 0 0 0 .8-7.92A6 6 0 0 0 6.2 9.7 3.4 3.4 0 0 0 7 16z"/><path d="M8 19l1 1M16 19l-1 1M12 18.5v2"/>',
+  storm:'<path d="M7 15h10a4 4 0 0 0 .8-7.92A6 6 0 0 0 6.2 8.7 3.4 3.4 0 0 0 7 15z"/><path d="M12 13l-2.5 4H12l-1.5 3.5L14.5 16H12l1.5-3z"/>'}[kind]||'';
+  return '<svg '+s+'>'+p+'</svg>';
+}
+function wxFor(ds){var m=wxCache[ds.slice(0,7)];return (m&&typeof m==='object')?m[ds]:null;}
+function fetchWxFor(y,m){
+  var t=new Date(),t0=iso(t);
+  var t16d=new Date(t.getFullYear(),t.getMonth(),t.getDate()+16),t16=iso(t16d);
+  var key=y+'-'+String(m+1).padStart(2,'0');
+  if(wxCache[key])return;
+  var dim=new Date(y,m+1,0).getDate();
+  var s=key+'-01',e=key+'-'+String(dim).padStart(2,'0');
+  if(s<t0)s=t0;
+  if(e>t16)e=t16;
+  if(s>e)return;
+  wxCache[key]='loading';
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=30.3674&longitude=-89.0928&daily=weathercode,temperature_2m_max,temperature_2m_min,precipitation_probability_max&temperature_unit=fahrenheit&timezone=America%2FChicago&start_date='+s+'&end_date='+e)
+    .then(function(r){if(!r.ok)throw 0;return r.json();})
+    .then(function(j){
+      var map={},d=j.daily||{};
+      for(var i=0;i<(d.time||[]).length;i++){
+        var wc=wmo(d.weathercode[i]);
+        map[d.time[i]]={kind:wc[1],label:wc[0],tmax:Math.round(d.temperature_2m_max[i]),tmin:Math.round(d.temperature_2m_min[i]),ppop:d.precipitation_probability_max[i]};
+      }
+      wxCache[key]=map;render();
+    }).catch(function(){
+      fetch('https://api.weatherapi.com/v1/forecast.json?key='+WXAPI_KEY+'&q=30.3674,-89.0928&days=3')
+        .then(function(r){if(!r.ok)throw 0;return r.json();})
+        .then(function(j){
+          var map={};
+          ((j.forecast||{}).forecastday||[]).forEach(function(fd){
+            var dy=fd.day||{},cc=dy.condition||{};
+            map[fd.date]={kind:wapiIcon(cc.code),label:cc.text||'',tmax:Math.round(dy.maxtemp_f),tmin:Math.round(dy.mintemp_f),ppop:dy.daily_chance_of_rain};
+          });
+          wxCache[key]=map;render();
+        }).catch(function(){wxCache[key]={};});
+    });
+}
+function fetchWx(){fetchWxFor(viewY,viewM);}
+
+
+var calRegistry=[];
+function calDates(e){
+  var d=String(e.date||'').replace(/-/g,'');
+  var t=String(e.time||'').trim();
+  var m=t.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AP]\.?M\.?)?$/i);
+  if(!m){
+    var nd=new Date(+e.date.slice(0,4),+e.date.slice(5,7)-1,+e.date.slice(8,10)+1);
+    function p2(x){return String(x).padStart(2,'0');}
+    return {start:d,end:nd.getFullYear()+p2(nd.getMonth()+1)+p2(nd.getDate()),allDay:true};
+  }
+  var h=+m[1],ap=(m[4]||'').replace(/\./g,'').toUpperCase();
+  if(ap==='PM'&&h<12)h+=12;
+  if(ap==='AM'&&h===12)h=0;
+  var dt=new Date(+e.date.slice(0,4),+e.date.slice(5,7)-1,+e.date.slice(8,10),h,+m[2]);
+  function fmt(x){function p2(y){return String(y).padStart(2,'0');}
+    return x.getFullYear()+p2(x.getMonth()+1)+p2(x.getDate())+'T'+p2(x.getHours())+p2(x.getMinutes())+'00';}
+  return {start:fmt(dt),end:fmt(new Date(dt.getTime()+3600000)),allDay:false};
+}
+function gcalUrl(e){
+  var c=calDates(e);
+  return 'https://calendar.google.com/calendar/render?action=TEMPLATE'+
+    '&text='+encodeURIComponent(e.title||'')+
+    '&dates='+c.start+'/'+c.end+
+    (e.location?'&location='+encodeURIComponent(e.location):'')+
+    '&details='+encodeURIComponent([e.desc,e.submitter?('Submitted by '+e.submitter+' via GulfX TV'):null].filter(Boolean).join('\n\n'));
+}
+function utcStamp(){
+  var n=new Date(),p=function(x){return String(x).padStart(2,'0');};
+  return n.getUTCFullYear()+p(n.getUTCMonth()+1)+p(n.getUTCDate())+'T'+p(n.getUTCHours())+p(n.getUTCMinutes())+p(n.getUTCSeconds())+'Z';
+}
+function icsDownload(e){
+  var c=calDates(e);
+  function q(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\r?\n/g,'\\n');}
+  var uid='gx-'+String(e.date).replace(/\D/g,'')+'-'+String(e.title||'').toLowerCase().replace(/[^a-z0-9]+/g,'').slice(0,24);
+  var L=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//GulfX TV//Community Calendar//EN','BEGIN:VEVENT',
+    'UID:'+uid+'@gulfxtv.com','DTSTAMP:'+utcStamp(),
+    'DTSTART'+(c.allDay?';VALUE=DATE':'')+':'+c.start,
+    'DTEND'+(c.allDay?';VALUE=DATE':'')+':'+c.end,
+    'SUMMARY:'+q(e.title),
+    'DESCRIPTION:'+q([e.desc,e.submitter?('Submitted by '+e.submitter+' via GulfX TV'):null].filter(Boolean).join('\n\n'))];
+  if(e.location)L.push('LOCATION:'+q(e.location));
+  L.push('END:VEVENT','END:VCALENDAR');
+  var blob=new Blob([L.join('\r\n')],{type:'text/calendar;charset=utf-8'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=String(e.title||'event').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,50)+'.ics';
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){URL.revokeObjectURL(a.href);a.remove();},1500);
+}
+function onCalClick(ev){
+  var t=ev.target&&ev.target.closest?ev.target.closest('[data-cal]'):null;
+  if(!t)return;
+  ev.preventDefault();ev.stopPropagation();
+  var e=calRegistry[+t.getAttribute('data-idx')];
+  if(!e)return;
+  if(t.getAttribute('data-cal')==='g')window.open(gcalUrl(e),'_blank','noopener');
+  else icsDownload(e);
+}
+
+function eventHtml(e){
+  var calIdx=calRegistry.push(e)-1;
+  return '<div class="gx-event"><div class="gx-event-top">'+
+    '<span class="gx-chip" style="background:'+(CATS[e.category]||'#64748b')+'">'+esc(e.category)+'</span>'+
+    '<span class="gx-event-title">'+esc(e.title)+'</span></div>'+
+    '<div class="gx-event-meta">'+esc([fmtTime(e.time),e.location].filter(Boolean).join(' \u00b7 '))+'</div>'+
+    (e.desc?'<div class="gx-event-desc">'+esc(e.desc)+'</div>':'')+
+    (e.submitter?'<div class="gx-event-meta">Submitted by '+esc(e.submitter)+'</div>':'')+
+    '<div class="gx-caladd">Add to calendar: <a href="#" data-cal="g" data-idx="'+calIdx+'">Google</a> &middot; <a href="#" data-cal="i" data-idx="'+calIdx+'">Apple / ICS</a></div>'+
+    '</div>';
+}
+function renderMonth(){
+  var label=document.getElementById('gx-month-label');
+  label.textContent=new Date(viewY,viewM,1).toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  var grid=document.getElementById('gx-grid');grid.innerHTML='';
+  var first=new Date(viewY,viewM,1).getDay(),days=new Date(viewY,viewM+1,0).getDate();
+  var prevDays=new Date(viewY,viewM,0).getDate();
+  function cell(y,m,d,other){
+    var div=document.createElement('div');
+    div.className='gx-day'+(other?' other':'');
+    var ds=y+'-'+String(m+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    if(ds===iso(today))div.classList.add('today');
+    if(ds===sel)div.classList.add('sel');
+    var evs=allEvents().filter(function(e){return e.date===ds;});
+    var w=wxFor(ds);
+    var wxHtml=w?'<span class="gx-wx">'+icon(w.kind,14)+Math.round(w.tmax)+'&deg;</span>':'';
+    div.innerHTML='<div class="gx-daytop"><span class="gx-daynum">'+d+'</span>'+wxHtml+'</div>'+
+      (evs.length?'<div class="gx-dots">'+evs.slice(0,4).map(function(e){
+        return '<span class="gx-dot" style="background:'+(CATS[e.category]||'#64748b')+'"></span>';
+      }).join('')+'</div>':'');
+    if(!other)div.onclick=function(){sel=ds;render();};
+    return div;
+  }
+  for(var i=first-1;i>=0;i--)grid.appendChild(cell(viewM===0?viewY-1:viewY,viewM===0?11:viewM-1,prevDays-i,true));
+  for(var d=1;d<=days;d++)grid.appendChild(cell(viewY,viewM,d,false));
+  var tail=(7-(first+days)%7)%7;
+  for(var t2=1;t2<=tail;t2++)grid.appendChild(cell(viewM===11?viewY+1:viewY,viewM===11?0:viewM+1,t2,true));
+
+  document.getElementById('gx-day-title').textContent=pretty(sel);
+  var fc=document.getElementById('gx-forecast');
+  var wday=wxFor(sel);
+  if(wday&&typeof wday==='object'){
+    fc.hidden=false;
+    fc.innerHTML=icon(wday.kind,22)+'<span>'+esc(wday.label)+' &middot; High '+wday.tmax+'&deg;F / Low '+wday.tmin+'&deg;F'+(wday.ppop==null?'':' &middot; '+wday.ppop+'% chance of rain')+'</span>';
+  }else{fc.hidden=true;fc.innerHTML='';}
+  var list=document.getElementById('gx-day-events');
+  var evs=allEvents().filter(function(e){return e.date===sel;})
+    .sort(function(a,b){return (a.time||'99')<(b.time||'99')?-1:1;});
+  if(!evs.length){
+    list.innerHTML='<div class="gx-empty">No events this day yet.<br>Know something happening? Submit it above.</div>';
+  }else{
+    list.innerHTML=evs.map(eventHtml).join('');
+  }
+}
+function render(){
+  calRegistry=[];
+  renderMonth();fetchWx();
+}
+
+document.getElementById('gx-prev').onclick=function(){viewM--;if(viewM<0){viewM=11;viewY--;}render();};
+document.getElementById('gx-next').onclick=function(){viewM++;if(viewM>11){viewM=0;viewY++;}render();};
+var formwrap=document.getElementById('gx-formwrap');
+document.getElementById('gx-open-form').onclick=function(){
+  formwrap.hidden=false;
+  document.getElementById('gx-f-date').value=sel;
+  formwrap.scrollIntoView({behavior:'smooth',block:'nearest'});
+};
+document.getElementById('gx-cancel').onclick=function(){formwrap.hidden=true;document.getElementById('gx-form-err').textContent='';};
+document.getElementById('gx-save').onclick=function(){
+  var err=document.getElementById('gx-form-err');
+  var title=document.getElementById('gx-f-title').value.trim();
+  var date=document.getElementById('gx-f-date').value;
+  if(!title){err.textContent='Please give the event a name.';return;}
+  if(!date){err.textContent='Please pick a date.';return;}
+  var time=document.getElementById('gx-f-time').value;
+  var location=document.getElementById('gx-f-location').value.trim();
+  var category=document.getElementById('gx-f-category').value;
+  var desc=document.getElementById('gx-f-desc').value.trim();
+  var submitter=document.getElementById('gx-f-submitter').value.trim();
+  state.events.push({
+    id:'e'+Date.now().toString(36),
+    title:title,date:date,time:time,location:location,
+    category:category,desc:desc,submitter:submitter,
+    createdAt:new Date().toISOString()
+  });
+  Store.save(state);
+  var subject='Calendar submission: '+title+' ('+date+')';
+  var body='New community calendar event submission:\n\n'+
+    'Event: '+title+'\nDate: '+date+'\nTime: '+(time||'Not specified')+'\n'+
+    'Location: '+(location||'Not specified')+'\nCategory: '+category+'\n'+
+    'Description: '+(desc||'Not specified')+'\nSubmitted by: '+(submitter||'Anonymous');
+  window.location.href='mailto:info@gulfxtv.com?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(body);
+  ['gx-f-title','gx-f-date','gx-f-time','gx-f-location','gx-f-desc','gx-f-submitter'].forEach(function(id){document.getElementById(id).value='';});
+  err.textContent='';formwrap.hidden=true;
+  sel=date;var p=date.split('-');viewY=+p[0];viewM=+p[1]-1;
+  render();
+};
+
+var catsel=document.getElementById('gx-f-category');
+Object.keys(CATS).forEach(function(c){
+  var o=document.createElement('option');o.value=c;o.textContent=c;catsel.appendChild(o);
+});
+
+Store.onChange(function(s){state=s;render();});
+render();
+fetchSheet();
+document.getElementById('gx-day-events').addEventListener('click',onCalClick);
+setInterval(fetchSheet,600000);
+})();
+</script>
+
+</body>
+</html>

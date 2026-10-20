@@ -1,0 +1,78 @@
+<body style="margin:0;padding:16px;background:#0b1226;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<div style="max-width:900px;margin:0 auto">
+<style>
+.gx-w{box-sizing:border-box;max-width:100%;background:#0b1226;border:1px solid rgba(232,185,35,.25);border-radius:10px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#f1f5f9}
+.gx-w *{box-sizing:border-box}
+.gx-w-head{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg,#b8911a,#e8b923);color:#0b1226;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:10px 14px}
+.gx-w-head .dot{width:8px;height:8px;border-radius:50%;background:#0b1226;animation:gxwblink 1.2s infinite}
+@keyframes gxwblink{0%,100%{opacity:1}50%{opacity:.25}}
+.gx-w-sub{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.06em;opacity:.75}
+.gx-fc-row{display:flex;gap:10px;overflow-x:auto;padding:14px}
+.gx-fc-card{flex:1 0 104px;min-width:104px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:10px 8px;text-align:center}
+.gx-fc-day{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#e8b923}
+.gx-fc-icon{font-size:30px;line-height:1.4}
+.gx-fc-hi{font-size:17px;font-weight:800}
+.gx-fc-lo{font-size:13px;color:#94a3b8}
+.gx-fc-rain{font-size:11px;color:#7dd3fc;margin-top:2px}
+.gx-al-list{max-height:330px;overflow-y:auto;padding:10px 14px 14px;display:flex;flex-direction:column;gap:10px}
+.gx-al-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-left:5px solid #e8b923;border-radius:8px;padding:10px 12px}
+.gx-al-card.warn{border-left-color:#dc2626}
+.gx-al-card.watch{border-left-color:#e8b923}
+.gx-al-card.advisory{border-left-color:#2563eb}
+.gx-al-event{font-size:13px;font-weight:800}
+.gx-al-meta{font-size:11px;color:#94a3b8;margin-top:2px}
+.gx-al-headline{font-size:12px;margin-top:6px;color:#e2e8f0}
+.gx-al-clear{text-align:center;padding:26px 14px;color:#94a3b8;font-size:13px}
+.gx-al-clear .big{font-size:26px}
+.gx-w-foot{padding:8px 14px;font-size:10px;color:#64748b;border-top:1px solid rgba(255,255,255,.07)}
+</style>
+<div class="gx-w">
+<div class="gx-w-head"><span class="dot"></span>Coast Alerts<span class="gx-w-sub">NWS &middot; 6 counties</span></div>
+<div class="gx-al-list" id="al-list"></div>
+<div class="gx-w-foot" id="al-foot">Updated 10:06 PM CDT</div>
+</div>
+</div>
+<script>
+var AL_FALLBACK=[{"event": "Dense Fog Advisory", "sev": "advisory", "areas": "Pointe Coupee; West Feliciana; East Feliciana; St. Helena; Washington; Iberville; West Baton Rouge; East Baton Rouge; Assumption; St. James; St. John The Baptist; Upper St. Bernard; Lower St. Bernard; Northern Tangipahoa; Southeast St. Tammany; Western Orleans; Eastern Orleans; Northern St. Tammany; Southwestern St. Tammany; Central Tangipahoa; Lower Tangipahoa; Northern Livingston; Southern Livingston; Western Ascension; Eastern Ascension; Upper Jefferson; Upper Plaquemines; Central Plaquemines; Lower Plaquemines; Central Jefferson; Coastal Jefferson; Upper Lafourche; Lower Lafourche; Upper Terrebonne; Lower Terrebonne; Upper St. Charles; Central St. Charles; Lower St. Charles; Wilkinson; Amite; Pike; Walthall; Pearl River; Northern Hancock; Northern Harrison; Northern Jackson; Southern Hancock; Southern Harrison; Southern Jackson", "headline": "Dense Fog Advisory issued October 14 at 7:33PM CDT until October 15 at 11:00AM CDT by NWS New Orleans LA", "expires": "2026-10-15 09:45", "onset": "2026-10-15T01:00:00-05:00"}];
+var COAST_RE=/Hancock|Harrison|Jackson|Pearl River|Stone|George/i;
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function sevOf(ev){var e=ev.toLowerCase();
+  if(e.indexOf('warning')>=0||e.indexOf('emergency')>=0)return 'warn';
+  if(e.indexOf('watch')>=0)return 'watch';return 'advisory';}
+function renderAl(list,stamp){
+  var el=document.getElementById('al-list');
+  if(!list.length){
+    el.innerHTML='<div class="gx-al-clear"><div class="big">\u2705</div>No active watches, warnings, or advisories<br>for the Mississippi Gulf Coast.</div>';
+  }else{
+    var h='';
+    for(var i=0;i<list.length;i++){var a=list[i],sev=sevOf(a.event);
+      h+='<div class="gx-al-card '+sev+'"><div class="gx-al-event">'+esc(a.event)+'</div>'+
+         '<div class="gx-al-meta">'+esc(a.areas)+(a.expires?' \u00b7 until '+esc(a.expires):'')+'</div>'+
+         (a.headline?'<div class="gx-al-headline">'+esc(a.headline)+'</div>':'')+'</div>';}
+    el.innerHTML=h;
+  }
+  if(stamp)document.getElementById('al-foot').textContent='Updated '+stamp;
+}
+function refreshAl(){
+  fetch('https://api.weather.gov/alerts/active?area=MS',{headers:{'Accept':'application/geo+json'}})
+  .then(function(r){if(!r.ok)throw 0;return r.json();})
+  .then(function(j){
+    var out=[],feats=j.features||[];
+    for(var i=0;i<feats.length;i++){var p=feats[i].properties||{},ev=p.event||'',area=p.areaDesc||'';
+      if(p.status!=='Actual')continue;
+      if(p.messageType!=='Alert'&&p.messageType!=='Update')continue;
+      var el=ev.toLowerCase();
+      if(/statement|outlook|synopsis|test|exercise/.test(el))continue;
+      if(!/warning|watch|advisory|emergency/.test(el))continue;
+      if(!COAST_RE.test(area))continue;
+      out.push({event:ev,areas:area,headline:p.headline||'',
+        expires:(p.expires||'').slice(0,16).replace('T',' '),onset:p.onset||p.effective||''});}
+    var ord={warn:0,watch:1,advisory:2};
+    out.sort(function(a,b){return (ord[sevOf(a.event)]-ord[sevOf(b.event)])||(a.onset<b.onset?-1:1);});
+    renderAl(out,'just now');
+  }).catch(function(){});
+}
+renderAl(AL_FALLBACK);
+setInterval(refreshAl,10*60000);
+refreshAl();
+</script>

@@ -1,0 +1,56 @@
+<body style="margin:0;padding:16px;background:#0b1226;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<div style="max-width:900px;margin:0 auto">
+<style>
+.gx-w{box-sizing:border-box;max-width:100%;background:#0b1226;border:1px solid rgba(232,185,35,.25);border-radius:10px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#f1f5f9}
+.gx-w *{box-sizing:border-box}
+.gx-w-head{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg,#b8911a,#e8b923);color:#0b1226;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:10px 14px}
+.gx-w-head .dot{width:8px;height:8px;border-radius:50%;background:#0b1226;animation:gxwblink 1.2s infinite}
+@keyframes gxwblink{0%,100%{opacity:1}50%{opacity:.25}}
+.gx-w-sub{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.06em;opacity:.75}
+.gx-we-grid{display:flex;gap:10px;padding:14px;flex-wrap:wrap}
+.gx-we-card{flex:1 1 200px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:12px 14px}
+.gx-we-day{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#e8b923}
+.gx-we-title{font-size:14px;font-weight:800;margin-top:2px}
+.gx-we-meta{font-size:11px;color:#94a3b8;margin-top:4px}
+.gx-we-cat{display:inline-block;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#0b1226;background:#e8b923;border-radius:5px;padding:2px 7px;margin-top:8px}
+.gx-w-foot{padding:8px 14px;font-size:10px;color:#64748b;border-top:1px solid rgba(255,255,255,.07);text-align:center}
+</style>
+<div class="gx-w">
+<div class="gx-w-head"><span class="dot"></span><span id="we-title">This Weekend</span><span class="gx-w-sub">Coast Events</span></div>
+<div class="gx-we-grid" id="we-grid"></div>
+<div class="gx-w-foot">Full calendar on the Events page</div>
+</div>
+</div>
+<script>
+var WE_FALLBACK=[{"title": "Gulf Coast Equality Fest", "date": "2026-10-17", "time": "", "location": "The Great Lawn at Harrah\u2019s Gulf Coast, Biloxi", "category": "Festival", "desc": "10th annual \u2018A Decade of Diversity.\u2019 Free, family-friendly: live music, drag performances, local vendors, food.", "submitter": "GulfX TV"}, {"title": "Tunnels to Towers Hernando 5K", "date": "2026-10-17", "time": "9:00 AM", "location": "Hernando Hills Elementary, 570 McIngvale Rd, Hernando", "category": "Fundraiser", "desc": "5K run/walk supporting the Tunnel to Towers Foundation. GulfX TV on-site producing event video.", "submitter": "GulfX TV"}, {"title": "Jackson County Blue Ribbon Fair", "date": "2026-10-18", "time": "", "location": "Pascagoula Fairgrounds", "category": "Festival", "desc": "Runs Oct 18\u201325: midway rides, livestock shows, church and civic food booths, Old Settlers Day. A century-old Coast tradition.", "submitter": "GulfX TV"}, {"title": "Kroctoberfest 2026", "date": "2026-10-23", "time": "", "location": "Salvation Army Kroc Center, Biloxi", "category": "Festival", "desc": "Free family fall tradition: trunk-or-treating, costume contest, live music, food trucks, community vendors.", "submitter": "GulfX TV"}, {"title": "Smokin the Coast", "date": "2026-10-31", "time": "10:00 AM", "location": "Point Cadet Plaza, Biloxi", "category": "Food & Drink", "desc": "10 AM\u20136 PM. Presented by the Trident Foundation.", "submitter": "GulfX TV"}, {"title": "Haunted Hangar", "date": "2026-10-31", "time": "4:00 PM", "location": "Mississippi Aviation Heritage Museum, Gulfport", "category": "Community", "desc": "4\u20136:30 PM. $10 per person.", "submitter": "GulfX TV"}, {"title": "Fall-O-Ween Festival", "date": "2026-10-31", "time": "10:00 AM", "location": "Gautier Public Library, 2100 Library Ln", "category": "Community", "desc": "10 AM\u20132 PM. Free family festival.", "submitter": "GulfX TV"}, {"title": "Peter Anderson Arts & Crafts Festival", "date": "2026-11-07", "time": "", "location": "Downtown Ocean Springs", "category": "Arts", "desc": "48th annual, Nov 7\u20138. Mississippi\u2019s largest fine arts festival: 400+ artists, craft and food booths.", "submitter": "GulfX TV"}, {"title": "Bud & Burgers in the Bay", "date": "2026-11-08", "time": "", "location": "Historic Hancock County Courthouse, Bay St. Louis", "category": "Food & Drink", "desc": "Burger cook-off paired with Port Air Space Day. Proceeds benefit community causes.", "submitter": "GulfX TV"}];
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmtDate(ds){var d=new Date(ds+'T12:00:00');return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()]+' '+(d.getMonth()+1)+'/'+d.getDate();}
+function weekendRange(){
+  var now=new Date(),dow=now.getDay(),diff=(5-dow+7)%7;
+  if(dow===0)diff=-2; if(dow===6)diff=-1;
+  var fri=new Date(now.getFullYear(),now.getMonth(),now.getDate()+diff);
+  var sun=new Date(fri.getFullYear(),fri.getMonth(),fri.getDate()+2);
+  function k(d){return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);}
+  return {fri:k(fri),sun:k(sun)};
+}
+function renderWe(events){
+  var r=weekendRange(),today=(function(){var n=new Date();return n.getFullYear()+'-'+('0'+(n.getMonth()+1)).slice(-2)+'-'+('0'+n.getDate()).slice(-2);})();
+  var we=events.filter(function(e){return e.date>=r.fri&&e.date<=r.sun;}).slice(0,4);
+  var title='This Weekend',list=we;
+  if(!we.length){
+    title='Coming Up';
+    list=events.filter(function(e){return e.date>=today;}).slice(0,3);
+  }
+  document.getElementById('we-title').textContent=title;
+  var h='';
+  for(var i=0;i<list.length;i++){var e=list[i];
+    h+='<div class="gx-we-card"><div class="gx-we-day">'+esc(fmtDate(e.date))+(e.time?' \u00b7 '+esc(e.time):'')+'</div>'+
+       '<div class="gx-we-title">'+esc(e.title)+'</div>'+
+       '<div class="gx-we-meta">'+esc(e.location||'')+'</div>'+
+       (e.category?'<div><span class="gx-we-cat">'+esc(e.category)+'</span></div>':'')+'</div>';}
+  document.getElementById('we-grid').innerHTML=h||'<div style="color:#94a3b8;font-size:13px;padding:8px">No events listed yet — check the full calendar.</div>';
+}
+renderWe(WE_FALLBACK);
+fetch('events.json').then(function(r){if(!r.ok)throw 0;return r.json();})
+  .then(function(j){if(j&&j.length)renderWe(j);}).catch(function(){});
+</script>

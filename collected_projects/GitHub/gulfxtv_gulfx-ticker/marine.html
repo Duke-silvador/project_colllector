@@ -1,0 +1,81 @@
+<body style="margin:0;padding:16px;background:#0b1226;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<div style="max-width:900px;margin:0 auto">
+<style>
+.gx-w{box-sizing:border-box;max-width:100%;background:#0b1226;border:1px solid rgba(232,185,35,.25);border-radius:10px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#f1f5f9}
+.gx-w *{box-sizing:border-box}
+.gx-w-head{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg,#0e7490,#22d3ee);color:#062a33;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:10px 14px}
+.gx-w-head .dot{width:8px;height:8px;border-radius:50%;background:#062a33;animation:gxwblink 1.2s infinite}
+@keyframes gxwblink{0%,100%{opacity:1}50%{opacity:.25}}
+.gx-w-sub{margin-left:auto;font-size:10px;font-weight:700;letter-spacing:.06em;opacity:.75}
+.gx-ma-grid{display:flex;gap:10px;padding:14px;flex-wrap:wrap}
+.gx-ma-card{flex:1 1 200px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:12px 14px}
+.gx-ma-name{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:#22d3ee}
+.gx-ma-big{font-size:26px;font-weight:800;margin:4px 0}
+.gx-ma-big small{font-size:13px;font-weight:600;color:#94a3b8}
+.gx-ma-row{font-size:12px;color:#cbd5e1;margin-top:2px}
+.gx-ma-tides{padding:0 14px 6px;font-size:12px;color:#cbd5e1}
+.gx-ma-tides .tt{font-weight:800;color:#e8b923;text-transform:uppercase;font-size:10px;letter-spacing:.08em}
+.gx-ma-tide{display:inline-block;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:4px 9px;margin:4px 6px 4px 0}
+.gx-w-foot{padding:8px 14px;font-size:10px;color:#64748b;border-top:1px solid rgba(255,255,255,.07)}
+</style>
+<div class="gx-w">
+<div class="gx-w-head"><span class="dot"></span>Marine Forecast<span class="gx-w-sub">Sound &amp; Gulf</span></div>
+<div class="gx-ma-grid" id="ma-grid"></div>
+<div class="gx-ma-tides"><span class="tt">Tides &mdash; Gulfport Harbor</span><div id="ma-tides"></div></div>
+<div class="gx-w-foot" id="ma-foot">Updated 10:13 PM CDT</div>
+</div>
+</div>
+<script>
+var MA_FALLBACK={"spots": [{"name": "Mississippi Sound", "wave": 0.5, "swell_dir": "SSE", "swell_per": 4, "sst": 79, "wind": 4, "wind_dir": "SSE"}, {"name": "Open Gulf", "wave": 1.0, "swell_dir": "SSE", "swell_per": 4, "sst": 80, "wind": null, "wind_dir": null}], "tides": [{"type": "H", "time": "12:40 AM", "h": 2.2}, {"type": "L", "time": "11:14 AM", "h": 0.3}, {"type": "H", "time": "1:22 AM", "h": 2.2}, {"type": "L", "time": "12:48 PM", "h": 0.3}]};
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function compass(d){return ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(d/22.5)%16];}
+function renderMa(data,stamp){
+  var h='';
+  for(var i=0;i<data.spots.length;i++){var p=data.spots[i];
+    h+='<div class="gx-ma-card"><div class="gx-ma-name">'+esc(p.name)+'</div>'+
+       '<div class="gx-ma-big">\ud83c\udf0a '+p.wave+' <small>ft</small></div>'+
+       '<div class="gx-ma-row">Swell '+esc(p.swell_dir)+' at '+p.swell_per+'s</div>'+
+       '<div class="gx-ma-row">Water '+p.sst+'&deg;F'+(p.wind!=null?' \u00b7 Wind '+esc(p.wind_dir)+' '+p.wind+' kt':'')+'</div></div>';}
+  document.getElementById('ma-grid').innerHTML=h;
+  var t='';
+  for(var j=0;j<data.tides.length;j++){var td=data.tides[j];
+    t+='<span class="gx-ma-tide">'+(td.type==='H'?'\u25b2 High':'\u25bd Low')+' '+esc(td.time)+' \u00b7 '+td.h+' ft</span>';}
+  document.getElementById('ma-tides').innerHTML=t||'<span style="color:#64748b">Tide data unavailable</span>';
+  if(stamp)document.getElementById('ma-foot').textContent='Updated '+stamp;
+}
+function idxNow(times){
+  var now=new Date(),n=now.getTime(),best=0,bd=1e15;
+  for(var i=0;i<times.length;i++){var d=Math.abs(new Date(times[i]).getTime()-n);if(d<bd){bd=d;best=i;}}
+  return best;
+}
+function refreshMa(){
+  var marine=fetch('https://marine-api.open-meteo.com/v1/marine?latitude=30.25,29.8&longitude=-89.0,-88.9&hourly=wave_height,swell_wave_direction,swell_wave_period,sea_surface_temperature&temperature_unit=fahrenheit&timezone=America%2FChicago&forecast_days=1').then(function(r){if(!r.ok)throw 0;return r.json();});
+  var wind=fetch('https://api.open-meteo.com/v1/forecast?latitude=30.3674&longitude=-89.0928&current=wind_speed_10m,wind_direction_10m&wind_speed_unit=mph&timezone=America%2FChicago&forecast_days=1').then(function(r){if(!r.ok)throw 0;return r.json();});
+  function p2(n){return (n<10?'0':'')+n;}
+  var a=new Date(),b=new Date(a.getTime()+2*86400000);
+  var k=function(d){return d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate());};
+  var tides=fetch('https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?begin_date='+k(a)+'&end_date='+k(b)+'&station=8745557&product=predictions&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json').then(function(r){if(!r.ok)throw 0;return r.json();});
+  Promise.all([marine,wind,tides]).then(function(rs){
+    var spots=[],names=['Mississippi Sound','Open Gulf'];
+    var wc=(rs[1].current||{});
+    for(var i=0;i<2&&i<rs[0].length;i++){var h=rs[0][i].hourly,ix=idxNow(h.time);
+      spots.push({name:names[i],
+        wave:Math.round((h.wave_height[ix]||0)*3.28084*2)/2,
+        swell_dir:compass(h.swell_wave_direction[ix]||0),
+        swell_per:Math.round(h.swell_wave_period[ix]||0),
+        sst:Math.round(h.sea_surface_temperature[ix]||0),
+        wind:i===0?Math.round((wc.wind_speed_10m||0)*0.868976):null,
+        wind_dir:i===0?compass(wc.wind_direction_10m||0):null});}
+    var pr=(rs[2].predictions||[]),now=new Date(),tds=[];
+    for(var j=0;j<pr.length&&tds.length<4;j++){
+      var t=new Date(pr[j].t.replace(' ','T'));
+      if(t>=now){var hh=t.getHours(),ap=hh>=12?'PM':'AM',h12=hh%12;if(h12===0)h12=12;
+        tds.push({type:pr[j].type,time:h12+':'+('0'+t.getMinutes()).slice(-2)+' '+ap,h:+pr[j].v});}
+    }
+    renderMa({spots:spots,tides:tds},'just now');
+  }).catch(function(){});
+}
+renderMa(MA_FALLBACK);
+setInterval(refreshMa,30*60000);
+refreshMa();
+</script>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Décarie — Reset</title>
+<style>
+  body { margin:0; background:#0a0a0a; color:#e8e8e8;
+         font-family: ui-monospace, Menlo, Consolas, monospace; padding:24px; }
+  h1 { font-size:15px; letter-spacing:.12em; color:#c8ff00; margin:0 0 18px; }
+  #log { font-size:12px; line-height:1.7; white-space:pre-wrap; }
+  .ok { color:#4ade80; } .err { color:#f87171; }
+  a.btn { display:block; margin-top:22px; padding:14px; text-align:center;
+          background:#c8ff00; color:#000; text-decoration:none; border-radius:8px;
+          font-weight:700; letter-spacing:.08em; }
+</style>
+</head>
+<body>
+<h1>RESET APP CACHE</h1>
+<div id="log">working…</div>
+<a class="btn" href="./index.html" id="go" style="display:none">OPEN THE APP</a>
+<script>
+// Unregisters every service worker and deletes every cache for this origin, so a
+// device stuck on a bad build can recover without digging through browser
+// settings. Touches nothing on the server and no POS data.
+const log = document.getElementById('log');
+const say = (m, cls) => { log.innerHTML += `\n<span class="${cls||''}">${m}</span>`; };
+(async () => {
+  log.textContent = '';
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      say(`service workers found: ${regs.length}`);
+      for (const r of regs) { await r.unregister(); say('  unregistered', 'ok'); }
+    } else say('no service worker support');
+  } catch (e) { say('sw error: ' + e.message, 'err'); }
+
+  try {
+    const keys = await caches.keys();
+    say(`caches found: ${keys.length}`);
+    for (const k of keys) { await caches.delete(k); say('  deleted ' + k, 'ok'); }
+  } catch (e) { say('cache error: ' + e.message, 'err'); }
+
+  say('\nDONE — cache cleared.', 'ok');
+  say('Tap below, then force-close and reopen the app.');
+  document.getElementById('go').style.display = 'block';
+})();
+</script>
+</body>
+</html>

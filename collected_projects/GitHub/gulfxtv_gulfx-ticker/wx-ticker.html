@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GulfX TV &mdash; South MS Weather Marquee</title>
+</head>
+<body style="margin:0;padding:20px;background:#0b1226;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<div style="max-width:900px;margin:0 auto">
+<style>
+.gx-marquee{box-sizing:border-box;max-width:100%;background:#0b1226;border:1px solid var(--hatch-widget-border);border-radius:10px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;display:flex;align-items:stretch}
+.gx-marquee *{box-sizing:border-box}
+.gx-mq-label{flex:none;display:flex;align-items:center;gap:8px;background:#dc2626;color:#fff;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;padding:10px 14px;white-space:nowrap}
+.gx-mq-label .dot{width:8px;height:8px;border-radius:50%;background:#fff;animation:gxmqblink 1.2s infinite}
+@keyframes gxmqblink{0%,100%{opacity:1}50%{opacity:.25}}
+.gx-mq-view{flex:1;overflow:hidden;position:relative;display:flex;align-items:center}
+.gx-mq-track{display:inline-flex;align-items:center;white-space:nowrap;animation:gxmqscroll var(--gx-mq-speed,60s) linear infinite;will-change:transform}
+.gx-mq-view:hover .gx-mq-track{animation-play-state:paused}
+@keyframes gxmqscroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+.gx-mq-item{display:inline-flex;align-items:center;gap:8px;padding:10px 0;color:#f1f5f9;font-size:13px;font-weight:500}
+.gx-mq-item .sev{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#fff;border-radius:5px;padding:2px 7px;white-space:nowrap}
+.gx-mq-sep{color:#e8b923;font-weight:800;padding:0 18px;font-size:14px}
+#gx-wx-marquee{transition:opacity .3s ease}
+</style>
+<div class="gx-marquee" id="gx-wx-marquee" style="--gx-mq-speed:60s">
+  <div class="gx-mq-label" id="gx-wx-badge" style="background:#2563eb"><span class="dot"></span><span id="gx-wx-badgetext">Weather</span></div>
+  <div class="gx-mq-view"><div class="gx-mq-track" id="gx-wx-track"></div></div>
+</div>
+<script>
+(function(){
+/* ============ CONFIG ============
+   South Mississippi current-conditions marquee with watches & warnings.
+   Conditions refresh THEMSELVES from Open-Meteo every 15 minutes and
+   watches/warnings refresh from the National Weather Service every
+   15 minutes (no backend needed). If a feed can't be reached, the baked
+   snapshots below are shown.
+   Each section plays exactly ONE full scroll rotation, then fades smoothly
+   to the next — Weather (blue badge: SUN & MOON chip with sunrise/sunset/
+   moon phase, then city conditions), alerts (red badge with white letters —
+   TROPICS when tropical alerts lead, ALERTS otherwise — or an all-clear
+   note when nothing is active), and Marine (teal badge, wave heights in
+   feet, wind in knots, swell, Gulf water temp). The fade is a 0.3s
+   crossfade; the scroll never restarts mid-rotation on data refreshes.
+   Scroll speed is constant (WX_SCROLL_PXSEC pixels/sec) in ALL modes — the
+   loop duration adapts to content length, and short content is repeated to
+   fill the bar so both sides scroll at the same pace.
+   Hover pauses the scroll. */
+var CITIES=[["Gulfport", 30.3674, -89.0928], ["Biloxi", 30.396, -88.8853], ["Ocean Springs", 30.4113, -88.8278], ["Pascagoula", 30.3658, -88.5561], ["Bay St. Louis", 30.3086, -89.3309], ["Long Beach", 30.35, -89.15], ["D'Iberville", 30.4268, -88.8979], ["Gautier", 30.3853, -88.6433], ["Moss Point", 30.4136, -88.5347], ["Diamondhead", 30.3789, -89.3797], ["Hattiesburg", 31.3271, -89.2903], ["Picayune", 30.5258, -89.679]];
+var WX_REFRESH_MIN=15;
+var WX_SCROLL_PXSEC=65;
+var COND={"0": ["Clear", "\u2600\ufe0f"], "1": ["Mostly Clear", "\ud83c\udf24\ufe0f"], "2": ["Partly Cloudy", "\u26c5"], "3": ["Overcast", "\u2601\ufe0f"], "45": ["Fog", "\ud83c\udf2b\ufe0f"], "48": ["Fog", "\ud83c\udf2b\ufe0f"], "51": ["Drizzle", "\ud83c\udf26\ufe0f"], "53": ["Drizzle", "\ud83c\udf26\ufe0f"], "55": ["Drizzle", "\ud83c\udf26\ufe0f"], "61": ["Rain", "\ud83c\udf27\ufe0f"], "63": ["Rain", "\ud83c\udf27\ufe0f"], "65": ["Rain", "\ud83c\udf27\ufe0f"], "80": ["Rain", "\ud83c\udf27\ufe0f"], "81": ["Rain", "\ud83c\udf27\ufe0f"], "82": ["Rain", "\ud83c\udf27\ufe0f"], "71": ["Snow", "\u2744\ufe0f"], "73": ["Snow", "\u2744\ufe0f"], "75": ["Snow", "\u2744\ufe0f"], "95": ["Thunderstorms", "\u26c8\ufe0f"], "96": ["Thunderstorms", "\u26c8\ufe0f"], "99": ["Thunderstorms", "\u26c8\ufe0f"]};
+var TROP_EVENTS=["Hurricane Warning", "Tropical Storm Warning", "Storm Surge Warning", "Extreme Wind Warning", "Hurricane Watch", "Tropical Storm Watch", "Storm Surge Watch"];
+var WX_EVENTS=["Hurricane Warning", "Tropical Storm Warning", "Storm Surge Warning", "Extreme Wind Warning", "Hurricane Watch", "Tropical Storm Watch", "Storm Surge Watch", "Tornado Warning", "Severe Thunderstorm Warning", "Flash Flood Warning", "Flood Warning", "Tornado Watch", "Severe Thunderstorm Watch", "Coastal Flood Warning", "Flash Flood Watch", "High Wind Warning", "Wind Advisory", "Coastal Flood Advisory", "Small Craft Advisory"];
+var NWS_POINT='https://api.weather.gov/alerts/active?point=30.3674,-89.0928';
+var MARINE_URL='https://marine-api.open-meteo.com/v1/marine?latitude=30.25,29.8&longitude=-89.0,-88.9'+
+  '&hourly=wave_height,swell_wave_direction,swell_wave_period,sea_surface_temperature'+
+  '&timezone=America%2FChicago&forecast_days=1';
+var MARINE_NAMES=['Miss. Sound','Open Gulf'];
+/*__WX_FALLBACK_START__*/
+var WX_FALLBACK=[{"name": "Gulfport", "temp": 72, "cond": "Clear", "emoji": "\ud83c\udf19\ufe0f", "wdir": "S", "wspd": 4, "hum": 79, "dew": 65, "feels": 75}, {"name": "Biloxi", "temp": 72, "cond": "Clear", "emoji": "\ud83c\udf19\ufe0f", "wdir": "S", "wspd": 4, "hum": 82, "dew": 66, "feels": 76}, {"name": "Ocean Springs", "temp": 72, "cond": "Clear", "emoji": "\ud83c\udf19\ufe0f", "wdir": "S", "wspd": 4, "hum": 86, "dew": 67, "feels": 77}, {"name": "Pascagoula", "temp": 72, "cond": "Clear", "emoji": "\ud83c\udf19\ufe0f", "wdir": "S", "wspd": 5, "hum": 86, "dew": 68, "feels": 77}, {"name": "Bay St. Louis", "temp": 72, "cond": "Clear", "emoji": "\ud83c\udf19\ufe0f", "wdir": "SE", "wspd": 6, "hum": 76, "dew": 64, "feels": 74}, {"name": "Long Beach", "temp": 72, "cond": "Clear", "emoji": "\ud83c\udf19\ufe0f", "wdir": "SE", "wspd": 4, "hum": 77, "dew": 64, "feels": 75}, {"name": "D'Iberville", "temp": 71, "cond": "Clear", "emoji": "\ud83c\udf19\ufe0f", "wdir": "S", "wspd": 4, "hum": 85, "dew": 66, "feels": 76}, {"name": "Gautier", "temp": 72, "cond": "Clear", "emoji": "\ud83c\udf19\ufe0f", "wdir": "S", "wspd": 5, "hum": 83, "dew": 67, "feels": 77}, {"name": "Moss Point", "temp": 71, "cond": "Clear", "emoji": "\ud83c\udf19\ufe0f", "wdir": "S", "wspd": 5, "hum": 86, "dew": 67, "feels": 76}, {"name": "Diamondhead", "temp": 71, "cond": "Clear", "emoji": "\ud83c\udf19\ufe0f", "wdir": "S", "wspd": 5, "hum": 77, "dew": 63, "feels": 73}, {"name": "Hattiesburg", "temp": 70, "cond": "Clear", "emoji": "\ud83c\udf19\ufe0f", "wdir": "SE", "wspd": 3, "hum": 60, "dew": 56, "feels": 71}, {"name": "Picayune", "temp": 69, "cond": "Clear", "emoji": "\ud83c\udf19\ufe0f", "wdir": "SE", "wspd": 5, "hum": 85, "dew": 64, "feels": 71}];
+/*__ALERT_FALLBACK_START__*/
+var ALERT_FALLBACK=[];
+/*__ALERT_FALLBACK_END__*/
+/*__MARINE_FALLBACK_START__*/
+var MARINE_FALLBACK={"pts": [{"name": "Miss. Sound", "wave": 0.5, "swell_dir": "SE", "swell_per": 4}, {"name": "Open Gulf", "wave": 1.0, "swell_dir": "SE", "swell_per": 4}], "sst": 79};
+/*__MARINE_FALLBACK_END__*/
+/*__SUN_FALLBACK_START__*/
+var SUN_FALLBACK={"sunrise": "6:58 AM", "sunset": "6:26 PM"};
+/*__SUN_FALLBACK_END__*/
+/*__WX_FALLBACK_END__*/
+function esc(s){return String(s).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];});}
+function compass(d){return ['N','NE','E','SE','S','SW','W','NW'][Math.floor((d+22.5)/45)%8];}
+function condChip(it){
+  return '<span class="gx-mq-item"><span class="sev" style="background:#2563eb">'+esc(it.name.toUpperCase())+'</span>'+
+    esc(it.emoji+' '+it.temp+'\u00b0 '+it.cond+' \u00b7 Feels '+it.feels+'\u00b0 \u00b7 Hum '+it.hum+'% \u00b7 Dew '+it.dew+'\u00b0 \u00b7 Wind '+it.wdir+' '+it.wspd+' mph')+
+    '</span><span class="gx-mq-sep">\u2022</span>';
+}
+function alertChip(it){
+  var col=it.event.indexOf('Warning')>=0?'#dc2626':(it.event.indexOf('Watch')>=0?'#ea580c':'#b8911a');
+  return '<span class="gx-mq-item"><span class="sev" style="background:'+col+'">'+esc(it.event.toUpperCase())+'</span>'+
+    esc(it.area)+'</span><span class="gx-mq-sep">\u2022</span>';
+}
+var condItems=fallbackItems(), alertItems=ALERT_FALLBACK.slice(), marineData=MARINE_FALLBACK, sunData=SUN_FALLBACK, mode='wx';
+function fmtTime(iso){
+  var t=String(iso).split('T')[1].split(':'),h=+t[0],ap=h>=12?'PM':'AM';
+  h=h%12; if(h===0)h=12;
+  return h+':'+t[1]+' '+ap;
+}
+function moonAge(d){
+  var syn=29.53058867,ref=Date.UTC(2000,0,6,18,14)/86400000;
+  var days=d.getTime()/86400000-ref;
+  return ((days%syn)+syn)%syn;
+}
+function moonIdx(age){return Math.floor(((age+1.84566)%29.53058867)/3.69133)%8;}
+function moonEmoji(age){return ['\ud83c\udf11','\ud83c\udf12','\ud83c\udf13','\ud83c\udf14','\ud83c\udf15','\ud83c\udf16','\ud83c\udf17','\ud83c\udf18'][moonIdx(age)];}
+function moonName(age){return ['New Moon','Waxing Crescent','First Quarter','Waxing Gibbous','Full Moon','Waning Gibbous','Last Quarter','Waning Crescent'][moonIdx(age)];}
+function sunChip(){
+  var age=moonAge(new Date());
+  return '<span class="gx-mq-item"><span class="sev" style="background:#b8911a">SUN & MOON</span>'+
+    esc('\ud83c\udf05 '+sunData.sunrise+' \u00b7 \ud83c\udf07 '+sunData.sunset+' \u00b7 '+moonEmoji(age)+' '+moonName(age))+
+    '</span><span class="gx-mq-sep">\u2022</span>';
+}
+function alertsHTML(){
+  if(alertItems.length)return alertItems.map(alertChip).join('');
+  return '<span class="gx-mq-item"><span class="sev" style="background:#dc2626">TROPICS</span>'+
+    'No active watches or warnings for the Gulf Coast</span><span class="gx-mq-sep">\u2022</span>';
+}
+function marineHTML(){
+  var w=condItems.length?condItems[0]:null;
+  var wtxt=w?(' \u00b7 Wind '+w.wdir+' '+Math.round(w.wspd*0.868976)+' kt'):'';
+  var chips=(marineData.pts||[]).map(function(p){
+    return '<span class="gx-mq-item"><span class="sev" style="background:#0e7490">'+esc(p.name.toUpperCase())+'</span>'+
+      esc('\ud83c\udf0a Waves '+p.wave+' ft \u00b7 Swell '+p.swell_dir+' '+p.swell_per+'s'+wtxt)+
+      '</span><span class="gx-mq-sep">\u2022</span>';
+  }).join('');
+  if(marineData.sst!=null)
+    chips+='<span class="gx-mq-item"><span class="sev" style="background:#0e7490">GULF WATER</span>'+
+      esc('\ud83c\udf21\ufe0f '+marineData.sst+'\u00b0F')+'</span><span class="gx-mq-sep">\u2022</span>';
+  return chips;
+}
+function render(){
+  var badge=document.getElementById('gx-wx-badge');
+  var btext=document.getElementById('gx-wx-badgetext');
+  var unit;
+  if(mode==='marine'){
+    badge.style.background='#0e7490';
+    btext.textContent='Marine';
+    unit=marineHTML();
+  }else if(mode==='alerts'){
+    var hasTrop=alertItems.some(function(it){return it.tropical;});
+    badge.style.background='#dc2626';
+    btext.textContent=(alertItems.length&&!hasTrop)?'Alerts':'Tropics';
+    unit=alertsHTML();
+  }else{
+    badge.style.background='#2563eb';
+    btext.textContent='Weather';
+    unit=sunChip()+condItems.map(condChip).join('');
+  }
+  /* constant px/sec in both modes: repeat short content to fill the bar,
+     then set the loop duration from the measured width */
+  var mq=document.getElementById('gx-wx-marquee');
+  var view=mq?mq.querySelector('.gx-mq-view'):null;
+  var track=document.getElementById('gx-wx-track');
+  track.innerHTML=unit;
+  var unitW=track.scrollWidth||600;
+  var viewW=(view&&view.clientWidth)||600;
+  var u=Math.max(1,Math.ceil(viewW/unitW)),seq='';
+  for(var i=0;i<u;i++)seq+=unit;
+  track.innerHTML=seq+seq;
+  /* only touch the scroll duration when the mode changed — data refreshes
+     must never restart the scroll mid-rotation (visible jump) */
+  if(mode!==lastMode){
+    track.style.setProperty('--gx-mq-speed',(track.scrollWidth/2/WX_SCROLL_PXSEC)+'s');
+    lastMode=mode;
+  }
+}
+var lastMode='', modeTimer=null;
+function loopSecs(){
+  var track=document.getElementById('gx-wx-track');
+  var n=parseFloat(String(track.style.getPropertyValue('--gx-mq-speed')||'').replace('s',''));
+  return (n>0?n:60);
+}
+/* advance after exactly one full scroll rotation of the current section */
+function scheduleNext(){
+  if(modeTimer)clearTimeout(modeTimer);
+  modeTimer=setTimeout(function(){
+    setMode(MODES[(MODES.indexOf(mode)+1)%MODES.length]);
+  },Math.max(10,loopSecs())*1000);
+}
+function setMode(m){
+  if(m===mode)return;
+  var mq=document.getElementById('gx-wx-marquee');
+  if(!mq){mode=m;render();scheduleNext();return;}
+  mq.style.opacity='0';
+  setTimeout(function(){
+    mode=m;
+    try{render();}finally{mq.style.opacity='1';}
+    scheduleNext();
+  },320);
+}
+function fallbackItems(){
+  var h=new Date().getHours(),night=(h<6||h>=19);
+  return WX_FALLBACK.map(function(e){
+    var c={};for(var k in e)c[k]=e[k];
+    if(night&&(c.cond==='Clear'||c.cond==='Mostly Clear'))c.emoji='\ud83c\udf19\ufe0f';
+    return c;
+  });
+}
+function refreshWx(){
+  var lats=CITIES.map(function(c){return c[1];}).join(',');
+  var lons=CITIES.map(function(c){return c[2];}).join(',');
+  fetch('https://api.open-meteo.com/v1/forecast?latitude='+lats+'&longitude='+lons+
+    '&current=temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,'+
+    'relative_humidity_2m,dew_point_2m,apparent_temperature,is_day'+
+    '&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FChicago&forecast_days=1')
+    .then(function(r){if(!r.ok)throw 0;return r.json();})
+    .then(function(j){
+      var items=[];
+      for(var i=0;i<CITIES.length&&i<j.length;i++){
+        var cur=(j[i]||{}).current||{};
+        var cd=COND[String(cur.weather_code)]||['',''];
+        var emoji=cd[1];
+        if(cur.is_day===0&&(cur.weather_code===0||cur.weather_code===1))emoji='\ud83c\udf19\ufe0f';
+        items.push({name:CITIES[i][0],temp:Math.round(cur.temperature_2m),
+          cond:cd[0],emoji:emoji,wdir:compass(cur.wind_direction_10m||0),
+          wspd:Math.round(cur.wind_speed_10m),
+          hum:Math.round(cur.relative_humidity_2m),
+          dew:Math.round(cur.dew_point_2m),
+          feels:Math.round(cur.apparent_temperature!=null?cur.apparent_temperature:cur.temperature_2m)});
+      }
+      if(items.length)condItems=items; else condItems=fallbackItems();
+      render();
+    })
+    .catch(function(){condItems=fallbackItems();render();});
+}
+function refreshAlerts(){
+  fetch(NWS_POINT,{headers:{'Accept':'application/geo+json'}})
+    .then(function(r){if(!r.ok)throw 0;return r.json();})
+    .then(function(j){
+      var feats=j.features||[],out=[];
+      for(var i=0;i<WX_EVENTS.length;i++){
+        for(var k=0;k<feats.length;k++){
+          var pr=feats[k].properties||{};
+          if(pr.event===WX_EVENTS[i]){
+            var area=String(pr.areaDesc||'the MS Gulf Coast').split(';')[0];
+            if(area.length>70)area=area.slice(0,67)+'\u2026';
+            out.push({event:pr.event,area:area,tropical:TROP_EVENTS.indexOf(pr.event)>=0});
+            break;
+          }
+        }
+      }
+      alertItems=out; render();
+    })
+    .catch(function(){alertItems=ALERT_FALLBACK.slice();render();});
+}
+function refreshMarine(){
+  fetch(MARINE_URL)
+    .then(function(r){if(!r.ok)throw 0;return r.json();})
+    .then(function(j){
+      var d=new Date(),p=function(n){return (n<10?'0':'')+n;};
+      var hh=d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':00';
+      var pts=[];
+      for(var k=0;k<MARINE_NAMES.length&&k<j.length;k++){
+        var h=(j[k]||{}).hourly||{},times=h.time||[],idx=times.indexOf(hh);
+        if(idx<0)idx=0;
+        var wh=h.wave_height||[],sd=h.swell_wave_direction||[],sp=h.swell_wave_period||[];
+        pts.push({name:MARINE_NAMES[k],
+          wave:Math.round((wh[idx]||0)*3.28084*2)/2,
+          swell_dir:compass(sd[idx]||0),
+          swell_per:Math.round(sp[idx]||0)});
+      }
+      var sst=null,h0=(j[0]||{}).hourly||{},sv=h0.sea_surface_temperature||[],t0=h0.time||[];
+      var i0=t0.indexOf(hh); if(i0<0)i0=0;
+      if(sv.length&&sv[i0]!=null)sst=Math.round(sv[i0]*9/5+32);
+      if(pts.length)marineData={pts:pts,sst:sst};
+      render();
+    })
+    .catch(function(){marineData=MARINE_FALLBACK;render();});
+}
+function refreshSun(){
+  fetch('https://api.open-meteo.com/v1/forecast?latitude=30.3674&longitude=-89.0928'+
+    '&daily=sunrise,sunset&timezone=America%2FChicago&forecast_days=1')
+    .then(function(r){if(!r.ok)throw 0;return r.json();})
+    .then(function(j){
+      var dy=(j||{}).daily||{};
+      if(dy.sunrise&&dy.sunrise.length&&dy.sunset&&dy.sunset.length)
+        sunData={sunrise:fmtTime(dy.sunrise[0]),sunset:fmtTime(dy.sunset[0])};
+      render();
+    })
+    .catch(function(){sunData=SUN_FALLBACK;render();});
+}
+var MODES=['wx','alerts','marine'];
+render();
+refreshWx();
+refreshAlerts();
+refreshMarine();
+refreshSun();
+scheduleNext();
+setInterval(refreshWx,Math.max(5,WX_REFRESH_MIN)*60000);
+setInterval(refreshAlerts,Math.max(5,WX_REFRESH_MIN)*60000);
+setInterval(refreshMarine,Math.max(5,WX_REFRESH_MIN)*60000);
+setInterval(refreshSun,Math.max(5,WX_REFRESH_MIN)*60000);
+if(window.addEventListener)window.addEventListener('resize',function(){render();});
+})();
+</script>
+</div>
+</body>
+</html>

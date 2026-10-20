@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GulfX TV &mdash; Gulf Coast Headlines</title>
+</head>
+<body style="margin:0;padding:20px;background:#0b1226;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<div style="max-width:720px;margin:0 auto">
+<style>
+.gx-news{box-sizing:border-box;max-width:100%;background:#0b1226;border:1px solid rgba(232,185,35,.25);border-radius:10px;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;color:#f1f5f9}
+.gx-news *{box-sizing:border-box}
+.gx-news-head{display:flex;align-items:center;gap:8px;background:linear-gradient(90deg,#b8911a,#e8b923);color:#0b1226;font-size:12px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;padding:10px 14px}
+.gx-news-head .dot{width:8px;height:8px;border-radius:50%;background:#0b1226;animation:gxnblink 1.2s infinite}
+@keyframes gxnblink{0%,100%{opacity:1}50%{opacity:.25}}
+.gx-news-list{max-height:420px;overflow-y:auto}
+.gx-news-item{display:flex;gap:10px;align-items:flex-start;padding:11px 14px;border-top:1px solid rgba(255,255,255,.07)}
+.gx-news-item:first-child{border-top:none}
+.gx-news-src{flex:none;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#0b1226;background:#e8b923;border-radius:5px;padding:3px 7px;margin-top:1px;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis}
+.gx-news-body{flex:1;min-width:0}
+.gx-news-title{font-size:14px;font-weight:600;line-height:1.35;margin:0 0 3px}
+.gx-news-title a{color:#f1f5f9;text-decoration:none}
+.gx-news-title a:hover{color:#e8b923;text-decoration:underline}
+.gx-news-time{font-size:11px;color:#94a3b8}
+.gx-news-foot{display:flex;justify-content:space-between;align-items:center;padding:8px 14px;border-top:1px solid rgba(255,255,255,.07);font-size:11px;color:#94a3b8}
+.gx-news-foot button{background:none;border:1px solid rgba(232,185,35,.5);color:#e8b923;border-radius:6px;font-size:11px;padding:3px 10px;cursor:pointer}
+.gx-news-foot button:hover{background:rgba(232,185,35,.15)}
+.gx-news-empty{padding:24px 14px;text-align:center;color:#94a3b8;font-size:13px}
+</style>
+<div class="gx-news" id="gx-news">
+  <div class="gx-news-head"><span class="dot"></span>Gulf Coast Headlines</div>
+  <div class="gx-news-list" id="gx-news-list"></div>
+  <div class="gx-news-foot"><span id="gx-news-updated"></span><button id="gx-news-refresh" type="button">&#8635; Refresh</button></div>
+</div>
+<script>
+(function(){
+var FEEDS=["https://news.google.com/rss/search?q=Gulfport%20Mississippi&hl=en-US&gl=US&ceid=US:en", "https://news.google.com/rss/search?q=Biloxi%20Mississippi&hl=en-US&gl=US&ceid=US:en", "https://news.google.com/rss/search?q=%22Mississippi%20Gulf%20Coast%22&hl=en-US&gl=US&ceid=US:en", "https://news.google.com/rss/search?q=Pascagoula%20Mississippi&hl=en-US&gl=US&ceid=US:en", "https://news.google.com/rss/search?q=%22Ocean%20Springs%22%20Mississippi&hl=en-US&gl=US&ceid=US:en", "https://news.google.com/rss/search?q=%22Bay%20St.%20Louis%22%20Mississippi&hl=en-US&gl=US&ceid=US:en"];
+var REFRESH_MIN=30, MAX_ITEMS=12;
+var FALLBACK=[{"title": "New hotels are sprouting up all across the Mississippi Coast. Here\u2019s why", "link": "https://news.google.com/rss/articles/CBMibkFVX3lxTE9lcFhqVmh5OHBNZlhNNl9OTU1lUFVTRGc1MlZYcXdKR0NtdWFjLVY1NUU3aUtUcm50bmt2OVVLcmhYMHFKUDlQNFFXVjhtVmFrTXNqVkZva2V3endPWmRwOWM2eHNkU1VmdjliR0hR0gFuQVVfeXFMTVJveWtmeHhOdTRLUUFYM1FLYmtMNVhPOTNmckEzVnVuQ1EydF9VazVEa2tlNVRzeE5oSUktOGpfdmpGVThYQjZfRHluOTF0dk5UbjNuNVM4TUlhcVRKTkU5amY4TjdfV0V0UV9zc2c?oc=5", "source": "Sun Herald", "ts": 1792490400}, {"title": "Beloved Mississippi Coast restaurants are taking new steps to survive \u2018vibe-killer\u2019 fall slump", "link": "https://news.google.com/rss/articles/CBMixgFBVV95cUxPZ1NCbHpZdm4wbHd3LVNoV2hyNUdEbzViazVSOFoxa2x6Z3JaOXpUblQ3YldVR1EzN0s4RmhHd0ZvMlV5TGFZdGRxWEh0LWVoSkd0aG5PalNLLVZHZWJrbXhMTDg2MU1kMEI3MUlvYlRUcDk0ODRja3NMczlTekRVc2RNRWVac1RsRGpSLVBLQXRZX3VCaG1ZQmQzcUk2WWhUS3B1azQxMU5NV2xOcFd3bWNDWXBuSklMcy02dFhURUZQY2VDdmfSAcsBQVVfeXFMT3ZXM3Vhc1ZBNmstcV9ISF80WExuemRERWJaSmc2bVVoTEY5Q2ktQnlPSHFFLUdQc2g1ZDc5WnZ6azgxa3FuZlZVN1dYMDdkaExGcncwU3d1cnJJalhGUmRCa29vM1NKcTZTeHdwbFN2UURNSHpRZWo2RzdESzMyT2dnSmNOU1RWcnNCXzRZN0xyQjhUa0hkSV9vRk1yNExhWWcyclFQNnRxaERVbmlhS2NyOWhxSG51TXdWa2tqSVNBVTYzYzZ0Q3pLMTg?oc=5", "source": "NOLA.com", "ts": 1792486800}, {"title": "Mississippi's Secret Coast: 3 beach towns worth the weekend drive", "link": "https://news.google.com/rss/articles/CBMiakFVX3lxTE9FNGZNWDJRQ2JqeE83OS1oWGQwNzRWUzQ0MzYxZUJXRjg4VG5wWXRKZnpIV0lKWVNtaDdpLUZ1WXFIcldqWllQZkZQdjM3ZlMya0ZidldBMFhwZVBSUWpzOXFMR0EtTjVRSmc?oc=5", "source": "Modesto Bee", "ts": 1792474088}, {"title": "Our Lady Aca. vs Away - Girls Middle School Basketball 10/20/2026 | Watch Live & On Demand", "link": "https://news.google.com/rss/articles/CBMiiAFBVV95cUxOV2VaU3p5VGR4RHJrVXNZcGlseXhhOXVySUFvaXJrNUExWmZJaENBQjdDc0R3c2RTNUNrRGQza2w2RWRtS2xhTGp4VjFRenlmakpMUklMQkVNMUQ5dThGYkhQZjMyU3ZBenhhVkNsYXNJalp3YTE0RDE1N2hZdVFzRHBTRVV2d1Y4?oc=5", "source": "NFHS Network", "ts": 1792465487}, {"title": "What we learned in Week 8 of high school football across the Mississippi Coast", "link": "https://news.google.com/rss/articles/CBMidEFVX3lxTE1YZXN3eUZtbUFvS1hfZVZGNjN5d1FkbzI5UjJqMk1IVklUSmhvQjFsMWQycTVNcDJGSENOWmo1aUQ5R19RNnh6WTBHeW43RXRzT193N1RxOW1XeEZHbkoyM0xKTXpFM0lGalFTVnVET0Qtc3ZD0gF0QVVfeXFMUGJxYnlUa3NIdnFILWlYRXJ4SFFtTlkxdnVCVWRiRnk0b1ItNEdyVGh1cGN0d2dKVVNNYkRKbkM0WmpmRVRLc1o5eGQ5aXE4X2llbUJ5SlFaZ3ZCZW1fc0dtczE1YTE5clFrcTNTSnBSaTFvN2M?oc=5", "source": "Sun Herald", "ts": 1792451700}, {"title": "Amtrak Mardi Gras Service to make rare Mobile-to-Ocean Springs stop during annual arts event", "link": "https://news.google.com/rss/articles/CBMiyAFBVV95cUxNQlVXNzBoRE43MXRrU1F5cWFNY2VlbUNZRmRxNGhZbDR3UkFlcjVNcFQ3V0Jmd1c2ZkFIQ29iOEp2SDBuZlFjWVMwT1hCa3RDWTkzSnFaRnY2M05rSUxmT2JFSWE5azFjVjJWWFZkVUoxTVFLUmw5VnZDemhRbm1mY2ZJbUtvSkFaTXZvdFA2TFBpMFByQ1lQUEhMNG0ycGhETWpxVnNQeFp6dktzeU5RdWdGTEZFTDg5UFZ2NndxRGh3UW5NM0xRS9IB3AFBVV95cUxOQkV5OUR6aVZqYjhTNGphR3dBT3QzQmd5VW9XZFpGVkItU0NUT1Q4QnhDRHpKR3pVUmhkZ0E2VlJwMF81UDRpV09EaW56dWtoYXRzSkd3OUc3b3FrcFhVN1VCcTk2enRMdXk1d3ZxMDg5LXM2cjhnSXRQcUp4M09GRUlGNDA4YWZuWUFRVHRrM1o3RHBPNE43T0dMUmZOZG9aWUlnQkg5eTdkMG4wU0Jaak1wbExXY2dxY3h5MTEzNnVtNEY1YTN1ZTFwaWZjSlNsejJFMmx4bm1mdWdx?oc=5", "source": "AL.com", "ts": 1792446000}, {"title": "Happening Nov. 20-21: Mississippi Senior World Pageant", "link": "https://news.google.com/rss/articles/CBMilgFBVV95cUxPMGNIMEZseHdqaGxhSEdCbTVoZFlyZ3UwQkNYZWwzY3NvdkZTUTBHdVB1cHJHWVBSSEo1WGt6NGRPblBUOWRVOXhlc0xUclkxWXZzZzdOWkFobElfWHZYRm91TE85ZjFEdzRRUlpBS2dPTE5vR1JkSXAzU3JmdEQxQVMxTU0zd2tMRDNSYWJ6Q3JFUXFuelE?oc=5", "source": "WLOX", "ts": 1792442304}, {"title": "Police, FBI investigating threat to South Mississippi school districts, officials say", "link": "https://news.google.com/rss/articles/CBMickFVX3lxTFBwYmN5UFdCaWcxcTgwRDRwODNGQU51V3pqSVV1ZHQ5VmpfeWxwMmpYc3RDUm1FTC1Fc2M4TEtPYVl0RHMzOWpPOG16bzFHTThkcEZYc2pfVkxZQ21NbVNvZUdZd052RGpXWXlSMWJ2UGNSUdIBckFVX3lxTE9GNUJ3MXJzdEVOWVJaa3dnLTBvbDBPRHZEUHQ0M3h2OXpiRXBmUk1VdHdjRjgxWTlCWGhtanl2ajdZc19sZnNod0FqVUxDamVxLWdwWUNrdmhqX0d6ZWZfb2FsN1dZYnc4M3RqMUt5UGFDQQ?oc=5", "source": "Sun Herald", "ts": 1792438260}, {"title": "Bay High School (Bay St. Louis, MS) JV Soccer", "link": "https://news.google.com/rss/articles/CBMib0FVX3lxTE1lcDhqYlRvdllpM2dXZFNzNWs5QkRqa3NaZ2lUaDhnZWJId00yaEFNcUVQYkJYMERoVjRsdDc4VmJoVDRRTkl5NzdHcV9UbDVQVGw5VFRmNDZCMFg2MDZtOGVPaTlqT1VEd0l6VHRZSQ?oc=5", "source": "MaxPreps", "ts": 1792433986}, {"title": "Award-winning rock band\u2019s 2027 tour will start at the Mississippi Coast Coliseum", "link": "https://news.google.com/rss/articles/CBMibkFVX3lxTFBPb2s0cElDZ3ltVTBoN1NHemVGSER2LTdkV3VPV0VDYnpJVlRVRW5DSktmS3I0WTNqYUZabHlUQmVRLUV0MGxieUJ6OGtfbVlha3EzM25OdzZQN1hWZXJOenBHMmpfYTU5aElTTExn0gFuQVVfeXFMUHhXY3VtdldSU2xfY0NybUpoZ2RuTFNOVG9obXRBR3pKZUg5R1FyUWlraFlZNTM2b3h0VlNHcnRvT2E0S18wUEZ4NENKZ0FhVU1ibjlIVkpVY3lUOVJ0d0VNUjNFM0VHVzBOa1ZOdlE?oc=5", "source": "Sun Herald", "ts": 1792420790}, {"title": "South Mississippi school districts investigating threat circulating on social media", "link": "https://news.google.com/rss/articles/CBMiswFBVV95cUxPaGRRTmxDdC1pMlZabDBaMG5xc25XWEwzUFhCUVp2eVJLZTJ0ZTRxcDJnRFFaZlRWTGU0YWJySXlzbl9NR3B4RFNKc2dvRzNaYVZ2WDNTcmxObWdvM1pFbGVwb0RZbmFVanVCeGo2VWRQb21WT0xxTHVCYVp6STU1eVVxVVhvdnNFeWpvTG0xZlduaU8zcDR0SU9MQWowalloSmpwLXpZUTZTTWUzSGNmNHVSaw?oc=5", "source": "WLOX", "ts": 1792417740}, {"title": "Trip to South Mississippi casino pays off in a big way for this Texas player", "link": "https://news.google.com/rss/articles/CBMigwFBVV95cUxPdDVEMnNZVktCUzJfZjB1MWRXeFFFWi1HM1UtSENWbFJOTWVjb2U1eGpNcnRsZHBEUTRTdlp6dnlQMFkwWXktQTB1MEpGUjFxUFM2anhTVVhMcG9iVkRPY2tRaXdfVU9SWHlSRE42eXVlNUJYdXQ2Z3cyb2h4bFFkY0RBZ9IBgwFBVV95cUxQNWE4V0YzQ0hqLXA0R3NxT211V0o3Nk5Yc0hCM3dTTVNMckhtX2I3SkJFdFhCdW1Sd1hmSzZoRFBlOTZXX2FqRHZzNkZDcjhjT2NnN21QSHpUeXpRdFMzeGFkQ3dlbkE4a3BKYmlzdE5iZ0xkRWxYdWx5OUk4NGdSZzBfSQ?oc=5", "source": "Sun Herald", "ts": 1792411200}];
+var BUILT_AT="2026-10-20 12:58 UTC";
+function esc(s){return String(s).replace(/[&<>"]/g,function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m];});}
+function timeAgo(ts){
+  var s=Math.max(1,Math.floor(Date.now()/1000-ts));
+  if(s<60)return s+'s ago';
+  var m=Math.floor(s/60); if(m<60)return m+'m ago';
+  var h=Math.floor(m/60); if(h<24)return h+'h ago';
+  return Math.floor(h/24)+'d ago';
+}
+function render(items,stamp){
+  var list=document.getElementById('gx-news-list');
+  if(!items.length){
+    list.innerHTML='<div class="gx-news-empty">No headlines right now &mdash; check back soon.</div>';
+  }else{
+    list.innerHTML=items.map(function(it){
+      return '<div class="gx-news-item"><span class="gx-news-src">'+esc(it.source)+'</span>'+
+        '<div class="gx-news-body"><p class="gx-news-title"><a href="'+esc(it.link)+
+        '" target="_blank" rel="noopener">'+esc(it.title)+'</a></p>'+
+        '<div class="gx-news-time">'+esc(timeAgo(it.ts))+'</div></div></div>';
+    }).join('');
+  }
+  document.getElementById('gx-news-updated').textContent='Updated '+stamp;
+}
+function parseRSS(text){
+  var out=[];
+  try{
+    var xml=new DOMParser().parseFromString(text,'text/xml');
+    var nodes=xml.getElementsByTagName('item');
+    for(var i=0;i<nodes.length;i++){
+      var g=function(t){var n=nodes[i].getElementsByTagName(t)[0];return n?n.textContent:'';};
+      var title=g('title'),link=g('link'),pub=g('pubDate');
+      var srcNodes=nodes[i].getElementsByTagName('source');
+      var src=srcNodes.length?srcNodes[0].textContent:'';
+      if(!title||!link)continue;
+      var p=title.lastIndexOf(' - ');
+      if(p>0){var tail=title.slice(p+3);
+        if(!src){src=tail;title=title.slice(0,p);}
+        else if(tail===src){title=title.slice(0,p);}}
+      var ts=Math.floor(Date.parse(pub)/1000)||0;
+      if(ts)out.push({title:title,link:link,source:src||'Google News',ts:ts});
+    }
+  }catch(e){}
+  return out;
+}
+function fetchFeed(url){
+  return fetch(url).then(function(r){if(!r.ok)throw 0;return r.text();})
+    .catch(function(){
+      return fetch('https://api.allorigins.win/raw?url='+encodeURIComponent(url))
+        .then(function(r){if(!r.ok)throw 0;return r.text();});
+    });
+}
+function refresh(){
+  var stamp=new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'});
+  Promise.all(FEEDS.map(fetchFeed)).then(function(texts){
+    var all=[],seen={};
+    texts.forEach(function(t){
+      parseRSS(t).forEach(function(it){
+        var key=it.title.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,60);
+        if(seen[key])return; seen[key]=1; all.push(it);
+      });
+    });
+    all.sort(function(a,b){return b.ts-a.ts;});
+    if(all.length)render(all.slice(0,MAX_ITEMS),stamp);
+    else render(FALLBACK,'baked snapshot');
+  }).catch(function(){render(FALLBACK,'baked snapshot');});
+}
+var btn=document.getElementById('gx-news-refresh');
+if(btn)btn.addEventListener('click',refresh);
+render(FALLBACK,'baked snapshot');
+refresh();
+setInterval(refresh,Math.max(10,REFRESH_MIN)*60000);
+})();
+</script>
+</div>
+</body>
+</html>
