@@ -1,0 +1,37 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommits", ":semanticPrefixFixDepsChoreOthers"],
+  "timezone": "America/New_York",
+  "labels": ["dependencies"],
+  "rangeStrategy": "bump",
+  "rebaseWhen": "behind-base-branch",
+  "pruneStaleBranches": true,
+  "dependencyDashboard": false,
+  "draftPR": true,
+  "vulnerabilityAlerts": {
+    "labels": ["security"]
+  },
+  "packageRules": [
+    {
+      "description": "This repository is the source of the @adea-ai/themes package: never self-update an internal package.",
+      "matchPackageNames": ["/^@adea-ai//"],
+      "enabled": false
+    },
+    {
+      "description": "Code Foundry runtime pins are sync-managed (runtime_ref in code-foundry.yml) and must not be independently upgraded; a bump branched before a sync can resurrect legacy caller files when merged. Workflow-file edits also abort the whole grouped branch: the runner's token cannot push workflow files, so GitHub rejects the ref and Renovate silently discards every update riding with it.",
+      "matchPackageNames": ["/^0xPlayerOne\\/code-foundry/"],
+      "enabled": false
+    },
+    {
+      "description": "GitHub Actions version bumps ride one grouped draft PR per cycle instead of one PR per action.",
+      "matchDepTypes": ["action"],
+      "groupName": "github actions"
+    },
+    {
+      "description": "External dependency updates (majors included) ride ONE draft branch per cycle. No auto-merge: GitHub refuses to attach it to a draft PR, and every PR must open as a draft because the code-foundry gates only run on the ready-for-review transition — a human marks each batch ready and merges it once the gates pass.",
+      "matchUpdateTypes": ["patch", "minor", "major", "pin", "digest"],
+      "groupName": "external dependencies",
+      "schedule": ["after 8am and before 8pm every weekday"]
+    }
+  ]
+}
