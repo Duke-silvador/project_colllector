@@ -1,0 +1,22 @@
+const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+export function restoreMarkup(s,language='de',selected='') {
+    const l=(de,en)=>language==='en'?en:de;
+    const option=(name,title,checked=false)=>'<label class="ct-rule"><input type="checkbox" name="'+name+'" '+(checked?'checked':'')+'><span>'+title+'</span></label>';
+    return '<p>'+l('Bereitet ausgewählte Figuren außerhalb des Kampfes vor. Karte, Ausrüstung, Attribute und Positionen bleiben erhalten. Kein gespeicherter Zustand vom Kampfbeginn.','Prepares selected participants outside combat. Map, equipment, attributes and positions are retained. This is not a snapshot of the beginning of combat.')+'</p>'+option('restoreHp',l('HP auf aktuelles Maximum setzen','Restore HP to the current maximum'),true)+option('restoreEffects',l('Temporäre Zustände, taktische Effekte und aktive Schilde entfernen','Clear temporary conditions, tactical effects and active shields'),true)+option('restoreRefill',l('Ausgewählte Vorräte auf Maximum auffüllen','Refill selected stocks to their maximum'))+option('restoreDead',l('Tote ebenfalls wiederherstellen – Spielleiter-/Testoption','Include dead participants – GM / testing option'))+'<p class="ct-muted">'+l('Vorräte bleiben standardmäßig unverändert. Tote werden ohne eigene Auswahl ausgelassen. Bindungen, Zugehörigkeit und Erheben-Sperren bleiben erhalten. Geflohene/ausgesetzte Figuren bei Bedarf separat zurückholen.','Stocks stay unchanged by default. Dead participants are skipped unless explicitly included. Allegiance, side and raise locks are retained. Return escaped/reserve participants separately if needed.')+'</p><div class="ct-controls">'+[['all',l('Alle auswählen','Check all')],['none',l('Alle abwählen','Uncheck all')],['party',l('Spieler & Verbündete','Players & allies')],['enemy',l('Gegner','Enemies')]].map(([key,title])=>'<button type="button" class="ct-button" data-restore-group="'+key+'">'+title+'</button>').join('')+'</div><div class="ct-restore-list">'+s.actors.map(a=>'<label class="ct-rule"><input type="checkbox" name="restoreActor" value="'+esc(a.id)+'" data-side="'+a.side+'" '+((selected?a.id===selected:a.condition!=='dead')?'checked':'')+'><span><strong>'+esc(a.name)+'</strong> · '+a.hp+'/'+a.maxHp+' HP'+(a.condition==='dead'?' · '+l('Tot','Dead'):'')+'</span></label>').join('')+'</div><details class="ct-fold"><summary>'+l('Vorräte auswählen (nur bei eingeschaltetem Auffüllen)','Choose stocks (used only when refill is enabled)')+'</summary><div class="ct-fold-body">'+s.actors.map(a=>'<h4>'+esc(a.name)+'</h4>'+a.resources.map(r=>r.capacity==null?'<p class="ct-muted">'+esc(r.name)+' · '+l('Kein Maximum; bleibt unverändert','No maximum; unchanged')+'</p>':'<label class="ct-rule"><input type="checkbox" name="restoreStock" data-actor="'+esc(a.id)+'" value="'+esc(r.id)+'" checked><span>'+esc(r.name)+' · '+r.quantity+' → '+r.capacity+'</span></label>').join('')).join('')+'</div></details>';
+}
+export function readRestore(form) {
+    const data=new FormData(form),actors=data.getAll('restoreActor'),stocks=Object.fromEntries(actors.map(id=>[id,[]]));
+    for(const input of form.querySelectorAll('input[name="restoreStock"]'))if(input.checked&&Object.hasOwn(stocks,input.dataset.actor))stocks[input.dataset.actor].push(input.value);
+    return {actors,hp:data.has('restoreHp'),effects:data.has('restoreEffects'),refill:data.has('restoreRefill'),includeDead:data.has('restoreDead'),stocks};
+}
+export function openRestore(c,dialog,selected='') {
+    const s=c.state(),chat=c.chatKey(),en=c.preferences().language==='en';
+    const d=dialog(en?'Restore participants':'Figuren wiederherstellen',restoreMarkup(s,en?'en':'de',selected),async form=>{
+        if(c.chatKey()!==chat||c.state().revision!==s.revision)throw Error(en?'Combat changed. Open restoration again.':'Kampfzustand geändert. Wiederherstellung erneut öffnen.');
+        await c.restore(readRestore(form));
+    },en?'Restore selected values':'Ausgewählte Werte wiederherstellen');
+    d.querySelector('form').addEventListener('click',event=>{
+        const group=event.target.closest('[data-restore-group]')?.dataset.restoreGroup;if(!group)return;
+        for(const input of d.querySelectorAll('input[name="restoreActor"]'))input.checked=group==='all'||group==='party'&&input.dataset.side!=='enemy'||group==='enemy'&&input.dataset.side==='enemy';
+    });return d;
+}
