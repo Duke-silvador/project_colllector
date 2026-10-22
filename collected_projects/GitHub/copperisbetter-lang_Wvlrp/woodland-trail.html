@@ -1,0 +1,221 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#142018"><title>West Virginia Live Research Project — Woodland Trail</title><style>*{box-sizing:border-box}body{margin:0;background:#142018;color:white;font-family:Georgia,serif}canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none}header{position:fixed;top:18px;left:20px;text-shadow:0 2px 5px #000;pointer-events:none}strong{font-size:32px;font-weight:400}small{display:block;font-size:13px}#previewControls{display:none;position:fixed;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:8px}button{background:#16261bdd;border:1px solid #ffffff55;border-radius:22px;color:white;padding:10px 16px;cursor:pointer;font-size:14px}#hint{position:fixed;bottom:70px;width:100%;text-align:center;font:13px sans-serif;text-shadow:0 2px 3px #000;pointer-events:none}#error{position:fixed;top:50%;padding:20px}.menu-wrap{position:relative;pointer-events:auto}
+.menu{border:1px solid rgba(255,255,255,.32);border-radius:999px;background:rgba(1,15,10,.62);color:#fff;padding:8px 12px;font-weight:900;font-size:14px;letter-spacing:.08em;cursor:pointer;backdrop-filter:blur(8px)}
+.site-menu{position:absolute;right:0;top:42px;width:min(78vw,250px);padding:7px;border:1px solid rgba(255,255,255,.22);border-radius:14px;background:rgba(3,16,11,.96);box-shadow:0 14px 34px rgba(0,0,0,.55);backdrop-filter:blur(12px);display:none}
+.site-menu.open{display:block}
+.site-menu details{border-bottom:1px solid rgba(255,255,255,.09)}.site-menu details:last-of-type{border-bottom:0}
+.site-menu summary{list-style:none;cursor:pointer;padding:9px 10px;font-size:14px;font-weight:900;letter-spacing:.08em;color:#fff}.site-menu summary::-webkit-details-marker{display:none}.site-menu summary:after{content:'▾';float:right;color:#9db2a6}
+.site-menu details[open] summary:after{content:'▴'}
+.submenu{display:grid;gap:3px;padding:0 6px 7px}.submenu a,.submenu button{display:block;width:100%;border:0;border-radius:8px;background:rgba(255,255,255,.05);color:#dce7e0;text-decoration:none;text-align:left;padding:8px 9px;font-size:14px;cursor:pointer}.submenu a:active,.submenu button:active{background:rgba(255,255,255,.12)}
+#wvHomeAccount{font-family:inherit}
+.wv-auth-pill{display:none!important}
+
+header{left:20px;right:0;z-index:40;display:flex;justify-content:space-between;pointer-events:none;padding-right:20px}.site-menu{left:auto;bottom:auto;transform:none;max-height:80vh;overflow:auto}.menu{min-height:44px}.submenu a,.submenu button{min-height:44px}header small{max-width:65vw}@media(max-width:600px){header strong{font-size:24px}header small{font-size:10px}}#hint{transition:opacity .5s}#previewControls{max-width:calc(100vw - 20px);flex-wrap:wrap;justify-content:center}#previewControls button{min-height:44px}@media(max-width:600px){#previewControls{gap:5px;width:calc(100vw - 20px)}#previewControls button{padding:8px 10px;font-size:13px}#hint{bottom:125px}}</style></head><body><canvas id="scene" aria-label="Drag to explore the woodland trail; tap the bird to visit the bird clearing, the deer to visit East Bank, the chicken to visit The Roost or distant Base Camp to return home; pinch or scroll to zoom" tabindex="0"></canvas><header><div><strong>WVLRP</strong><small>West Virginia Live Research Project</small></div>  <div class="menu-wrap">
+    <button class="menu" id="siteMenuButton" type="button" aria-expanded="false">☰ MENU</button>
+    <nav class="site-menu" id="siteMenu" aria-label="WVLRP menu">
+      <details>
+        <summary>EXPLORE</summary><div class="submenu"><a href="adventures.html">Base Camp</a><a href="woodland-trail.html">Woodland Trail</a><a href="bird.html">Bird</a><a href="squirrel.html">Squirrel</a><a href="woodland-fork.html">Continue Woodland Trail</a><a href="ranger-station.html">Ranger Station</a></div></details><details><summary>LIVE CAMERAS</summary>
+        <div class="submenu">
+          <a href="adventure-east-bank.html">East Bank</a>
+          <a href="adventure-roost.html">The Roost</a>
+          <a href="west-bank.html">West Bank</a>
+          <a href="south-hill.html">South Hill</a>
+          <a href="infrared-camera.html">Infrared / Night Vision</a>
+        </div>
+      </details>
+      <details>
+        <summary>COMMUNITY</summary>
+        <div class="submenu">
+          <a href="community.html">Community clearing</a><a href="lounge.html">Lounge</a>
+          <a href="visitors.html">Look Who’s Here</a>
+        </div>
+      </details>
+      <details>
+        <summary>PROJECT</summary>
+        <div class="submenu">
+          <a href="sponsors.html">Sponsors</a>
+          <a href="supporters.html">Supporters</a>
+          <a href="gift-shop.html">Gift Shop</a>
+          <a href="member-guide.html">Explore WVLRP</a>
+        </div>
+      </details>
+      <details>
+        <summary>ACCOUNT</summary>
+        <div class="submenu">
+          <button type="button" id="wvHomeAccount">Sign In / Account</button>
+        </div>
+      </details>
+    </nav>
+  </div></header><div id="hint">Drag to look around · Pinch or scroll to zoom</div><nav id="previewControls"><button id="continueTrail">Continue trail</button><button id="camp">Trail ahead</button><button id="valley">Look back</button><button id="deerView">Look left</button><button id="minus" aria-label="Zoom out">−</button><button id="plus" aria-label="Zoom in">+</button></nav><div id="error"></div><script src="woodland-hen.js?v=20261006-1"></script><script src="trail-transitions.js?v=20261006-1"></script><script>
+const c=document.querySelector('canvas'),g=c.getContext('webgl');
+if(!g)document.querySelector('#error').textContent='This viewer needs WebGL. Open it in Chrome or another modern browser.';
+else {
+const vs='attribute vec2 a;varying vec2 p;void main(){p=a;gl_Position=vec4(a,0.,1.);}';
+const fs=`precision highp float;varying vec2 p;uniform sampler2D tex,hen,deerAtlas,songbirdAtlas,squirrelAtlas;uniform float yaw,pitch,fov,aspect,henReady,deerReady,frameA,frameB,frameMix,deerA,deerB,deerMix,birdReady,birdA,birdB,birdMix,squirrelReady,squirrelA,squirrelB,squirrelMix;vec4 henFrame(vec2 q,float n){vec2 cell=vec2(mod(n,4.),floor(n/4.));return texture2D(hen,(cell+clamp(q,vec2(.002),vec2(.998)))/4.);}vec4 deerFrame(vec2 q,float n){vec2 cell=vec2(mod(n,4.),floor(n/4.));return texture2D(deerAtlas,(cell+clamp(q,vec2(.003),vec2(.997)))/4.);}vec4 songbirdFrame(vec2 q,float n){vec2 cell=vec2(mod(n,4.),floor(n/4.));return texture2D(songbirdAtlas,(cell+clamp(q,vec2(.003),vec2(.997)))/4.);}vec4 squirrelFrame(vec2 q,float n){return texture2D(squirrelAtlas,(vec2(mod(n,4.),floor(n/4.))+clamp(q,vec2(.003),vec2(.997)))/4.);}void main(){float t=tan(fov*.5);vec3 d=normalize(vec3(p.x*t*aspect,p.y*t,1.));float yy=d.y*cos(pitch)+d.z*sin(pitch);float zz=d.z*cos(pitch)-d.y*sin(pitch);float xx=d.x*cos(yaw)+zz*sin(yaw);float z=zz*cos(yaw)-d.x*sin(yaw);float u=fract(atan(xx,z)/6.28318530718+1.);float v=.5-atan(yy,length(vec2(xx,z)))/3.14159265359;vec4 forest=texture2D(tex,vec2(u,v));
+// The animal lives at a fixed bearing on the forest floor, not on the screen.
+float delta=mod(u-0.72334+1.5,1.)-.5;
+vec2 q=vec2(delta/.02944+.5,(v-.55282)/.05152);
+vec2 shade=vec2(delta/.012512,(v-.59906)/.003312);
+float shadow=exp(-dot(shade,shade)*2.)*.24*henReady;
+forest.rgb*=1.-shadow;
+if(henReady>.5&&q.x>=0.&&q.x<=1.&&q.y>=0.&&q.y<=1.){
+vec4 a=henFrame(q,frameA),b=henFrame(q,frameB);
+// Blend premultiplied colors so transparent feather edges stay clean.
+vec4 bird=mix(vec4(a.rgb*a.a,a.a),vec4(b.rgb*b.a,b.a),frameMix);
+// Let the clearing's actual grass and leaf texture overlap the toes.
+// Texture-driven coverage follows the existing vegetation instead of a straight cut.
+vec3 ground=texture2D(tex,vec2(u,v)).rgb;
+float vegetation=smoothstep(.015,.105,ground.g-ground.b);
+float leafDetail=smoothstep(.19,.47,dot(ground,vec3(.24,.58,.18)));
+float foliageEdge=mix(.77,.85,1.-vegetation*leafDetail);
+float cover=smoothstep(foliageEdge,foliageEdge+.045,q.y)*.98;
+bird*=1.-cover;
+forest.rgb=forest.rgb*(1.-bird.a)+bird.rgb*vec3(.93,.86,.72);
+}
+// A distant deer, sized to stay recognizable against the dense foliage.
+// Hooves meet the distant trail clearing marked by Doug; size includes the atlas margin.
+float deerBearing=.46;float dd=mod(u-deerBearing+1.5,1.)-.5;
+vec2 dq=vec2(dd/.042+.5,(v-.465)/.084);
+vec2 ds=vec2(dd/.018,(v-.541)/.0035);
+forest.rgb*=1.-exp(-dot(ds,ds)*2.)*.16*deerReady;
+if(deerReady>.5&&dq.x>=0.&&dq.x<=1.&&dq.y>=0.&&dq.y<=1.){
+vec4 da=deerFrame(dq,deerA),db=deerFrame(dq,deerB);
+vec4 deer=mix(vec4(da.rgb*da.a,da.a),vec4(db.rgb*db.a,db.a),deerMix);
+vec3 leaves=texture2D(tex,vec2(u,v)).rgb;
+float vegetation=smoothstep(.01,.09,leaves.g-leaves.b);
+float cover=smoothstep(mix(.89,.84,vegetation),.98,dq.y)*.80;
+deer*=1.-cover;
+forest.rgb=forest.rgb*(1.-deer.a)+deer.rgb*vec3(.94,.88,.78);
+}
+// The singing perch grows leftward from the near oak, in its own part of the trail.
+float bd=mod(u-.256+1.5,1.)-.5;
+vec2 bq=vec2(.5-bd/.042,(v-.38532)/.084);
+if(birdReady>.5&&bq.x>=0.&&bq.x<=1.&&bq.y>=0.&&bq.y<=1.){
+vec4 ba=songbirdFrame(bq,birdA),bb=songbirdFrame(bq,birdB);
+// Keep the tree branch completely stationary; only the head and upper body use the singing poses.
+vec4 still=songbirdFrame(bq,0.);
+float moving=smoothstep(.27,.32,bq.x)*(1.-smoothstep(.75,.80,bq.x))*(1.-smoothstep(.735,.77,bq.y));
+ba=mix(still,ba,moving);bb=mix(still,bb,moving);
+// Very low-alpha extraction residue is invisible, including outside feather edges.
+ba.a*=smoothstep(.03,.12,ba.a);bb.a*=smoothstep(.03,.12,bb.a);
+vec4 perched=mix(vec4(ba.rgb*ba.a,ba.a),vec4(bb.rgb*bb.a,bb.a),birdMix);
+// The oak's foreground bark overlaps the branch root, hiding the cut end.
+float trunkEdge=.268-.04*(v-.35);
+perched*=1.-smoothstep(trunkEdge-.002,trunkEdge+.003,u);
+forest.rgb=forest.rgb*(1.-perched.a)+perched.rgb;
+}
+float sd=mod(u-.95+1.5,1.)-.5;vec2 sq=vec2(sd/.030+.5,(v-.705)/.060);vec2 ss=vec2(sd/.012,(v-.760)/.0025);forest.rgb*=1.-exp(-dot(ss,ss)*2.)*.18*squirrelReady;
+if(squirrelReady>.5&&sq.x>=0.&&sq.x<=1.&&sq.y>=0.&&sq.y<=1.){vec4 sa=squirrelFrame(sq,squirrelA),sb=squirrelFrame(sq,squirrelB);vec4 animal=mix(vec4(sa.rgb*sa.a,sa.a),vec4(sb.rgb*sb.a,sb.a),squirrelMix);vec3 floorLeaves=texture2D(tex,vec2(u,v)).rgb;float leafCover=smoothstep(.16,.46,dot(floorLeaves,vec3(.24,.58,.18)));animal*=1.-smoothstep(mix(.94,.91,leafCover),.995,sq.y)*.85;forest.rgb=forest.rgb*(1.-animal.a)+animal.rgb*vec3(.96,.87,.72);}gl_FragColor=forest;}`;
+function shader(type,s){let q=g.createShader(type);g.shaderSource(q,s);g.compileShader(q);if(!g.getShaderParameter(q,g.COMPILE_STATUS))throw Error(g.getShaderInfoLog(q));return q;}
+const program=g.createProgram();g.attachShader(program,shader(g.VERTEX_SHADER,vs));g.attachShader(program,shader(g.FRAGMENT_SHADER,fs));g.linkProgram(program);if(!g.getProgramParameter(program,g.LINK_STATUS))throw Error(g.getProgramInfoLog(program));g.useProgram(program);
+const b=g.createBuffer();g.bindBuffer(g.ARRAY_BUFFER,b);g.bufferData(g.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]),g.STATIC_DRAW);const a=g.getAttribLocation(program,'a');g.enableVertexAttribArray(a);g.vertexAttribPointer(a,2,g.FLOAT,false,0,0);
+const loc={};['yaw','pitch','fov','aspect','henReady','deerReady','frameA','frameB','frameMix','deerA','deerB','deerMix','birdReady','birdA','birdB','birdMix','squirrelReady','squirrelA','squirrelB','squirrelMix'].forEach(k=>loc[k]=g.getUniformLocation(program,k));
+const view=new URLSearchParams(location.search).get('view'),showDeer=view==='deer',showBird=view==='bird',showSquirrel=view==='squirrel';
+let yaw=showSquirrel?Math.PI*2*.95:showBird?Math.PI*2*.253:showDeer?Math.PI*2*.46:Math.PI+.35,pitch=showSquirrel?-.55:showBird?.18:showDeer?-.045:-.06,fov=1.65,ready=false;const texture=g.createTexture();g.bindTexture(g.TEXTURE_2D,texture);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.CLAMP_TO_EDGE);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.CLAMP_TO_EDGE);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);
+const henTexture=g.createTexture();g.activeTexture(g.TEXTURE1);g.bindTexture(g.TEXTURE_2D,henTexture);
+g.texImage2D(g.TEXTURE_2D,0,g.RGBA,1,1,0,g.RGBA,g.UNSIGNED_BYTE,new Uint8Array([0,0,0,0]));
+g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.CLAMP_TO_EDGE);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.CLAMP_TO_EDGE);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);
+g.uniform1i(g.getUniformLocation(program,'hen'),1);g.uniform1i(g.getUniformLocation(program,'tex'),0);
+const deerTexture=g.createTexture();let deerReady=false;
+g.activeTexture(g.TEXTURE2);g.bindTexture(g.TEXTURE_2D,deerTexture);
+g.texImage2D(g.TEXTURE_2D,0,g.RGBA,1,1,0,g.RGBA,g.UNSIGNED_BYTE,new Uint8Array([0,0,0,0]));
+g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.CLAMP_TO_EDGE);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.CLAMP_TO_EDGE);
+g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);
+g.uniform1i(g.getUniformLocation(program,'deerAtlas'),2);
+const deerImage=new Image();deerImage.onload=()=>{g.activeTexture(g.TEXTURE2);g.bindTexture(g.TEXTURE_2D,deerTexture);g.texImage2D(g.TEXTURE_2D,0,g.RGBA,g.RGBA,g.UNSIGNED_BYTE,deerImage);deerReady=true;draw();};
+fetch('assets/woodland-deer-fluid-v1.b64?v=20261007-1').then(r=>{if(!r.ok)throw Error('Deer unavailable');return r.text();}).then(data=>deerImage.src='data:image/webp;base64,'+data.trim()).catch(console.error);
+const deerReduced=matchMedia('(prefers-reduced-motion: reduce)');
+const deerBeats=[[0,.7],[1,.32],[2,.33],[3,.38],[2,.28],[1,.30],[0,.65],[1,.31],[2,.32],[3,.45],[2,.29],[1,.34],[0,1.2],[4,.18],[5,.18],[6,.22],[7,.8],[8,1.0],[9,.8],[10,.13],[11,.18],[9,.65],[8,.65],[12,.2],[13,.22],[14,.24],[15,.7]];
+const deerLength=deerBeats.reduce((a,b)=>a+b[1],0);
+function deerPose(seconds){if(deerReduced.matches)return[8,8,0];let phase=seconds%deerLength;for(let i=0;i<deerBeats.length;i++){const [frame,duration]=deerBeats[i];if(phase<duration){const t=phase/duration;return[frame,deerBeats[(i+1)%deerBeats.length][0],t*t*(3-2*t)];}phase-=duration;}return[0,0,0];}
+
+
+const birdTexture=g.createTexture();let birdReady=false;
+g.activeTexture(g.TEXTURE3);g.bindTexture(g.TEXTURE_2D,birdTexture);
+g.texImage2D(g.TEXTURE_2D,0,g.RGBA,1,1,0,g.RGBA,g.UNSIGNED_BYTE,new Uint8Array([0,0,0,0]));
+g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.CLAMP_TO_EDGE);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.CLAMP_TO_EDGE);
+g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);
+g.uniform1i(g.getUniformLocation(program,'songbirdAtlas'),3);
+const birdImage=new Image();birdImage.onload=()=>{g.activeTexture(g.TEXTURE3);g.bindTexture(g.TEXTURE_2D,birdTexture);g.texImage2D(g.TEXTURE_2D,0,g.RGBA,g.RGBA,g.UNSIGNED_BYTE,birdImage);birdReady=true;draw();};
+fetch('assets/woodland-cerulean-singing-v1.b64?v=20261007-1').then(r=>{if(!r.ok)throw Error('Bird unavailable');return r.text();}).then(data=>birdImage.src='data:image/webp;base64,'+data.trim()).catch(console.error);
+const birdReduced=matchMedia('(prefers-reduced-motion: reduce)');
+// A quiet interval, a short phrase, then a natural rest; audio can follow the same clock.
+const birdBeats=[[0,2.8],[1,.40],[2,.45],[3,.65],[4,.18],[5,.16],[6,.15],[7,.18],[8,.16],[9,.13],[10,.14],[11,.18],[8,.16],[9,.14],[10,.16],[11,.20],[12,.22],[13,.25],[14,.35],[15,.65],[0,2.0]];
+const birdLength=birdBeats.reduce((sum,beat)=>sum+beat[1],0);
+function birdPose(seconds){if(birdReduced.matches)return[0,0,0];let phase=seconds%birdLength;for(let i=0;i<birdBeats.length;i++){const [frame,duration]=birdBeats[i];if(phase<duration){const t=phase/duration;return[frame,birdBeats[(i+1)%birdBeats.length][0],t*t*(3-2*t)];}phase-=duration;}return[0,0,0];}
+
+
+const squirrelTexture=g.createTexture();let squirrelReady=false;
+g.activeTexture(g.TEXTURE4);g.bindTexture(g.TEXTURE_2D,squirrelTexture);g.texImage2D(g.TEXTURE_2D,0,g.RGBA,1,1,0,g.RGBA,g.UNSIGNED_BYTE,new Uint8Array([0,0,0,0]));
+for(const p of [g.TEXTURE_WRAP_S,g.TEXTURE_WRAP_T])g.texParameteri(g.TEXTURE_2D,p,g.CLAMP_TO_EDGE);
+for(const p of [g.TEXTURE_MIN_FILTER,g.TEXTURE_MAG_FILTER])g.texParameteri(g.TEXTURE_2D,p,g.LINEAR);
+g.uniform1i(g.getUniformLocation(program,'squirrelAtlas'),4);
+const squirrelImage=new Image();squirrelImage.onload=()=>{g.activeTexture(g.TEXTURE4);g.bindTexture(g.TEXTURE_2D,squirrelTexture);g.texImage2D(g.TEXTURE_2D,0,g.RGBA,g.RGBA,g.UNSIGNED_BYTE,squirrelImage);squirrelReady=true;draw();};
+fetch('assets/woodland-squirrel-nut-v1.b64?v=20261007-1').then(r=>{if(!r.ok)throw Error('Squirrel unavailable');return r.text();}).then(data=>squirrelImage.src='data:image/webp;base64,'+data.trim()).catch(console.error);
+const squirrelReduced=matchMedia('(prefers-reduced-motion: reduce)');
+const squirrelBeats=[[0,.17],[1,.17],[2,.17],[3,.17],[4,.17],[5,.17],[6,.17],[7,.17],[0,.17],[1,.17],[2,.17],[3,.17],[4,.17],[5,.17],[6,.17],[7,.35],[8,.3],[9,.4],[10,1.3],[11,1.6],[12,1.1],[13,.45],[14,.35],[15,.3]];
+const squirrelLength=squirrelBeats.reduce((sum,beat)=>sum+beat[1],0);
+function squirrelPose(seconds){if(squirrelReduced.matches)return[0,0,0];let phase=seconds%squirrelLength;for(let i=0;i<squirrelBeats.length;i++){const [frame,duration]=squirrelBeats[i];if(phase<duration){const t=phase/duration;return[frame,squirrelBeats[(i+1)%squirrelBeats.length][0],t*t*(3-2*t)];}phase-=duration;}return[0,0,0];}
+let henReady=false;const henImage=new Image();henImage.onload=()=>{g.activeTexture(g.TEXTURE1);g.bindTexture(g.TEXTURE_2D,henTexture);g.texImage2D(g.TEXTURE_2D,0,g.RGBA,g.RGBA,g.UNSIGNED_BYTE,henImage);henReady=true;draw();};
+fetch('assets/woodland-hen.b64?v=20261006-1').then(r=>{if(!r.ok)throw Error('Hen unavailable');return r.text();}).then(data=>henImage.src='data:image/webp;base64,'+data.trim()).catch(()=>{});
+g.activeTexture(g.TEXTURE0);g.bindTexture(g.TEXTURE_2D,texture);
+const deerStart=performance.now()/1000;
+const img=new Image();img.onload=()=>{g.activeTexture(g.TEXTURE0);g.bindTexture(g.TEXTURE_2D,texture);g.texImage2D(g.TEXTURE_2D,0,g.RGB,g.RGB,g.UNSIGNED_BYTE,img);ready=true;draw();dispatchEvent(new Event("wvlrp-scene-ready"));};img.onerror=()=>document.querySelector('#error').textContent='The woodland image could not load. Please refresh.';img.src='assets/woodland-trail-hd.webp?v=20261006-1';
+function draw(){const ratio=Math.min(devicePixelRatio||1,2);const width=Math.round(innerWidth*ratio),height=Math.round(innerHeight*ratio);if(c.width!==width||c.height!==height){c.width=width;c.height=height;}g.viewport(0,0,c.width,c.height);if(!ready)return;g.uniform1f(loc.yaw,yaw);g.uniform1f(loc.pitch,pitch);g.uniform1f(loc.fov,fov);g.uniform1f(loc.aspect,c.width/c.height);g.activeTexture(g.TEXTURE0);g.bindTexture(g.TEXTURE_2D,texture);
+g.uniform1f(loc.squirrelReady,squirrelReady?1:0);const sp=squirrelPose(performance.now()/1000-deerStart);g.uniform1f(loc.squirrelA,sp[0]);g.uniform1f(loc.squirrelB,sp[1]);g.uniform1f(loc.squirrelMix,sp[2]);
+g.uniform1f(loc.birdReady,birdReady?1:0);const bp=birdPose(performance.now()/1000-deerStart);g.uniform1f(loc.birdA,bp[0]);g.uniform1f(loc.birdB,bp[1]);g.uniform1f(loc.birdMix,bp[2]);
+g.uniform1f(loc.henReady,henReady?1:0);g.uniform1f(loc.deerReady,deerReady?1:0);
+const pose=window.WVLRPHen.pose(performance.now()/1000);
+g.uniform1f(loc.frameA,pose[0]);g.uniform1f(loc.frameB,pose[1]);g.uniform1f(loc.frameMix,pose[2]);const dp=deerPose(performance.now()/1000-deerStart);g.uniform1f(loc.deerA,dp[0]);g.uniform1f(loc.deerB,dp[1]);g.uniform1f(loc.deerMix,dp[2]);g.drawArrays(g.TRIANGLES,0,6);}
+function zoom(d){if(window.WVLRPTravel?.busy)return;fov=Math.max(.52,Math.min(1.65,fov+d));draw();}
+window.WVLRP_QUEST_VIEW=()=>({yaw,pitch,fov});
+window.WVLRP_SET_VIEW=state=>{if(!state||!ready)return;yaw=state.yaw;pitch=state.pitch;fov=state.fov;draw()};
+function scenePoint(x,y){
+  const rect=c.getBoundingClientRect(),t=Math.tan(fov/2);
+  const dx=((x-rect.left)/rect.width*2-1)*t*rect.width/rect.height;
+  const dy=(1-(y-rect.top)/rect.height*2)*t;
+  const yy=dy*Math.cos(pitch)+Math.sin(pitch);
+  const zz=Math.cos(pitch)-dy*Math.sin(pitch);
+  const xx=dx*Math.cos(yaw)+zz*Math.sin(yaw);
+  const z=zz*Math.cos(yaw)-dx*Math.sin(yaw);
+  const u=((Math.atan2(xx,z)/(2*Math.PI))%1+1)%1;
+  const v=.5-Math.atan2(yy,Math.hypot(xx,z))/Math.PI;
+  return {u,v};
+}
+function onBaseCamp(x,y){const {u,v}=scenePoint(x,y);return ready&&u>=.04&&u<=.10&&v>=.43&&v<=.515;}
+function onRoostHen(x,y){const {u,v}=scenePoint(x,y),delta=((u-.72334+1.5)%1)-.5;return ready&&henReady&&Math.abs(delta)<=.01472&&v>=.55282&&v<=.60434;}
+function onEastBankDeer(x,y){const {u,v}=scenePoint(x,y),delta=((u-.46+1.5)%1)-.5;return ready&&deerReady&&Math.abs(delta)<=.021&&v>=.465&&v<=.549;}
+function onSongbird(x,y){const {u,v}=scenePoint(x,y),delta=((u-.253+1.5)%1)-.5;return ready&&birdReady&&Math.abs(delta)<=.010&&v>=.415&&v<=.447;}
+function onSquirrel(x,y){const {u,v}=scenePoint(x,y),delta=((u-.95+1.5)%1)-.5;return ready&&squirrelReady&&Math.abs(delta)<=.015&&v>=.705&&v<=.765;}
+const pointers=new Map();let distance=0,tapStart=null,tapMoved=false;c.addEventListener('pointerdown',e=>{if(window.WVLRPTravel?.busy)return;if(pointers.size===0){tapStart=[e.clientX,e.clientY];tapMoved=false;}else tapMoved=true;c.setPointerCapture(e.pointerId);pointers.set(e.pointerId,[e.clientX,e.clientY]);distance=0;});
+c.addEventListener('pointermove',e=>{if(!pointers.has(e.pointerId)){c.style.cursor=(onBaseCamp(e.clientX,e.clientY)||onRoostHen(e.clientX,e.clientY)||onEastBankDeer(e.clientX,e.clientY)||onSongbird(e.clientX,e.clientY)||onSquirrel(e.clientX,e.clientY))?'pointer':'grab';return;}if(tapStart&&Math.hypot(e.clientX-tapStart[0],e.clientY-tapStart[1])>6)tapMoved=true;const prev=pointers.get(e.pointerId);pointers.set(e.pointerId,[e.clientX,e.clientY]);if(pointers.size===1){yaw-=(e.clientX-prev[0])*.000675*fov;pitch=Math.max(-1.45,Math.min(1.45,pitch+(e.clientY-prev[1])*.000675*fov));}else{const ps=[...pointers.values()];const d=Math.hypot(ps[0][0]-ps[1][0],ps[0][1]-ps[1][1]);if(distance)fov=Math.max(.52,Math.min(1.65,fov*distance/d));distance=d;}draw();});
+c.addEventListener('pointerup',e=>{
+  const tap=pointers.has(e.pointerId)&&pointers.size===1&&!tapMoved;
+  const squirrel=tap&&onSquirrel(e.clientX,e.clientY);
+  const bird=tap&&!squirrel&&onSongbird(e.clientX,e.clientY);
+  const hen=tap&&!bird&&onRoostHen(e.clientX,e.clientY);
+  const deer=tap&&!bird&&!hen&&onEastBankDeer(e.clientX,e.clientY);
+  const camp=tap&&!bird&&!hen&&!deer&&onBaseCamp(e.clientX,e.clientY);
+  pointers.delete(e.pointerId);distance=0;
+  if(squirrel||bird||hen||deer||camp){pointers.clear();const url=squirrel?'squirrel.html':bird?'bird.html':hen?'adventure-roost.html':deer?'adventure-east-bank.html':'adventures.html';
+    if(window.WVLRPTravel?.go)window.WVLRPTravel.go({url,from:{yaw,pitch,fov},to:squirrel?{yaw:Math.PI*2*.95,pitch:-.55,fov:Math.max(.52,fov*.78)}:bird?{yaw:Math.PI*2*.253,pitch:.18,fov:Math.max(.52,fov*.78)}:hen?{yaw:Math.PI*2*.72334,pitch:Math.PI*(.5-.57858),fov:Math.max(.52,fov*.78)}:deer?{yaw:Math.PI*2*.46,pitch:Math.PI*(.5-.507),fov:Math.max(.52,fov*.78)}:{yaw:0.44,pitch:0.09,fov:Math.max(.52,fov*.78)},render:state=>{yaw=state.yaw;pitch=state.pitch;fov=state.fov;draw();}});
+    else location.href=url;
+  }
+});
+c.addEventListener('pointercancel',e=>{pointers.delete(e.pointerId);distance=0;tapMoved=true;});c.addEventListener('wheel',e=>{e.preventDefault();zoom(e.deltaY*.0003);},{passive:false});
+document.querySelector('#continueTrail').onclick=()=>{if(window.WVLRPTravel?.go)WVLRPTravel.go({url:'woodland-fork.html',from:{yaw,pitch,fov},to:{yaw:Math.PI+.35,pitch:-.06,fov:Math.max(.65,fov*.78)},render:s=>{yaw=s.yaw;pitch=s.pitch;fov=s.fov;draw()}});else location.assign('woodland-fork.html')};document.querySelector('#camp').onclick=()=>{yaw=Math.PI+.35;pitch=-.06;fov=1.65;draw();};document.querySelector('#valley').onclick=()=>{yaw=.35;pitch=-.06;fov=1.65;draw();};document.querySelector('#deerView').onclick=()=>{yaw=Math.PI*2*.46;pitch=-.045;fov=1.65;draw();};document.querySelector('#plus').onclick=()=>zoom(-.12);document.querySelector('#minus').onclick=()=>zoom(.12);
+c.addEventListener('keydown',e=>{if(window.WVLRPTravel?.busy)return;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','-'].includes(e.key))e.preventDefault();if(e.key==='ArrowLeft')yaw-=.1;if(e.key==='ArrowRight')yaw+=.1;if(e.key==='ArrowUp')pitch=Math.min(1.45,pitch+.1);if(e.key==='ArrowDown')pitch=Math.max(-1.45,pitch-.1);if(e.key==='+')zoom(-.1);if(e.key==='-')zoom(.1);draw();});addEventListener('resize',draw);
+function animateHen(){if(!document.hidden&&ready&&(henReady||deerReady||birdReady||squirrelReady))draw();requestAnimationFrame(animateHen);}requestAnimationFrame(animateHen);
+}
+</script><script>
+(()=>{
+  const btn=document.getElementById('siteMenuButton'),menu=document.getElementById('siteMenu'),account=document.getElementById('wvHomeAccount');
+  if(!btn||!menu)return;
+  btn.addEventListener('click',e=>{e.stopPropagation();const open=menu.classList.toggle('open');btn.setAttribute('aria-expanded',String(open))});
+  menu.addEventListener('click',e=>e.stopPropagation());
+  document.addEventListener('click',()=>{menu.classList.remove('open');btn.setAttribute('aria-expanded','false')});
+  account?.addEventListener('click',()=>{
+    menu.classList.remove('open');btn.setAttribute('aria-expanded','false');
+    const auth=document.querySelector('.wv-auth-pill'); if(auth) auth.click();
+  });
+})();
+</script><script src="site-auth.js?v=20260916-menu2"></script><script>setTimeout(()=>document.querySelector("#hint").style.opacity=0,5000);</script><script src="site-auth.js?v=20260916-menu2"></script><script src="site-analytics.js?v=20260916-1"></script><script src="ranger-cases.js?v=4"></script><script src="west-hills-entry.js?v=1"></script><script src="trail-signs.js?v=20261007-real-wood"></script></body></html>

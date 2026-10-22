@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101d2a">
+  <title>Laura 2.5 — Frozen Face Snapshot | WVLRP</title>
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/4.0.0/model-viewer.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #101d2a; color: #eef7fc; font: 16px system-ui, Arial, sans-serif; }
+    main { max-width: 1050px; margin: auto; }
+    header { padding: 12px 16px; background: #203749; }
+    h1 { font-size: 19px; margin: 0 0 4px; }
+    header p { margin: 0; color: #bfd5e3; font-size: 13px; }
+    model-viewer { display: block; width: 100%; height: 72dvh; min-height: 340px; background: radial-gradient(circle at 50% 40%, #718798, #1c3041 75%); touch-action: none; }
+    .controls { display: flex; flex-wrap: wrap; gap: 7px; padding: 12px; }
+    button { flex: 1 1 85px; color: white; background: #2b536d; border: 1px solid #779aaf; border-radius: 9px; font-size: 14px; font-weight: 600; padding: 12px 10px; }
+    button:focus-visible { outline: 2px solid #d7f3ff; }
+    #status { padding: 0 14px 12px; font-size: 14px; color: #d3e8f2; }
+    .note { color: #b8ccd7; font-size: 13px; line-height: 1.5; margin: 0; padding: 0 14px 20px; }
+    @media (max-width: 440px) { model-viewer { height: 68dvh; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Laura 2.5 — Preserved 3D Face</h1>
+    <p>From your original reference image • Drag to turn • Pinch to zoom</p>
+  </header>
+  <model-viewer id="viewer" camera-controls camera-orbit="0deg 90deg auto" camera-target="auto auto auto" exposure="1.2" environment-image="neutral" interaction-prompt="none" alt="Single face reconstructed from Laura reference photo"></model-viewer>
+  <div class="controls" aria-label="3D view controls">
+    <button data-view="0">Front</button>
+    <button data-view="-90">Left side</button>
+    <button data-view="90">Right side</button>
+    <button id="reset">Reset</button>
+    <button id="spin" aria-pressed="false">Rotate</button>
+  </div>
+  <div id="status" role="status">Loading saved Laura 2.5 model…</div>
+  <p class="note">This is the saved Laura 2.5 checkpoint. Do not modify this baseline. Forehead hair artifacts removed; skin tone unchanged pending body matching. Eyes not yet movable. This is the first-pass, single-face reconstruction: 38,365 vertices and one connected surface. The back of the skull, hair mesh, and rigging still need to be completed. Only the model—not the source photographs—is published here.</p>
+</main>
+<script>
+(async function () {
+  const view = document.querySelector('#viewer');
+  const status = document.querySelector('#status');
+  const spin = document.querySelector('#spin');
+  let assetUrl = null;
+  const root = './world-creator/assets/laura-2-5-face/';
+  const paths = Array.from({length:10}, (_, i) => root + 'face.part' + String(i).padStart(2,'0') + '.b64?forehead-clean-v1');
+  try {
+    const chunks = await Promise.all(paths.map(async (url, i) => {
+      const r = await fetch(url, {cache:'no-store'});
+      if (!r.ok) throw Error('Model section ' + (i+1) + ' unavailable (HTTP ' + r.status + ')');
+      return (await r.text()).trim();
+    }));
+    status.textContent = 'Opening 3D mesh…';
+    const data = atob(chunks.join(''));
+    const bytes = new Uint8Array(data.length);
+    for (let i = 0; i < data.length; i++) bytes[i] = data.charCodeAt(i);
+    if (bytes.length !== 1527736 || String.fromCharCode(...bytes.subarray(0, 4)) !== 'glTF'
+        || new DataView(bytes.buffer).getUint32(8,true) !== bytes.length)
+      throw Error('3D model data failed validation.');
+    assetUrl = URL.createObjectURL(new Blob([bytes], {type:'model/gltf-binary'}));
+    view.src = assetUrl;
+    view.addEventListener('load', () => status.textContent = 'Laura 2.5 loaded. Preserved checkpoint — drag to rotate or pinch to zoom.', {once:true});
+    view.addEventListener('error', () => status.textContent = 'Unable to display the 3D model. Please reload.', {once:true});
+  } catch(err) {
+    status.textContent = 'Unable to load Laura: ' + err.message;
+  }
+  function angle(a) {
+    view.removeAttribute('auto-rotate');
+    spin.textContent = 'Rotate';
+    spin.setAttribute('aria-pressed','false');
+    view.setAttribute('camera-orbit', String(a) + 'deg 90deg auto');
+    if (view.jumpCameraToGoal) view.jumpCameraToGoal();
+  }
+  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click',() => angle(b.dataset.view)));
+  document.querySelector('#reset').addEventListener('click',() => { angle(0); view.setAttribute('camera-target','auto auto auto'); });
+  spin.addEventListener('click', () => {
+    const on = view.hasAttribute('auto-rotate');
+    view.toggleAttribute('auto-rotate', !on);
+    spin.textContent = on ? 'Rotate' : 'Stop';
+    spin.setAttribute('aria-pressed', String(!on));
+  });
+})();
+</script>
+</body>
+</html>

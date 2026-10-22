@@ -1,0 +1,79 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":disablePeerDependencies"],
+  "minimumReleaseAge": "3 days",
+  "labels": ["renovate"],
+  "lockFileMaintenance": {
+    "enabled": true
+  },
+  "rangeStrategy": "bump",
+  "platformAutomerge": true,
+  "packageRules": [
+    {
+      "description": "Auto-merge everything except major updates (those need review) — CI still has to pass first.",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "marked and axe-core ship as runtime dependencies of the published package, so their updates reach every consumer — keep them manually reviewed. In-range updates touch only the lockfile, so the published range does not narrow.",
+      "groupName": "dependencies",
+      "matchDepTypes": ["dependencies"],
+      "rangeStrategy": "update-lockfile",
+      "automerge": false
+    },
+    {
+      "description": "Dev dependencies are `catalog:` references, which Renovate reports from pnpm-workspace.yaml as pnpm.catalog.default.",
+      "groupName": "devDependencies",
+      "matchDepTypes": ["devDependencies", "pnpm.catalog.default"]
+    },
+    {
+      "groupName": "linters",
+      "matchPackageNames": [
+        "eslint{/,}**",
+        "@eslint{/,}**",
+        "typescript-eslint{/,}**",
+        "globals{/,}**",
+        "publint{/,}**"
+      ]
+    },
+    {
+      "groupName": "typescript",
+      "matchPackageNames": ["typescript"]
+    },
+    {
+      "groupName": "Svelte",
+      "matchPackageNames": ["@sveltejs/{/,}**", "svelte{/,}**"]
+    },
+    {
+      "groupName": "changesets",
+      "matchPackageNames": ["@changesets/cli", "changesets/action"]
+    },
+    {
+      "description": "lockFileMaintenance has no release timestamp, so the default timestamp-required behaviour leaves renovate/stability-days pending forever. pnpm-workspace.yaml minimumReleaseAge enforces the cooldown when the lockfile is regenerated.",
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "minimumReleaseAgeBehaviour": "timestamp-optional",
+      "automerge": true
+    },
+    {
+      "description": "Actions run in release.yml with publishing rights; a pinned SHA only helps if someone reads the bump.",
+      "matchManagers": ["github-actions"],
+      "automerge": false
+    },
+    {
+      "description": "takumi 2.16 renamed FontSubset's ranges, which blume still reads (see the override in pnpm-workspace.yaml). Allow 2.16 once blume reads the new field.",
+      "matchPackageNames": ["takumi-js"],
+      "allowedVersions": "<2.16.0"
+    },
+    {
+      "description": "vite-plugin-inspect 12.1 depends on @vitejs/devtools-kit ^0.7, so @vitejs/devtools 0.8 installs a second vite and SvelteKit's runner check fails (vite_ssr_environment_not_runnable). Allow 0.8 once vite-plugin-inspect moves to devtools-kit 0.8.",
+      "matchPackageNames": ["@vitejs/devtools"],
+      "allowedVersions": "<0.8.0"
+    },
+    {
+      "description": "engines.node of the published package is the documented support floor (Node 22.17, fs.globSync), not a version to keep current; raising it drops users.",
+      "matchFileNames": ["packages/svelte-zukan/package.json"],
+      "matchDepTypes": ["engines"],
+      "enabled": false
+    }
+  ]
+}

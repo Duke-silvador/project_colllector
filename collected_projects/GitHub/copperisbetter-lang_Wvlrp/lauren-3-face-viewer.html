@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101d2a">
+<link rel="icon" href="data:,">
+<title>Lauren 3 — Corrected Eye Sockets + Movable Eyes | WVLRP</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101d2a;color:#edf6fc;font:16px system-ui,Arial,sans-serif}
+main{max-width:1050px;margin:auto}
+header{padding:13px 16px;background:#203749}
+h1{font-size:20px;margin:0 0 5px}
+header p{margin:0;color:#c6dbe7;font-size:13px}
+#stage{height:63dvh;min-height:360px;background:radial-gradient(circle at 50% 40%,#718798,#1c3041 75%);touch-action:none;position:relative;overflow:hidden}
+#stage canvas{display:block;width:100%;height:100%;touch-action:none}
+.controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding:9px 12px}
+button,select{border:1px solid #779aaf;border-radius:9px;color:white;background:#2b536d;font:600 14px system-ui;padding:11px 7px;min-height:43px}
+button:active,button:focus-visible{background:#467997}
+fieldset{border:1px solid #3d596a;border-radius:10px;margin:8px 12px;padding:9px}
+legend{color:#c8e4f3;font-size:14px;font-weight:700;padding:0 7px}
+label{display:flex;align-items:center;gap:9px;margin:9px 0;font-size:13px}
+label span{min-width:67px}
+input[type=range]{flex:1;min-width:20px;accent-color:#90c5ec}
+output{width:32px;text-align:right;font-variant-numeric:tabular-nums}
+#status{padding:8px 13px;color:#dfebf6;font-size:14px}
+.note{margin:0;padding:4px 13px 20px;color:#c9d9e3;font-size:12px;line-height:1.4}
+@media(max-width:440px){#stage{height:58dvh;min-height:330px}}
+</style>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"}}</script>
+</head>
+<body><main>
+<header><h1>Lauren 3 — Eye Socket Repair</h1><p>Genuine left and right eyeballs • Upper/lower eye puffs • Drag to rotate, pinch to zoom</p></header>
+<div id="stage" aria-label="Interactive 3D face viewer"></div>
+<div class="controls">
+ <button id="front">Front</button><button id="leftside">Left side</button><button id="rightside">Right side</button>
+ <button id="resetCamera">Reset camera</button><button id="spin">Rotate</button><button id="blink">Blink</button>
+</div>
+<fieldset>
+ <legend>Look direction</legend>
+ <div class="controls" style="padding:0">
+  <button data-look="-18,0">Look left</button><button data-look="0,0">Straight ahead</button><button data-look="18,0">Look right</button>
+  <button data-look="0,12">Look up</button><button data-look="0,-12">Look down</button><button id="resetEyes">Reset eyes</button>
+ </div>
+ <label><span>Horizontal</span><input id="yaw" type="range" min="-25" max="25" value="0" step="1"><output id="yawOut">0°</output></label>
+ <label><span>Vertical</span><input id="pitch" type="range" min="-18" max="18" value="0" step="1"><output id="pitchOut">0°</output></label>
+</fieldset>
+<fieldset>
+ <legend>Fine-tune each eye independently</legend>
+ <label><span>Eye</span><select id="chooseEye"><option value="left">Left eye</option><option value="right">Right eye</option></select></label>
+ <label><span>Side trim</span><input id="trimX" type="range" min="-12" max="12" step="1" value="0"><output id="trimXOut">0°</output></label>
+ <label><span>Up trim</span><input id="trimY" type="range" min="-10" max="10" step="1" value="0"><output id="trimYOut">0°</output></label>
+</fieldset>
+<div id="status" role="status" aria-live="polite">Loading original, intact Lauren 3 mesh and movable eye rig…</div>
+<p class="note">Lauren 3 working preview: the source GLB and protected Laura 2.5 are unchanged. Gentle eye puffs are continuous 3D deformations applied to a fresh in-memory copy; the left/right movable eyes have separate controls. The preview now uses the saved skin colors without directional-light tint. Final body skin-color matching remains deferred.</p>
+</main>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {installLauren3Eyes} from './world-creator/lauren3-eye-rig.js?v=eye-rig-v5-skin-stable';
+const stage=document.querySelector('#stage'),status=document.querySelector('#status');
+const scene=new THREE.Scene();scene.background=new THREE.Color('#344d60');
+// Soft, balanced studio lights for movable eyes. The saved photographic
+// face colors are displayed separately without directional-light tint.
+scene.add(new THREE.HemisphereLight(0xffffff,0xbfc1c2,1.7));
+scene.add(new THREE.AmbientLight(0xffffff,0.8));
+const key=new THREE.DirectionalLight(0xffffff,1.45);key.position.set(850,1200,1550);scene.add(key);
+const fill=new THREE.DirectionalLight(0xffffff,1.3);fill.position.set(-900,650,1300);scene.add(fill);
+const rim=new THREE.DirectionalLight(0xffffff,0.6);rim.position.set(0,750,-1400);scene.add(rim);
+const camera=new THREE.PerspectiveCamera(34,1,.1,10000);
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance',alpha:false});
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.15;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.75));
+stage.append(renderer.domElement);
+const orbit=new OrbitControls(camera,renderer.domElement);
+orbit.enableDamping=true;orbit.dampingFactor=.1;orbit.minDistance=165;orbit.maxDistance=1900;
+orbit.enablePan=false;
+function resize(){const w=Math.max(1,stage.clientWidth),h=Math.max(1,stage.clientHeight);renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}
+new ResizeObserver(resize).observe(stage);resize();
+let rig=null, center=new THREE.Vector3(800,445,220),turning=false,spinName='Rotate';
+function lookAtFront(){camera.position.set(center.x,center.y,center.z+1050);orbit.target.copy(center);orbit.update();}
+function setSide(sign){camera.position.set(center.x+sign*1000,center.y,center.z+70);orbit.target.copy(center);orbit.update();}
+lookAtFront();
+renderer.setAnimationLoop(time=>{if(turning&&rig){const t=time*.00015;camera.position.set(center.x+1050*Math.sin(t),center.y+10,center.z+1050*Math.cos(t));}rig?.tick(time);orbit.update();renderer.render(scene,camera);});
+const expected='27931d29e5366c452af77e7d182dd4eea3f444eebcc8e660134f7aa961c6298e';
+async function load(){
+ const root='./world-creator/assets/lauren-3-face/';
+ const paths=Array.from({length:10},(_,i)=>root+'face.part'+String(i).padStart(2,'0')+'.b64?intact-eye-rig-v5-skin-stable');
+ const chunks=await Promise.all(paths.map(async url=>{const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw Error('Missing model part ('+r.status+')');return (await r.text()).trim();}));
+ const data=atob(chunks.join('')),bytes=new Uint8Array(data.length);
+ for(let i=0;i<data.length;i++)bytes[i]=data.charCodeAt(i);
+ if(bytes.length!==1527736||String.fromCharCode(...bytes.slice(0,4))!=='glTF'||new DataView(bytes.buffer).getUint32(8,true)!==bytes.length)throw Error('Model integrity validation failed');
+ if(!crypto?.subtle)throw Error('Secure 3D validation unavailable; open via HTTPS');
+ const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');
+ if(hash!==expected)throw Error('Model data mismatch: older/cached/mixed chunks. Please reload.');
+ const gltf=await new GLTFLoader().parseAsync(bytes.buffer,'');
+ const face=gltf.scene;
+ const mesh=[];face.traverse(o=>{if(o.isMesh)mesh.push(o);});
+ if(mesh.length!==1)throw Error('Expected only one face, got '+mesh.length);
+ rig=installLauren3Eyes(face);
+ // The previous eye viewer applied strong new directional lights to a head
+ // whose photo-derived skin appearance was ALREADY baked into vertex colors.
+ // This made identical model data look muddy/dark and change as it rotated.
+ // Use the SAME original color/map factors in an unlit reference material,
+ // leaving every source vertex color and the archived Laura 2.5 unchanged.
+ // This affects only Lauren 3's browser preview, NOT the GLB asset.
+ const headMesh=mesh[0];
+ const originalMaterial=Array.isArray(headMesh.material)?headMesh.material[0]:headMesh.material;
+ const originalColor=originalMaterial?.color?.clone()??new THREE.Color(0xffffff);
+ const originalVertexColor=!!headMesh.geometry.getAttribute('color');
+ headMesh.material=new THREE.MeshBasicMaterial({
+  color:originalColor, map:originalMaterial?.map??null,
+  vertexColors:originalVertexColor, side:originalMaterial?.side??THREE.FrontSide,
+  transparent:originalMaterial?.transparent??false,
+  opacity:originalMaterial?.opacity??1,
+  alphaTest:originalMaterial?.alphaTest??0,
+  toneMapped:false
+ });
+ scene.add(face);
+ const bounds=new THREE.Box3().setFromObject(face),bcenter=bounds.getCenter(new THREE.Vector3());
+ center.set(bcenter.x,bcenter.y,bcenter.z);
+ lookAtFront();
+ status.textContent='Lauren 3 eye repair v5 loaded — saved skin colors restored in stable reference lighting, with movable eyes and preserved upper/lower puffs. '+rig.removed.join('/')+' original eye triangles replaced. Drag to inspect.';
+}
+load().catch(err=>{console.error(err);status.textContent='Unable to load eye rig: '+err.message;});
+function cancelSpin(){turning=false;document.querySelector('#spin').textContent='Rotate';}
+document.querySelector('#front').onclick=()=>{cancelSpin();lookAtFront();};
+document.querySelector('#leftside').onclick=()=>{cancelSpin();setSide(-1);};
+document.querySelector('#rightside').onclick=()=>{cancelSpin();setSide(1);};
+document.querySelector('#resetCamera').onclick=()=>{cancelSpin();lookAtFront();};
+document.querySelector('#spin').onclick=()=>{turning=!turning;document.querySelector('#spin').textContent=turning?'Stop':'Rotate';};
+document.querySelector('#blink').onclick=()=>rig?.blink();
+const yaw=document.querySelector('#yaw'),pitch=document.querySelector('#pitch');
+function setGaze(a,b){yaw.value=a;pitch.value=b;document.querySelector('#yawOut').textContent=a+'°';document.querySelector('#pitchOut').textContent=b+'°';rig?.look('both',+a,+b);}
+for(const element of document.querySelectorAll('[data-look]'))element.onclick=()=>{const [a,b]=element.dataset.look.split(',').map(Number);setGaze(a,b);};
+yaw.oninput=()=>setGaze(+yaw.value,+pitch.value);
+pitch.oninput=()=>setGaze(+yaw.value,+pitch.value);
+const choose=document.querySelector('#chooseEye'),trimX=document.querySelector('#trimX'),trimY=document.querySelector('#trimY');
+const saved={left:{x:0,y:0},right:{x:0,y:0}};
+choose.onchange=()=>{const state=saved[choose.value];trimX.value=state.x;trimY.value=state.y;document.querySelector('#trimXOut').textContent=state.x+'°';document.querySelector('#trimYOut').textContent=state.y+'°';};
+function fit(){const id=choose.value,obj=saved[id];obj.x=+trimX.value;obj.y=+trimY.value;document.querySelector('#trimXOut').textContent=obj.x+'°';document.querySelector('#trimYOut').textContent=obj.y+'°';rig?.trim(id,'x',obj.x);rig?.trim(id,'y',obj.y);}
+trimX.oninput=fit;trimY.oninput=fit;
+document.querySelector('#resetEyes').onclick=()=>{rig?.reset();setGaze(0,0);saved.left={x:0,y:0};saved.right={x:0,y:0};choose.onchange();};
+</script>
+</body></html>

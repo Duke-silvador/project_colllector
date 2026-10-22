@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#06110d">
+<title>Mobile Live | WVLRP</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:Arial,sans-serif;background:#06110d;color:#fff}
+.top{height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:#03100b;border-bottom:1px solid #ffffff24}
+.top a{color:#fff;text-decoration:none;font-weight:900}.top strong{font-size:12px;letter-spacing:.14em}
+.wrap{width:min(96vw,760px);margin:auto;padding:18px 0 90px}.intro{text-align:center;padding:10px 14px 18px}
+.intro h1{margin:5px 0 8px;font-size:clamp(28px,8vw,44px)}.intro p{margin:auto;max-width:620px;color:#b9c9c0;line-height:1.5}
+.panel{padding:14px;border-radius:24px;background:#071713;border:1px solid #ffffff2d;box-shadow:0 20px 60px #0009}
+.stage{position:relative;margin:auto;width:min(100%,430px);aspect-ratio:9/16;max-height:70vh;border-radius:20px;overflow:hidden;background:#010302;border:1px solid #ffffff2b}
+.stage video{width:100%;height:100%;object-fit:cover;background:#000}.placeholder{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:30px;background:radial-gradient(circle,#17312366,transparent 60%)}
+.placeholder.hide{display:none}.placeholder b{display:block;font-size:23px;margin-bottom:8px}.placeholder small{color:#b9c9c0;line-height:1.45}
+.live{position:absolute;left:10px;top:10px;padding:7px 10px;border-radius:999px;background:#070d0bcc;border:1px solid #ffffff2d;font-size:11px;font-weight:900;letter-spacing:.1em}
+.live:before{content:"";display:inline-block;width:8px;height:8px;margin-right:7px;border-radius:50%;background:#777}.live.ready:before{background:#ff4141;box-shadow:0 0 12px #ff4141}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:13px}.btn{border:1px solid #ffffff2e;border-radius:13px;background:#173326;color:#fff;padding:13px 10px;font-weight:900;font-size:14px}
+.btn.primary{grid-column:1/-1;background:#23643f}.status{margin-top:12px;padding:12px;border-radius:12px;background:#020806;border:1px solid #ffffff20;color:#c8d5ce;font-size:13px;line-height:1.45}
+.note{margin-top:14px;color:#91a49a;font-size:12px;line-height:1.5;text-align:center}
+</style>
+</head>
+<body>
+<header class="top"><a href="index.html">← WVLRP</a><strong>MOBILE LIVE</strong><a href="index.html#cameras">CAMERAS</a></header>
+<main class="wrap">
+<section class="intro"><h1>Mobile Live</h1><p>Live field video from the WVLRP Mobile Live app.</p></section>
+<section class="panel">
+<div class="stage">
+<video id="player" playsinline autoplay muted></video>
+<div id="placeholder" class="placeholder"><div><b>📱 Waiting for Mobile Live</b><small>Start GO LIVE in the WVLRP Mobile Live app. This page connects automatically.</small></div></div>
+<div id="liveBadge" class="live">OFFLINE</div>
+</div>
+<div class="controls">
+<button id="audio" class="btn primary">🔊 TURN AUDIO ON</button>
+<button id="retry" class="btn primary">↻ RECONNECT NOW</button>
+</div>
+<div id="status" class="status">Looking for the Mobile Live stream…</div>
+<div class="note">The viewer retries automatically if the phone changes networks or the Mobile Live app reconnects.</div>
+</section>
+</main>
+<script>
+(()=> {
+  const video=document.getElementById('player');
+  const placeholder=document.getElementById('placeholder');
+  const badge=document.getElementById('liveBadge');
+  const status=document.getElementById('status');
+  const audio=document.getElementById('audio');
+  const retry=document.getElementById('retry');
+  let pc=null,sessionUrl=null,retryTimer=null,connecting=false;
+
+  const setStatus=t=>status.textContent=t;
+  const waitIce=pc=>new Promise(resolve=>{
+    if(pc.iceGatheringState==='complete') return resolve();
+    const done=()=>{if(pc.iceGatheringState==='complete'){pc.removeEventListener('icegatheringstatechange',done);resolve();}};
+    pc.addEventListener('icegatheringstatechange',done);
+    setTimeout(resolve,2500);
+  });
+
+  async function closePeer(sendDelete=false){
+    clearTimeout(retryTimer);
+    if(sendDelete && sessionUrl){try{await fetch(sessionUrl,{method:'DELETE'});}catch(_){}}
+    sessionUrl=null;
+    if(pc){try{pc.close();}catch(_){} pc=null;}
+  }
+
+  function offline(message){
+    placeholder.classList.remove('hide');
+    badge.classList.remove('ready');
+    badge.textContent='OFFLINE';
+    setStatus(message||'Mobile Live is offline. Waiting for the app…');
+    clearTimeout(retryTimer);
+    retryTimer=setTimeout(connect,3000);
+  }
+
+  async function connect(){
+    if(connecting) return;
+    connecting=true;
+    await closePeer(false);
+    setStatus('Connecting to Mobile Live…');
+    try{
+      const next=new RTCPeerConnection();
+      pc=next;
+      const stream=new MediaStream();
+      video.srcObject=stream;
+      next.addTransceiver('video',{direction:'recvonly'});
+      next.addTransceiver('audio',{direction:'recvonly'});
+      next.ontrack=e=>{
+        if(e.streams && e.streams[0]) video.srcObject=e.streams[0];
+        else stream.addTrack(e.track);
+      };
+      next.onconnectionstatechange=()=>{
+        if(pc!==next) return;
+        if(next.connectionState==='connected'){
+          placeholder.classList.add('hide');
+          badge.classList.add('ready');
+          badge.textContent='MOBILE LIVE';
+          setStatus('LIVE — connected to the WVLRP Mobile Live app.');
+          video.play().catch(()=>{});
+        }else if(['failed','disconnected','closed'].includes(next.connectionState)){
+          offline('Mobile Live connection dropped. Reconnecting…');
+        }
+      };
+      await next.setLocalDescription(await next.createOffer());
+      await waitIce(next);
+      const endpoint='https://158-101-120-6.sslip.io/webrtc/mobile/whep';
+      const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/sdp'},body:next.localDescription.sdp});
+      if(!res.ok) throw new Error('stream unavailable ('+res.status+')');
+      const loc=res.headers.get('Location');
+      if(loc) sessionUrl=new URL(loc,endpoint).toString();
+      const answer=await res.text();
+      await next.setRemoteDescription({type:'answer',sdp:answer});
+    }catch(e){
+      if(pc){try{pc.close();}catch(_){} pc=null;}
+      offline('Waiting for Mobile Live — '+(e.message||e));
+    }finally{
+      connecting=false;
+    }
+  }
+
+  audio.onclick=async()=>{
+    video.muted=!video.muted;
+    audio.textContent=video.muted?'🔊 TURN AUDIO ON':'🔇 MUTE AUDIO';
+    try{await video.play();}catch(_){}
+  };
+  retry.onclick=()=>{clearTimeout(retryTimer);connect();};
+  window.addEventListener('pagehide',()=>closePeer(true));
+  connect();
+})();
+</script>
+<script src="site-auth.js?v=20260916-menu2"></script>
+<script src="site-analytics.js?v=20260916-1"></script>
+</body></html>

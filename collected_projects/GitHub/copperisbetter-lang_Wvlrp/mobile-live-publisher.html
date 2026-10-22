@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta name="robots" content="noindex,nofollow"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#06110d"><title>Mobile Live | WVLRP</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:Arial,sans-serif;background:#06110d;color:#fff}.top{height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;background:#03100b;border-bottom:1px solid #ffffff24}.top a{color:#fff;text-decoration:none;font-weight:900}.top strong{font-size:12px;letter-spacing:.14em}.wrap{width:min(96vw,760px);margin:auto;padding:18px 0 90px}.intro{text-align:center;padding:10px 14px 18px}.intro h1{margin:5px 0 8px;font-size:clamp(28px,8vw,44px)}.intro p{margin:auto;max-width:620px;color:#b9c9c0;line-height:1.5}.panel{padding:14px;border-radius:24px;background:#071713;border:1px solid #ffffff2d;box-shadow:0 20px 60px #0009}.stage{position:relative;margin:auto;width:min(100%,430px);aspect-ratio:9/16;max-height:70vh;border-radius:20px;overflow:hidden;background:#010302;border:1px solid #ffffff2b}.stage video{width:100%;height:100%;object-fit:cover;background:#000}.placeholder{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:30px;background:radial-gradient(circle,#17312366,transparent 60%)}.placeholder.hide{display:none}.placeholder b{display:block;font-size:23px;margin-bottom:8px}.placeholder small{color:#b9c9c0;line-height:1.45}.live{position:absolute;left:10px;top:10px;padding:7px 10px;border-radius:999px;background:#070d0bcc;border:1px solid #ffffff2d;font-size:11px;font-weight:900;letter-spacing:.1em}.live:before{content:"";display:inline-block;width:8px;height:8px;margin-right:7px;border-radius:50%;background:#777}.live.ready:before{background:#ff4141;box-shadow:0 0 12px #ff4141}.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:13px}.btn{border:1px solid #ffffff2e;border-radius:13px;background:#173326;color:#fff;padding:13px 10px;font-weight:900;font-size:14px}.btn.primary{grid-column:1/-1;background:#23643f}.btn.stop{background:#5a2424}.status{margin-top:12px;padding:12px;border-radius:12px;background:#020806;border:1px solid #ffffff20;color:#c8d5ce;font-size:13px;line-height:1.45}.note{margin-top:14px;color:#91a49a;font-size:12px;line-height:1.5;text-align:center}.hidden{display:none}
+</style></head><body>
+<header class="top"><a href="index.html">← WVLRP</a><strong>MOBILE LIVE</strong><a href="index.html#cameras">CAMERAS</a></header>
+<main class="wrap"><section class="intro"><h1>Mobile Live</h1><p>Turn this phone into a WVLRP field camera. Your browser can use the front or rear camera and microphone without installing another app.</p></section>
+<section class="panel"><div class="stage"><video id="preview" playsinline autoplay muted></video><div id="placeholder" class="placeholder"><div><b>📱 Ready for the field</b><small>Tap Start Camera and allow camera + microphone access. Nothing starts until you give permission.</small></div></div><div id="liveBadge" class="live">PREVIEW OFF</div></div>
+<div class="controls"><button id="start" class="btn primary">START CAMERA + MIC</button><button id="flip" class="btn" disabled>↻ FLIP CAMERA</button><button id="mic" class="btn" disabled>🎙 MIC ON</button><button id="publish" class="btn primary" disabled>GO LIVE</button><button id="stop" class="btn stop hidden">STOP MOBILE LIVE</button></div>
+<div id="status" class="status">Camera is off. Start the preview when you're ready.</div><div class="note">Mobile Live keeps the WVLRP site available in this browser while the camera is active. Keep this page open while broadcasting. GO LIVE publishes this phone's camera and microphone directly to WVLRP's Oracle Mobile Live relay.</div></section></main>
+<script>
+(()=>{let stream=null,facing='environment',micOn=true,publishing=false;const v=document.getElementById('preview'),ph=document.getElementById('placeholder'),badge=document.getElementById('liveBadge'),status=document.getElementById('status'),start=document.getElementById('start'),flip=document.getElementById('flip'),mic=document.getElementById('mic'),publish=document.getElementById('publish'),stop=document.getElementById('stop');
+const setStatus=t=>status.textContent=t;async function camera(){if(stream)stream.getTracks().forEach(t=>t.stop());try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing},width:{ideal:1080},height:{ideal:1920}},audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});v.srcObject=stream;ph.classList.add('hide');badge.textContent='PREVIEW READY';badge.classList.add('ready');flip.disabled=false;mic.disabled=false;publish.disabled=false;start.textContent='RESTART CAMERA';setStatus('Camera and microphone are ready. Preview stays on this phone until you tap GO LIVE.');}catch(e){setStatus('Camera/microphone permission was not granted or is unavailable: '+(e.message||e.name));}}
+start.onclick=camera;flip.onclick=async()=>{facing=facing==='environment'?'user':'environment';await camera()};mic.onclick=()=>{if(!stream)return;micOn=!micOn;stream.getAudioTracks().forEach(t=>t.enabled=micOn);mic.textContent=micOn?'🎙 MIC ON':'🔇 MIC OFF'};
+let pc=null;
+async function goLive(){
+  if(!stream)return;
+  try{
+    pc=new RTCPeerConnection();
+    stream.getTracks().forEach(track=>pc.addTrack(track,stream));
+    await pc.setLocalDescription(await pc.createOffer());
+    await new Promise(resolve=>{if(pc.iceGatheringState==='complete')return resolve();const done=()=>{if(pc.iceGatheringState==='complete'){pc.removeEventListener('icegatheringstatechange',done);resolve()}};pc.addEventListener('icegatheringstatechange',done);setTimeout(resolve,2500)});
+    const endpoint='https://158-101-120-6.sslip.io/webrtc/mobile/whip';
+    const res=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/sdp'},body:pc.localDescription.sdp});
+    if(!res.ok)throw new Error('Oracle ingest returned '+res.status);
+    const answer=await res.text();
+    await pc.setRemoteDescription({type:'answer',sdp:answer});
+    setStatus('Oracle accepted the stream. Finishing the media connection…');
+    await new Promise((resolve,reject)=>{
+      if(pc.connectionState==='connected') return resolve();
+      let done=false;
+      const finish=(err)=>{
+        if(done)return;done=true;
+        clearTimeout(timer);
+        pc.removeEventListener('connectionstatechange',onState);
+        err?reject(err):resolve();
+      };
+      const onState=()=>{
+        if(pc.connectionState==='connected') finish();
+        else if(['failed','closed'].includes(pc.connectionState)) finish(new Error('media connection '+pc.connectionState));
+      };
+      pc.addEventListener('connectionstatechange',onState);
+      const timer=setTimeout(()=>finish(new Error('media connection timed out — Oracle ICE port is not reachable')),12000);
+    });
+    publishing=true;badge.textContent='MOBILE LIVE';stop.classList.remove('hidden');publish.disabled=true;
+    setStatus('YOU ARE LIVE — camera and microphone are publishing to the WVLRP Mobile Live stream.');
+  }catch(e){if(pc){pc.close();pc=null}publishing=false;badge.textContent='PREVIEW READY';publish.disabled=false;setStatus('Could not start Mobile Live: '+(e.message||e));}
+}
+publish.onclick=goLive;
+stop.onclick=()=>{publishing=false;if(pc){pc.close();pc=null}badge.textContent='PREVIEW READY';stop.classList.add('hidden');publish.disabled=false;setStatus('Broadcast stopped. Camera preview is still running.');};
+window.addEventListener('pagehide',()=>{if(stream)stream.getTracks().forEach(t=>t.stop())});})();
+</script><script src="site-auth.js?v=20260916-menu2"></script><script src="site-analytics.js?v=20260916-1"></script></body></html>
