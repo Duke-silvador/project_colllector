@@ -1,0 +1,882 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Briquothèque</title>
+<meta name="theme-color" content="#18181b">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icones/briquotheque-192.png">
+<link rel="apple-touch-icon" href="icones/briquotheque-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1><button id="bouton-retour-entete" class="retour-entete" data-action="retour-entete" aria-label="Retour" title="Retour" hidden>←</button><span id="titre-appli">Briquothèque</span></h1>
+  <div class="entete-bas">
+    <div id="fichier-info" class="fichier-info"></div>
+    <!-- connecté : amis en ligne et pseudo (js/amis.js) -->
+    <div id="entete-compte" class="entete-compte" hidden>
+      <button id="entete-amis" class="puce-entete" data-action="amis" aria-label="Mes amis">👥</button>
+      <button id="entete-pseudo" class="puce-entete" data-action="compte"></button>
+    </div>
+  </div>
+</header>
+<nav id="arborescence" class="arborescence" aria-label="Menus" hidden></nav>
+
+<main>
+  <!-- Bandeau : modifications à enregistrer -->
+  <div id="bandeau-save" class="bandeau" hidden>
+    <span id="bandeau-texte"></span>
+    <button class="petit" data-action="enregistrer">Enregistrer</button>
+  </div>
+
+  <!-- 1. Pas encore de fichier -->
+  <section id="ecran-fichier" class="ecran" hidden>
+    <p class="intro">Bienvenue ! Votre collection est rangée directement dans l'appli et enregistrée au fur et à mesure.</p>
+    <button class="gros-bouton rouge" data-action="base-creer">🗄️ Commencer ma collection</button>
+    <button class="gros-bouton vert" data-action="base-depuis-excel">📥 Reprendre ma collection d'un fichier Excel</button>
+    <input type="file" id="input-excel-base" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+    <button class="gros-bouton gris" data-action="compte">👤 J'ai un compte : retrouver ma collection</button>
+    <button class="bouton-lien" data-action="base">📚 Seulement contribuer à la base commune des blisters JB</button>
+    <div class="choix-langue" aria-label="Langue"></div>
+  </section>
+
+  <!-- 2. Accueil -->
+  <section id="ecran-accueil" class="ecran" hidden>
+    <div class="bandeau base-vide-seul"><span>🗄️ Votre collection est vide</span>
+      <button class="petit" data-action="base-depuis-excel">📥 Reprendre d'un fichier Excel</button></div>
+    <!-- Rappel : catalogue BrickLink à mettre à jour (à partir du 2 du mois) -->
+    <div id="bandeau-catalogue" class="bandeau bleu-fonce" hidden>
+      <span>📚 Catalogue BrickLink à mettre à jour</span>
+      <button class="petit" data-action="voir-catalogue">Comment ?</button>
+    </div>
+
+    <!-- Pas connecté : connexion proposée dès l'arrivée (js/compte.js) ; ensuite la session reste ouverte (connexion automatique) -->
+    <div id="accueil-connexion" class="carte connexion-accueil" hidden>
+      <p><b>👤 Connectez-vous</b> pour sauvegarder votre collection en ligne, échanger vos doubles et retrouver vos amis.
+        <span class="score">Ensuite, la connexion se fait toute seule sur cet appareil.</span></p>
+      <div class="deux-boutons">
+        <button class="gros-bouton vert" data-compte-ouvrir="connexion">Se connecter</button>
+        <button class="gros-bouton gris" data-compte-ouvrir="inscription">Créer un compte</button>
+      </div>
+      <button class="bouton-lien" data-action="connexion-plus-tard">Plus tard</button>
+    </div>
+
+    <p class="section-titre">➕ Ajouter à ma collection</p>
+    <label class="action-principale">
+      <span class="icone">📷</span>
+      <span><b>Photographier</b><small>Figurine, blister JB, set… l'appli reconnaît ce que c'est</small></span>
+      <input type="file" id="input-photo" accept="image/*" capture="environment" hidden>
+    </label>
+    <label class="action-principale action-blister">
+      <span class="icone">📦</span>
+      <span><b>Photographier un blister JB</b><small>Recto, verso, n° · reconnu grâce à la base commune</small></span>
+      <input type="file" id="input-blister" accept="image/*" capture="environment" hidden>
+    </label>
+    <div class="tuiles">
+      <label class="tuile"><span class="icone">🖼️</span><b>Photo déjà prise</b><small>Figurine, depuis la galerie</small>
+        <input type="file" id="input-galerie" accept="image/*" hidden></label>
+      <label class="tuile"><span class="icone">🖼️</span><b>Blister, photo déjà prise</b><small>Blister JB, depuis la galerie</small>
+        <input type="file" id="input-blister-galerie" accept="image/*" hidden></label>
+      <button class="tuile" data-action="recherche"><span class="icone">🔍</span><b>Chercher par nom</b><small>Figurine (BrickLink)</small></button>
+      <button class="tuile" data-action="saisie"><span class="icone">⌨️</span><b>Saisir un code</b><small>Un ou plusieurs codes</small></button>
+      <button class="tuile" data-action="set"><span class="icone">🧱</span><b>Set LEGO</b><small>Ou Youmko, Pantasy, Cobi…</small></button>
+      <label class="tuile"><span class="icone">🛒</span><b>Scanner une boîte</b><small>Code-barres d'un set, en magasin</small>
+        <input type="file" id="input-boite" accept="image/*" capture="environment" hidden></label>
+      <button class="tuile" data-action="objet"><span class="icone">🔑</span><b>Objet dérivé</b><small>Porte-clés, lampes, magnets…</small></button>
+    </div>
+
+    <p class="section-titre">📖 Ma collection</p>
+    <div class="tuiles">
+      <button class="tuile" data-action="collection"><span class="icone">📖</span><b>Ma collection</b><small>Figurines, sets, objets dérivés</small></button>
+      <button class="tuile" data-action="valeur"><span class="icone">💶</span><b>Valeur</b><small>Ventes BrickLink sur 6 mois</small></button>
+      <button class="tuile" data-action="statistiques"><span class="icone">📊</span><b>Statistiques</b><small>Séries complètes, manquantes</small></button>
+      <button class="tuile" data-action="souhaits"><span class="icone">⭐</span><b>Ma liste de souhaits</b><small>Ce que vous voulez, sorties</small></button>
+      <button class="tuile" data-action="justificatifs"><span class="icone">🧾</span><b>Justificatifs</b><small>Tickets, factures, captures</small></button>
+      <button class="tuile" data-action="assurance"><span class="icone">🛡️</span><b>Dossier assureur</b><small>Inventaire estimé en PDF</small></button>
+    </div>
+
+    <!-- Tout JB Spielwaren au même endroit (demande de Mathias, 20/10/2026) : blisters, customs, tiles et autres objets -->
+    <p class="section-titre">🟪 JB Spielwaren</p>
+    <div class="tuiles">
+      <label class="tuile" for="input-blister"><span class="icone">📦</span><b>Photographier un blister</b><small>Recto, verso, n°</small></label>
+      <button class="tuile" data-action="customs-voir"><span class="icone">🎨</span><b>Mes customs JB</b><small>Mes blisters, en photos</small></button>
+      <button class="tuile" data-action="objets-jb-voir"><span class="icone">🟪</span><b>Tiles et objets JB</b><small>Tiles, vignettes, chromés…</small></button>
+      <button class="tuile" data-action="objet-jb"><span class="icone">➕</span><b>Ajouter un tile ou un objet</b><small>Nom, photo, quantité</small></button>
+      <button class="tuile" data-action="custom"><span class="icone">🔗</span><b>Figurine custom</b><small>Catalogue JB ou lien</small></button>
+      <button class="tuile" data-action="achats"><span class="icone">🏷️</span><b>Mes achats customs</b><small>Prix payé et revente</small></button>
+      <button class="tuile" data-action="base"><span class="icone">📚</span><b>Base de blisters</b><small>Commune à tous : photos, envois</small></button>
+      <button class="tuile" data-action="consulter"><span class="icone">🗂️</span><b>Catalogue JB</b><small>Toutes les customs JB</small></button>
+    </div>
+
+    <p class="section-titre">🤝 Communauté</p>
+    <div class="tuiles">
+      <button class="tuile" data-action="echanges"><span class="icone">🔄</span><b>Échanges</b><small id="tuile-echanges-info">Doubles contre souhaits</small></button>
+      <button class="tuile" data-action="amis"><span class="icone">👥</span><b>Mes amis</b><small>En ligne, demandes d'amis</small></button>
+      <button class="tuile" data-action="compte"><span class="icone">👤</span><b>Mon compte</b><small id="tuile-compte-info">Connexion, sauvegarde en ligne</small></button>
+    </div>
+
+    <p class="section-titre">🔎 Découvrir</p>
+    <div class="tuiles">
+      <button class="tuile" data-action="nouveautes"><span class="icone">🆕</span><b>Nouveautés</b><small>Sorties LEGO par thème</small></button>
+      <button class="tuile" data-action="magasins-autour"><span class="icone">📍</span><b>Magasins proches</b><small>Boutiques LEGO et jouets</small></button>
+    </div>
+
+    <p class="section-titre">🖨️ Imprimer et exporter</p>
+    <div class="tuiles">
+      <button class="tuile" data-action="impression"><span class="icone">🖨️</span><b>Imprimer des étiquettes</b><small>À la taille de vos étiquettes</small></button>
+      <button class="tuile" data-action="exports"><span class="icone">📤</span><b>Exporter</b><small>Excel, PDF, CSV, BrickLink</small></button>
+    </div>
+
+    <details class="outils" id="outils">
+      <summary>Outils <span class="score" id="version-appli"></span></summary>
+      <p class="sous-titre">🌐 Langue</p>
+      <div class="choix-langue" aria-label="Langue"></div>
+      <p class="sous-titre">📱 Appli Android</p>
+      <a class="bouton gris" href="telechargement/briquotheque.apk" download="Briquotheque.apk">📥 Télécharger l'appli Android (.apk)</a>
+      <p class="aide">Ouvrez le fichier téléchargé : Android demande une fois d'autoriser l'installation depuis Chrome. L'appli se met à jour toute seule.
+        Sur iPhone : dans Safari, « Partager » puis « Sur l'écran d'accueil ».</p>
+      <details class="langue-verif"><summary data-action="langue-controle">Contrôle de la langue : textes pas encore traduits <span id="langue-controle"></span></summary>
+        <div id="langue-manquants"></div></details>
+      <div id="bloc-erreurs" class="alerte" hidden><b>⚠️ Dernières erreurs</b>
+        <pre id="liste-erreurs" class="score" style="white-space:pre-wrap;margin:6px 0 0"></pre></div>
+      <button class="bouton gris" data-action="rapport">📨 Signaler un problème ou suggérer une amélioration</button>
+      <p class="aide">Un blocage, un bug, ou une amélioration à suggérer ? Pour un problème, le message décrit aussi l'appli
+        (version, téléphone, écran, dernières actions et erreurs), sans rien de votre collection ni de vos photos.
+        Vous choisissez à qui l'envoyer.</p>
+      <div id="bloc-catalogue" class="bloc-catalogue">
+        <p class="sous-titre">🔄 Mises à jour</p>
+        <p class="aide">Les catalogues se mettent à jour tout seuls : sets, nouveautés, objets dérivés et prix LEGO France
+          chaque nuit ; nouvelles figurines BrickLink chaque mois. Ce bouton les relit tout de suite.</p>
+        <p class="aide" id="catalogue-info"></p>
+        <button class="gros-bouton vert" data-action="tout-mettre-a-jour">🔄 Tout mettre à jour</button>
+        <p class="aide" id="maj-etat"></p>
+        <details class="aide"><summary>Mettre à jour le catalogue BrickLink à la main (secours)</summary>
+        <ol class="aide etapes">
+          <li>Connectez-vous sur BrickLink, puis ouvrez la <a href="https://www.bricklink.com/catalogDownload.asp" target="_blank" rel="noopener">page de téléchargement du catalogue</a>.</li>
+          <li>Choisissez <b>Catalog Items</b>, <b>Minifigures</b>, <b>Tab-Delimited File</b> (cochez <b>Year Released</b> si proposé), puis <b>Download</b>.</li>
+          <li>Touchez le bouton ci-dessous et choisissez le fichier téléchargé (<b>Minifigures.txt</b>, parfois nommé Minifigures.txt.xml).</li>
+        </ol>
+        <label class="bouton">📥 Mettre à jour le catalogue BrickLink
+          <input type="file" id="input-catalogue" hidden>
+        </label>
+        </details>
+      </div>
+      <hr>
+      <label class="case-a-cocher" id="bloc-reglage-camps" hidden><input type="checkbox" id="reglage-camps"> Star Wars rangé par camps : Gentils (vert), Méchants (rouge), Zone grise — étiquettes de couleur</label>
+      <button class="bouton gris" data-action="base-depuis-excel">📥 Reprendre un fichier Excel (remplace la collection)</button>
+      <p class="aide" id="info-sauvegarde"></p>
+      <button class="bouton bleu" data-action="sauvegarde-en-ligne">☁️ Sauvegarder en ligne maintenant (dépôt privé)</button>
+      <button class="bouton gris" data-action="restaurer-en-ligne">☁️ Restaurer la sauvegarde en ligne</button>
+    </details>
+  </section>
+
+  <!-- Recadrage de la photo -->
+  <section id="ecran-recadrage" class="ecran" hidden>
+    <p class="intro" id="recadrage-titre">Encadrez la figurine : glissez le cadre, ou tirez ses coins.</p>
+    <div id="recadrage-zone" class="recadrage-zone">
+      <img id="recadrage-image" alt="">
+      <div id="recadrage-cadre" class="recadrage-cadre">
+        <span data-coin="hg" class="coin hg"></span><span data-coin="hd" class="coin hd"></span>
+        <span data-coin="bg" class="coin bg"></span><span data-coin="bd" class="coin bd"></span>
+      </div>
+    </div>
+    <button class="gros-bouton vert" data-action="recadrage-ok">✂️ Identifier cette zone</button>
+    <button class="bouton gris" data-action="recadrage-entiere">Utiliser toute la photo</button>
+    <button class="bouton-lien" data-action="recadrage-annuler">Annuler</button>
+  </section>
+
+  <!-- Consultation de la collection (lecture seule) -->
+  <section id="ecran-collection" class="ecran" hidden>
+    <!-- ajouter directement depuis Ma collection (Mathias, 11/10/2026) : mêmes choix qu'à l'accueil ; les photos passent
+         par les mêmes champs (label for=…) que les gros boutons de l'accueil -->
+    <details class="ajouter-collection">
+      <summary class="bouton">➕ Ajouter à ma collection</summary>
+      <div class="tuiles">
+        <label class="tuile" for="input-photo"><span class="icone">📷</span><b>Photographier</b><small>Figurine, blister, set… reconnu</small></label>
+        <label class="tuile" for="input-blister"><span class="icone">📦</span><b>Blister JB</b><small>Le photographier</small></label>
+        <label class="tuile" for="input-galerie"><span class="icone">🖼️</span><b>Photo déjà prise</b><small>Figurine, depuis la galerie</small></label>
+        <label class="tuile" for="input-blister-galerie"><span class="icone">🖼️</span><b>Blister, photo déjà prise</b><small>Blister JB, depuis la galerie</small></label>
+        <button class="tuile" data-action="recherche"><span class="icone">🔍</span><b>Chercher par nom</b><small>Figurine (BrickLink)</small></button>
+        <button class="tuile" data-action="saisie"><span class="icone">⌨️</span><b>Saisir un code</b><small>Un ou plusieurs codes</small></button>
+        <button class="tuile" data-action="custom"><span class="icone">🎨</span><b>Figurine custom</b><small>Catalogue JB ou lien</small></button>
+        <button class="tuile" data-action="set"><span class="icone">🧱</span><b>Set LEGO</b><small>Ou Youmko, Pantasy, Cobi…</small></button>
+        <label class="tuile"><span class="icone">🛒</span><b>Scanner une boîte</b><small>Code-barres d'un set</small>
+          <input type="file" id="input-boite-collection" accept="image/*" capture="environment" hidden></label>
+        <button class="tuile" data-action="objet"><span class="icone">🔑</span><b>Objet dérivé</b><small>Porte-clés, lampes, magnets…</small></button>
+        <button class="tuile" data-action="objet-jb"><span class="icone">🟪</span><b>Tile ou objet JB</b><small>Tiles, vignettes, chromés…</small></button>
+      </div>
+    </details>
+    <input id="collection-recherche" class="champ" type="search" placeholder="🔍 Nom ou code…" autocomplete="off">
+    <div id="collection-onglets" class="puces"></div>
+    <div class="bascule" id="collection-bascule">
+      <button data-vue="liste" class="choisi">Liste</button>
+      <button data-vue="vignettes">Vignettes</button>
+    </div>
+    <p class="aide" id="collection-info"></p>
+    <div id="collection-contenu"></div>
+    <button class="bouton gris" data-action="accueil">↩︎ Retour</button>
+  </section>
+
+  <!-- Figurine custom (JB Spielwaren ou autre) -->
+  <section id="ecran-custom" class="ecran" hidden>
+    <p class="intro">🎨 Figurine <b>custom</b> (JB Spielwaren ou autre fabricant) : elle sera rangée dans l'onglet « Customs ».</p>
+    <img id="custom-photo" class="photo-apercu" alt="Photo du blister">
+    <label for="custom-recherche" class="etiquette-champ">Chercher dans le catalogue JB Spielwaren</label>
+    <input id="custom-recherche" class="champ" type="search" autocomplete="off" placeholder="ex. clone, witch, knight…">
+    <p class="aide" id="custom-recherche-info"></p>
+    <div id="custom-indice"></div>
+    <div id="custom-resultats" class="grille"></div>
+    <button class="bouton gris" id="btn-encadrer-nom" hidden>✂️ Encadrer le nom moi-même</button>
+    <div id="custom-choisie"></div>
+    <label for="custom-lien" class="etiquette-champ">Lien de la page de la figurine (facultatif)</label>
+    <input id="custom-lien" class="champ" type="url" inputmode="url" autocomplete="off" placeholder="https://www.jb-spielwaren.de/…">
+    <p class="aide">Sur la page de la figurine : ⋮ → <b>Partager</b> → <b>Copier le lien</b>, puis collez-le ici.<span class="excel-seul"> Le QR code de l'étiquette ouvrira cette page. Sans lien, l'étiquette n'aura pas de QR code.</span></p>
+    <label for="custom-nom" class="etiquette-champ">Nom de la figurine</label>
+    <input id="custom-nom" class="champ" autocomplete="off" placeholder="ex. CLONE TROOPER 501st">
+    <p class="aide excel-seul" id="custom-code"></p>
+    <div class="apercu-etiquette excel-seul" id="custom-apercu"></div>
+    <div id="custom-alerte"></div>
+    <label class="case-a-cocher"><input type="checkbox" id="custom-non-numerote"> Non numérotée (pas de série limitée)</label>
+    <div id="custom-bloc-numeros">
+      <label for="custom-serie" class="etiquette-champ">Série limitée à</label>
+      <input id="custom-serie" class="champ" inputmode="numeric" autocomplete="off" placeholder="ex. 250">
+      <label class="etiquette-champ" id="custom-numeros-titre">N° de l'exemplaire (écrit sur le blister)</label>
+      <div id="custom-numeros" class="grille-numeros">
+        <input id="custom-exemplaire" class="champ" inputmode="numeric" autocomplete="off" placeholder="ex. 189">
+      </div>
+      <p class="aide" id="custom-numeros-etat"></p>
+    </div>
+    <p class="question">Ajouter à ma collection ?</p>
+    <div class="oui-non">
+      <button class="gros-bouton gris" data-action="non">Non</button>
+      <button class="gros-bouton vert" data-action="custom-oui">Oui</button>
+    </div>
+  </section>
+
+  <!-- Valeur de la collection (js/valeur.js) : prix relevés dans le dépôt GitHub privé -->
+  <!-- Nouveautés LEGO (js/ecran_nouveautes.js) : sorties de l'année par thème, relues chaque nuit (Rebrickable) -->
+  <section id="ecran-nouveautes" class="ecran" hidden>
+    <p class="intro">🆕 <b>Nouveautés LEGO</b> <span class="score" id="nv-maj"></span>
+      <button class="petit" id="nv-actualiser">🔄 Actualiser</button></p>
+    <input id="nv-recherche" class="champ" type="search" autocomplete="off" placeholder="🔍 Filtrer (ex. shrek, vador, 75412)">
+    <div class="bascule" id="nv-onglets">
+      <button data-nv="mois" class="choisi">📅 Par mois</button>
+      <button data-nv="figurines">🧍 Figurines</button>
+      <button data-nv="sets">🧱 Sets</button>
+      <button data-nv="objets">🔑 Objets</button>
+    </div>
+    <div id="nv-themes" class="puces"></div>
+    <div id="nv-contenu"></div>
+    <button class="bouton gris" data-action="accueil">↩︎ Retour</button>
+  </section>
+
+  <!-- Objets dérivés LEGO (catalogue BrickLink « Gear ») : onglet « Objets dérivés » (js/objets.js) -->
+  <section id="ecran-objet" class="ecran" hidden>
+    <p class="intro">🔑 <b>Objet dérivé LEGO</b> : porte-clés, porte-clés lumineux, magnet, réveil… Il est valorisé d'après
+      les ventes BrickLink, grâce à son numéro BrickLink.</p>
+    <label class="gros-bouton vert">📷 Photographier l'étiquette (face avant)
+      <input type="file" id="input-objet-photo" accept="image/*" capture="environment" hidden></label>
+    <p class="aide">L'appli lit la référence imprimée au-dessus du code-barres (ex. KE48H) et retrouve l'objet. Ou tapez son nom :</p>
+    <label for="objet-nom" class="etiquette-champ">Ce que c'est</label>
+    <input id="objet-nom" class="champ" autocomplete="off" placeholder="ex. ghost key light, vader, KE48H">
+    <div id="objet-nouveautes" class="grille"></div>
+    <button class="bouton bleu" data-action="objet-chercher">🔎 Trouver son numéro sur BrickLink</button>
+    <p class="aide">Sur BrickLink, ouvrez le bon objet : son numéro est écrit sous le nom (« Item No »). Recopiez-le ci-dessous.</p>
+    <label for="objet-code" class="etiquette-champ">Numéro BrickLink</label>
+    <input id="objet-code" class="champ" autocomplete="off" autocapitalize="characters" placeholder="ex. 5005374 ou LGL-KE7">
+    <label for="objet-type" class="etiquette-champ">Type</label>
+    <select id="objet-type" class="champ">
+      <option value="Porte-clés">Porte-clés</option><option value="Porte-clés lumineux">Porte-clés lumineux</option><option value="Lampe / torche">Lampe / torche</option><option value="Magnet">Magnet</option>
+      <option value="Montre / réveil">Montre / réveil</option><option value="Stylo / papeterie">Stylo / papeterie</option><option value="Autre">Autre</option>
+    </select>
+    <label for="objet-etat" class="etiquette-champ">État</label>
+    <select id="objet-etat" class="champ"><option value="Neuf (emballage)">Neuf (emballage)</option><option value="Occasion">Occasion</option></select>
+    <label for="objet-quantite" class="etiquette-champ">Quantité</label>
+    <input id="objet-quantite" class="champ" type="number" min="1" value="1" inputmode="numeric">
+    <label for="objet-remarques" class="etiquette-champ">Remarques (facultatif)</label>
+    <input id="objet-remarques" class="champ" autocomplete="off" placeholder="ex. carton 3, pile à changer">
+    <div class="deux-champs">
+      <div><label class="etiquette-champ" for="objet-prix">Prix payé (€, facultatif)</label>
+        <input id="objet-prix" class="champ" inputmode="decimal" autocomplete="off" placeholder="par exemplaire"></div>
+      <div><label class="etiquette-champ" for="objet-date">Acheté le (facultatif)</label>
+        <input id="objet-date" class="champ" type="date"></div></div>
+    <button class="gros-bouton vert" data-action="objet-ajouter">➕ Ajouter à ma collection</button>
+    <div id="objet-liste"></div>
+  </section>
+
+  <!-- Tiles et autres objets JB Spielwaren (js/objets_jb.js) -->
+  <section id="ecran-objet-jb" class="ecran" hidden>
+    <p class="intro">🟪 <b>Tile ou objet JB Spielwaren</b> : tile (petite plaque imprimée), vignette, élément chromé, pièce
+      imprimée, poster… Souvent offerts : le prix payé est facultatif.</p>
+    <label class="gros-bouton vert">📷 Photographier l'objet (facultatif)
+      <input type="file" id="input-jb-photo" accept="image/*" capture="environment" hidden></label>
+    <img id="jb-apercu" class="photo-apercu" alt="" hidden>
+    <label for="jb-type" class="etiquette-champ">Type</label>
+    <select id="jb-type" class="champ"></select>
+    <label for="jb-nom" class="etiquette-champ">Nom</label>
+    <input id="jb-nom" class="champ" autocomplete="off" placeholder="ex. Tile Darth Donut, ou ce qui est imprimé dessus">
+    <label for="jb-quantite" class="etiquette-champ">Quantité</label>
+    <input id="jb-quantite" class="champ" type="number" min="1" value="1" inputmode="numeric">
+    <label for="jb-prix" class="etiquette-champ">Prix payé par exemplaire (facultatif : vide si offert)</label>
+    <input id="jb-prix" class="champ" inputmode="decimal" autocomplete="off" placeholder="vide si offert">
+    <label for="jb-date" class="etiquette-champ">Date d'achat (facultatif)</label>
+    <input id="jb-date" class="champ" type="date">
+    <label for="jb-remarques" class="etiquette-champ">Remarques (facultatif)</label>
+    <input id="jb-remarques" class="champ" autocomplete="off" placeholder="ex. stream du 12/10, boîte 2">
+    <button class="gros-bouton vert" data-action="objet-jb-ajouter">➕ Ajouter à ma collection</button>
+    <button class="bouton gris" data-action="objets-jb-voir">🟪 Voir mes tiles et objets JB</button>
+    <button class="bouton bleu" id="jb-importer" data-action="objet-jb-importer" hidden>📥 Reprendre mes achats (tiles, vignettes… des directs Whatnot)</button>
+  </section>
+
+  <!-- Compte en ligne (js/compte.js, Supabase) : connexion, sauvegarde en ligne de la collection -->
+  <section id="ecran-compte" class="ecran" hidden>
+    <div id="compte-contenu"></div>
+  </section>
+
+  <!-- Amis et présence (js/amis.js) -->
+  <section id="ecran-amis" class="ecran" hidden>
+    <div id="amis-contenu"></div>
+  </section>
+
+  <!-- Échanges entre collectionneurs (js/echanges.js) -->
+  <section id="ecran-echanges" class="ecran" hidden>
+    <div id="echanges-contenu"></div>
+  </section>
+
+  <!-- Coffre à justificatifs d'achat (js/justificatifs.js) : tickets, factures, captures de commandes -->
+  <section id="ecran-justificatifs" class="ecran" hidden>
+    <p class="intro">🧾 <b>Justificatifs d'achat</b> : photographiez vos tickets et factures, ou ajoutez la capture d'écran
+      d'une commande (Whatnot, JB Spielwaren, eBay…). Ils servent de preuves pour l'assureur et rappellent ce que vous avez
+      acheté, même quand la figurine n'est pas nommée sur la commande.</p>
+    <div class="tuiles">
+      <label class="tuile"><span class="icone">📷</span><b>Photographier</b><small>Ticket ou facture</small>
+        <input type="file" id="input-justificatif-photo" accept="image/*" capture="environment" hidden></label>
+      <label class="tuile"><span class="icone">🖼️</span><b>Capture d'écran</b><small>Ou photo déjà prise</small>
+        <input type="file" id="input-justificatif-galerie" accept="image/*" multiple hidden></label>
+    </div>
+    <p class="aide" id="justificatifs-info"></p>
+    <div id="justificatifs-liste" class="base-liste"></div>
+    <button class="gros-bouton gris" id="justificatifs-sauver" data-action="justificatifs-sauver" hidden>📤 Sauvegarder mes justificatifs (.zip)</button>
+    <label class="bouton-lien">📥 Reprendre une sauvegarde de justificatifs
+      <input type="file" id="input-justificatifs-zip" accept=".zip,application/zip" hidden></label>
+  </section>
+
+  <!-- Dossier pour l'assureur (js/assurance.js) : inventaire estimé, à enregistrer en PDF ou en tableur -->
+  <section id="ecran-assurance" class="ecran" hidden>
+    <div class="pas-imprime">
+      <p class="intro">🛡️ <b>Dossier pour l'assureur</b> : l'inventaire complet de votre collection, article par article, avec
+        sa valeur estimée, la méthode et la date des prix. Vous l'enregistrez en PDF pour l'envoyer à votre assureur.
+        <a href="methode.html">ℹ️ Comment est calculée la valeur ?</a></p>
+      <label for="assurance-nom" class="etiquette-champ">Nom du propriétaire</label>
+      <input id="assurance-nom" class="champ" autocomplete="name">
+      <label for="assurance-adresse" class="etiquette-champ">Adresse (facultatif)</label>
+      <input id="assurance-adresse" class="champ" autocomplete="street-address">
+      <label for="assurance-contrat" class="etiquette-champ">N° de contrat d'assurance (facultatif)</label>
+      <input id="assurance-contrat" class="champ" autocomplete="off">
+      <label class="case-a-cocher"><input type="checkbox" id="assurance-photos" checked> Avec les photos des articles</label>
+      <label class="case-a-cocher"><input type="checkbox" id="assurance-justificatifs" checked> Avec mes justificatifs d'achat (🧾)</label>
+      <button class="gros-bouton vert" data-action="assurance-preparer">📄 Préparer le dossier</button>
+      <p class="aide" id="assurance-etat"></p>
+      <div id="assurance-sortie" class="oui-non" hidden>
+        <button class="gros-bouton bleu" data-action="assurance-imprimer">🖨️ Enregistrer en PDF</button>
+        <button class="gros-bouton gris" data-action="assurance-tableur">📊 Tableur (.csv)</button>
+      </div>
+    </div>
+    <div id="assurance-dossier"></div>
+  </section>
+
+  <section id="ecran-valeur" class="ecran" hidden>
+    <p class="intro">💶 <b>Valeur de ma collection</b> : ce que coûterait son rachat aujourd'hui, d'après les ventes réelles
+      BrickLink des 6 derniers mois et les prix LEGO. <a href="methode.html">ℹ️ Comment est calculée la valeur ?</a></p>
+    <div id="valeur-bandeau" class="bandeau" hidden></div>
+    <p class="aide" id="valeur-etat"></p>
+    <div id="valeur-avancement" class="carte" hidden></div>
+    <div id="valeur-jeton-bloc" class="carte" hidden>
+      <label for="valeur-jeton" class="etiquette-champ">Jeton d'accès GitHub (github_pat_…)</label>
+      <input id="valeur-jeton" class="champ champ-masque" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" data-lpignore="true" data-1p-ignore placeholder="github_pat_…">
+      <button class="bouton bleu" data-action="valeur-jeton">Enregistrer le jeton</button>
+      <p class="aide">Il ne sert qu'à votre dépôt privé et reste dans ce téléphone.</p>
+    </div>
+    <div id="valeur-actions" hidden>
+      <div class="tuiles">
+        <button class="tuile" data-action="valeur-envoyer"><span class="icone">📤</span><b>Envoyer ma liste</b><small>et relever les prix</small></button>
+        <button class="tuile" data-action="valeur-actualiser"><span class="icone">🔄</span><b>Actualiser</b><small>Lire les derniers prix</small></button>
+      </div>
+      <button class="bouton gris" data-action="valeur-customs">📥 Ajouter mes customs achetées (reçus JB et Whatnot)</button>
+      <div id="valeur-resultat"></div>
+      <button class="bouton-lien" data-action="valeur-oublier">Retirer le jeton de ce téléphone</button>
+    </div>
+  </section>
+
+  <!-- Mes achats de customs (js/achats.js) : nommer les achats en lot, prix payé et prix de revente par figurine -->
+  <section id="ecran-achats" class="ecran" hidden>
+    <p class="intro">🏷️ <b>Mes achats de customs</b> : le prix payé de chaque exemplaire (frais de port compris), pour savoir à
+      combien revendre vos doubles.</p>
+    <div class="onglets-achats">
+      <button class="bouton" id="achats-onglet-nommer" data-action="achats-nommer">À nommer</button>
+      <button class="bouton" id="achats-onglet-figurines" data-action="achats-figurines">Par figurine</button>
+      <button class="bouton" id="achats-onglet-vendre" data-action="achats-vendre">À vendre</button>
+    </div>
+    <details class="carte">
+      <summary>Réglages de la revente</summary>
+      <label for="achats-frais" class="etiquette-champ">Frais de vente (% du prix de vente, commission + paiement)</label>
+      <input id="achats-frais" class="champ" inputmode="decimal">
+      <label for="achats-fixe" class="etiquette-champ">Frais fixes par vente (€)</label>
+      <input id="achats-fixe" class="champ" inputmode="decimal">
+      <label for="achats-marge" class="etiquette-champ">Marge voulue (% du prix payé)</label>
+      <input id="achats-marge" class="champ" inputmode="decimal">
+      <p class="aide">Vérifiez les frais actuels sur Whatnot (ou la plateforme où vous vendez). Le prix de revente conseillé
+        vous rend le prix payé plus la marge, une fois les frais retirés (arrondi à l'euro supérieur).
+        <a href="methode.html">ℹ️ Toutes les méthodes de calcul</a></p>
+    </details>
+    <label class="case-a-cocher" id="achats-filtre" hidden><input type="checkbox" id="achats-doublons"> Seulement les figurines en plusieurs exemplaires</label>
+    <div id="achats-liste"></div>
+    <button class="bouton gris" data-action="accueil">↩︎ Retour</button>
+  </section>
+
+  <!-- Consulter la base des figurines JB (js/consulter.js) -->
+  <section id="ecran-consulter" class="ecran" hidden>
+    <p class="intro">🗂️ <b>Base des figurines JB</b> : le catalogue JB Spielwaren, les figurines retirées retrouvées ailleurs
+      et les blisters photographiés par les collectionneurs.</p>
+    <input id="consulter-recherche" class="champ" type="search" autocomplete="off" placeholder="Chercher un nom (ex. donut, chrome, vader)">
+    <select id="consulter-filtre" class="champ">
+      <option value="tout">Toute la base</option>
+      <option value="jb">En vente chez JB</option>
+      <option value="retirees">Épuisées / plus en vente chez JB</option>
+      <option value="album">Photos de collectionneurs</option>
+      <option value="mes">Mes photos de blisters</option>
+    </select>
+    <p class="aide" id="consulter-info"></p>
+    <div id="consulter-liste" class="grille"></div>
+    <button class="bouton gris" id="consulter-plus" hidden>Voir plus</button>
+    <button class="bouton gris" data-action="accueil">↩︎ Retour</button>
+  </section>
+
+  <!-- Sets LEGO (js/sets.js) : numéro -> fiche, état, boîte, notice, figurines -> onglet « Sets » -->
+  <section id="ecran-set" class="ecran" hidden>
+    <label for="set-marque" class="etiquette-champ">Marque</label>
+    <select id="set-marque" class="champ"></select>
+    <input id="set-marque-autre" class="champ" autocomplete="off" placeholder="Nom de la marque" hidden>
+    <div id="set-bloc-lego">
+    <label for="set-numero" class="etiquette-champ">🧱 Numéro ou nom du set LEGO</label>
+    <input id="set-numero" class="champ" type="search" autocomplete="off" placeholder="ex. 75192 ou death star">
+    <p class="aide" id="set-info"></p>
+    <label class="bouton gris">📥 Importer une liste de sets (depuis un fichier Excel)
+      <input type="file" id="input-import-sets" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+    </label>
+    <div id="set-fiche"></div>
+    </div>
+    <div id="set-bloc-marque" hidden>
+      <p class="aide">Les autres marques ne sont pas dans les catalogues LEGO : renseignez le set vous-même. Sa valeur : le prix
+        sur le site du fabricant s'il le vend encore, sinon les annonces eBay France, sinon votre prix payé.</p>
+      <label for="set-m-numero" class="etiquette-champ">Numéro (sur la boîte)</label>
+      <input id="set-m-numero" class="champ" autocomplete="off" placeholder="ex. 2299">
+      <label for="set-m-nom" class="etiquette-champ">Nom</label>
+      <input id="set-m-nom" class="champ" autocomplete="off" placeholder="ex. Titanic">
+      <div class="deux-champs">
+        <div><label for="set-m-pieces" class="etiquette-champ">Pièces</label><input id="set-m-pieces" class="champ" inputmode="numeric"></div>
+        <div><label for="set-m-annee" class="etiquette-champ">Année</label><input id="set-m-annee" class="champ" inputmode="numeric"></div>
+      </div>
+      <label for="set-m-prix-fabricant" class="etiquette-champ">Prix sur le site du fabricant (€, s'il le vend encore)</label>
+      <input id="set-m-prix-fabricant" class="champ" inputmode="decimal" placeholder="prix affiché pour la France, ex. 299,00">
+    </div>
+    <div id="set-details" hidden>
+      <label for="set-etat" class="etiquette-champ">État</label>
+      <select id="set-etat" class="champ">
+        <option value="Neuf scellé">Neuf scellé</option><option value="Monté">Monté</option><option value="Démonté (en boîte)">Démonté (en boîte)</option><option value="Sans figurines">Sans figurines</option><option value="Incomplet">Incomplet</option><option value="Boîte seule (vide)">Boîte seule (vide)</option><option value="Autre">Autre</option>
+      </select>
+      <label class="case-a-cocher"><input type="checkbox" id="set-boite"> Boîte d'origine</label>
+      <label class="case-a-cocher"><input type="checkbox" id="set-notice"> Notice</label>
+      <div class="deux-champs">
+        <div><label class="etiquette-champ" for="set-prix">Prix payé (€, facultatif)</label>
+          <input id="set-prix" class="champ" inputmode="decimal" autocomplete="off" placeholder="ex. 79,99"></div>
+        <div><label class="etiquette-champ" for="set-date">Acheté le (facultatif)</label>
+          <input id="set-date" class="champ" type="date"></div></div>
+      <p class="sous-titre" id="set-figs-titre"></p>
+      <div id="set-figs" class="base-liste"></div>
+      <p class="question">Ajouter ce set à ma collection ?</p>
+      <div class="oui-non">
+        <button class="gros-bouton gris" data-action="accueil">Non</button>
+        <button class="gros-bouton vert" data-action="set-ajouter">Oui</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Base commune des blisters JB : photos et noms de vos blisters, à exporter pour enrichir la base (js/base.js) -->
+  <section id="ecran-base" class="ecran" hidden>
+    <p class="intro">📚 <b>Base de blisters JB</b>, commune à tous (la vôtre, celle de votre ami, les collectionneurs) : photographiez vos blisters un par un (recto, puis verso). Le nom est lu tout seul : vérifiez-le, notez le numéro écrit à la main (« 143 of 250 »), puis « Ajouter ».
+      L'appli compte vos exemplaires de chaque figurine et les compare à vos achats. « Envoyer » crée un fichier à
+      m'envoyer : ces blisters seront ensuite reconnus par l'appli (nom et décor).</p>
+    <label class="gros-bouton corail">📷 Photographier un blister
+      <input type="file" id="input-base" accept="image/*" capture="environment" hidden>
+    </label>
+    <label class="bouton gris">🖼️ Choisir une photo déjà prise
+      <input type="file" id="input-base-galerie" accept="image/*,application/pdf" hidden>
+    </label>
+    <label class="bouton gris">🗂️ Importer une série de scans (photos ou PDF : recto, verso, recto, verso…)
+      <input type="file" id="input-base-scans" accept="image/*,application/pdf" multiple hidden>
+    </label>
+    <div id="base-autre" hidden>
+      <label class="gros-bouton bleu-fonce">➕ <span id="btn-base-autre">Autre exemplaire</span>
+        <input type="file" id="input-base-autre" accept="image/*" capture="environment" hidden></label>
+      <button class="bouton-lien" data-action="base-autre">ou garder la même photo (plus rapide)</button>
+    </div>
+    <p class="score" id="base-cadre-memo" hidden>📌 Cadre mémorisé : les photos sont recadrées comme la première
+      de la série. <button class="bouton-lien" data-action="base-oublier-cadre">Oublier ce cadre</button></p>
+    <p class="alerte" id="base-serie-etat" hidden></p>
+    <p class="aide" id="base-etat"></p>
+    <div class="recto-verso">
+      <img id="base-photo" class="photo-apercu" alt="Recto du blister">
+      <img id="base-verso" class="photo-apercu" alt="Verso du blister" hidden>
+    </div>
+    <div class="suggestions" id="base-recadrer-boutons" hidden>
+      <button class="petit" data-action="base-recadrer-recto">✂️ Recadrer le recto</button>
+      <button class="petit" data-action="base-recadrer-verso" id="btn-recadrer-verso" hidden>✂️ Recadrer le verso</button>
+    </div>
+    <div id="base-recadrage" class="carte" hidden>
+      <p class="aide" id="base-recadrage-titre">Ajustez le cadre autour du blister : glissez-le, ou tirez ses coins.</p>
+      <div id="base-recadrage-zone" class="recadrage-zone"><img id="base-recadrage-image" alt="">
+        <div id="base-recadrage-cadre" class="recadrage-cadre">
+          <span data-coin="hg" class="coin hg"></span><span data-coin="hd" class="coin hd"></span>
+          <span data-coin="bg" class="coin bg"></span><span data-coin="bd" class="coin bd"></span>
+        </div></div>
+      <label class="case-a-cocher"><input type="checkbox" id="base-recadrage-memoriser"> 📌 Garder ce cadre pour les photos
+        suivantes (même installation : carton, support, téléphone au même endroit)</label>
+      <button class="gros-bouton vert" data-action="base-recadrage-ok">✔ Garder ce cadre</button>
+      <button class="bouton gris" data-action="base-recadrage-entiere">Garder la photo entière</button>
+      <button class="bouton-lien" data-action="base-recadrage-annuler">Annuler</button>
+    </div>
+    <div id="base-etape-verso" class="carte" hidden>
+      <p><b>📷 Maintenant le verso</b> : retournez le blister (le nom se lit pendant ce temps).</p>
+      <label class="gros-bouton corail">📷 Photographier le verso
+        <input type="file" id="input-base-verso" accept="image/*" capture="environment" hidden></label>
+      <label class="bouton gris">🖼️ Choisir le verso dans les photos
+        <input type="file" id="input-base-verso-galerie" accept="image/*" hidden></label>
+    </div>
+    <div id="base-fiche" hidden>
+      <label for="base-nom" class="etiquette-champ">Nom imprimé sur le blister</label>
+      <input id="base-nom" class="champ" autocomplete="off" autocapitalize="characters" placeholder="ex. SHINY DARK LORD">
+      <div id="base-suggestions" class="suggestions"></div>
+      <p class="score" id="base-verso-info" hidden></p>
+      <label for="base-precision" class="etiquette-champ">Précision : personnage, couleur… (si le nom imprimé ne suffit pas)</label>
+      <input id="base-precision" class="champ" autocomplete="off" autocapitalize="characters" placeholder="ex. Harley Quinn, chromée rose">
+      <div id="base-identite"></div>
+      <label class="bouton gris" id="base-verso-refaire" hidden>📷 Refaire la photo du verso
+        <input type="file" id="input-base-verso2" accept="image/*" capture="environment" hidden></label>
+      <p class="score" id="base-deja"></p>
+      <div class="deux-champs">
+        <div><label for="base-nombre" class="etiquette-champ">Exemplaires de cette figurine</label>
+          <input id="base-nombre" class="champ" type="number" inputmode="numeric" min="1" max="99" value="1"></div>
+        <div><label for="base-serie" class="etiquette-champ">Série limitée à</label>
+          <input id="base-serie" class="champ" inputmode="numeric" autocomplete="off" placeholder="ex. 250"></div>
+      </div>
+      <label class="etiquette-champ" id="base-numeros-titre">N° de l'exemplaire</label>
+      <div id="base-numeros" class="grille-numeros">
+        <input id="base-numero" class="champ" inputmode="numeric" autocomplete="off" placeholder="ex. 143">
+      </div>
+      <p class="score" id="base-numeros-etat"></p>
+      <label class="case-a-cocher"><input type="checkbox" id="base-non-numerote"> Non numérotée (pas de série limitée)</label>
+      <label for="base-remarque" class="etiquette-champ">Note particulière (facultatif)</label>
+      <input id="base-remarque" class="champ" autocomplete="off" autocapitalize="characters" placeholder="ex. SIGNÉE PAR L'ACTEUR, SPÉCIAL COMIC CON…">
+      <div class="suggestions" id="base-notes">
+        <button class="petit" data-note="SIGNÉE">✍️ SIGNÉE</button>
+        <button class="petit" data-note="SPÉCIAL COMIC CON">🎪 COMIC CON</button>
+        <button class="petit" data-note="ÉDITION SPÉCIALE">⭐ ÉDITION SPÉCIALE</button>
+        <button class="petit" data-note="ERREUR D'IMPRESSION">❗ ERREUR D'IMPRESSION</button>
+        <button class="petit" data-note="CADEAU / GIVEAWAY">🎁 CADEAU</button>
+        <button class="petit" data-note="BRICKS OF MAZE">🧩 BRICKS OF MAZE</button>
+      </div>
+      <!-- prix payé de chaque blister (Mathias, 22/10/2026) : valeur de la collection et prix de revente ; reste dans le téléphone -->
+      <div class="deux-champs">
+        <div><label for="base-prix" class="etiquette-champ">Prix payé (€, facultatif)</label>
+          <input id="base-prix" class="champ" inputmode="decimal" autocomplete="off" placeholder="ex. 24,90"></div>
+        <div><label for="base-date-achat" class="etiquette-champ">Acheté le (facultatif)</label>
+          <input id="base-date-achat" class="champ" type="date"></div>
+      </div>
+      <p class="aide">Prix d'un exemplaire, port compris : il sert à la valeur de la collection et aux prix de revente. Il reste dans votre téléphone.</p>
+      <!-- un prix par n° (Mathias, 22/10/2026) : les exemplaires d'un même listing ne sont pas tous payés le même prix -->
+      <div id="base-prix-detail" hidden>
+        <label for="base-prix-total" class="etiquette-champ">Prix total payé pour tous les exemplaires (facultatif)</label>
+        <input id="base-prix-total" class="champ" inputmode="decimal" autocomplete="off" placeholder="ex. 75">
+        <p class="aide" id="base-prix-moyen"></p>
+        <p class="etiquette-champ">Prix de chaque exemplaire (si les prix diffèrent ; vide : le prix ci-dessus)</p>
+        <div id="base-prix-numeros" class="grille-prix"></div>
+      </div>
+      <div id="base-bloc-excel" hidden>
+        <input type="checkbox" id="base-excel" checked hidden>
+        <p class="score" id="base-excel-info"></p>
+      </div>
+      <button class="gros-bouton vert" data-action="base-ajouter">📚 Ajouter à ma collection</button>
+      <p class="aide">Le blister rejoint aussi la base commune de reconnaissance (s'il n'y est pas déjà).</p>
+      <button class="bouton-lien" data-action="base-ajouter-commune">Ce blister n'est pas à moi (vu en boutique, photo d'un ami…) : seulement pour la base commune</button>
+    </div>
+    <div class="carte">
+      <p class="sous-titre" id="base-compte"></p>
+      <p class="score" id="base-commune-etat"></p>
+      <button class="bouton bleu" data-action="base-commune-envoyer" id="btn-base-commune" hidden>🌐 Envoyer à la base commune</button>
+      <label class="bouton gris">📥 Ajouter un envoi de blisters (.zip de votre ami, ou le vôtre)
+        <input type="file" id="input-base-reprendre" accept=".zip,application/zip" hidden></label>
+      <button class="bouton bleu" data-action="base-exporter" id="btn-base-exporter">📤 Envoyer les blisters (un fichier .zip)</button>
+      <p class="aide">Le fichier va dans « Téléchargements » : envoyez-le moi (ou mettez-le dans Google Drive). Les blisters
+        restent dans le téléphone tant que vous ne les effacez pas.</p>
+      <div class="onglets-achats">
+        <button class="bouton actif" id="base-vue-photos" data-action="base-vue-photos">Dernières photos</button>
+        <button class="bouton" id="base-vue-compte" data-action="base-vue-compte">Par figurine</button>
+      </div>
+      <input id="base-filtre" class="champ" type="search" autocomplete="off" placeholder="🔍 Chercher dans mes blisters (nom, n°…)">
+      <div id="base-liste" class="base-liste"></div>
+      <button class="bouton gris" data-action="base-importer-album" id="btn-base-album">📥 Reprendre les blisters de mon album photo</button>
+      <button class="bouton gris" data-action="consulter">🗂️ Consulter toute la base</button>
+      <button class="bouton gris" data-action="base-recadrer-tout" id="btn-base-recadrer-tout" hidden>✂️ Recadrer les photos déjà prises</button>
+      <button class="bouton gris" data-action="base-a-refaire" id="btn-base-a-refaire" hidden>📏 Photos prises de loin ou mal cadrées</button>
+      <button class="bouton-lien" data-action="base-vider" id="btn-base-vider">Effacer les blisters déjà exportés</button>
+    </div>
+  </section>
+
+  <!-- Recherche par nom -->
+  <section id="ecran-recherche" class="ecran" hidden>
+    <label for="recherche-texte" class="etiquette-champ">Nom de la figurine (en anglais, comme sur BrickLink)</label>
+    <input id="recherche-texte" class="champ" type="search" placeholder="ex. luke hoth, homer, gandalf" autocomplete="off">
+    <p class="aide" id="recherche-info"></p>
+    <div id="recherche-nouveautes" class="suggestions"></div>
+    <div id="recherche-serie"></div>
+    <div id="recherche-resultats" class="grille"></div>
+    <button class="bouton gris" data-action="accueil">↩︎ Retour</button>
+  </section>
+
+  <!-- 3. Identification en cours -->
+  <section id="ecran-chargement" class="ecran">
+    <img id="photo-apercu" class="photo-apercu" alt="">
+    <p class="attente"><span class="roue"></span> <span id="texte-chargement">Ouverture de votre collection…</span></p>
+  </section>
+
+  <!-- 4. Résultat -->
+  <section id="ecran-resultat" class="ecran" hidden>
+    <!-- photo de blister prise par « Photographier une figurine » (Mathias, 22/10/2026) : passage à la reconnaissance des blisters -->
+    <div id="alerte-blister" hidden></div>
+    <div id="carte-principale" class="carte"></div>
+    <div id="zone-ajout"></div>
+    <div id="autres" class="autres">
+      <p class="sous-titre">Pas la bonne ? Autres possibilités :</p>
+      <div id="liste-autres" class="grille"></div>
+      <div class="actions-autres">
+        <label class="bouton bleu" id="btn-dos">📷 Ajouter une photo de dos pour affiner
+          <input type="file" id="input-dos" accept="image/*" capture="environment" hidden>
+        </label>
+        <button class="bouton bleu" data-action="recherche">🔍 Chercher par nom</button>
+        <button class="bouton bleu" data-action="nouveautes-series">🆕 Nouveautés (séries récentes, pas encore reconnues en photo)</button>
+        <button class="bouton-lien" data-action="saisie">⌨️ Saisir le code à la main</button>
+      </div>
+    </div>
+    <button class="bouton gris" data-action="accueil">↩︎ Nouvelle photo</button>
+  </section>
+
+  <!-- 5. Saisie manuelle -->
+  <section id="ecran-saisie" class="ecran" hidden>
+    <label for="saisie-code" class="etiquette-champ">Code BrickLink de la figurine</label>
+    <input id="saisie-code" class="champ" placeholder="ex. SW0631" autocapitalize="characters" autocomplete="off">
+    <p class="aide">Vous ne connaissez pas le code ? <a id="lien-recherche" href="https://www.bricklink.com/catalogTree.asp?itemType=M" target="_blank" rel="noopener">Chercher sur BrickLink</a></p>
+    <button class="gros-bouton vert" data-action="valider-saisie">Valider</button>
+    <details class="carte" id="bloc-plusieurs-codes">
+      <summary class="sous-titre">📋 Plusieurs figurines d'un coup</summary>
+      <p class="aide">Tapez ou collez plusieurs codes BrickLink, séparés par des espaces, des virgules ou des retours à la
+        ligne (ex. « SH0015 SH0036, SH0065 »). L'appli vous montre chaque figurine avant d'ajouter.</p>
+      <label class="bouton gris">📷 Lire les codes sur des photos (vitrines, présentoirs…)
+        <input type="file" id="input-plusieurs-photo" accept="image/*" multiple hidden></label>
+      <p class="score" id="plusieurs-photo-etat"></p>
+      <textarea id="plusieurs-codes" class="champ" rows="4" autocapitalize="characters" autocomplete="off" spellcheck="false"
+        placeholder="SH0015 SH0036 SH0065…"></textarea>
+      <button class="bouton bleu" data-action="verifier-plusieurs">Vérifier la liste</button>
+      <div id="plusieurs-liste"></div>
+    </details>
+    <button class="bouton gris" data-action="accueil">Annuler</button>
+  </section>
+
+  <!-- 6. Confirmation -->
+  <section id="ecran-ok" class="ecran" hidden>
+    <div class="succes">✅ <span id="texte-ok"></span></div>
+    <div id="fiche-ok"></div>
+    <div class="etiquette-ok excel-seul"><span class="aide">Son étiquette :</span><div id="apercu-ok" class="apercu-etiquette"></div></div>
+    <p class="aide excel-seul">Pensez à enregistrer le fichier pour le retrouver dans Google Drive.</p>
+    <button class="gros-bouton vert excel-seul" data-action="enregistrer">📤 Enregistrer le fichier</button>
+    <button class="gros-bouton rouge" data-action="suivante" id="btn-suivante">📷 Figurine suivante</button>
+    <button class="bouton gris" data-action="voir-ajout">📚 Voir dans Ma collection</button>
+    <button class="bouton-lien" data-action="accueil">Retour à l'accueil</button>
+  </section>
+
+  <!-- Enregistrement -->
+  <section id="ecran-save" class="ecran" hidden>
+    <p class="intro">Votre fichier mis à jour est prêt :</p>
+    <p class="nom-fichier" id="nom-save"></p>
+    <!-- Enregistrement direct (fenêtre d'enregistrement du téléphone, Google Drive compris) : un appui
+         suffit les fois suivantes ; visible seulement si le navigateur le permet -->
+    <div id="bloc-direct" class="carte" hidden>
+      <button class="gros-bouton vert" data-action="enregistrer-direct" id="btn-direct">💾 Enregistrer</button>
+      <p class="aide" id="aide-direct"></p>
+      <button class="bouton-lien" data-action="enregistrer-ailleurs" id="btn-ailleurs" hidden>Enregistrer dans un autre fichier…</button>
+    </div>
+    <details id="bloc-telechargement" class="outils">
+      <summary id="titre-telechargement">Autre méthode : télécharger, puis importer dans Google Drive</summary>
+      <a class="gros-bouton vert" id="lien-telecharger" download>⬇️ 1. Télécharger le fichier</a>
+      <div class="carte etapes-drive">
+        <p class="sous-titre">2. Le mettre dans Google Drive</p>
+        <ol class="etapes">
+          <li>Ouvrez l'appli <b>Google Drive</b>.</li>
+          <li>Touchez le bouton <b>+</b> (en bas à droite), puis <b>Importer</b>.</li>
+          <li>Choisissez <b>Téléchargements</b>, puis le fichier dont le nom est affiché ci-dessus.</li>
+        </ol>
+      </div>
+      <button class="bouton bleu" id="btn-partager" data-action="partager" hidden>📤 Ou : partager directement (Drive, e-mail…)</button>
+      <p class="aide">Votre ancien fichier n'est pas effacé : le nouveau porte la date et l'heure dans son nom.</p>
+    </details>
+    <button class="bouton gris" data-action="accueil">↩︎ Retour</button>
+  </section>
+</main>
+
+<dialog id="dialogue">
+  <p id="dialogue-texte"></p>
+  <div class="dialogue-boutons">
+    <button class="bouton gris" value="non" id="dialogue-non">Non</button>
+    <button class="bouton vert" value="oui" id="dialogue-oui">Oui</button>
+  </div>
+</dialog>
+
+<!-- petit menu d'actions (choisirAction, js/app.js) -->
+<dialog id="menu-actions" class="menu-actions">
+  <p id="menu-titre"></p>
+  <div id="menu-boutons"></div>
+  <button class="bouton gris" id="menu-fermer">Fermer</button>
+</dialog>
+  <!-- Impression d'étiquettes à la taille choisie (js/impression.js) -->
+  <section id="ecran-impression" class="ecran" hidden>
+    <div class="pas-imprime colonne">
+      <p class="intro">🖨️ <b>Imprimer des étiquettes</b><br><small>Sur une planche d'étiquettes autocollantes (A4) ou une
+        imprimante d'étiquettes en rouleau. Choisissez le modèle de vos étiquettes, ou entrez vos propres mesures.</small></p>
+      <button class="bouton gris" data-action="voir-planches">🗂️ Voir les étiquettes rangées en planches (par onglet)</button>
+      <p class="sous-titre">1. Quelles étiquettes ?</p>
+      <div id="imp-sources" class="puces"></div>
+      <label class="case-a-cocher"><input type="checkbox" id="imp-nouvelles" checked> Seulement celles pas encore imprimées</label>
+      <p class="aide" id="imp-compte"></p>
+      <div id="imp-reglages" class="colonne">
+        <p class="sous-titre">2. Format des étiquettes</p>
+        <select id="imp-modele" class="champ" aria-label="Modèle d'étiquettes"></select>
+        <div class="grille-reglages">
+          <label>Papier<select id="imp-page" class="champ"><option value="A4">A4</option><option value="Lettre">Lettre (US)</option><option value="rouleau">Rouleau (une étiquette par page)</option></select></label>
+          <label>Largeur (mm)<input id="imp-l" class="champ" inputmode="decimal"></label>
+          <label>Hauteur (mm)<input id="imp-h" class="champ" inputmode="decimal"></label>
+        </div>
+        <div class="grille-reglages" id="imp-marges">
+          <label>Marge du haut (mm)<input id="imp-mh" class="champ" inputmode="decimal"></label>
+          <label>Marge de gauche (mm)<input id="imp-mg" class="champ" inputmode="decimal"></label>
+          <label>Espace entre colonnes (mm)<input id="imp-eh" class="champ" inputmode="decimal"></label>
+          <label>Espace entre lignes (mm)<input id="imp-ev" class="champ" inputmode="decimal"></label>
+        </div>
+        <p class="aide" id="imp-planche"></p>
+        <div id="imp-depart-bloc"><label>Commencer à l'étiquette n° (planche déjà entamée)<input id="imp-depart" class="champ" type="number" inputmode="numeric" min="1" value="1"></label></div>
+        <p class="sous-titre">3. Contenu</p>
+        <label class="case-a-cocher"><input type="checkbox" id="imp-qr"> QR code (page BrickLink, ou du fabricant pour une custom)</label>
+        <label class="case-a-cocher"><input type="checkbox" id="imp-nom"> Nom de la figurine sous le code</label>
+        <label class="case-a-cocher"><input type="checkbox" id="imp-couleur"> Couleur du thème en fond (décochez pour une imprimante noir et blanc)</label>
+        <label class="case-a-cocher"><input type="checkbox" id="imp-traits"> Traits de découpe (papier ordinaire)</label>
+      </div>
+      <p class="aide">Conseil : imprimez d'abord une page sur papier ordinaire et posez-la sur la planche, à contre-jour, pour
+        vérifier l'alignement. Imprimez toujours en taille réelle (100 %), sans marges.</p>
+      <div class="oui-non">
+        <button class="gros-bouton gris" data-imp="apercu">👁️ Aperçu</button>
+        <button class="gros-bouton vert" data-imp="imprimer">🖨️ Imprimer / PDF</button>
+      </div>
+      <p class="aide" id="imp-etat"></p>
+      <button class="bouton-lien" data-imp="oublier">Tout remettre « à imprimer »</button>
+      <button class="bouton gris" data-action="accueil">↩︎ Retour</button>
+    </div>
+    <div id="imp-feuilles"></div>
+  </section>
+  <style id="style-impression"></style>
+
+  <!-- Statistiques de la collection (js/statistiques.js) -->
+  <section id="ecran-statistiques" class="ecran" hidden>
+    <p class="intro">📊 <b>Statistiques</b><br><small>Votre collection en chiffres, et ce qu'il manque pour compléter vos séries.</small></p>
+    <div id="st-contenu" class="colonne"></div>
+    <button class="bouton gris" data-action="accueil">↩︎ Retour</button>
+  </section>
+
+  <!-- Exports de la collection (js/exports.js) -->
+  <section id="ecran-exports" class="ecran" hidden>
+    <div class="pas-imprime colonne">
+      <p class="intro">📤 <b>Exporter ma collection</b><br><small>Une copie de toute votre collection, à garder, retravailler
+        ou partager. Votre collection n'est pas modifiée.</small></p>
+      <p class="aide" id="exp-resume"></p>
+      <button class="gros-bouton vert" data-action="export-excel">📊 Excel (.xlsx) : un onglet par catégorie</button>
+      <button class="gros-bouton bleu" data-action="export-pdf">📄 PDF : liste imprimable</button>
+      <button class="bouton gris" data-action="export-csv">🧾 CSV (tableur, toutes catégories)</button>
+      <button class="bouton gris" data-action="export-bricklink">🧱 BrickLink (XML : figurines et sets)</button>
+      <button class="bouton gris" data-action="export-sauvegarde">💾 Sauvegarde complète (.json)</button>
+      <label class="bouton gris">📥 Restaurer une sauvegarde (.json) dans l'appli
+        <input type="file" id="input-sauvegarde" accept=".json,application/json" hidden></label>
+      <p class="aide">Les fichiers arrivent dans « Téléchargements ». Pour le PDF, choisissez « Enregistrer au format PDF »
+        dans le menu qui s'ouvre.</p>
+      <button class="bouton gris" data-action="accueil">↩︎ Retour</button>
+    </div>
+    <div id="exp-liste"></div>
+  </section>
+
+  <!-- Liste de souhaits (js/souhaits.js) : onglet « Souhaits » du fichier Excel -->
+  <section id="ecran-souhaits" class="ecran" hidden>
+    <p class="intro">⭐ <b>Ma liste de souhaits</b><br><small>Les figurines, customs, sets et objets que vous voulez. Ajoutez-en depuis leur fiche (« ⭐ Ajouter à ma liste de souhaits »). Touchez un souhait pour l'ajouter à votre collection ou le retirer de la liste.</small></p>
+    <p class="aide" id="sh-info"></p>
+    <div id="sh-contenu"></div>
+    <button class="bouton gris" data-action="accueil">↩︎ Retour</button>
+  </section>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="js/langue.js"></script>
+<script src="js/clavier.js"></script>
+<script src="js/orientation.js"></script>
+<script src="lib/jszip.min.js"></script>
+<script src="lib/qrcode.js"></script>
+<script src="js/label.js"></script>
+<script src="js/camps.js"></script>
+<script src="js/recherche.js"></script>
+<script src="js/xlsx.js"></script>
+<script src="js/base_collection.js"></script>
+<script src="js/cadre_tactile.js"></script>
+<script src="js/recadrage.js"></script>
+<script src="js/catalogue.js"></script>
+<script src="js/empreinte.js"></script>
+<script src="js/nouveautes.js"></script>
+<script src="js/catalogue_jb.js"></script>
+<script src="lib/tesseract/tesseract.min.js"></script>
+<script src="js/lecture_paddle.js"></script>
+<script src="js/vision.js"></script>
+<script src="js/blister.js"></script>
+<script src="js/collection.js"></script>
+<script src="js/app.js"></script>
+<script src="js/base.js"></script>
+<script src="js/base_commune.js"></script>
+<script src="js/sets.js"></script>
+<script src="js/import_sets.js"></script>
+  <script src="js/objets.js"></script>
+  <script src="js/objets_jb.js"></script>
+  <script src="js/ecran_nouveautes.js"></script>
+  <script src="js/souhaits.js"></script>
+  <script src="js/impression.js"></script>
+  <script src="js/exports.js"></script>
+  <script src="js/statistiques.js"></script>
+  <script src="js/valeur.js"></script>
+  <script src="js/assurance.js"></script>
+  <script src="js/achats.js"></script>
+  <script src="js/consulter.js"></script>
+<script src="js/occupe.js"></script>
+<script src="js/arborescence.js"></script>
+<script src="js/scan_boite.js"></script>
+<script src="js/justificatifs.js"></script>
+<script src="js/magasins.js"></script>
+<script src="lib/supabase-2.117.2.js"></script>
+<script src="js/compte.js"></script>
+<script src="js/echanges.js"></script>
+<script src="js/amis.js"></script>
+</body>
+</html>
