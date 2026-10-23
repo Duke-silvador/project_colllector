@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>沐晴助手</title>
+<meta name="theme-color" content="#f5f5f7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+  :root{
+    --bg:#f5f5f7; --card:#fff; --ink:#1d1d1f; --sub:#6e6e73; --faint:#aeaeb2;
+    --accent:#0a84ff; --ok:#34c759; --bad:#ff3b30;
+    --radius:16px; --shadow:0 1px 2px rgba(0,0,0,.04), 0 10px 30px rgba(0,0,0,.06);
+  }
+  *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  body{margin:0;min-height:100vh;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,"Segoe UI","Microsoft YaHei UI",sans-serif;
+    display:flex;align-items:center;justify-content:center;padding:24px;font-size:15px}
+  .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
+    padding:30px 26px;max-width:400px;width:100%;text-align:center}
+  .logo{width:56px;height:56px;border-radius:16px;margin:0 auto 16px;
+    background:linear-gradient(145deg,#0a84ff,#0060df);display:flex;align-items:center;
+    justify-content:center;box-shadow:0 6px 18px rgba(10,132,255,.32)}
+  .logo svg{width:30px;height:30px;stroke:#fff;fill:none;stroke-width:2;
+    stroke-linecap:round;stroke-linejoin:round}
+  h1{font-size:18px;margin:0 0 6px;font-weight:700;letter-spacing:.2px}
+  .sub{color:var(--sub);font-size:13px;margin-bottom:20px;line-height:1.6}
+  .status{display:flex;align-items:center;justify-content:center;gap:9px;
+    background:#f5f5f7;border-radius:11px;padding:12px 14px;font-size:13.5px;
+    font-weight:600;margin-bottom:18px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--faint);flex:0 0 auto}
+  .dot.ok{background:var(--ok);animation:pulse 2.2s ease-in-out infinite}
+  .dot.bad{background:var(--bad)}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(52,199,89,.45)}
+                   50%{box-shadow:0 0 0 6px rgba(52,199,89,0)}}
+  .btn{display:flex;align-items:center;gap:11px;width:100%;padding:14px 16px;
+    border:none;border-radius:12px;background:var(--accent);color:#fff;
+    font-size:15px;font-weight:600;font-family:inherit;cursor:pointer;
+    text-align:left;transition:background .15s;min-height:52px}
+  .btn+.btn{margin-top:10px}
+  .btn:hover:not(:disabled){background:#0070e0}
+  .btn:disabled{background:#e4e4e8;color:#a1a1a6;cursor:default}
+  .btn .ico{width:20px;height:20px;flex:0 0 auto;stroke:currentColor;fill:none;
+    stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+  .btn .tx{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .btn .tx b{font-size:15px;font-weight:600;line-height:1.25}
+  .btn .tx span{font-size:11.5px;font-weight:400;opacity:.82;line-height:1.3}
+  .meta{margin-top:18px;padding-top:16px;border-top:1px solid #f0f0f2;
+    font-size:11.5px;color:var(--faint);line-height:1.7;text-align:left}
+  .meta b{color:var(--sub);font-weight:600}
+  .hidden{display:none}
+  .err{background:#ffebea;color:var(--bad);border-radius:11px;padding:12px 14px;
+    font-size:13px;text-align:left;line-height:1.6;margin-bottom:14px}
+  .reload{margin-top:12px;background:none;border:none;color:var(--accent);
+    font-size:13px;font-family:inherit;cursor:pointer;padding:4px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <svg viewBox="0 0 24 24"><path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z"/></svg>
+  </div>
+  <h1>沐晴助手</h1>
+  <div class="sub">固定入口 · 自动找到当前地址</div>
+
+  <div id="errBox" class="err hidden"></div>
+
+  <div class="status">
+    <span class="dot" id="dot"></span>
+    <span id="txt">正在查找服务器…</span>
+  </div>
+
+  <button class="btn" id="bModels" onclick="jump('/models')" disabled>
+    <svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="17" r="2"/></svg>
+    <span class="tx"><b>模型切换</b><span>Hermes / WorkBuddy 用哪个模型</span></span>
+  </button>
+  <button class="btn" id="bMoa" onclick="jump('/moa')" disabled>
+    <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="19" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M12 7.5v4M12 11.5L6.5 16.8M12 11.5l5.5 5.3"/></svg>
+    <span class="tx"><b>模型组合</b><span>顾问并行 + 汇总，辅助模型</span></span>
+  </button>
+  <button class="btn" id="bCh" onclick="jump('/channels')" disabled>
+    <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M7 10h4M7 14h7"/><circle cx="17.5" cy="9.5" r="1"/></svg>
+    <span class="tx"><b>通道控制</b><span>微信 / QQ / 飞书 扫码接入</span></span>
+  </button>
+
+  <button class="reload" onclick="lookup(true)">重新查找</button>
+
+  <div class="meta">
+    <div><b>这个地址永远不会变</b>，可以存成书签或加到主屏幕。</div>
+    <div style="margin-top:5px">服务器重启后地址会自动更新到这里，你不用管。</div>
+    <div style="margin-top:5px">上次更新：<span id="upd">—</span></div>
+  </div>
+</div>
+
+<script>
+/* 沐晴助手 · 固定跳转入口（三个页面共用一个入口）
+ * 数据源：同仓库的 model_addr.json（由 model-switcher 的上报器自动更新）
+ * 本页不含任何密钥：面板口令仅在本机浏览器内用于拼 URL。 */
+
+var API = 'https://api.github.com/repos/56gfy/mq-jump/contents/model_addr.json';
+var PW  = 'mq2026';          /* 面板口令，与 model-switcher/password.txt 一致 */
+var addr = null;
+
+function el(id){ return document.getElementById(id); }
+function setDot(kind){ el('dot').className = 'dot' + (kind ? ' ' + kind : ''); }
+function setBtns(enabled){
+  ['bModels','bMoa','bCh'].forEach(function(id){ el(id).disabled = !enabled; });
+}
+
+function b64decode(s){
+  s = String(s).replace(/\s/g, '');
+  try { return decodeURIComponent(escape(atob(s))); }
+  catch(e){ try { return atob(s); } catch(e2){ return ''; } }
+}
+
+function lookup(manual){
+  if (manual){ el('txt').textContent = '正在重新查找…'; setDot(''); setBtns(false); }
+  var url = API + '?t=' + Date.now();          /* 绕开 CDN 缓存 */
+  fetch(url, {cache:'no-store'}).then(function(r){
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(j){
+    var txt = b64decode(j.content || '');
+    var d = JSON.parse(txt);
+    if (!d || !d.url) throw new Error('model_addr.json 里没有 url 字段');
+    addr = d;
+    el('upd').textContent = d.updated ? d.updated : '未知';
+    var age = d.ts ? Math.round((Date.now() - d.ts) / 1000) : -1;
+    /* 三档判据：
+         < 10 分钟  → 在线，直接可进
+         < 1 小时   → 地址可能仍有效，但电脑可能已关机/休眠，让用户自己点
+         >= 1 小时  → 基本是电脑关了，明确说清楚，别让用户以为 app 坏了 */
+    if (age >= 0 && age < 600) {
+      el('txt').textContent = '服务器在线 · ' + (age < 120 ? '刚刚更新' : Math.round(age/60) + ' 分钟前更新');
+      setDot('ok');
+      setBtns(true);
+    } else if (age >= 0 && age < 3600) {
+      el('txt').textContent = '地址可能仍有效（' + Math.round(age/60) + ' 分钟未更新）';
+      setDot('');
+      setBtns(true);
+    } else {
+      var mins = Math.round(age/60);
+      var when = mins < 120 ? mins + ' 分钟' : Math.round(mins/60) + ' 小时';
+      el('txt').textContent = '电脑可能没开机（地址已 ' + when + ' 未更新）';
+      setDot('bad');
+      setBtns(true);                     /* 仍允许点：万一只是内网抖动 */
+      el('errBox').className = 'err';
+      el('errBox').innerHTML = '这台电脑已经 ' + when + ' 没上报状态了，多半是关机或休眠。' +
+        '<br>开机后本页会自动恢复，不用改任何设置。';
+    }
+  }).catch(function(e){
+    setDot('bad');
+    el('txt').textContent = '暂时找不到服务器';
+    setBtns(false);
+    el('errBox').className = 'err';
+    el('errBox').innerHTML = '读取地址失败：' + e.message +
+      '<br><br>可能原因：① 电脑没开机 ② 地址还没同步 ③ 网络抖动。' +
+      '<br>稍后点「重新查找」再试。';
+  });
+}
+
+function jump(path){
+  if (!addr || !addr.url) return;
+  var base = String(addr.url).replace(/\/+$/, '');      /* 去掉尾部斜杠 */
+  /* ⚠ model_addr.json 里存的是裸主机（如 https://xxx.trycloudflare.com），
+     三个页面各有自己的路径，必须补上，否则会落到根路径（= 模型切换页）。 */
+  var u = base + path + (PW ? ('#pw=' + encodeURIComponent(PW)) : '');
+  location.href = u;
+}
+
+lookup(false);
+/* 页面回到前台时自动刷新（手机切回浏览器） */
+document.addEventListener('visibilitychange', function(){
+  if (!document.hidden && !addr) lookup(true);
+});
+</script>
+</body>
+</html>

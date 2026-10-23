@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>线上服务监控</title>
+<style>
+  /* ==========================================================================
+     线上服务监控 · 看板样式
+     视觉方向：克制的深灰蓝仪表盘。底色分三层（底/卡片/内嵌），靠极细描边
+     + 柔和阴影分层；主色降饱和（青绿=正常 / 橙红=异常 / 蓝=强调）。
+     数字用等宽字体并放大，作为视觉主角；标签走小字距。
+     约束：零外链、零 CDN、零字体文件、零图片、零 emoji（图标全部内联 SVG）。
+     ========================================================================== */
+  :root{
+    /* 背景三层 */
+    --bg:#0b0f15;          /* 页面底 */
+    --panel:#121924;       /* 卡片底（比页面亮一点点） */
+    --panel2:#0d131c;      /* 内嵌块（比卡片暗） */
+    --panel-hi:#161f2b;    /* 悬停态 */
+    /* 描边三层：极细、低对比，只用来分层 */
+    --line:#1e2836;
+    --line-soft:#182231;
+    --line-strong:#293546;
+    /* 文字层级 */
+    --text:#dbe3ec;
+    --dim:#8a98aa;
+    --faint:#5d6b7d;
+    /* 状态色：降饱和、提质感 */
+    --ok:#4bc78a;          /* 偏青的绿 */
+    --ok-soft:rgba(75,199,138,.14);
+    --bad:#e2674f;         /* 偏橙的红 */
+    --bad-soft:rgba(226,103,79,.14);
+    --unknown:#6b7684;
+    --accent:#5a9df6;      /* 强调蓝 */
+    /* 节奏：圆角 / 间距统一 */
+    --r-lg:14px; --r-md:10px; --r-sm:7px;
+    --sp-1:6px; --sp-2:10px; --sp-3:14px; --sp-4:18px; --sp-5:26px;
+    --mono:ui-monospace,SFMono-Regular,"Cascadia Mono","JetBrains Mono",Consolas,"Courier New",monospace;
+    --sans:-apple-system,"Segoe UI","Microsoft YaHei","PingFang SC",system-ui,Roboto,"Helvetica Neue",Arial,sans-serif;
+    --shadow:0 1px 2px rgba(0,0,0,.35), 0 8px 22px -14px rgba(0,0,0,.75);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    background:
+      radial-gradient(1100px 460px at 12% -8%, rgba(90,157,246,.07), transparent 62%),
+      radial-gradient(900px 420px at 92% -12%, rgba(75,199,138,.05), transparent 60%),
+      var(--bg);
+    background-repeat:no-repeat;
+    color:var(--text);
+    font-family:var(--sans);
+    font-size:13px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+    min-height:100vh;
+  }
+  .ic{width:16px;height:16px;flex:none;vertical-align:-3px;}
+  .mono{font-family:var(--mono);font-variant-numeric:tabular-nums;}
+  a{color:var(--accent);text-decoration:none;word-break:break-all;}
+  a:hover{text-decoration:underline;}
+  ::selection{background:rgba(90,157,246,.28);}
+
+  /* ---------------- 顶栏 ---------------- */
+  header{
+    display:flex;align-items:center;gap:var(--sp-2);
+    padding:var(--sp-3) var(--sp-4);
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg, rgba(22,31,43,.92), rgba(13,19,28,.92));
+    backdrop-filter:blur(6px);
+    position:sticky;top:0;z-index:5;
+  }
+  header .brand{
+    display:flex;align-items:center;gap:var(--sp-2);
+    font-size:15px;font-weight:600;letter-spacing:.4px;white-space:nowrap;
+  }
+  header .brand .ic{width:19px;height:19px;color:var(--accent);}
+  header .meta{
+    color:var(--dim);font-size:11.5px;letter-spacing:.2px;
+    margin-left:auto;text-align:right;min-width:0;
+  }
+  header .meta b{color:var(--text);font-weight:500;}
+  #btn-refresh{
+    display:inline-flex;align-items:center;gap:var(--sp-1);
+    min-height:38px;padding:0 var(--sp-3);
+    background:#1a2433;color:var(--text);
+    border:1px solid var(--line-strong);border-radius:var(--r-sm);
+    font-size:12.5px;font-family:var(--sans);letter-spacing:.3px;
+    cursor:pointer;transition:background .16s ease, border-color .16s ease, transform .12s ease;
+  }
+  #btn-refresh:hover{background:#1f2b3d;border-color:#35506e;}
+  #btn-refresh:active{transform:translateY(1px);}
+  #btn-refresh:focus-visible{outline:2px solid rgba(90,157,246,.6);outline-offset:2px;}
+  #btn-refresh[disabled]{opacity:.55;cursor:progress;}
+  #btn-refresh[disabled] .ic{animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ---------------- 汇总仪表盘 ---------------- */
+  #summary{
+    display:grid;grid-template-columns:1.25fr 1fr 1fr 1fr;gap:var(--sp-2);
+    padding:var(--sp-4) var(--sp-4) var(--sp-2);
+  }
+  .stat{
+    position:relative;overflow:hidden;
+    background:linear-gradient(180deg, var(--panel-hi), var(--panel) 70%);
+    border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4);
+    box-shadow:var(--shadow);
+  }
+  .stat::before{ /* 左侧状态色条（与卡片同一套视觉语言） */
+    content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+    background:var(--accent);opacity:.9;
+  }
+  .stat.ok::before{background:var(--ok);}
+  .stat.bad::before{background:var(--bad);}
+  .stat.unknown::before{background:var(--unknown);}
+  .stat .k{
+    font-size:10.5px;letter-spacing:1.4px;text-transform:uppercase;
+    color:var(--faint);margin-bottom:2px;
+  }
+  .stat .v{
+    font-family:var(--mono);font-variant-numeric:tabular-nums;
+    font-size:38px;line-height:1.05;font-weight:600;letter-spacing:-.5px;
+    color:var(--text);
+  }
+  .stat.total .v{font-size:44px;}
+  .stat.ok    .v{color:var(--ok);}
+  .stat.bad   .v{color:var(--bad);}
+  .stat.unknown .v{color:var(--dim);}
+  .stat .sub{font-size:11px;color:var(--faint);letter-spacing:.3px;margin-top:2px;}
+
+  /* ---------------- 异常告警条 ---------------- */
+  .alert{
+    display:none;align-items:flex-start;gap:var(--sp-2);
+    margin:var(--sp-2) var(--sp-4) 0;
+    border:1px solid rgba(226,103,79,.34);
+    background:linear-gradient(180deg, rgba(226,103,79,.10), rgba(226,103,79,.05));
+    color:#f0b6a6;border-radius:var(--r-md);padding:var(--sp-3);
+    box-shadow:0 0 0 1px rgba(226,103,79,.05) inset;
+  }
+  .alert.show{display:flex;}
+  .alert .ic{color:var(--bad);margin-top:2px;}
+  .alert b{color:#f2a894;font-weight:600;}
+  .alert .detail{color:#c9a79c;font-size:11.5px;}
+
+  /* ---------------- 主体 / 分组 ---------------- */
+  main{padding:0 var(--sp-4) var(--sp-5);}
+  .group-head{
+    display:flex;align-items:center;gap:var(--sp-1);
+    margin:var(--sp-4) 0 var(--sp-2);
+    color:var(--dim);font-size:11px;font-weight:600;
+    letter-spacing:1.6px;text-transform:uppercase;
+  }
+  .group-head .ic{width:14px;height:14px;color:var(--faint);}
+  .group-head .count{
+    margin-left:auto;color:var(--faint);font-weight:400;
+    letter-spacing:.4px;text-transform:none;font-size:11px;
+    font-family:var(--mono);
+  }
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:var(--sp-3);}
+
+  /* ---------------- 卡片 ---------------- */
+  .card{
+    position:relative;overflow:hidden;
+    background:linear-gradient(180deg, #141c27, var(--panel) 65%);
+    border:1px solid var(--line-soft);border-radius:var(--r-lg);
+    padding:var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-4);
+    display:flex;flex-direction:column;gap:var(--sp-2);
+    box-shadow:0 1px 2px rgba(0,0,0,.28);
+    transition:border-color .18s ease, background .18s ease, box-shadow .18s ease;
+  }
+  .card:hover{
+    background:linear-gradient(180deg, #17202c, #131a24 65%);
+    border-color:var(--line-strong);
+    box-shadow:var(--shadow);
+  }
+  .card::before{ /* 状态色竖条：正常安静，异常一眼可见 */
+    content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+    background:var(--ok);opacity:.45;transition:opacity .2s ease;
+  }
+  .card.ok::before{background:var(--ok);opacity:.4;}
+  .card.bad::before{background:var(--bad);opacity:1;}
+  .card.unknown::before{background:var(--unknown);opacity:.6;}
+  .card.ok{border-color:var(--line-soft);}
+  .card.bad{
+    border-color:rgba(226,103,79,.34);
+    box-shadow:0 0 0 1px rgba(226,103,79,.07) inset, 0 10px 26px -20px rgba(226,103,79,.9);
+  }
+
+  .card .row1{display:flex;align-items:center;gap:var(--sp-1);}
+  .card .name{
+    font-weight:600;font-size:13.5px;letter-spacing:.2px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .code-badge{
+    margin-left:auto;flex:none;
+    font-family:var(--mono);font-variant-numeric:tabular-nums;
+    font-size:10.5px;letter-spacing:.4px;
+    padding:2px 8px;border-radius:999px;
+    border:1px solid var(--line);background:var(--panel2);color:var(--dim);
+  }
+  .code-badge.ok{color:var(--ok);border-color:rgba(75,199,138,.30);background:var(--ok-soft);}
+  .code-badge.bad{color:var(--bad);border-color:rgba(226,103,79,.32);background:var(--bad-soft);}
+
+  .card .url{
+    font-family:var(--mono);font-size:11px;color:var(--faint);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .card .state{font-size:12.5px;font-weight:500;letter-spacing:.2px;}
+  .card .row3{
+    display:flex;gap:var(--sp-4);color:var(--dim);font-size:11.5px;
+  }
+  .card .row3 .lbl{color:var(--faint);letter-spacing:.3px;}
+  .card .row3 b{
+    color:var(--text);font-weight:500;font-family:var(--mono);
+    font-variant-numeric:tabular-nums;
+  }
+  .card .row3 .ic{width:12px;height:12px;color:var(--faint);}
+
+  /* ---------------- 耗时柱状图 ---------------- */
+  .spark-wrap{margin-top:var(--sp-1);}
+  .spark-head{
+    display:flex;justify-content:space-between;align-items:baseline;
+    font-size:10px;letter-spacing:1px;color:var(--faint);
+    text-transform:uppercase;margin-bottom:3px;
+  }
+  .spark-head .peak{font-family:var(--mono);letter-spacing:.2px;text-transform:none;color:var(--dim);}
+  svg.spark{display:block;width:100%;height:34px;}
+  svg.spark rect{transition:opacity .15s ease;}
+  svg.spark rect:hover{opacity:1;}
+
+  /* ---------------- 失败原因 / 备注 ---------------- */
+  details.err{margin-top:-2px;}
+  details.err summary{
+    cursor:pointer;user-select:none;list-style:none;
+    display:flex;align-items:center;gap:5px;
+    color:#e79c8b;font-size:11.5px;letter-spacing:.2px;
+  }
+  details.err summary::-webkit-details-marker{display:none;}
+  details.err summary .tri{
+    width:12px;height:12px;flex:none;color:var(--faint);
+    transition:transform .18s ease;
+  }
+  details.err[open] summary .tri{transform:rotate(90deg);}
+  details.err summary:hover{color:#f0b6a6;}
+  details.err .err-body{
+    color:var(--dim);font-size:11.5px;line-height:1.6;
+    background:var(--panel2);border:1px solid var(--line-soft);
+    border-radius:var(--r-sm);padding:var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);
+    margin-top:var(--sp-1);word-break:break-all;
+    border-left:2px solid rgba(226,103,79,.4);
+  }
+  .remark{
+    color:var(--faint);font-size:11px;line-height:1.55;
+    border-top:1px dashed var(--line);padding-top:var(--sp-2);
+    letter-spacing:.15px;
+  }
+
+  /* ---------------- 状态点 ---------------- */
+  .dot{width:9px;height:9px;border-radius:50%;flex:none;position:relative;}
+  .dot.ok{background:var(--ok);animation:breathe 2.6s ease-in-out infinite;}
+  .dot.bad{background:var(--bad);}
+  .dot.unknown{background:var(--unknown);}
+  @keyframes breathe{
+    0%,100%{box-shadow:0 0 0 0 rgba(75,199,138,.42);}
+    50%    {box-shadow:0 0 0 4px rgba(75,199,138,0);}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .dot.ok{animation:none;}
+    #btn-refresh[disabled] .ic{animation:none;}
+  }
+  .t-ok{color:var(--ok);} .t-bad{color:var(--bad);} .t-unknown{color:var(--dim);}
+
+  /* ---------------- 页脚 / 空态 ---------------- */
+  footer{
+    padding:var(--sp-4) var(--sp-4) var(--sp-5);
+    color:var(--faint);font-size:11px;line-height:1.8;
+    border-top:1px solid var(--line);
+    letter-spacing:.15px;
+  }
+  footer .sep{color:#2c3746;margin:0 5px;}
+  footer .mono{color:var(--dim);}
+  .empty{
+    color:var(--faint);padding:44px 0;text-align:center;
+    border:1px dashed var(--line);border-radius:var(--r-lg);
+    font-size:12px;letter-spacing:.6px;
+  }
+  .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);}
+
+  /* ==========================================================================
+     窄屏（手机）适配 —— 用户主要用手机看，这一段必须留在 <style> 的**末尾**。
+     放在前面会被后面同优先级的规则覆盖（CSS 同优先级后者赢）：例如
+     `.card .url{white-space:nowrap}` 在下文之后定义，就会让长网址不换行、
+     在 390px 屏上被右侧裁掉。改这里请勿往前挪。
+     ========================================================================== */
+  @media (max-width:560px){
+    header{padding:var(--sp-2) var(--sp-3);flex-wrap:wrap;gap:var(--sp-1) var(--sp-2);}
+    header .brand{font-size:14px;}
+    header .meta{
+      order:3;flex-basis:100%;margin-left:0;text-align:left;
+      font-size:11px;line-height:1.6;
+    }
+    #btn-refresh{min-height:44px;padding:0 var(--sp-3);margin-left:auto;}
+
+    #summary{
+      grid-template-columns:1fr 1fr;gap:var(--sp-2);
+      padding:var(--sp-3) var(--sp-3) var(--sp-1);
+    }
+    .stat{padding:var(--sp-2) var(--sp-2) var(--sp-2) var(--sp-3);}
+    .stat .k{font-size:10px;letter-spacing:1.1px;}
+    .stat .v{font-size:30px;}
+    .stat.total .v{font-size:34px;}
+
+    .alert{margin:var(--sp-2) var(--sp-3) 0;padding:var(--sp-2) var(--sp-3);}
+    main{padding:0 var(--sp-3) var(--sp-4);}
+    .grid{grid-template-columns:1fr;gap:var(--sp-2);}
+    .card{padding:var(--sp-3) var(--sp-3) var(--sp-3) var(--sp-3);}
+    .card .name{white-space:normal;}          /* 名称也允许换行，避免挤压 */
+    .card .url{white-space:normal;word-break:break-all;overflow:visible;}
+    .card .row3{flex-wrap:wrap;gap:var(--sp-1) var(--sp-3);}
+    footer{padding:var(--sp-3) var(--sp-3) var(--sp-5);}
+  }
+  @media (max-width:390px){
+    #summary{grid-template-columns:1fr 1fr;}
+    .stat .v{font-size:27px;}
+    .stat.total .v{font-size:30px;}
+  }
+
+  /* ---------------- 数据来源提示条（快照/实时） ----------------
+     保持既有视觉语言：仍用顶部告警条那一套配色（蓝=实时、橙=快照、红=错误）。
+     放在 <style> 最末尾，避免被前面同优先级的规则覆盖。 */
+  #alert.snap{
+    border-color:rgba(90,157,246,.34);
+    background:linear-gradient(180deg, rgba(90,157,246,.10), rgba(90,157,246,.05));
+    color:#bcd4f7;
+    box-shadow:0 0 0 1px rgba(90,157,246,.05) inset;
+  }
+  #alert.snap .ic{color:var(--accent);}
+  #alert.snap b{color:#cfe0fb;}
+  #alert.snap .detail{color:#9fb6d6;}
+</style>
+</head>
+<body>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="i-activity" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+  <symbol id="i-tower" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+</svg>
+
+<header>
+  <span class="brand">
+    <svg class="ic" aria-hidden="true"><use href="#i-activity"/></svg>
+    <h1 style="font:inherit">线上服务监控</h1>
+  </span>
+  <button id="btn-refresh" title="让探针立刻探测一轮">
+    <svg class="ic" aria-hidden="true"><use href="#i-refresh"/></svg><span id="btn-text">立即探测</span>
+  </button>
+  <div class="meta" id="meta">正在连接探针服务 …</div>
+</header>
+
+<div id="summary"></div>
+
+<div class="alert" id="alert">
+  <svg class="ic" aria-hidden="true"><use href="#i-alert"/></svg>
+  <div><b id="alert-title">未连接到探针服务</b><div class="detail" id="alert-detail"><br></div></div>
+</div>
+
+<main id="board"><div class="empty">等待探针数据 …</div></main>
+
+<footer>
+  探针服务 <span class="mono">monitor_server.py</span><span class="sep">·</span>每 5 分钟自动探测一轮（原 30 秒，为省 ngrok 免费额度降频），本页面每 15 秒拉取一次数据<span class="sep">·</span>
+  数据接口 <a href="api/status">/api/status</a><span class="sep">·</span>
+  手动探测 <a href="api/probe">/api/probe</a>
+</footer>
+
+<script>
+"use strict";
+/* ==========================================================================
+   数据加载：快照优先（v2）
+   顺序固定：① 先取同目录快照 status.json（不依赖任何隧道，隧道挂了也能看）
+            ② 再异步取实时探针（不阻塞①的渲染）
+            ③ 两者都失败 → 错误态 + 重试按钮
+   monitor.html（固定公网页）由 publish_addr.py 注入 window.__SNAPSHOT__ = true。
+   ========================================================================== */
+
+/* 快照模式开关：固定公网页为 true，隧道/本机那份保持 false（实时优先）。
+   默认 false —— 与发布脚本注入的默认值一致。 */
+window.__SNAPSHOT__ = window.__SNAPSHOT__ || true;
+
+/* 探针地址自适应：
+   页面与探针服务同源（同一台服务器既返回 HTML 也返回 API）。
+   - file:// 双击打开 → 页面没有 origin，只能用绝对地址
+   - http/https 访问 → 用相对路径，避免把手机自己的 127.0.0.1 当成探针 */
+var PROBE = (location.protocol === "file:") ? "http://127.0.0.1:8899" : "";
+/* 供自测脚本读取，确认 http 下打的是相对路径 */
+window.__PROBE__ = PROBE;
+
+var SNAP_STALE_MS = 6 * 60 * 1000;   /* 快照超过 6 分钟视为陈旧 */
+var SNAP_FILE = "status.json";       /* 与页面同目录的快照文件 */
+
+var GROUPS = [
+  {key:"公网静态站", icon:"i-globe"},
+  {key:"隧道服务",   icon:"i-tower"},
+  {key:"本机端口",   icon:"i-server"}
+];
+var lastSig = null;
+var curSource = "";        /* 当前已渲染数据的来源："snapshot" | "live" | "" */
+
+function esc(s){
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+/* "YYYY-MM-DD HH:MM:SS"（本地时间，无时区）→ Date */
+function parseLocal(s){
+  if (!s) return null;
+  var p = String(s).split(/[- :]/);
+  return new Date(+p[0], +p[1]-1, +p[2], +p[3]||0, +p[4]||0, +p[5]||0);
+}
+
+/* 快照数据龄期（毫秒）；取不到时间戳返回 null */
+function snapshotAgeMs(data){
+  var d = parseLocal(data && data.embedded_at) || parseLocal(data && data.generated_at);
+  if (!d || isNaN(d.getTime())) return null;
+  return Date.now() - d.getTime();
+}
+function minutesAgo(ms){ return Math.max(0, Math.round(ms/60000)); }
+
+function stateOf(it){
+  if (it.ok === null || it.ok === undefined) return {cls:"unknown", dot:"unknown", label:"未探到"};
+  if (it.ok) return {cls:"ok", dot:"ok", label:"正常"};
+  if (it.status_code !== null && it.status_code !== undefined)
+    return {cls:"bad", dot:"bad", label:"服务不可达 · HTTP " + it.status_code};
+  return {cls:"bad", dot:"bad", label:"探测失败"};
+}
+
+function ago(ts){ /* ts: "YYYY-MM-DD HH:MM:SS" */
+  if (!ts) return "";
+  var t = parseLocal(ts);
+  if (!t || isNaN(t.getTime())) return "";
+  var s = Math.max(0, Math.round((Date.now() - t.getTime())/1000));
+  if (s < 60) return s + " 秒前";
+  if (s < 3600) return Math.floor(s/60) + " 分钟前";
+  return Math.floor(s/3600) + " 小时前";
+}
+
+/* 耗时柱状图：圆角柱 + 正常/异常两色 + hover 提示（原生 <title>） */
+function spark(history){
+  if (!history || !history.length) return "";
+  var W = 300, H = 34, pad = 4, n = history.length;
+  var maxMs = 1;
+  history.forEach(function(h){ if (h.ms && h.ms > maxMs) maxMs = h.ms; });
+  var step = W / Math.max(n, 2), bw = Math.min(11, step * 0.6);
+  var bars = "";
+  history.forEach(function(h, i){
+    var ratio = (h.ms && h.ms > 0) ? (h.ms / maxMs) : 0;
+    var bh = Math.max(ratio > 0 ? 3 : 2, Math.round(ratio * (H - pad - 2)));
+    var x = (i * step + (step - bw)/2).toFixed(1);
+    var y = (H - pad - bh).toFixed(1);
+    var color = h.ok ? "var(--ok)" : "var(--bad)";
+    bars += '<rect x="'+x+'" y="'+y+'" width="'+bw.toFixed(1)+'" height="'+bh+'" rx="2" ry="2" fill="'+color+'" opacity="0.72"><title>'+
+      esc(h.t+" · "+(h.ok?("HTTP "+h.code):"失败")+(h.ms!=null?(" · "+h.ms+" ms"):""))+'</title></rect>';
+  });
+  var body = '<svg class="spark" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" role="img" aria-label="近 '+n+' 次探测耗时">'+
+    '<line x1="0" y1="'+(H-pad+0.5)+'" x2="'+W+'" y2="'+(H-pad+0.5)+'" stroke="var(--line)" stroke-width="1"/>'+
+    bars + '</svg>';
+  return '<div class="spark-wrap"><div class="spark-head"><span>近 '+n+' 次耗时</span>'+
+         '<span class="peak">峰值 '+maxMs+' ms</span></div>' + body + '</div>';
+}
+
+function cardHtml(it){
+  var st = stateOf(it);
+  var hasCode = (it.status_code !== null && it.status_code !== undefined);
+  var codeCls = !hasCode ? "" : (it.ok ? " ok" : " bad");
+  var badge = '<span class="code-badge'+codeCls+'">' + (hasCode ? ("HTTP " + it.status_code) : "--") + '</span>';
+  var lat = (it.latency_ms !== null && it.latency_ms !== undefined) ? it.latency_ms + " ms" : "--";
+  var checked = it.checked_at ? (it.checked_at + "（" + ago(it.checked_at) + "）") : "未探测";
+  var h = '';
+  h += '<div class="card ' + st.cls + '">';
+  h += '<div class="row1"><span class="dot ' + st.dot + '"></span><span class="name">' + esc(it.name) + '</span>' + badge + '</div>';
+  h += '<div class="url" title="' + esc(it.url || it.addr_source || "") + '">' + esc(it.url || it.addr_source || "地址未知") + '</div>';
+  h += '<div class="state t-' + st.cls + '">' + st.label + '</div>';
+  h += '<div class="row3">' +
+         '<span><span class="lbl">耗时</span> <b>' + esc(lat) + '</b></span>' +
+         '<span><svg class="ic" aria-hidden="true"><use href="#i-clock"/></svg> <b style="font-family:var(--sans)">' + esc(checked) + '</b></span>' +
+       '</div>';
+  h += spark(it.history);
+  if (it.error){
+    var kind = hasCode ? "服务不可达" : "探测失败";
+    h += '<details class="err"><summary><svg class="ic tri" aria-hidden="true"><use href="#i-chevron"/></svg>失败原因（' + kind + '）</summary>' +
+         '<div class="err-body">' + esc(it.error) + '</div></details>';
+  }
+  if (it.remark) h += '<div class="remark">' + esc(it.remark) + '</div>';
+  h += '</div>';
+  return h;
+}
+
+function render(data){
+  var s = data.summary || {};
+  var total = s.total||0, ok = s.ok||0, bad = s.bad||0, unk = s.unknown||0;
+  var rate = total > 0 ? Math.round(ok / total * 100) : 0;
+  var sum = '';
+  sum += '<div class="stat total"><div class="k">监控目标</div><div class="v">' + total + '</div>' +
+         '<div class="sub">正常率 ' + rate + '%</div></div>';
+  sum += '<div class="stat ok"><div class="k">正常</div><div class="v">' + ok + '</div><div class="sub">可用</div></div>';
+  sum += '<div class="stat bad"><div class="k">异常</div><div class="v">' + bad + '</div><div class="sub">需关注</div></div>';
+  sum += '<div class="stat unknown"><div class="k">未探到</div><div class="v">' + unk + '</div><div class="sub">暂无数据</div></div>';
+  document.getElementById("summary").innerHTML = sum;
+
+  var byGroup = {};
+  (data.targets||[]).forEach(function(it){ (byGroup[it.group] = byGroup[it.group] || []).push(it); });
+  var html = "";
+  GROUPS.forEach(function(g){
+    var items = byGroup[g.key] || [];
+    if (!items.length) return;
+    var okN = items.filter(function(x){return x.ok===true;}).length;
+    var badN = items.filter(function(x){return x.ok===false;}).length;
+    html += '<div class="group-head"><svg class="ic" aria-hidden="true"><use href="#'+g.icon+'"/></svg>' +
+            esc(g.key) + ' <span class="count">' + items.length + ' 项 · ' + okN + ' 正常 / ' + badN + ' 异常</span></div>';
+    html += '<div class="grid">' + items.map(cardHtml).join("") + '</div>';
+  });
+  if (!html) html = '<div class="empty">探针返回数据为空</div>';
+  document.getElementById("board").innerHTML = html;
+  document.getElementById("alert").classList.remove("show");
+}
+
+function setMeta(data){
+  var m = '<b>' + esc(data.generated_at) + '</b> 更新 · 探测周期 ' + esc(data.interval) + ' 秒';
+  document.getElementById("meta").innerHTML = m;
+}
+
+function sigOf(data){
+  return JSON.stringify([data.summary, data.targets]);
+}
+
+/* 顶部提示条：显示数据来源（实时 / 快照 / 错误），并保留状态条颜色语言 */
+function showBanner(source, note, corrupt){
+  var el = document.getElementById("alert");
+  var title = document.getElementById("alert-title");
+  var detail = document.getElementById("alert-detail");
+  el.classList.remove("bad", "snap");
+  if (source === "snapshot"){
+    el.classList.add("snap");
+    title.textContent = "数据来源于快照";
+    detail.innerHTML = esc(note || "隧道离线时正常现象");
+  } else if (source === "live"){
+    title.textContent = "已连接 · 实时";
+    detail.innerHTML = esc(note || "实时源可用，正在显示最新数据");
+  } else if (source === "live-fallback"){
+    el.classList.add("snap");
+    title.textContent = "实时源不可达 · 显示快照";
+    detail.innerHTML = esc(note || "已自动改用最近一次快照，稍后自动重试实时源");
+  } else {
+    title.textContent = "暂时取不到数据";
+    detail.innerHTML = esc(note || "请确认电脑上监控在运行") +
+      '<br><b>请确认电脑上监控在运行</b>（双击「启动监控.cmd」），然后点右上角重试。' +
+      '<br><button id="btn-retry" type="button">重试</button>';
+    el.classList.add("show");
+    var rb = document.getElementById("btn-retry");
+    if (rb) rb.addEventListener("click", function(){ load(true); });
+    return;
+  }
+  el.classList.add("show");
+}
+
+/* showError 的历史调用点（手动探测失败）→ 转成统一提示条 */
+function showError(msg){
+  showBanner(curSource === "snapshot" ? "live-fallback" : "error", msg);
+}
+
+/* ---------- ① 快照优先：先取同目录 status.json ---------- */
+async function loadSnapshot(){
+  var data;
+  try{
+    var r = await fetch(SNAP_FILE + "?t=" + Date.now(), {cache:"no-store"});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    data = await r.json();
+  }catch(e){
+    return false;
+  }
+  if (!data || !data.targets || !data.targets.length) return false;
+
+  render(data);
+  setMeta(data);
+  lastSig = sigOf(data);
+  curSource = "snapshot";
+
+  var age = snapshotAgeMs(data);
+  var note = "";
+  try{
+    if (age !== null && age > SNAP_STALE_MS){
+      note = "快照数据 · " + minutesAgo(age) + " 分钟前 · 隧道离线时正常现象";
+    } else {
+      note = "快照数据" + (data.embedded_at ? (" · " + data.embedded_at + " 推送") : "") +
+             " · 隧道离线时正常现象";
+    }
+  }catch(e){ note = "隧道离线时正常现象"; }
+  showBanner("snapshot", note);
+  return true;
+}
+
+/* ---------- ② 再取实时（异步，不阻塞快照渲染） ---------- */
+function getLiveAddr(cb){
+  /* 说明：PROBE 只是"探针基址"。
+     - file:// 打开 → PROBE 是绝对地址（本机 127.0.0.1:8899），直接用
+     - http/https 打开 → PROBE 为空（同源相对），需先读同目录 monitor_addr.json
+       拿到当前隧道地址，再取实时；读不到则退回 localStorage 里的上次地址 */
+  var saved = "";
+  try{ saved = localStorage.getItem("probe_addr") || ""; }catch(e){ saved = ""; }
+  var finish = function(addr){ cb(String(addr||"").trim().replace(/\/+$/, "")); };
+
+  /* file:// 直连本机探针 */
+  if (location.protocol === "file:"){
+    finish(PROBE || saved);
+    return;
+  }
+
+  /* http/https：读同目录地址文件 → 隧道地址 */
+  var fallback = saved;
+  try{
+    var r = new XMLHttpRequest();
+    r.open("GET", "monitor_addr.json?t=" + Date.now(), true);
+    r.onreadystatechange = function(){
+      if (r.readyState !== 4) return;
+      var u = "";
+      try{
+        if (r.status >= 200 && r.status < 300){ u = (JSON.parse(r.responseText) || {}).probe || ""; }
+      }catch(e){ u = ""; }
+      finish(u || fallback || "");
+    };
+    r.onerror = function(){ finish(fallback || ""); };
+    r.send();
+  }catch(e){ finish(fallback || ""); }
+}
+
+async function loadLive(){
+  getLiveAddr(async function(addr){
+    window.__LIVE_ADDR__ = addr || "";
+    if (!addr){
+      /* 探针地址为空 → 跳过，静默保持快照 */
+      window.__LIVE_STATUS__ = "no-addr";
+      if (curSource === "snapshot") showBanner("snapshot",
+        (document.getElementById("alert-detail").textContent || "隧道离线时正常现象"));
+      return;
+    }
+    try{
+      var r = await fetch(addr + "/api/status", {cache:"no-store"});
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      var data = await r.json();
+      if (!data || !data.targets || !data.targets.length) throw new Error("空数据");
+      var sig = sigOf(data);
+      if (sig !== lastSig){ lastSig = sig; render(data); }
+      setMeta(data);
+      curSource = "live";
+      window.__LIVE_STATUS__ = "live";
+      try{ localStorage.setItem("probe_addr", addr); }catch(e){}
+      showBanner("live", "实时源 " + addr + " 可用");
+    }catch(e){
+      window.__LIVE_STATUS__ = "err:" + e.message;
+      if (curSource === "snapshot"){
+        showBanner("live-fallback", "实时源不可达，显示快照（" + e.message + "）");
+      } else {
+        showBanner("error", "无法访问实时源（" + e.message + "）。请确认电脑上监控在运行。");
+      }
+    }
+  });
+}
+
+async function load(manual){
+  var hasSnap = await loadSnapshot();          /* ① 快照，阻塞到渲染完成 */
+  if (!hasSnap && !curSource){
+    /* 连快照都没有 → 错误态（loadLive 若拿到实时会覆盖提示条） */
+    showBanner("error", manual ? "手动探测：暂时取不到数据" : "暂时取不到数据");
+  }
+  loadLive();                                  /* ② 实时，异步不阻塞 */
+}
+
+async function probeNow(){
+  var btn = document.getElementById("btn-refresh");
+  btn.disabled = true;
+  document.getElementById("btn-text").textContent = "探测中，最长约 8~20 秒 …";
+  try{
+    var r = await fetch(PROBE + "/api/probe", {cache:"no-store"});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    var data = await r.json();
+    lastSig = sigOf(data); render(data); setMeta(data);
+    curSource = "live";
+    showBanner("live", "手动探测完成");
+  }catch(e){
+    showBanner(curSource === "snapshot" ? "live-fallback" : "error",
+               "手动探测请求失败（" + e.message + "）");
+  }
+  btn.disabled = false;
+  document.getElementById("btn-text").textContent = "立即探测";
+}
+
+document.getElementById("btn-refresh").addEventListener("click", probeNow);
+load(false);
+setInterval(function(){ load(false); }, 15000);
+</script>
+</body>
+</html>
