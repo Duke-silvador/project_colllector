@@ -1,0 +1,945 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/oauth2"
+)
+
+type fakeServer struct {
+	*httptest.Server
+	t                  *testing.T
+	signIn             bool
+	discoveryRedirects bool
+	mu                 sync.Mutex
+	clients            map[string]string
+	codes              map[string]string
+	access             map[string]bool
+	refresh            map[string]bool
+	issued             int
+	keepAccess         bool
+	lastAccess         string
+	signIns            atomic.Int32
+	refreshes          atomic.Int32
+	pages              map[string]string
+	pageHeaders        map[string]http.Header
+	pageAsked          atomic.Int32
+	chatPages          []string
+	chatAsked          atomic.Int32
+	chatStatus         int
+	chatTextMissing    bool
+	chatHeldOpen       bool
+	chatPathsAsked     []string
+	chatAfterAsked     []string
+	unavailable        atomic.Int32
+	tokenUnavailable   atomic.Int32
+	device             bool
+	deviceAnswer       func(deviceCode string) string
+	deviceCodes        map[string]string
+}
+
+func newFakeServer(t *testing.T) *fakeServer {
+	f := &fakeServer{
+		t:           t,
+		signIn:      true,
+		clients:     map[string]string{},
+		codes:       map[string]string{},
+		access:      map[string]bool{},
+		refresh:     map[string]bool{},
+		pages:       map[string]string{},
+		pageHeaders: map[string]http.Header{},
+		deviceCodes: map[string]string{},
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /.well-known/oauth-authorization-server", f.metadata)
+	mux.HandleFunc("POST /oauth/register", f.register)
+	mux.HandleFunc("POST /oauth/device", f.deviceAuthorization)
+	mux.HandleFunc("GET /oauth/authorize", f.authorize)
+	mux.HandleFunc("POST /oauth/token", f.token)
+	mux.HandleFunc("GET /chat", f.chat)
+	mux.HandleFunc("GET /chat.json", f.chat)
+	mux.HandleFunc("GET /chat.md", f.chat)
+	mux.HandleFunc("GET /", f.page)
+	f.Server = httptest.NewServer(mux)
+	t.Cleanup(f.Close)
+	return f
+}
+
+func (f *fakeServer) metadata(w http.ResponseWriter, r *http.Request) {
+	if f.discoveryRedirects {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	if !f.signIn {
+		http.NotFound(w, nil)
+		return
+	}
+	meta := map[string]any{
+		"issuer":                 f.URL,
+		"authorization_endpoint": f.URL + "/oauth/authorize",
+		"token_endpoint":         f.URL + "/oauth/token",
+		"registration_endpoint":  f.URL + "/oauth/register",
+	}
+	if f.device {
+		meta["device_authorization_endpoint"] = f.URL + "/oauth/device"
+	}
+	writeJSON(w, http.StatusOK, meta)
+}
+
+func (f *fakeServer) register(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		RedirectURIs []string `json:"redirect_uris"`
+		GrantTypes   []string `json:"grant_types"`
+	}
+	require.NoError(f.t, json.NewDecoder(r.Body).Decode(&body))
+	if slices.Contains(body.GrantTypes, deviceCodeGrant) {
+		assert.Empty(f.t, body.RedirectURIs, "a client signing in from another device registered somewhere for a browser to come back to")
+		body.RedirectURIs = []string{""}
+	}
+	require.Len(f.t, body.RedirectURIs, 1)
+	f.mu.Lock()
+	id := fmt.Sprintf("client-%d", len(f.clients)+1)
+	f.clients[id] = body.RedirectURIs[0]
+	f.mu.Unlock()
+	writeJSON(w, http.StatusCreated, map[string]any{"client_id": id})
+}
+
+func (f *fakeServer) deviceAuthorization(w http.ResponseWriter, r *http.Request) {
+	require.NoError(f.t, r.ParseForm())
+	f.mu.Lock()
+	deviceCode := fmt.Sprintf("device-%d", len(f.deviceCodes)+1)
+	f.deviceCodes[deviceCode] = r.PostFormValue("client_id")
+	f.mu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"device_code":               deviceCode,
+		"user_code":                 "BCDF-GHJK",
+		"verification_uri":          f.URL + "/device",
+		"verification_uri_complete": f.URL + "/device?code=BCDF-GHJK",
+		"expires_in":                600,
+		"interval":                  1,
+	})
+}
+
+func (f *fakeServer) authorize(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	f.mu.Lock()
+	redirect, known := f.clients[q.Get("client_id")]
+	f.mu.Unlock()
+	if !known || redirect != q.Get("redirect_uri") {
+		http.Error(w, "redirect_uri is not registered for this client", http.StatusBadRequest)
+		return
+	}
+	assert.Equal(f.t, "mcp", q.Get("scope"))
+	assert.Equal(f.t, "S256", q.Get("code_challenge_method"))
+	f.signIns.Add(1)
+	code := fmt.Sprintf("code-%d", f.signIns.Load())
+	f.mu.Lock()
+	f.codes[code] = q.Get("client_id")
+	f.mu.Unlock()
+	back, err := url.Parse(redirect)
+	require.NoError(f.t, err)
+	back.RawQuery = url.Values{"code": {code}, "state": {q.Get("state")}}.Encode()
+	http.Redirect(w, r, back.String(), http.StatusFound)
+}
+
+func (f *fakeServer) token(w http.ResponseWriter, r *http.Request) {
+	if f.tokenUnavailable.Add(-1) >= 0 {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("<html>503 Service Unavailable</html>"))
+		return
+	}
+	require.NoError(f.t, r.ParseForm())
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	switch r.PostFormValue("grant_type") {
+	case "authorization_code":
+		if f.codes[r.PostFormValue("code")] != r.PostFormValue("client_id") || r.PostFormValue("code_verifier") == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_grant"})
+			return
+		}
+		delete(f.codes, r.PostFormValue("code"))
+	case "refresh_token":
+		if !f.refresh[r.PostFormValue("refresh_token")] {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_grant"})
+			return
+		}
+		delete(f.refresh, r.PostFormValue("refresh_token"))
+		f.refreshes.Add(1)
+	case deviceCodeGrant:
+		deviceCode := r.PostFormValue("device_code")
+		if f.deviceCodes[deviceCode] != r.PostFormValue("client_id") {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid_grant"})
+			return
+		}
+		if answer := f.deviceAnswer(deviceCode); answer != "" {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": answer})
+			return
+		}
+		delete(f.deviceCodes, deviceCode)
+		f.signIns.Add(1)
+	default:
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "unsupported_grant_type"})
+		return
+	}
+	f.issued++
+	access, refresh := fmt.Sprintf("access-%d", f.issued), fmt.Sprintf("refresh-%d", f.issued)
+	if f.keepAccess && r.PostFormValue("grant_type") == "refresh_token" {
+		access = f.lastAccess
+	}
+	f.lastAccess = access
+	f.access[access] = true
+	f.refresh[refresh] = true
+	writeJSON(w, http.StatusOK, map[string]any{
+		"access_token":  access,
+		"token_type":    "Bearer",
+		"expires_in":    3600,
+		"refresh_token": refresh,
+	})
+}
+
+func (f *fakeServer) authorized(r *http.Request) bool {
+	if !f.signIn {
+		return true
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.access[strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")]
+}
+
+func (f *fakeServer) page(w http.ResponseWriter, r *http.Request) {
+	f.pageAsked.Add(1)
+	if !f.authorized(r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "invalid_token"})
+		return
+	}
+	if r.URL.Path == "/" {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<html>front page</html>"))
+		return
+	}
+	body, ok := f.pages[r.URL.Path]
+	if !ok {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	if strings.HasPrefix(body, "->") {
+		http.Redirect(w, r, strings.TrimPrefix(body, "->"), http.StatusMovedPermanently)
+		return
+	}
+	for name, values := range f.pageHeaders[r.URL.Path] {
+		for _, value := range values {
+			w.Header().Add(name, value)
+		}
+	}
+	_, _ = w.Write([]byte(body))
+}
+
+func (f *fakeServer) chat(w http.ResponseWriter, r *http.Request) {
+	if !f.authorized(r) {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "invalid_token"})
+		return
+	}
+	if f.unavailable.Add(-1) >= 0 {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("<html>502 Bad Gateway</html>"))
+		return
+	}
+	if f.chatStatus != 0 {
+		writeJSON(w, f.chatStatus, map[string]any{"error": "account_chat_disabled"})
+		return
+	}
+	f.mu.Lock()
+	f.chatPathsAsked = append(f.chatPathsAsked, r.URL.Path)
+	f.chatAfterAsked = append(f.chatAfterAsked, r.URL.Query().Get("after_seq"))
+	f.mu.Unlock()
+	if f.chatTextMissing && r.URL.Path == "/chat.md" {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	asked := int(f.chatAsked.Add(1))
+	if f.chatHeldOpen {
+		<-r.Context().Done()
+		return
+	}
+	_, _ = w.Write([]byte(f.chatPages[min(asked, len(f.chatPages))-1]))
+}
+
+func (f *fakeServer) revokeAll() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.access = map[string]bool{}
+}
+
+func writeJSON(w http.ResponseWriter, status int, body any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+type memoryStore struct {
+	mu         sync.Mutex
+	saved      map[string]*credentials
+	unreadable error
+}
+
+func (m *memoryStore) describe() string {
+	return "memory"
+}
+
+func (m *memoryStore) load(origin string) (*credentials, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.unreadable != nil {
+		return nil, m.unreadable
+	}
+	return copyCredentials(m.saved[origin]), nil
+}
+
+func (m *memoryStore) save(origin string, c *credentials) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.saved[origin] = copyCredentials(c)
+	return nil
+}
+
+func copyCredentials(c *credentials) *credentials {
+	if c == nil {
+		return nil
+	}
+	held := *c
+	if c.Token != nil {
+		token := *c.Token
+		held.Token = &token
+	}
+	return &held
+}
+
+func (m *memoryStore) remove(origin string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.saved, origin)
+	return nil
+}
+
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+type harness struct {
+	app    *app
+	store  *memoryStore
+	stdout *bytes.Buffer
+	stderr *lockedBuffer
+	opened atomic.Int32
+}
+
+func newHarness(t *testing.T) *harness {
+	h := &harness{
+		store:  &memoryStore{saved: map[string]*credentials{}},
+		stdout: &bytes.Buffer{},
+		stderr: &lockedBuffer{},
+	}
+	h.app = &app{
+		store:      h.store,
+		signInWith: signInChoice{methodBrowser, "the test asks for the browser"},
+		lockDir:    t.TempDir(),
+		stdout:     h.stdout,
+		stderr:     h.stderr,
+		http:       &http.Client{Timeout: 10 * time.Second},
+		open: func(_ context.Context, address string) error {
+			h.opened.Add(1)
+			resp, err := http.Get(address)
+			if err != nil {
+				return err
+			}
+			return resp.Body.Close()
+		},
+	}
+	return h
+}
+
+func (h *harness) get(t *testing.T, address string) error {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	return h.app.get(ctx, address)
+}
+
+func mustParse(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	u, err := url.Parse(raw)
+	require.NoError(t, err)
+	return u
+}
+
+func TestGet_SignsInOnceThenReadsWithTheSavedToken(t *testing.T) {
+	server := newFakeServer(t)
+	server.pages["/me/notes.md"] = "# Notes\n"
+	h := newHarness(t)
+
+	require.NoError(t, h.get(t, server.URL+"/me/notes"))
+	require.NoError(t, h.get(t, server.URL+"/me/notes"))
+
+	assert.Equal(t, "# Notes\n# Notes\n", h.stdout.String())
+	assert.Equal(t, int32(1), h.opened.Load(), "the second read found its token and asked nobody to sign in")
+	assert.NotNil(t, h.store.saved[server.URL], "the token is kept under the server it came from")
+	assert.Contains(t, h.stderr.String(), server.URL+"/oauth/authorize",
+		"an agent's terminal shows the sign-in address, because the browser may open on a screen nobody is looking at")
+}
+
+func TestGet_WaitsOutARestartWhileRenewingTheSignIn(t *testing.T) {
+	server := newFakeServer(t)
+	server.pages["/me/notes.md"] = "# Notes\n"
+	h := newHarness(t)
+	h.app.pause = func(int) time.Duration { return time.Millisecond }
+	require.NoError(t, h.get(t, server.URL+"/me/notes"))
+	h.stdout.Reset()
+	h.store.saved[server.URL].Token.Expiry = time.Now().Add(-time.Minute)
+	server.tokenUnavailable.Store(2)
+
+	require.NoError(t, h.get(t, server.URL+"/me/notes"),
+		"a token that ran out while the server restarted stopped wlget, though any other read waits the restart out")
+
+	assert.Equal(t, "# Notes\n", h.stdout.String())
+	assert.Contains(t, h.stderr.String(), "trying again")
+	assert.Equal(t, int32(1), h.opened.Load(), "a restart is no reason to sign in again")
+}
+
+func TestGet_RefreshesAnExpiredTokenWithoutAskingAgain(t *testing.T) {
+	server := newFakeServer(t)
+	server.pages["/me/notes.md"] = "# Notes\n"
+	h := newHarness(t)
+	require.NoError(t, h.get(t, server.URL+"/me/notes"))
+	saved := h.store.saved[server.URL]
+	saved.Token.Expiry = time.Now().Add(-time.Minute)
+
+	require.NoError(t, h.get(t, server.URL+"/me/notes"))
+
+	assert.Equal(t, int32(1), server.refreshes.Load())
+	assert.Equal(t, int32(1), h.opened.Load())
+	assert.NotEqual(t, "access-1", h.store.saved[server.URL].Token.AccessToken,
+		"the server rotates the refresh token, so the one just spent is worthless and the new pair must be kept")
+}
+
+func TestGet_ParallelReadersRenewTheSharedSignInOnce(t *testing.T) {
+	server := newFakeServer(t)
+	server.pages["/me/notes.md"] = "# Notes\n"
+	first := newHarness(t)
+	require.NoError(t, first.get(t, server.URL+"/me/notes"))
+	first.store.saved[server.URL].Token.Expiry = time.Now().Add(-time.Minute)
+
+	readers := []*harness{first}
+	for range 4 {
+		other := newHarness(t)
+		other.store = first.store
+		other.app.store = first.store
+		other.app.lockDir = first.app.lockDir
+		readers = append(readers, other)
+	}
+	var wg sync.WaitGroup
+	for _, reader := range readers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			assert.NoError(t, reader.get(t, server.URL+"/me/notes"))
+		}()
+	}
+	wg.Wait()
+
+	assert.Equal(t, int32(1), server.refreshes.Load(),
+		"agents in parallel each renewed with the same refresh token, the server read the second use as theft and revoked the sign-in for all of them")
+	for i, reader := range readers {
+		signedInWhileSettingUp := map[bool]int32{true: 1, false: 0}[i == 0]
+		assert.Equal(t, signedInWhileSettingUp, reader.opened.Load(), "nobody had to sign in again")
+	}
+}
+
+func TestGet_SignsInAgainWhenTheServerNoLongerTakesTheToken(t *testing.T) {
+	server := newFakeServer(t)
+	server.pages["/me/notes.md"] = "# Notes\n"
+	h := newHarness(t)
+	require.NoError(t, h.get(t, server.URL+"/me/notes"))
+	server.revokeAll()
+
+	require.NoError(t, h.get(t, server.URL+"/me/notes"))
+
+	assert.Equal(t, int32(2), h.opened.Load())
+	assert.Equal(t, "# Notes\n# Notes\n", h.stdout.String())
+}
+
+func TestGet_ReadsAServerThatTakesNoSignIn(t *testing.T) {
+	server := newFakeServer(t)
+	server.signIn = false
+	server.pages["/me/notes.md"] = "# Notes\n"
+	h := newHarness(t)
+
+	require.NoError(t, h.get(t, server.URL+"/me/notes"))
+
+	assert.Equal(t, "# Notes\n", h.stdout.String())
+	assert.Zero(t, h.opened.Load(), "a server of your own on this computer has nobody to sign in")
+}
+
+func TestGet_NamesAServerThatRedirectsTheSignInQuestion(t *testing.T) {
+	server := newFakeServer(t)
+	server.discoveryRedirects = true
+	h := newHarness(t)
+
+	err := h.get(t, server.URL+"/me/notes")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "redirect",
+		"followed, the redirect lands on the front page and the reader is told the HTML did not parse, which says nothing of what went wrong")
+	assert.Zero(t, h.opened.Load())
+}
+
+func TestGet_FollowsARenamedPage(t *testing.T) {
+	server := newFakeServer(t)
+	server.pages["/me/notes/12.md"] = "->/me/notes/12-new-title.md"
+	server.pages["/me/notes/12-new-title.md"] = "# New title\n"
+	h := newHarness(t)
+
+	require.NoError(t, h.get(t, server.URL+"/me/notes/12"))
+
+	assert.Equal(t, "# New title\n", h.stdout.String())
+}
+
+func TestGet_RefusesAPageTheServerDoesNotHave(t *testing.T) {
+	server := newFakeServer(t)
+	h := newHarness(t)
+
+	err := h.get(t, server.URL+"/me/missing")
+
+	require.Error(t, err)
+	assert.Empty(t, h.stdout.String(), "the site's front page is not the page that was asked for")
+	assert.Contains(t, err.Error(), server.URL+"/me/missing.md")
+}
+
+func TestGet_ReportsARefusalWithWhatTheServerSaid(t *testing.T) {
+	server := newFakeServer(t)
+	server.chatStatus = http.StatusForbidden
+	h := newHarness(t)
+
+	err := h.get(t, server.URL+"/chat?after_seq=0")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "403")
+	assert.Contains(t, err.Error(), "account_chat_disabled")
+}
+
+func TestGet_ChatWaitsUntilSomethingArrives(t *testing.T) {
+	server := newFakeServer(t)
+	empty := `{"messages":[],"latest_seq":7,"has_more":false}`
+	arrived := `{"messages":[{"seq":8,"body":"Ready"}],"latest_seq":8,"has_more":false}`
+	server.chatPages = []string{empty, empty, arrived}
+	h := newHarness(t)
+
+	require.NoError(t, h.get(t, server.URL+"/chat.json?after_seq=7"))
+
+	assert.Equal(t, int32(3), server.chatAsked.Load(),
+		"an empty answer means the server's wait ran out, and the reader asked to be told when something comes")
+	assert.JSONEq(t, arrived, h.stdout.String())
+}
+
+func TestGet_ChatComesAsTextUnlessJSONIsAskedFor(t *testing.T) {
+	server := newFakeServer(t)
+	arrived := "#8 · writer · docs/review · 2026-10-13 18:00 UTC\n\nReady\n\nnext after_seq 8\n"
+	server.chatPages = []string{"", "", arrived}
+	h := newHarness(t)
+
+	require.NoError(t, h.get(t, server.URL+"/chat?after_seq=7"))
+
+	assert.Equal(t, int32(3), server.chatAsked.Load(),
+		"an empty text answer means the server's wait ran out, as an empty list of messages does")
+	assert.Equal(t, arrived, h.stdout.String())
+	assert.Equal(t, []string{"/chat.md", "/chat.md", "/chat.md"}, server.chatPathsAsked,
+		"a chat address without an ending reads as text, as a page does")
+}
+
+func TestGet_FollowPrintsEachMessageAndWaitsOnFromIt(t *testing.T) {
+	server := newFakeServer(t)
+	first := "#8 · writer · docs/review · 2026-10-13 18:00 UTC\n\nReady\n\nnext after_seq 8\n"
+	second := "#9 · reviewer · docs/review · reply to #8 · 2026-10-13 18:01 UTC\n\nRead it\n\nnext after_seq 9\n"
+	server.chatPages = []string{first, "", second, ""}
+	h := newHarness(t)
+	h.app.follow = true
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	stopped := make(chan error)
+	go func() { stopped <- h.app.get(ctx, server.URL+"/chat?after_seq=7&exclude_session=me") }()
+
+	require.Eventually(t, func() bool { return server.chatAsked.Load() >= 5 }, 5*time.Second, time.Millisecond)
+	cancel()
+
+	assert.ErrorIs(t, <-stopped, context.Canceled, "only an interrupt ends a follow")
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	assert.Equal(t, []string{"7", "8", "8", "9", "9"}, server.chatAfterAsked[:5],
+		"each wait starts after the last message shown, so none is printed twice and none is skipped")
+	assert.Equal(t, first+second, h.stdout.String())
+}
+
+func TestGet_ChatStopsAtTheDeadlineAndSaysWhereToWaitFrom(t *testing.T) {
+	server := newFakeServer(t)
+	server.chatPages = []string{""}
+	h := newHarness(t)
+	h.app.until = time.Now().Add(200 * time.Millisecond)
+
+	err := h.get(t, server.URL+"/chat?after_seq=7")
+
+	var reached deadlineReached
+	require.ErrorAs(t, err, &reached, "a deadline that passes in silence is its own outcome, not a failure to read")
+	assert.Equal(t, "no messages by "+h.app.until.UTC().Format(time.RFC3339)+"\n\nnext after_seq 7\n", h.stdout.String(),
+		"the wait is started again from the same line a message would have ended with")
+}
+
+func TestGet_DeadlineEndsAWaitTheServerHoldsOpen(t *testing.T) {
+	server := newFakeServer(t)
+	server.chatHeldOpen = true
+	h := newHarness(t)
+	h.app.until = time.Now().Add(200 * time.Millisecond)
+	started := time.Now()
+
+	err := h.get(t, server.URL+"/chat?after_seq=7")
+
+	require.ErrorAs(t, err, new(deadlineReached))
+	assert.Less(t, time.Since(started), 5*time.Second,
+		"the server keeps a quiet wait open for a long time, and the deadline does not wait for it to end")
+}
+
+func TestGet_ChatJSONStopsAtTheDeadlineWithAnAnswerOfTheSameKind(t *testing.T) {
+	server := newFakeServer(t)
+	server.chatPages = []string{`{"messages":[],"latest_seq":7,"has_more":false}`}
+	h := newHarness(t)
+	h.app.until = time.Now().Add(200 * time.Millisecond)
+
+	err := h.get(t, server.URL+"/chat.json?after_seq=7")
+
+	require.ErrorAs(t, err, new(deadlineReached))
+	assert.JSONEq(t, `{"messages":[],"reason":"deadline","deadline":"`+h.app.until.UTC().Format(time.RFC3339)+`","next_after_seq":7}`, h.stdout.String(),
+		"a reader of JSON gets JSON that says why it is empty, not a line of text after it")
+}
+
+func TestGet_ChatThatAnswersBeforeTheDeadlineEndsAsUsual(t *testing.T) {
+	server := newFakeServer(t)
+	arrived := "#8 · writer · docs/review · 2026-10-13 18:00 UTC\n\nReady\n\nnext after_seq 8\n"
+	server.chatPages = []string{"", arrived}
+	h := newHarness(t)
+	h.app.until = time.Now().Add(5 * time.Second)
+
+	require.NoError(t, h.get(t, server.URL+"/chat?after_seq=7"))
+
+	assert.Equal(t, arrived, h.stdout.String())
+}
+
+func TestGet_FollowEndsAtTheDeadlineAfterWhatArrived(t *testing.T) {
+	server := newFakeServer(t)
+	first := "#8 · writer · docs/review · 2026-10-13 18:00 UTC\n\nReady\n\nnext after_seq 8\n"
+	server.chatPages = []string{first, ""}
+	h := newHarness(t)
+	h.app.follow = true
+	h.app.until = time.Now().Add(300 * time.Millisecond)
+
+	err := h.get(t, server.URL+"/chat?after_seq=7")
+
+	require.ErrorAs(t, err, new(deadlineReached),
+		"a message does not move the deadline, or a busy chat would push it back for ever")
+	assert.Equal(t, first+"no more messages by "+h.app.until.UTC().Format(time.RFC3339)+"\n\nnext after_seq 8\n", h.stdout.String(),
+		"after a message was printed, saying none came would be false")
+}
+
+func TestGet_DeadlineAlreadyPastStillReadsWhatArrivedBeforeIt(t *testing.T) {
+	server := newFakeServer(t)
+	arrived := "#8 · writer · docs/review · 2026-10-13 18:00 UTC\n\nReady\n\nnext after_seq 8\n"
+	server.chatPages = []string{arrived}
+	h := newHarness(t)
+	h.app.until = time.Now().Add(-time.Minute)
+	h.app.lastLook = time.Second
+
+	require.NoError(t, h.get(t, server.URL+"/chat?after_seq=7"),
+		"a wait started again after an agreed deadline still finds the answer that came before it")
+
+	assert.Equal(t, arrived, h.stdout.String())
+}
+
+func TestGet_DeadlineAlreadyPastWithNothingArrivedStopsAfterOneLook(t *testing.T) {
+	server := newFakeServer(t)
+	server.chatHeldOpen = true
+	h := newHarness(t)
+	h.app.until = time.Now().Add(-time.Minute)
+	h.app.lastLook = 200 * time.Millisecond
+	started := time.Now()
+
+	err := h.get(t, server.URL+"/chat?after_seq=7")
+
+	require.ErrorAs(t, err, new(deadlineReached))
+	assert.Equal(t, int32(1), server.chatAsked.Load(), "the server was asked once before the passed deadline was reported")
+	assert.Less(t, time.Since(started), 5*time.Second)
+}
+
+func TestGet_ChatJSONWithoutACursorStopsAtTheDeadlineFromTheStart(t *testing.T) {
+	server := newFakeServer(t)
+	server.chatPages = []string{`{"messages":[],"latest_seq":0,"has_more":false}`}
+	h := newHarness(t)
+	h.app.until = time.Now().Add(200 * time.Millisecond)
+
+	err := h.get(t, server.URL+"/chat.json")
+
+	require.ErrorAs(t, err, new(deadlineReached), "a wait from the start has a cursor too: the start")
+	assert.Contains(t, h.stdout.String(), `"next_after_seq":0`)
+}
+
+func TestGet_DeadlineRefusesAPage(t *testing.T) {
+	server := newFakeServer(t)
+	h := newHarness(t)
+	h.app.until = time.Now().Add(time.Minute)
+
+	err := h.get(t, server.URL+"/me/notes")
+
+	require.Error(t, err, "a page answers at once, so there is nothing to wait for until the deadline")
+	assert.Contains(t, err.Error(), "chat")
+}
+
+func TestGet_FollowRefusesAPage(t *testing.T) {
+	server := newFakeServer(t)
+	h := newHarness(t)
+	h.app.follow = true
+
+	err := h.get(t, server.URL+"/me/notes")
+
+	require.Error(t, err, "a page does not change while it is read, so following it would print it once and then hang")
+	assert.Contains(t, err.Error(), "chat")
+}
+
+func TestGet_NamesTheJSONChatForAServerWithoutTheText(t *testing.T) {
+	server := newFakeServer(t)
+	server.chatTextMissing = true
+	h := newHarness(t)
+
+	err := h.get(t, server.URL+"/chat?after_seq=7")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat.json",
+		"Wikilayer 1.2.0 takes /chat.md for an account name and redirects to its front page, and the reader needs to know what to ask instead")
+}
+
+func TestGet_RefusesTextThatIsNotChatMessages(t *testing.T) {
+	server := newFakeServer(t)
+	server.chatPages = []string{"<html>Sign in to the Wi-Fi</html>"}
+	h := newHarness(t)
+
+	err := h.get(t, server.URL+"/chat?after_seq=7")
+
+	require.Error(t, err, "a captive portal's page printed as chat would pass for news")
+	assert.Empty(t, h.stdout.String())
+}
+
+func TestGet_WaitsOutAServerThatIsRestarting(t *testing.T) {
+	server := newFakeServer(t)
+	server.chatPages = []string{`{"messages":[{"seq":8}],"latest_seq":8,"has_more":false}`}
+	server.unavailable.Store(2)
+	h := newHarness(t)
+	h.app.pause = func(int) time.Duration { return time.Millisecond }
+
+	require.NoError(t, h.get(t, server.URL+"/chat.json?after_seq=7"),
+		"a deploy restarts the server under every agent waiting on the chat, and each of them died with a 502")
+
+	assert.Contains(t, h.stderr.String(), "502")
+	assert.JSONEq(t, `{"messages":[{"seq":8}],"latest_seq":8,"has_more":false}`, h.stdout.String())
+}
+
+func TestGet_WaitsOutARestartRightAfterSigningInAgain(t *testing.T) {
+	server := newFakeServer(t)
+	server.chatPages = []string{`{"messages":[{"seq":8}],"latest_seq":8,"has_more":false}`}
+	h := newHarness(t)
+	h.app.pause = func(int) time.Duration { return time.Millisecond }
+	require.NoError(t, h.get(t, server.URL+"/chat.json?after_seq=7"))
+	h.stdout.Reset()
+	server.revokeAll()
+	server.unavailable.Store(1)
+
+	require.NoError(t, h.get(t, server.URL+"/chat.json?after_seq=7"),
+		"the request made with the new sign-in met the same deploy, and only the first request was ever retried")
+	assert.Contains(t, h.stderr.String(), "trying again")
+}
+
+func TestGet_DoesNotRetryANameThatDoesNotExist(t *testing.T) {
+	h := newHarness(t)
+	h.app.pause = func(int) time.Duration {
+		t.Error("an address whose host does not exist will not exist in two minutes either")
+		return time.Millisecond
+	}
+	origin := "https://wlget-test.invalid"
+	h.store.saved[origin] = &credentials{
+		ClientID: "c", RedirectURL: "http://127.0.0.1:1/callback",
+		AuthURL: origin + "/oauth/authorize", TokenURL: origin + "/oauth/token",
+		Token: &oauth2.Token{AccessToken: "a", Expiry: time.Now().Add(time.Hour)},
+	}
+
+	err := h.get(t, origin+"/me/notes")
+
+	require.Error(t, err)
+}
+
+func TestLogout_WaitsForARenewalUnderWay(t *testing.T) {
+	server := newFakeServer(t)
+	server.pages["/me/notes.md"] = "# Notes\n"
+	h := newHarness(t)
+	require.NoError(t, h.get(t, server.URL+"/me/notes"))
+	renewing := make(chan struct{})
+	release := make(chan struct{})
+	renewed := make(chan error, 1)
+	go func() {
+		renewed <- h.app.locked(context.Background(), server.URL, func() error {
+			close(renewing)
+			<-release
+			saved, err := h.store.load(server.URL)
+			if err != nil {
+				return err
+			}
+			return h.store.save(server.URL, saved)
+		})
+	}()
+	<-renewing
+	impatient, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := h.app.logout(impatient, server.URL+"/me/notes")
+	close(release)
+	require.NoError(t, <-renewed)
+
+	require.Error(t, err,
+		"a logout that does not wait for the renewal removes the entry, and the renewal then saves its token back: the reader is told it is signed out and is not")
+	saved, loadErr := h.store.load(server.URL)
+	require.NoError(t, loadErr)
+	assert.NotNil(t, saved)
+}
+
+func TestGet_GivesUpOnAServerThatStaysDown(t *testing.T) {
+	server := newFakeServer(t)
+	server.unavailable.Store(1000)
+	h := newHarness(t)
+	h.app.pause = func(int) time.Duration { return time.Millisecond }
+
+	err := h.get(t, server.URL+"/chat?after_seq=7")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "502")
+	assert.NotContains(t, err.Error(), "<html>",
+		"a proxy's error page is markup, and the status line already says what happened")
+}
+
+func TestGet_RefusesAChatAnswerWithoutMessages(t *testing.T) {
+	for _, body := range []string{`{}`, `{"messages":null}`, `{"error":"x"}`} {
+		t.Run(body, func(t *testing.T) {
+			server := newFakeServer(t)
+			server.chatPages = []string{body}
+			h := newHarness(t)
+
+			err := h.get(t, server.URL+"/chat.json?after_seq=0")
+
+			require.Error(t, err, "taken for an empty wait, it would be asked again for ever and the agent would never hear why")
+			assert.Equal(t, int32(1), server.chatAsked.Load())
+		})
+	}
+}
+
+func TestGet_KeepsARefreshTokenThatChangedAlone(t *testing.T) {
+	server := newFakeServer(t)
+	server.pages["/me/notes.md"] = "# Notes\n"
+	h := newHarness(t)
+	require.NoError(t, h.get(t, server.URL+"/me/notes"))
+	server.keepAccess = true
+	h.store.saved[server.URL].Token.Expiry = time.Now().Add(-time.Minute)
+
+	require.NoError(t, h.get(t, server.URL+"/me/notes"))
+
+	assert.Equal(t, "refresh-2", h.store.saved[server.URL].Token.RefreshToken,
+		"the old refresh token is spent, and keeping it means signing in again at the next renewal")
+}
+
+func TestGet_ExplainsADamagedSavedSignIn(t *testing.T) {
+	server := newFakeServer(t)
+	h := newHarness(t)
+	h.store.saved[server.URL] = &credentials{ClientID: "c"}
+
+	err := h.get(t, server.URL+"/me/notes")
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), server.URL)
+	assert.Contains(t, err.Error(), "-logout")
+}
+
+func TestLogout_ForgetsTheServersToken(t *testing.T) {
+	server := newFakeServer(t)
+	server.pages["/me/notes.md"] = "# Notes\n"
+	h := newHarness(t)
+	require.NoError(t, h.get(t, server.URL+"/me/notes"))
+
+	require.NoError(t, h.app.logout(context.Background(), server.URL+"/me/notes"))
+
+	assert.Nil(t, h.store.saved[server.URL])
+}
+
+func TestLogout_TakesTheServersOwnAddress(t *testing.T) {
+	server := newFakeServer(t)
+	server.pages["/me/notes.md"] = "# Notes\n"
+	h := newHarness(t)
+	require.NoError(t, h.get(t, server.URL+"/me/notes"))
+
+	require.NoError(t, h.app.logout(context.Background(), server.URL+"/"),
+		"the README tells readers to log out with the server's address, and wlget refused it as naming no page")
+
+	assert.Nil(t, h.store.saved[server.URL])
+}
+
+func TestCredentials_SurviveTheRoundTripThroughText(t *testing.T) {
+	saved := &credentials{
+		ClientID:    "client-1",
+		RedirectURL: "http://127.0.0.1:5000/callback",
+		AuthURL:     "https://wikilayer.example/oauth/authorize",
+		TokenURL:    "https://wikilayer.example/oauth/token",
+		Token:       &oauth2.Token{AccessToken: "a", RefreshToken: "r", Expiry: time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)},
+	}
+
+	text, err := saved.encode()
+	require.NoError(t, err)
+	back, err := decodeCredentials(text)
+	require.NoError(t, err)
+
+	assert.Equal(t, saved.ClientID, back.ClientID)
+	assert.Equal(t, saved.RedirectURL, back.RedirectURL)
+	assert.Equal(t, saved.AuthURL, back.AuthURL)
+	assert.Equal(t, saved.TokenURL, back.TokenURL)
+	assert.Equal(t, saved.Token.AccessToken, back.Token.AccessToken)
+	assert.Equal(t, saved.Token.RefreshToken, back.Token.RefreshToken)
+	assert.True(t, saved.Token.Expiry.Equal(back.Token.Expiry))
+}
