@@ -1,0 +1,184 @@
+/* « Création de build rapide » (lots 224 et 227) : une page pleine, au-dessus de l'écran de choix des personnages ; les fenêtres qu'elle ouvre (fiche d'arme, artefact,
+   bonus d'ensemble, choix des mods) passent au-dessus d'elle. Lot 274 (ordre « build rapide sur l'image », Hive, 23/10) : la page est posée sur l'image de Hive ;
+   les règles de l'ancienne mise en page sont retirées (l'historique Git les garde). Les classes `.rp-…` servent aussi à « Mes builds » (`.rp-lecture`), gardées ici. */
+
+/* « Mes builds » : chaque build montré comme la page rapide, en lecture seule (lot 233). */
+.rp-lecture .rp-partie { padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.1); }
+.rp-lecture .rp-partie h5, .rp-lecture .rp-sous { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--texte-pale, #9aa6b5); }
+.rp-lecture .rp-sous { margin-top: 12px; }
+.rp-lecture .rp-carre { width: 44px; height: 44px; flex: none; display: grid; place-items: center; padding: 0; color: inherit; background: rgba(255,255,255,.06); border: 1px dashed rgba(255,255,255,.35); border-radius: 6px; cursor: pointer; position: relative; }
+.rp-lecture .rp-carre.plein { border-style: solid; background: rgba(255,255,255,.1); }
+.rp-lecture .rp-carre.ouvert { border-color: #7fb3e8; box-shadow: 0 0 0 2px rgba(127,179,232,.4); }
+.rp-lecture .rp-carre.art { border-color: rgba(243,215,122,.7); }
+.rp-lecture .rp-carre.exo { border-color: rgba(243,215,122,.9); }
+.rp-lecture .rp-carre.inactif, .rp-lecture .rp-carre:disabled { opacity: .45; cursor: default; }
+.rp-lecture .rp-carre img { width: 100%; height: 100%; object-fit: cover; border-radius: 4px; }
+.rp-lecture .rp-rond { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border: 1px dashed rgba(243,215,122,.55); border-radius: 50%; overflow: hidden; }
+.rp-lecture .rp-rond.plein { border-style: solid; background: rgba(255,255,255,.08); }
+.rp-lecture .rp-rond img { width: 100%; height: 100%; object-fit: cover; }
+.rp-lecture .rp-armes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.rp-lecture .rp-arme { display: grid; justify-items: center; gap: 6px; align-content: start; }
+.rp-lecture .rp-et { font-size: 12px; color: var(--texte-pale, #9aa6b5); min-width: 5.5em; }
+.rp-lecture .rp-arme .rp-et { text-align: center; }
+.rp-lecture .rp-nomarme { font-size: 11px; text-align: center; line-height: 1.2; opacity: .85; }
+.rp-lecture .rp-perks { display: grid; gap: 6px; justify-items: center; }
+.rp-lecture .rp-ligne { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.rp-lecture .rp-frag { flex-wrap: nowrap; }
+.rp-lecture .rp-frag .rp-carre { width: 38px; height: 38px; }
+.rp-lecture .rp-bonus { display: flex; gap: 6px; }
+.rp-lecture .rp-stats { display: flex; flex-wrap: wrap; gap: 6px; }
+.rp-lecture .rp-stat { display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; font-size: 12px; color: inherit; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.2); border-radius: 6px; cursor: pointer; }
+.rp-lecture .rp-stat.pris { background: rgba(127,179,232,.25); border-color: #7fb3e8; }
+.rp-lecture .rp-stat svg, .rp-lecture .rp-stat img { width: 14px; height: 14px; }
+.cp-rapide { display: inline-flex; }
+body.rapide-ouvert { overflow: hidden; }
+body.rapide-ouvert .pg-fiche { z-index: 20; }
+body.rapide-ouvert .pg-sac-panneau { z-index: 20; }
+.rp-lecture .rp-carre { width: 48px; height: 48px; }
+.rp-lecture .rp-frag .rp-carre { width: 42px; height: 42px; }
+.rp-lecture .rp-rond { width: 36px; height: 36px; }
+.rp-lecture .rp-stat { min-height: 44px; padding: 6px 12px; font-size: 13px; }
+.rp-lecture .ct-s-mods .ct-case { width: 40px; height: 40px; }
+body.rapide-ouvert #btSphere, body.rapide-ouvert #raspoutine, body.rapide-ouvert #btRaspoutine { display: none !important; }
+.cp-rapide-cons { display: inline-flex; flex: none; min-height: 36px; padding: 4px 12px; font-size: 12px; margin-left: auto; margin-right: 6px; }
+.rp-lecture { padding: 2px 0; }
+.rp-lecture .rp-carre { cursor: default; }
+.rp-lecture .rp-frag { flex-wrap: wrap; }
+.cf-rech-arme.ra-sur-rapide { z-index: 300; }
+
+/* ---------- La page rapide sur l'image (lot 274) ---------- */
+#rapide { position: fixed; inset: 0; z-index: 13; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 0; background: #05070b; color: var(--texte, #e8ecf1); }
+#rapide[hidden] { display: none; }
+#rapide button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+#rapide input, #rapide select, #rapide textarea { font-size: 16px; }   /* en dessous, Safari zoome au toucher */
+
+/* L'en-tête reste à l'écran : Retour, le titre et le témoin d'enregistrement, la recherche d'arme, le plein écran ; il tient compte de l'encoche. */
+#rapide .rp-tete { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; gap: 6px; min-height: 52px; box-sizing: border-box;
+  padding: calc(4px + env(safe-area-inset-top, 0px)) max(8px, env(safe-area-inset-right, 0px)) 4px max(4px, env(safe-area-inset-left, 0px));
+  background: rgba(5,7,11,.92); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border-bottom: 1px solid rgba(127,179,232,.25); }
+#rapide .rp-retour { flex: none; min-width: 44px; min-height: 44px; padding: 0 10px 0 6px; font-size: 15px; color: inherit; background: none; border: 0; }
+#rapide .rp-retour.rp-confirme { color: #f3d77a; font-weight: 700; }
+#rapide .rp-tete-titre { flex: 1 1 auto; min-width: 0; display: grid; gap: 1px; }
+#rapide .rp-tete h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#rapide .rp-temoin { font-size: 12px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #f3a07a; }
+#rapide .rp-temoin[data-etat="ok"] { color: #8fd19e; }
+#rapide .rp-temoin[data-etat="vide"] { color: var(--texte-pale, #9aa6b5); }
+#rapide .rp-chercher, #rapide .rp-plein-ecran { flex: none; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; color: inherit; background: none; border: 1px solid rgba(255,255,255,.22); border-radius: 10px; }
+#rapide .rp-plein-ecran[aria-pressed="true"] { border-color: #7fb3e8; color: #7fb3e8; }
+
+/* Les couleurs du plateau, à un seul endroit (lot 280) : la page les lit ici, la carte à envoyer (canvas) les relit ici aussi. */
+:root { --rp-fond: #05070b; --rp-ciel: #0d1830; --rp-case: #12161d; --rp-glace: #7fb3e8; --rp-ambre: #f3b04a; --rp-gris: rgba(255,255,255,.3); --rp-or: #ceae33; }
+
+/* Le plateau, à la largeur de l'écran (une colonne de 640 px au plus sur tablette et ordinateur) ; tout ce qui est dessus est placé en pourcentages de la grille de 816 × 1927. */
+#rapide .rp-boite { max-width: 640px; margin: 0 auto; padding-bottom: env(safe-area-inset-bottom, 0px); }
+#rapide .rp-plateau { position: relative; aspect-ratio: 816 / 1927; container-type: inline-size;
+  background:
+    radial-gradient(1px 1px at 8% 2.1%, #fff 50%, transparent), radial-gradient(1px 1px at 23% 6.3%, #cfe0f4 50%, transparent), radial-gradient(1.5px 1.5px at 41% 1.4%, #fff 50%, transparent),
+    radial-gradient(1px 1px at 57% 8.9%, #fff 50%, transparent), radial-gradient(1px 1px at 71% 3.2%, #cfe0f4 50%, transparent), radial-gradient(1.5px 1.5px at 86% 7.4%, #fff 50%, transparent),
+    radial-gradient(1px 1px at 94% 1.8%, #fff 50%, transparent), radial-gradient(1px 1px at 33% 11.2%, #cfe0f4 50%, transparent), radial-gradient(1px 1px at 63% 12.6%, #fff 50%, transparent),
+    radial-gradient(1px 1px at 15% 12.1%, #fff 50%, transparent), radial-gradient(1px 1px at 4% 40%, #cfe0f4 50%, transparent), radial-gradient(1px 1px at 98% 58%, #cfe0f4 50%, transparent),
+    radial-gradient(1px 1px at 2% 77%, #fff 50%, transparent), radial-gradient(1px 1px at 97% 88%, #fff 50%, transparent),
+    radial-gradient(120% 9% at 50% 0, rgba(127,179,232,.22), transparent 70%),
+    linear-gradient(var(--rp-ciel), var(--rp-fond) 14.3%, var(--rp-fond) 92%, #0a0d14);
+}
+/* Le décor : panneaux (bordure fine bleu glacé, reflets ambre aux coins), séparateurs, rails. Placés par la table de personnage.js. */
+#rapide .rp-plateau .rp-decor { position: absolute; inset: 0; pointer-events: none; }
+#rapide .rp-plateau .rp-decor > div { position: absolute; box-sizing: border-box; }
+#rapide .rp-plateau .rp-panneau { border: 1px solid color-mix(in srgb, var(--rp-glace) 45%, transparent); border-radius: calc(14 * 100cqw / 816);
+  background: linear-gradient(color-mix(in srgb, var(--rp-glace) 6%, transparent), rgba(5,7,11,.35) 60%); box-shadow: 0 0 calc(18 * 100cqw / 816) color-mix(in srgb, var(--rp-glace) 9%, transparent); }
+#rapide .rp-plateau .rp-panneau::before, #rapide .rp-plateau .rp-panneau::after { content: ""; position: absolute; width: 12%; height: calc(40 * 100cqw / 816); border: 0 solid color-mix(in srgb, var(--rp-ambre) 70%, transparent); }
+#rapide .rp-plateau .rp-panneau::before { top: -1px; left: -1px; border-width: 1.5px 0 0 1.5px; border-top-left-radius: inherit; }
+#rapide .rp-plateau .rp-panneau::after { right: -1px; bottom: -1px; border-width: 0 1.5px 1.5px 0; border-bottom-right-radius: inherit; }
+#rapide .rp-plateau .rp-sep { background: linear-gradient(transparent, color-mix(in srgb, var(--rp-glace) 45%, transparent) 20% 80%, transparent); }
+#rapide .rp-plateau .rp-rail { background: linear-gradient(transparent, color-mix(in srgb, var(--rp-glace) 22%, transparent) 10% 90%, transparent); }
+#rapide .rp-calque, #rapide .rp-enr, #rapide .rp-images { display: contents; }
+#rapide .rp-plateau .rp-partie { position: absolute; inset: 0; margin: 0; padding: 0; border: 0; pointer-events: none; }
+#rapide .rp-plateau .rp-partie * { pointer-events: auto; }
+#rapide .rp-plateau :is(.rp-armes, .rp-arme, .rp-perks, .rp-stats, .ct-s-mods, .ct-s-ligne, .rp-bonus, .rp-ligne, .ct-s-carres) { display: contents; }
+#rapide .rp-plateau :is(.rp-carre, .rp-rond, .ct-case, .rp-stat-cell, .rp-txt, .ct-s-carre, .rp-attente, .rp-nom, .rp-msg, .rp-enregistrer, .rp-bt-image, .rp-logo) { position: absolute; box-sizing: border-box; margin: 0; }
+
+/* Les cases (lot 280, plus d'image) : aplat très sombre, pointillés fins, coins arrondis ; une case pleine montre l'icône du choix, bordure pleine.
+   Armes et colonne 1 de l'armure en bleu glacé, colonne 2 en ambre, colonnes 3 à 5 en gris ; ronds de perks et d'artefact en ambre. */
+#rapide .rp-plateau :is(.rp-carre, .rp-rond, .ct-case) { display: grid; place-items: center; padding: 0; color: inherit; background: var(--rp-case); border: 1px dashed var(--rp-gris); border-radius: 10%;
+  box-shadow: none; outline: none; opacity: 1; cursor: pointer; }
+#rapide .rp-plateau .rp-rond { border-radius: 50%; border-color: color-mix(in srgb, var(--rp-ambre) 75%, transparent); }
+#rapide .rp-plateau :is(.rp-carre, .ct-case.c1) { border-color: color-mix(in srgb, var(--rp-glace) 75%, transparent); }
+#rapide .rp-plateau .ct-case.c2 { border-color: color-mix(in srgb, var(--rp-ambre) 75%, transparent); }
+#rapide .rp-plateau :is(.rp-carre, .rp-rond, .ct-case):is(.plein, .mod) { border-style: solid; }
+#rapide .rp-plateau :is(.rp-carre, .rp-rond, .ct-case) img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+#rapide .rp-plateau :is(.rp-carre, .rp-rond, .ct-case):is(.plein, .mod) { background: var(--rp-case); }
+#rapide .rp-plateau .rp-carre.exo { border: 2px solid var(--rp-or); }
+#rapide .rp-plateau .ct-case.a-chercher { opacity: .72; }
+#rapide .rp-plateau :is(.rp-carre, .rp-rond, .ct-case).ouvert { box-shadow: 0 0 0 2px #7fb3e8, 0 0 14px rgba(127,179,232,.55); }
+#rapide .rp-plateau :is(.rp-carre, .ct-case):is(:disabled, .inactif) { cursor: default; background: rgba(0,0,0,.35); }
+#rapide .rp-plateau .rp-carre.inactif.plein { background: var(--rp-case); }
+#rapide .rp-plateau .ct-case.grise { cursor: help; }
+#rapide .rp-plateau :is(.rp-carre, .rp-rond, .ct-case, .ct-s-carre, .rp-nom input, .rp-enregistrer, .rp-bt-image):focus-visible { outline: 2px solid #f3d77a; outline-offset: 2px; }
+/* Zone de toucher : jusqu'à la moitié de l'écart avec la voisine (`--g`, en pixels de la grille ; 100cqw = la largeur du plateau). Elle part du bord
+   intérieur de la case : on y ajoute l'épaisseur de la bordure (lot 280), sinon une fente morte reste entre deux cases. */
+#rapide .rp-plateau :is(button.rp-carre, button.rp-rond, button.ct-case, .ct-s-carre)::after { content: ""; position: absolute; inset: calc(var(--g, 4) * -100cqw / 816 - var(--rp-bord, 1px)); border-radius: inherit; }
+#rapide .rp-plateau .rp-carre.exo { --rp-bord: 2px; }
+#rapide .rp-plateau .ens-init { font-size: 13px; font-weight: 800; }
+#rapide .rp-plateau .ens-n { position: absolute; right: 3px; bottom: 2px; font-size: 11px; font-style: normal; font-weight: 800; text-shadow: 0 1px 2px #000; }
+
+/* Les statistiques visées : une seule commande par statistique, son sélecteur de niveau, posé (invisible) sur tout le rectangle. */
+#rapide .rp-plateau .rp-stat-cell { display: flex; align-items: center; gap: 4px; padding: 0 5px 0 7px; background: var(--rp-case); border: 1px solid color-mix(in srgb, var(--rp-glace) 60%, transparent); border-radius: 10px; font-size: 11.5px; cursor: pointer; overflow: hidden; }
+#rapide .rp-plateau .rp-stat-cell :is(svg, img) { flex: none; width: 15px; height: 15px; }
+#rapide .rp-plateau .rp-stat-nom { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#rapide .rp-plateau .rp-niveau { flex: none; display: grid; place-items: center; min-width: 22px; height: 22px; border: 1px solid rgba(255,255,255,.3); border-radius: 11px; font-size: 13px; }
+#rapide .rp-plateau .rp-stat-cell.pris { background: rgba(127,179,232,.2); box-shadow: inset 0 0 0 1.5px #7fb3e8; font-weight: 600; }
+#rapide .rp-plateau .rp-stat-cell.pris .rp-niveau { color: #0b0f14; background: #7fb3e8; border-color: transparent; }
+#rapide .rp-plateau .rp-stat-cell .ct-niveau { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; -webkit-appearance: none; appearance: none; }
+#rapide .rp-plateau .rp-stat-cell:focus-within { outline: 2px solid #f3d77a; outline-offset: 2px; }
+
+/* Les textes posés par le code : titres des panneaux (sur leur bordure), noms des lignes, des armes, de l'exotique, de la doctrine. 11 px au moins. */
+#rapide .rp-plateau .rp-titre-p { position: absolute; transform: translateY(-50%); margin: 0; padding: 0 7px; font-size: 11px; font-weight: 700; line-height: 1.15; letter-spacing: .1em;
+  text-transform: uppercase; white-space: nowrap; color: #cfe0f4; background: #070a10; border-radius: 6px; pointer-events: none; }
+#rapide .rp-plateau .rp-txt { display: flex; align-items: center; font-size: 11px; letter-spacing: -.01em; line-height: 1.2; color: rgba(232,236,241,.85); text-shadow: 0 1px 2px #000, 0 0 6px #000; overflow: hidden; pointer-events: none; }
+#rapide .rp-plateau .rp-arme .rp-txt { display: block; text-align: center; white-space: nowrap; text-overflow: ellipsis; }
+#rapide .rp-plateau .rp-arme .rp-nomarme { color: #f3d77a; }
+#rapide .rp-plateau .rp-sous { justify-content: center; text-align: center; font-size: 11.5px; font-weight: 600; color: #cfe0f4; }
+#rapide .rp-plateau .rp-exo-nom, #rapide .rp-plateau .rp-doc-nom, #rapide .rp-plateau .rp-doc-aide { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 12px; overflow-wrap: anywhere; color: #f3d77a; }
+#rapide .rp-plateau .rp-exo-nom { text-align: right; padding-top: 4px; }
+#rapide .rp-plateau .rp-doc-nom, #rapide .rp-plateau .rp-doc-aide { padding-top: 7px; }
+#rapide .rp-plateau .rp-doc-aide { color: #fff; font-weight: 600; }
+#rapide .rp-plateau .rp-attente { display: flex; align-items: center; margin: 0; font-size: 13px; }
+#rapide .rp-plateau .rp-cl .ct-s-carre { display: grid; place-items: center; min-height: 0; padding: 0 4px; font-size: 12.5px; color: inherit; background: rgba(5,7,11,.7); border: 1px solid rgba(255,255,255,.28); border-radius: 8px; }
+#rapide .rp-plateau .rp-cl .ct-s-carre.equipe { color: #1a0f05; background: #f3b04a; border-color: #f3b04a; font-weight: 700; }
+
+/* Le haut de l'image : le logo du Bunker, le nom du build et son message (deux lignes). Le bas : Enregistrer, Capture, Envoyer. */
+#rapide .rp-logo { left: 1.96%; top: 1.25%; width: 11.76%; height: auto; aspect-ratio: 1; filter: drop-shadow(0 2px 6px #000); pointer-events: none; }
+#rapide .rp-nom { display: block; }
+#rapide .rp-nom input { box-sizing: border-box; width: 100%; height: 44px; padding: 0 12px; color: inherit; background: rgba(5,7,11,.75); border: 1px solid rgba(127,179,232,.45); border-radius: 10px; }
+#rapide .rp-cache { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+#rapide .rp-msg { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; font-size: 12px; line-height: 1.3; color: rgba(232,236,241,.92); text-shadow: 0 1px 2px #000, 0 0 8px #000; }
+#rapide :is(.rp-enregistrer, .rp-bt-image) { display: grid; place-items: center; height: 44px; min-height: 44px; padding: 0 6px; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#rapide .rp-bt-image { color: inherit; background: rgba(5,7,11,.8); border: 1px solid rgba(255,255,255,.3); border-radius: 10px; }
+
+/* Le tiroir des choix (arme, perk, exotique, doctrine et ses pièces), en bas de l'écran ; la page garde de quoi défiler au-dessus. */
+#rapide .rp-tiroir { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; max-width: 640px; margin: 0 auto; max-height: min(58vh, 520px); max-height: min(58dvh, 520px); overflow-y: auto; overscroll-behavior: contain;
+  box-sizing: border-box; padding: 0 max(12px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
+  background: #0b0f14; border-top: 1px solid rgba(127,179,232,.45); border-radius: 16px 16px 0 0; box-shadow: 0 -12px 30px rgba(0,0,0,.6); }
+#rapide .rp-tiroir[hidden] { display: none; }
+#rapide .rp-tiroir-tete { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 0 8px; background: #0b0f14; }
+#rapide .rp-tiroir-tete .bouton { min-height: 44px; }
+#rapide .rp-tiroir .ct-s-carre { min-height: 64px; }
+#rapide .rp-tiroir .rp-exo-texte { box-sizing: border-box; width: 100%; min-height: 44px; margin: 6px 0; }
+#rapide .rp-tiroir > .rp-tiroir-corps > .bouton { min-height: 44px; margin-top: 8px; }
+#rapide.rp-tiroir-ouvert .rp-boite { padding-bottom: min(58vh, 520px); padding-bottom: min(58dvh, 520px); }
+/* Sous 380 px de large, l'icône des statistiques laisse la place à leur nom. */
+@container (max-width: 380px) { #rapide .rp-plateau .rp-stat-cell :is(svg, img) { display: none; } }
+/* Une icône qui ne se charge pas ne déborde pas de sa case (son texte de remplacement reste pour les lecteurs d'écran). */
+#rapide .rp-plateau img { font-size: 0; color: transparent; }
+/* Lot 277 : « Ouvrir une carte », à droite du nom ; dans le tiroir, l'image ou le code. */
+#rapide .rp-plateau .rp-ouvrir-carte { position: absolute; box-sizing: border-box; margin: 0; height: 44px; min-height: 44px; padding: 0 6px; font-size: 13px; line-height: 1.1; white-space: normal; color: inherit; background: rgba(5,7,11,.75); border: 1px solid rgba(243,180,70,.6); border-radius: 10px; }
+#rapide .rp-plateau .rp-ouvrir-carte[aria-expanded="true"] { border-color: #f3b04a; box-shadow: 0 0 0 2px rgba(243,180,70,.35); }
+#rapide .rp-tiroir .rp-ouvrir { display: grid; gap: 10px; }
+#rapide .rp-tiroir .rp-fichier { position: relative; display: grid; place-items: center; min-height: 48px; }
+#rapide .rp-tiroir .rp-code { display: flex; gap: 8px; }
+#rapide .rp-tiroir .rp-code input { flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 0 12px; letter-spacing: .12em; text-transform: uppercase; }
+#rapide .rp-tiroir .rp-code .bouton { min-height: 44px; }
+#rapide .rp-tiroir .rp-envoi { display: grid; gap: 10px; }
+#rapide .rp-tiroir .rp-envoi .bouton { min-height: 48px; }
+/* Les noms des lignes ne touchent pas la bordure du panneau (lot 280). */
+#rapide .rp-plateau :is(.rp-ligne > .rp-et, .ct-s-nom).rp-txt { padding-left: calc(12 * 100cqw / 816); }
