@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JLPT 전체 단어장</title>
+  <link rel="icon" type="image/svg+xml" href="__STAR_IMAGE__">
+  <style>__THEME_CSS__</style>
+  <style>__PET_CSS__</style>
+</head>
+<body>
+  <div class="scenery" aria-hidden="true"><span class="sun"></span><span class="cloud cloud-one"></span><span class="cloud cloud-two"></span><span class="hill hill-one"></span><span class="hill hill-two"></span></div>
+  <header class="site-header">
+    <p class="header-sticker" lang="ja">ひとつずつ、ゆっくり。</p>
+    <h1>JLPT 전체 단어장</h1>
+    <p class="header-description">작은 한 걸음도 차곡차곡. 오늘도 내 속도로 공부해요.</p>
+    <p id="storage-note">급수별 위치와 학습 기록은 이 브라우저에 자동 저장됩니다.</p>
+    <div class="pet-tools"><span>친구들을 잡아 끌어 보세요. 놓으면 사뿐히 내려와요.</span><button id="pet-toggle" type="button" aria-pressed="false">움직임 멈추기</button><div class="mobile-pet-picker"><label for="mobile-pets">모바일 친구</label><select id="mobile-pets"><option value="new">시사 · 모몽가 · 랏코</option><option value="original">치이카와 · 하치와레 · 우사기</option><option value="all">전체 6종</option></select></div></div>
+  </header>
+  <main>
+    <section id="home" aria-label="메인 화면">
+      <section class="paper-panel grade-panel" aria-labelledby="grade-title">
+      <p class="section-tag">오늘의 작은 공부</p>
+      <h2 id="grade-title">어디부터 시작할까요?</h2>
+      <p>급수를 선택하면 마지막으로 보던 단어부터 이어서 학습합니다.</p>
+      <div id="level-buttons"></div>
+      <p class="panel-footnote">조금씩 익숙해지면 돼요. 이어서 한 단어 더!</p>
+      </section>
+      <section class="paper-panel review-panel" aria-label="모르겠음 단어 모음">
+        <p class="section-tag pink-tag">한 번 더 만나기</p>
+        <h2>모르겠음 단어 모음</h2>
+        <label for="review-level">복습할 급수</label>
+        <select id="review-level">
+          <option value="all">전체 급수</option>
+          <option>N5</option><option>N4</option><option>N3</option><option>N2</option><option>N1</option>
+        </select>
+        <p id="review-summary"></p>
+        <button id="start-review" type="button">모르겠음 단어만 복습</button>
+        <p id="review-empty">아직 모르겠음으로 표시한 단어가 없습니다. 학습 화면에서 ↓를 눌러 등록하세요.</p>
+        <div class="table-scroll" tabindex="0" role="region" aria-label="모르겠음 단어 목록">
+        <table id="review-table">
+          <caption>모르겠음으로 표시한 단어 목록 · 단어를 누르면 해당 위치에서 복습합니다.</caption>
+          <thead><tr><th scope="col">급수</th><th scope="col">단어</th><th scope="col">읽는 법</th><th scope="col">뜻</th></tr></thead>
+          <tbody id="review-rows"></tbody>
+        </table>
+        </div>
+      </section>
+    </section>
+    <section id="study" aria-label="단어 학습 화면" hidden>
+      <div class="study-toolbar">
+      <button id="go-home" type="button">메인 화면으로</button>
+      <label for="level">급수</label>
+      <select id="level">
+        <option value="N5">N5 · 300개</option><option value="N4">N4 · 780개</option>
+        <option value="N3">N3 · 1,100개</option><option value="N2">N2 · 2,100개</option>
+        <option value="N1">N1 · 2,900개</option>
+      </select>
+      </div>
+      <h2 id="study-title">전체 단어 학습</h2>
+      <p class="keyboard-hint">← 이전 단어 / → 다음 단어 / ↑ 알고 있음 + 다음 / ↓ 모르겠음 + 다음</p>
+      <p id="position"></p>
+      <progress id="progress" value="0" max="1" aria-label="학습 진행"></progress>
+      <p id="counts"></p>
+      <article id="card" aria-label="현재 단어">
+        <h2 id="word" lang="ja"></h2>
+        <p id="reading" lang="ja"></p>
+        <p id="meaning"></p>
+        <h3>예문</h3>
+        <p id="example" lang="ja"></p>
+        <p id="translation"></p>
+        <p id="answer"></p>
+      </article>
+      <nav aria-label="단어 학습">
+        <button id="prev" type="button">← 이전</button>
+        <button id="known" type="button">↑ 알고 있음</button>
+        <button id="unknown" type="button">↓ 모르겠음</button>
+        <button id="next" type="button">다음 →</button>
+      </nav>
+      <p id="message" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+  <script id="vocabulary" type="application/json">__DATA__</script>
+  <script id="pet-sprites" type="application/json">__PET_SPRITES__</script>
+  <script id="pet-profiles" type="application/json">__PET_PROFILES__</script>
+  <script>__PET_INTEGRATION__</script>
+  <script>
+  (() => {
+    'use strict';
+    const data = JSON.parse(document.getElementById('vocabulary').textContent);
+    const storageKey = 'jlpt-local-vocabulary-v1';
+    const levels = Object.keys(data);
+    const el = Object.fromEntries(['home', 'study', 'level-buttons', 'review-level', 'review-summary',
+      'start-review', 'review-empty', 'review-table', 'review-rows', 'go-home', 'level', 'study-title',
+      'position', 'progress', 'counts', 'card', 'word', 'reading', 'meaning', 'example', 'translation',
+      'answer', 'prev', 'next', 'known', 'unknown', 'message', 'storage-note']
+      .map(id => [id, document.getElementById(id)]));
+    const allWords = levels.flatMap(level => data[level].map(word => ({ ...word, level })));
+    const byId = Object.fromEntries(allWords.map(word => [word.id, word]));
+    let saved = {};
+    try { saved = JSON.parse(localStorage.getItem(storageKey) || '{}') || {}; }
+    catch (_) { el['storage-note'].textContent = '저장 기록을 읽을 수 없어 새 세션으로 시작합니다.'; }
+    if (typeof saved !== 'object' || Array.isArray(saved)) saved = {};
+    let level = levels.includes(saved.level) ? saved.level : 'N5';
+    const positions = {}, answers = {};
+    for (const key of levels) {
+      const p = saved.positions?.[key];
+      positions[key] = Number.isInteger(p) && p >= 0 && p < data[key].length ? p : 0;
+      for (const word of data[key]) {
+        const value = saved.answers?.[word.id];
+        if (value === 'known' || value === 'unknown') answers[word.id] = value;
+      }
+    }
+    let mode = 'all', reviewIds = [], reviewIndex = 0, reviewTotal = 0;
+    function save() {
+      try { localStorage.setItem(storageKey, JSON.stringify({ level, positions, answers })); }
+      catch (_) { el['storage-note'].textContent = '브라우저 저장이 차단되어 있습니다. 현재 창에서만 기록이 유지됩니다.'; }
+    }
+    function unknownWords() {
+      const filter = el['review-level'].value;
+      return allWords.filter(word => answers[word.id] === 'unknown' && (filter === 'all' || word.level === filter));
+    }
+    function stats(list) {
+      let known = 0, unknown = 0;
+      for (const word of list) {
+        if (answers[word.id] === 'known') known++;
+        if (answers[word.id] === 'unknown') unknown++;
+      }
+      return { known, unknown };
+    }
+    function renderHome() {
+      el['level-buttons'].replaceChildren();
+      for (const key of levels) {
+        const { known, unknown } = stats(data[key]);
+        const row = document.createElement('p');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = `${key} 학습 · 전체 ${data[key].length.toLocaleString('ko-KR')}개`;
+        button.addEventListener('click', () => startLevel(key));
+        row.append(button, document.createTextNode(` 알고 있음 ${known}개 / 모르겠음 ${unknown}개 / 이어보기 ${positions[key] + 1}번째`));
+        el['level-buttons'].append(row);
+      }
+      const list = unknownWords();
+      el['review-summary'].textContent = `${el['review-level'].value === 'all' ? '전체 급수' : el['review-level'].value} · 모르겠음 ${list.length.toLocaleString('ko-KR')}개`;
+      el['start-review'].disabled = list.length === 0;
+      el['review-empty'].hidden = list.length !== 0;
+      el['review-table'].hidden = list.length === 0;
+      el['review-rows'].replaceChildren();
+      const fragment = document.createDocumentFragment();
+      list.forEach((word, index) => {
+        const row = document.createElement('tr');
+        const grade = document.createElement('td'); grade.textContent = word.level;
+        const cell = document.createElement('td');
+        const button = document.createElement('button'); button.type = 'button';
+        button.textContent = word.kanji; button.lang = 'ja';
+        button.addEventListener('click', () => startReview(index)); cell.append(button);
+        const reading = document.createElement('td'); reading.textContent = word.hiragana; reading.lang = 'ja';
+        const meaning = document.createElement('td'); meaning.textContent = word.korean;
+        row.append(grade, cell, reading, meaning); fragment.append(row);
+      });
+      el['review-rows'].append(fragment);
+    }
+    function showHome() {
+      el.home.hidden = false; el.study.hidden = true;
+      renderHome();
+      document.dispatchEvent(new CustomEvent('vocab:view'));
+    }
+    function startLevel(key) {
+      level = key; mode = 'all';
+      el.home.hidden = true; el.study.hidden = false;
+      save(); render();
+      document.dispatchEvent(new CustomEvent('vocab:start'));
+    }
+    function startReview(index = 0) {
+      reviewIds = unknownWords().map(word => word.id);
+      if (!reviewIds.length) return;
+      reviewIndex = index; reviewTotal = reviewIds.length; mode = 'review';
+      el.home.hidden = true; el.study.hidden = false;
+      render();
+      document.dispatchEvent(new CustomEvent('vocab:start'));
+    }
+    function currentList() { return mode === 'all' ? data[level] : reviewIds.map(id => byId[id]); }
+    function currentIndex() { return mode === 'all' ? positions[level] : reviewIndex; }
+    function render(message = '') {
+      const list = currentList(), index = currentIndex(), word = list[index];
+      const { known, unknown } = stats(mode === 'all' ? list : allWords);
+      el.level.value = level;
+      el.level.hidden = mode === 'review';
+      document.querySelector('label[for="level"]').hidden = mode === 'review';
+      el['study-title'].textContent = mode === 'review' ? '모르겠음 단어 복습' : `${level} 전체 단어 학습`;
+      el.progress.max = mode === 'review' ? reviewTotal : list.length;
+      el.progress.value = mode === 'review' ? reviewTotal - list.length + Math.min(index, list.length) : known + unknown;
+      el.counts.textContent = mode === 'review'
+        ? `전체 급수에 남은 모르겠음 ${unknown}개 · ↑ 알고 있음으로 바꾸면 모음에서 빠집니다.`
+        : `알고 있음 ${known}개 / 모르겠음 ${unknown}개 / 미평가 ${list.length - known - unknown}개`;
+      el.card.hidden = !word;
+      el.prev.disabled = index === 0 || list.length === 0;
+      el.next.disabled = !word || index >= list.length - 1;
+      el.known.disabled = el.unknown.disabled = !word;
+      el.known.setAttribute('aria-pressed', String(!!word && answers[word.id] === 'known'));
+      el.unknown.setAttribute('aria-pressed', String(!!word && answers[word.id] === 'unknown'));
+      if (word) {
+        el.position.textContent = `${mode === 'review' ? word.level + ' · 복습' : level} · ${index + 1} / ${list.length.toLocaleString('ko-KR')} · 원본 ID ${word.id}`;
+        el.word.textContent = word.kanji; el.reading.textContent = word.hiragana;
+        el.meaning.textContent = `뜻: ${word.korean}`;
+        el.example.textContent = word.ex; el.translation.textContent = word.tr;
+        el.answer.textContent = `현재 기록: ${answers[word.id] === 'known' ? '알고 있음' : answers[word.id] === 'unknown' ? '모르겠음' : '미평가'}`;
+      } else {
+        el.position.textContent = '이번 복습을 마쳤습니다.';
+      }
+      el.message.textContent = message || (!word ? '메인 화면에서 남은 모르겠음 단어를 다시 확인할 수 있습니다.' : '');
+    }
+    function move(delta) {
+      const list = currentList(), current = currentIndex();
+      if (!list.length) return;
+      const next = Math.min(list.length - 1, Math.max(0, current + delta));
+      if (mode === 'review') reviewIndex = next; else positions[level] = next;
+      save(); render(next === current ? (delta < 0 ? '첫 번째 단어입니다.' : '마지막 단어입니다.') : '');
+    }
+    function mark(answer) {
+      const list = currentList(), index = currentIndex(), word = list[index];
+      if (!word) return;
+      const wasComplete = mode === 'all' && list.every(item => answers[item.id]);
+      answers[word.id] = answer;
+      let suffix = '';
+      if (mode === 'review') {
+        if (answer === 'known') reviewIds.splice(reviewIndex, 1);
+        else reviewIndex++;
+      } else if (index < list.length - 1) positions[level]++;
+      else suffix = list.every(item => answers[item.id]) ? ' 이 급수의 모든 단어를 평가했습니다.' : ' 마지막 단어입니다.';
+      save(); render(`${word.kanji}: ${answer === 'known' ? '알고 있음' : '모르겠음'}으로 저장했습니다.${suffix}`);
+      document.dispatchEvent(new CustomEvent(answer === 'known' ? 'vocab:correct' : 'vocab:wrong'));
+      const completed = mode === 'review' ? reviewIndex >= reviewIds.length : !wasComplete && list.every(item => answers[item.id]);
+      if (completed) document.dispatchEvent(new CustomEvent('vocab:complete'));
+    }
+    el['go-home'].addEventListener('click', showHome);
+    el['review-level'].addEventListener('change', renderHome);
+    el['start-review'].addEventListener('click', () => startReview());
+    el.level.addEventListener('change', () => { startLevel(el.level.value); el.level.blur(); });
+    el.prev.addEventListener('click', () => move(-1));
+    el.next.addEventListener('click', () => move(1));
+    el.known.addEventListener('click', () => mark('known'));
+    el.unknown.addEventListener('click', () => mark('unknown'));
+    document.addEventListener('keydown', event => {
+      if (el.study.hidden || event.altKey || event.ctrlKey || event.metaKey || event.isComposing) return;
+      if (event.target.closest?.('select, input, textarea, [contenteditable="true"], .cv-pet')) return;
+      const action = { ArrowLeft: () => move(-1), ArrowRight: () => move(1),
+        ArrowUp: () => mark('known'), ArrowDown: () => mark('unknown') }[event.key];
+      if (action) { event.preventDefault(); if (!event.repeat) action(); }
+    });
+    showHome();
+  })();
+  </script>
+</body>
+</html>
