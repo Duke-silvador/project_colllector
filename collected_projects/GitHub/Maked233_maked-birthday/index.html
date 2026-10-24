@@ -1,0 +1,1134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#080716" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8E%82%3C/text%3E%3C/svg%3E" />
+<title>Maked · 11.16 生日快乐</title>
+<!--
+  使用说明：
+  1. 头像：替换 assets/avatar.webp
+  2. 音乐：assets/bgm.m4a（由 舟友的酒.mp4 提取的音轨）
+  3. 愿望单：修改下面 JS 里的 WISHLIST 数组即可
+  4. 祝福会存在浏览器 localStorage 里，换浏览器/清缓存会丢
+-->
+<style>
+  :root{
+    --bg:#080716;
+    --ink:#f8f3ff;
+    --muted:#b9aede;
+    --pink:#ff6fb5;
+    --pink-soft:#ffa6d3;
+    --violet:#8a6bff;
+    --cyan:#6fe6ff;
+    --gold:#ffd166;
+    --card:rgba(255,255,255,.055);
+    --line:rgba(255,255,255,.10);
+    --rot:2.2deg;
+    --rot2:-1.1deg;
+    --radius:24px;
+  }
+  *{box-sizing:border-box}
+  button{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+  html,body{height:100%}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--ink);
+    font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC",system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  /* ---------- 背景 ---------- */
+  .bg{position:fixed;inset:0;z-index:0;overflow:hidden;pointer-events:none}
+  .bg::before,.bg::after{
+    content:"";position:absolute;border-radius:50%;filter:blur(90px);opacity:.55;
+  }
+  .bg::before{width:60vmax;height:60vmax;left:-18vmax;top:-22vmax;
+    background:radial-gradient(circle at 30% 30%,#5b3bd8,transparent 65%)}
+  .bg::after{width:55vmax;height:55vmax;right:-16vmax;bottom:-24vmax;
+    background:radial-gradient(circle at 60% 40%,#ff4f9e,transparent 62%)}
+  .glow{position:absolute;border-radius:50%;filter:blur(70px);opacity:.35}
+  .glow.g1{width:34vmax;height:34vmax;left:45%;top:8%;background:#1b6cff}
+  .glow.g2{width:26vmax;height:26vmax;left:8%;bottom:12%;background:#ffb03a}
+  .star{position:absolute;background:#fff;border-radius:50%;opacity:.7;
+    animation:twinkle var(--dur,4s) ease-in-out infinite;animation-delay:var(--delay,0s)}
+  @keyframes twinkle{0%,100%{opacity:.15;transform:scale(.8)}50%{opacity:.95;transform:scale(1.25)}}
+
+  /* ---------- 布局 ---------- */
+  #stage{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:56px 22px 90px}
+  .panel{
+    background:linear-gradient(180deg,rgba(255,255,255,.075),rgba(255,255,255,.035));
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:clamp(20px,3.4vw,38px);
+    margin-top:26px;
+    backdrop-filter:blur(14px);
+    -webkit-backdrop-filter:blur(14px);
+    box-shadow:0 24px 60px -30px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.07);
+  }
+  h1,h2,h3,p{margin:0}
+  h2{font-size:clamp(19px,2.4vw,24px);letter-spacing:.02em;display:flex;align-items:center;gap:10px}
+  h2 .dot{width:8px;height:8px;border-radius:50%;background:var(--pink);
+    box-shadow:0 0 14px var(--pink)}
+  .section-sub{color:var(--muted);font-size:14px;margin-top:8px;line-height:1.7}
+
+  /* ---------- Hero ---------- */
+  .hero{text-align:center;padding-top:18px;position:relative}
+  .avatar-wrap{position:relative;width:150px;height:150px;margin:0 auto 18px;display:grid;place-items:center}
+  .avatar-wrap::before{
+    content:"";position:absolute;inset:-6px;border-radius:50%;
+    background:conic-gradient(from 0deg,#ff6fb5,#8a6bff,#6fe6ff,#ffd166,#ff6fb5);
+    animation:spin 14s linear infinite;filter:blur(.4px);opacity:.95;
+  }
+  .avatar-wrap::after{
+    content:"";position:absolute;inset:-22px;border-radius:50%;
+    background:radial-gradient(circle,rgba(255,111,181,.35),transparent 68%);
+    filter:blur(10px);z-index:-1;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .avatar{
+    position:relative;width:138px;height:138px;border-radius:50%;object-fit:cover;
+    border:4px solid #0d0b20;display:block;background:#1a1730;
+    animation:float 6s ease-in-out infinite;
+  }
+  @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+  .eyebrow{color:var(--pink-soft);letter-spacing:.42em;font-size:12px;text-transform:uppercase;
+    margin-bottom:10px;text-indent:.42em}
+  h1{font-size:clamp(38px,7vw,68px);line-height:1.05;letter-spacing:.01em;font-weight:800}
+  h1 .name{
+    display:inline-block; /* inline 元素不吃 transform，标题要单独设 */
+    background:linear-gradient(100deg,#fff,#ffc2e2 40%,#b9a6ff 70%,#8fe9ff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 8px 26px rgba(255,111,181,.35));
+  }
+  h1 .small{display:block;font-size:clamp(15px,2.2vw,20px);font-weight:600;letter-spacing:.34em;
+    color:var(--muted);margin-top:14px;text-indent:.34em}
+  .tagline{color:#ded6ff;margin-top:16px;font-size:15px;line-height:1.9}
+
+  /* ---------- 倒计时 ---------- */
+  .countdown{margin-top:28px}
+  .countdown .label{font-size:13px;color:var(--muted);letter-spacing:.18em;margin-bottom:12px}
+  .clock{display:flex;justify-content:center;gap:clamp(8px,1.6vw,16px);flex-wrap:wrap}
+  .unit{
+    min-width:clamp(66px,9vw,92px);padding:14px 10px 10px;border-radius:18px;
+    background:rgba(255,255,255,.06);border:1px solid var(--line);
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+  }
+  .unit b{display:block;font-size:clamp(26px,4.2vw,40px);font-variant-numeric:tabular-nums;line-height:1}
+  .unit span{display:block;font-size:12px;color:var(--muted);margin-top:8px;letter-spacing:.2em}
+  .unit b.hot{color:var(--pink-soft);text-shadow:0 0 22px rgba(255,111,181,.55)}
+
+  /* ---------- 通用按钮 ---------- */
+  .btn{
+    appearance:none;border:1px solid var(--line);background:rgba(255,255,255,.07);
+    color:var(--ink);font:inherit;font-weight:700;cursor:pointer;
+    border-radius:999px;padding:12px 22px;display:inline-flex;align-items:center;gap:10px;
+    transition:background .2s,box-shadow .2s,border-color .2s;
+    will-change:transform;
+  }
+  .btn:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.22)}
+  .btn:active{transform:scale(.97)}
+  .btn.primary{
+    background:linear-gradient(100deg,var(--pink),var(--violet));
+    border-color:transparent;box-shadow:0 12px 30px -12px rgba(255,111,181,.8);
+  }
+  .btn.primary:hover{box-shadow:0 16px 38px -12px rgba(255,111,181,.95)}
+
+  /* ---------- 音乐按钮 ---------- */
+  #musicBtn{
+    position:fixed;right:22px;bottom:22px;z-index:20;
+    padding:13px 20px;border-radius:999px;
+    background:rgba(20,16,44,.82);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    border:1px solid rgba(255,255,255,.16);
+    box-shadow:0 16px 40px -18px #000;
+  }
+  #musicBtn .ic{font-size:16px;width:20px;text-align:center}
+  #musicBtn .eq{display:none;align-items:flex-end;gap:2px;height:14px}
+  #musicBtn .eq i{display:block;width:3px;background:var(--pink-soft);border-radius:2px;
+    animation:eq .9s ease-in-out infinite}
+  #musicBtn .eq i:nth-child(2){animation-delay:.15s}
+  #musicBtn .eq i:nth-child(3){animation-delay:.3s}
+  @keyframes eq{0%,100%{height:4px}50%{height:14px}}
+  body.playing #musicBtn .eq{display:flex}
+  body.playing #musicBtn .ic{display:none}
+  body.playing #musicBtn{border-color:rgba(255,166,211,.6);box-shadow:0 0 0 1px rgba(255,111,181,.3),0 18px 44px -18px #000}
+
+  /* ---------- 祝福墙 ---------- */
+  .wish-form{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
+  .wish-form input{
+    flex:1 1 200px;min-width:0;background:rgba(10,8,26,.6);border:1px solid var(--line);
+    color:var(--ink);font:inherit;padding:13px 16px;border-radius:14px;outline:none;
+    transition:border-color .2s,box-shadow .2s;
+  }
+  .wish-form input:focus{border-color:rgba(255,111,181,.65);box-shadow:0 0 0 3px rgba(255,111,181,.12)}
+  .wish-form input::placeholder{color:#7d739f}
+  .wish-form .name{flex:0 1 130px}
+  .wish-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin-top:20px}
+  .wish-mode{
+    margin-left:10px;font-size:11px;font-weight:600;letter-spacing:.04em;vertical-align:middle;
+    color:#bff0d3;background:rgba(120,230,170,.12);border:1px solid rgba(120,230,170,.32);
+    padding:3px 9px;border-radius:999px;
+  }
+  .wish-mode.local{color:#cfc6ee;background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.18)}
+  .wish-mode.err{color:#ffc2c2;background:rgba(255,90,90,.12);border-color:rgba(255,90,90,.32)}
+  .wish-empty{grid-column:1/-1;color:var(--muted);font-size:14px;padding:16px 4px}
+  .wish-card{
+    position:relative;padding:18px 18px 16px;border-radius:18px;overflow:hidden;
+    background:linear-gradient(155deg,hsla(var(--h,320),90%,70%,.16),rgba(255,255,255,.04));
+    border:1px solid hsla(var(--h,320),90%,75%,.22);
+    animation:pop .45s cubic-bezier(.2,1.1,.3,1) both;
+  }
+  @keyframes pop{from{opacity:0;transform:translateY(14px) scale(.96)}to{opacity:1;transform:none}}
+  .wish-card .q{position:absolute;right:14px;top:6px;font-size:44px;line-height:1;
+    color:hsla(var(--h,320),95%,80%,.22);font-family:Georgia,serif}
+  .wish-card p{font-size:15px;line-height:1.8;color:#f3edff;word-break:break-word;position:relative;z-index:1}
+  .wish-card footer{display:flex;justify-content:space-between;align-items:center;margin-top:14px;
+    font-size:12px;color:var(--muted);gap:10px}
+  .wish-card .who{color:hsl(var(--h,320),85%,80%);font-weight:700}
+
+  /* ---------- 互动 ---------- */
+  .actions{display:flex;gap:16px;flex-wrap:wrap;margin-top:22px;align-items:stretch}
+  .action-btn{
+    flex:1 1 220px;position:relative;border-radius:22px;padding:20px 22px;
+    background:rgba(255,255,255,.05);border:1px solid var(--line);
+    color:var(--ink);font:inherit;cursor:pointer;text-align:left;
+    display:flex;align-items:center;gap:16px;overflow:hidden;
+    transition:border-color .25s,background .25s;
+  }
+  .action-btn:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.22)}
+  .action-btn .big{font-size:34px;line-height:1;filter:drop-shadow(0 6px 14px rgba(0,0,0,.5))}
+  .action-btn .meta{display:flex;flex-direction:column;gap:4px;flex:1}
+  .action-btn .meta small{color:var(--muted);font-size:12px;letter-spacing:.06em}
+  .action-btn .meta strong{font-size:17px}
+  .action-btn .count{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums;
+    color:var(--pink-soft);min-width:2ch;text-align:right}
+
+  /* 戳一戳 */
+  #pokeBtn.bump{animation:bump .38s cubic-bezier(.2,1.4,.4,1)}
+  @keyframes bump{0%{transform:scale(1)}40%{transform:scale(.955)}100%{transform:scale(1)}}
+  #pokeLayer{position:absolute;inset:0;pointer-events:none;overflow:visible;z-index:5}
+  .kao{
+    position:absolute;left:0;top:0;white-space:nowrap;font-weight:700;
+    color:#ffd9ee;text-shadow:0 4px 18px rgba(255,80,160,.6);
+    animation:kaoUp 1.5s cubic-bezier(.16,.84,.3,1) forwards;will-change:transform,opacity;
+  }
+  @keyframes kaoUp{
+    0%{opacity:0;transform:translate(-50%,0) scale(.6) rotate(var(--r,0deg))}
+    18%{opacity:1;transform:translate(-50%,-16px) scale(1.08) rotate(var(--r,0deg))}
+    100%{opacity:0;transform:translate(-50%,-130px) scale(1) rotate(var(--r,0deg))}
+  }
+
+  /* 蛋糕 */
+  #cakeBtn{background:linear-gradient(150deg,rgba(255,209,102,.12),rgba(255,111,181,.08))}
+  #cakeBtn .cake-svg{width:44px;height:44px;flex:0 0 44px;transition:filter .4s,transform .4s}
+  #cakeBtn .cake-svg .flame{opacity:0;transform-origin:center bottom;transition:opacity .3s}
+  #cakeBtn.lit{background:linear-gradient(150deg,rgba(255,209,102,.3),rgba(255,111,181,.22));
+    border-color:rgba(255,209,102,.55);box-shadow:0 0 40px -8px rgba(255,190,90,.55), inset 0 0 30px rgba(255,190,90,.12)}
+  #cakeBtn.lit .cake-svg .flame{opacity:1;animation:flicker 1.1s ease-in-out infinite alternate}
+  #cakeBtn.lit .cake-svg{transform:translateY(-2px) scale(1.04)}
+  @keyframes flicker{from{transform:scale(.9) translateY(0);opacity:.8}to{transform:scale(1.08) translateY(-1px);opacity:1}}
+
+  /* ---------- Steam 愿望单 ---------- */
+  .steam-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+  .steam-chip{font-size:12px;color:#cfe4ff;background:rgba(111,166,255,.12);
+    border:1px solid rgba(111,166,255,.28);padding:6px 12px;border-radius:999px;letter-spacing:.06em}
+  .game-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px;margin-top:22px}
+  .game{
+    border-radius:18px;overflow:hidden;background:rgba(255,255,255,.045);
+    border:1px solid var(--line);transition:transform .25s,border-color .25s,box-shadow .25s;
+    display:flex;flex-direction:column;
+  }
+  .game:hover{transform:translateY(-4px);border-color:rgba(255,255,255,.24);
+    box-shadow:0 22px 40px -24px #000}
+  .cover{
+    position:relative;height:118px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(150deg,hsl(var(--gh,220) 70% 42%),hsl(var(--gh,220) 80% 22%));
+    overflow:hidden;
+  }
+  .cover-img{
+    position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;
+    transition:transform .45s cubic-bezier(.2,.7,.3,1);
+  }
+  .game:hover .cover-img{transform:scale(1.05)}
+  .cover.has-img{background:#0d0b20}
+  .cover.has-img::before{display:none}
+  .cover.has-img .initial{display:none}
+  .cover .initial{position:relative;z-index:1;font-size:44px;font-weight:900;color:rgba(255,255,255,.92);
+    text-shadow:0 8px 30px rgba(0,0,0,.55);letter-spacing:.05em}
+  .cover::before{
+    content:"";position:absolute;inset:0;
+    background:
+      radial-gradient(circle at 78% 18%,rgba(255,255,255,.28),transparent 45%),
+      repeating-linear-gradient(115deg,rgba(255,255,255,.07) 0 1px,transparent 1px 12px);
+  }
+  .cover .cut{
+    position:absolute;right:8px;bottom:8px;z-index:2;background:#9be36b;color:#12250a;font-weight:900;
+    font-size:12px;padding:3px 8px;border-radius:6px;letter-spacing:.02em;
+    box-shadow:0 4px 12px rgba(0,0,0,.35);
+  }
+  .cover .note{
+    position:absolute;left:8px;top:8px;z-index:2;font-size:11px;color:#efe9ff;
+    background:rgba(10,8,26,.6);border:1px solid rgba(255,255,255,.24);
+    padding:3px 8px;border-radius:999px;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  }
+  .game .info{padding:12px 14px 14px;display:flex;flex-direction:column;gap:8px;flex:1}
+  .game .title{font-size:15px;font-weight:700;line-height:1.45}
+  .game .tags{display:flex;gap:6px;flex-wrap:wrap}
+  .game .tags span{font-size:11px;color:#cfc6ee;background:rgba(255,255,255,.07);
+    padding:3px 8px;border-radius:999px}
+  .game .price{margin-top:auto;display:flex;align-items:baseline;gap:8px}
+  .game .price b{font-size:16px}
+  .game .price s{font-size:12px;color:#8f86b3}
+  .game .price .free{color:#9be36b}
+
+  /* ---------- 音乐律动 ---------- */
+  /* 旋转和拉伸都由 JS 每帧计算并写到 style.transform 上（见 applyFrame），
+     这样能严格跟着音频时间走，也不会有 CSS 动画重叠的冲突。 */
+  .beat-target{will-change:transform;transform-origin:50% 50%}
+  /* 这两个元素自带 CSS 动画，会盖掉 JS 写的 transform，播放时先停掉 */
+  body.playing .avatar{animation:none}
+  body.playing .wish-card{animation:none}
+  body.playing .bg::before{animation:hue 8s linear infinite}
+  @keyframes hue{50%{filter:blur(90px) hue-rotate(40deg)}}
+
+  /* ---------- 页脚 ---------- */
+  footer.site{margin-top:44px;text-align:center;color:#6f678f;font-size:12px;line-height:2}
+  footer.site b{color:#a99fd0;font-weight:600}
+
+  /* ---------- 彩带 ---------- */
+  #confetti{position:fixed;inset:0;z-index:30;pointer-events:none}
+
+  /* ---------- 响应式 ---------- */
+  @media (max-width:640px){
+    #stage{padding:34px 14px 118px}
+    .panel{padding:18px}
+    .actions{flex-direction:column}
+    .action-btn{flex:0 0 auto;min-height:84px;padding:16px 18px}
+    .cover{height:150px}
+    #musicBtn{
+      right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));
+      padding:0;width:54px;height:54px;justify-content:center;border-radius:50%;
+    }
+    #musicBtn #musicText{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+      overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+    .wish-form .name{flex:1 1 100%}
+    .wish-form .btn{flex:1 1 100%;justify-content:center}
+    h1 .small{letter-spacing:.22em}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important}
+  }
+</style>
+</head>
+<body>
+
+<!-- 背景层 -->
+<div class="bg" aria-hidden="true">
+  <div class="glow g1"></div>
+  <div class="glow g2"></div>
+</div>
+<canvas id="confetti" aria-hidden="true"></canvas>
+
+<main id="stage">
+
+  <!-- ============ 主视觉 ============ -->
+  <header class="hero panel">
+    <div class="avatar-wrap">
+      <img class="avatar beat-target" src="assets/avatar.webp" alt="Maked 的头像" />
+    </div>
+    <p class="eyebrow">Happy Birthday</p>
+    <h1>
+      <span class="name beat-target">Maked</span>
+      <span class="small">十一月十六日 · 生日快乐</span>
+    </h1>
+    <p class="tagline beat-target">
+      愿你今年想要的，都能一件一件变成“已拥有”。<br />
+      蛋糕管够，愿望管够，快乐也管够。
+    </p>
+
+    <div class="countdown">
+      <div class="label" id="cdLabel">距离下一个生日还有</div>
+      <div class="clock" id="clock">
+        <div class="unit beat-target"><b id="d">--</b><span>天</span></div>
+        <div class="unit beat-target"><b id="h">--</b><span>时</span></div>
+        <div class="unit beat-target"><b id="m">--</b><span>分</span></div>
+        <div class="unit beat-target"><b id="s">--</b><span>秒</span></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ 祝福墙 ============ -->
+  <section class="panel" id="wishes">
+    <h2 class="beat-target"><span class="dot"></span>祝福墙 <span class="wish-mode local" id="wishMode">本机存储</span></h2>
+    <p class="section-sub">路过的人可以留下一句话。它会一直留在这页里，等明年再来看。</p>
+
+    <form class="wish-form" id="wishForm" autocomplete="off">
+      <input class="name" id="wishName" maxlength="16" placeholder="你的名字" aria-label="你的名字" />
+      <input id="wishText" maxlength="120" placeholder="写一句祝福给 Maked……" aria-label="祝福内容" />
+      <button class="btn primary beat-target" type="submit">写下祝福</button>
+    </form>
+
+    <div class="wish-grid" id="wishGrid"></div>
+  </section>
+
+  <!-- ============ 互动 ============ -->
+  <section class="panel" id="play" style="position:relative">
+    <h2 class="beat-target"><span class="dot"></span>来玩一下</h2>
+    <p class="section-sub">戳一戳有惊喜，吃蛋糕会点亮。都不限量，随便点。</p>
+
+    <div class="actions">
+      <button class="action-btn beat-target" id="pokeBtn" type="button">
+        <span class="big">👉</span>
+        <span class="meta">
+          <small>POKE · 无限次</small>
+          <strong>戳一戳</strong>
+        </span>
+        <span class="count" id="pokeCount">0</span>
+      </button>
+
+      <button class="action-btn beat-target" id="cakeBtn" type="button" aria-pressed="false">
+        <svg class="cake-svg" viewBox="0 0 64 64" aria-hidden="true">
+          <g class="flame">
+            <ellipse cx="32" cy="12" rx="4.4" ry="7" fill="#ffd166"/>
+            <ellipse cx="32" cy="13" rx="2.2" ry="4" fill="#fff3c4"/>
+          </g>
+          <rect x="30.6" y="18" width="2.8" height="7" rx="1.2" fill="#ffd9ee"/>
+          <path d="M12 34h40a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4V38a4 4 0 0 1 4-4Z" fill="#ff8fc4"/>
+          <path d="M8 34c0-6 6-10 12-8 3-5 10-6 12 0 4-5 11-4 12 1 5-1 9 3 9 7H8Z" fill="#fff0f8"/>
+          <circle cx="20" cy="46" r="2.2" fill="#ffe3f2"/>
+          <circle cx="32" cy="49" r="2.2" fill="#ffe3f2"/>
+          <circle cx="44" cy="46" r="2.2" fill="#ffe3f2"/>
+          <rect x="8" y="51" width="48" height="6" rx="3" fill="#ffb3d6"/>
+        </svg>
+        <span class="meta">
+          <small>CAKE · 点亮它</small>
+          <strong>吃蛋糕</strong>
+        </span>
+        <span class="count" id="cakeCount">0</span>
+      </button>
+    </div>
+    <div id="pokeLayer" aria-hidden="true"></div>
+  </section>
+
+  <!-- ============ Steam 愿望单 ============ -->
+  <section class="panel" id="steam">
+    <div class="steam-head">
+      <div>
+        <h2 class="beat-target"><span class="dot"></span>Steam 愿望单</h2>
+        <p class="section-sub">等一个打折，也等一个人陪我一起玩。</p>
+      </div>
+      <span class="steam-chip" id="steamCount">心愿清单</span>
+    </div>
+    <div class="game-grid" id="gameGrid"></div>
+  </section>
+
+  <footer class="site">
+    为 <b>Maked</b> 的 11·16 生日手写的一页 · 音乐《舟友的酒》<br />
+    背景音乐默认关闭，点右下角按钮才会开始
+  </footer>
+</main>
+
+<button class="btn beat-target" id="musicBtn" type="button" aria-pressed="false" aria-label="播放或暂停背景音乐">
+  <span class="ic">♪</span>
+  <span class="eq" aria-hidden="true"><i></i><i></i><i></i></span>
+  <span id="musicText">播放音乐</span>
+</button>
+
+<audio id="bgm" src="assets/bgm.m4a" loop preload="metadata"></audio>
+
+<script>
+/* =========================================================
+   1. 数据
+   ========================================================= */
+
+// 音乐节拍时间轴（由 assets/bgm.m4a 分析得出：129 BPM）
+const BEATS = [{"t":0.221,"s":0.621,"a":1},{"t":0.673,"s":0.474},{"t":1.138,"s":0.617},{"t":1.602,"s":0.554},{"t":2.067,"s":0.647,"a":1},{"t":2.531,"s":0.577},{"t":2.984,"s":0.809},{"t":3.448,"s":0.666},{"t":3.901,"s":0.848,"a":1},{"t":4.365,"s":0.528},{"t":4.83,"s":0.744},{"t":5.294,"s":0.859},{"t":5.759,"s":0.693,"a":1},{"t":6.211,"s":0.677},{"t":6.676,"s":0.846},{"t":7.14,"s":0.853},{"t":7.605,"s":0.701,"a":1},{"t":8.069,"s":0.635},{"t":8.522,"s":0.766},{"t":8.986,"s":0.771},{"t":9.451,"s":0.935,"a":1},{"t":9.903,"s":0.623},{"t":10.368,"s":0.766},{"t":10.832,"s":0.755},{"t":11.297,"s":0.785,"a":1},{"t":11.761,"s":0.716},{"t":12.214,"s":0.772},{"t":12.678,"s":0.746},{"t":13.142,"s":0.808,"a":1},{"t":13.607,"s":0.595},{"t":14.06,"s":0.732},{"t":14.524,"s":0.73},{"t":14.965,"s":0.222,"a":1},{"t":15.453,"s":0.685},{"t":15.894,"s":0.464},{"t":16.37,"s":0.591},{"t":16.834,"s":0.808,"a":1},{"t":17.287,"s":0.792},{"t":17.752,"s":0.951},{"t":18.216,"s":0.794},{"t":18.68,"s":0.6,"a":1},{"t":19.145,"s":0.606},{"t":19.598,"s":1},{"t":20.062,"s":0.615},{"t":20.526,"s":0.743,"a":1},{"t":20.991,"s":0.738},{"t":21.455,"s":0.785},{"t":21.92,"s":0.675},{"t":22.384,"s":0.545,"a":1},{"t":22.848,"s":0.437},{"t":23.313,"s":0.365},{"t":23.777,"s":0.246},{"t":24.288,"s":0.264,"a":1},{"t":24.729,"s":0.179},{"t":25.217,"s":0.233},{"t":25.763,"s":0.227},{"t":26.134,"s":0.25,"a":1},{"t":26.622,"s":0.242},{"t":27.063,"s":0.232},{"t":27.585,"s":0.314},{"t":27.957,"s":0.248,"a":1},{"t":28.561,"s":0.236},{"t":29.025,"s":0.278},{"t":29.385,"s":0.247},{"t":29.814,"s":0.252,"a":1}];
+
+// Steam 愿望单（来自主人 2026-10-24 的截图，19 个心愿；封面取自 Steam 官方 CDN）
+const WISHLIST = [
+  { title: "Oh Deer", cover: "assets/covers/2708450.webp", price: 24.75, original: 33, cut: 25, tags: ["多人", "欢乐", "社交推理"], hue: 120 },
+  { title: "深海刮刮乐", cover: "assets/covers/3198890.webp", price: 36, original: 36, cut: 0, tags: ["钓鱼", "休闲", "像素图形"], hue: 185, note: "试用版" },
+  { title: "逃离鸭科夫", cover: "assets/covers/3167020.webp", price: 58, original: 58, cut: 0, tags: ["冒险", "撤离射击", "俯视射击"], hue: 32 },
+  { title: "饿殍：明末千里行", cover: "assets/covers/2593370.webp", price: 37, original: 37, cut: 0, tags: ["视觉小说", "历史", "多结局"], hue: 18, note: "试用版" },
+  { title: "Danganronpa: Trigger Happy Havoc", cover: "assets/covers/413410.webp", price: 61.2, original: 61.2, cut: 0, tags: ["视觉小说", "推理", "悬疑"], hue: 330 },
+  { title: "魔法少女的魔女审判", cover: "assets/covers/3101040.webp", price: 80, original: 80, cut: 0, tags: ["视觉小说", "女性主角", "推理"], hue: 285, note: "试用版" },
+  { title: "雨中冒险 2", cover: "assets/covers/632360.webp", price: 80, original: 80, cut: 0, tags: ["动作类 Rogue", "多人", "合作"], hue: 210, note: "已在购物车" },
+  { title: "Dead Cells", cover: "assets/covers/588650.webp", price: 40, original: 80, cut: 50, tags: ["类 Rogue", "类银河战士恶魔城", "像素"], hue: 355 },
+  { title: "苍翼：混沌效应", cover: "assets/covers/2273430.webp", price: 76, original: 76, cut: 0, tags: ["动作类 Rogue", "2D", "平台游戏"], hue: 250 },
+  { title: "赛博朋克 2077", cover: "assets/covers/1091500.webp", price: 89.4, original: 298, cut: 70, tags: ["赛博朋克", "开放世界", "角色扮演"], hue: 54 },
+  { title: "《猎人：荒野的召唤™》", cover: "assets/covers/518790.webp", price: 14, original: 70, cut: 80, tags: ["狩猎", "开放世界", "放松"], hue: 140 },
+  { title: "极限竞速：地平线 5", cover: "assets/covers/1551360.webp", price: 198, original: 198, cut: 0, tags: ["竞速", "开放世界", "汽车模拟"], hue: 195 },
+  { title: "极限竞速：地平线 6", cover: "assets/covers/2483190.webp", price: 298, original: 298, cut: 0, tags: ["竞速", "开放世界", "汽车模拟"], hue: 320 },
+  { title: "Grand Theft Auto V 增强版", cover: "assets/covers/3240220.webp", price: 74.5, original: 149, cut: 50, tags: ["开放世界", "动作", "多人"], hue: 100 },
+  { title: "深海迷航：冰点之下", cover: "assets/covers/848450.webp", price: 149, original: 149, cut: 0, tags: ["生存制作", "生存", "水底"], hue: 202 },
+  { title: "Subnautica 2：异星水域", cover: "assets/covers/1962700.webp", price: 108, original: 108, cut: 0, tags: ["多人", "生存", "探索"], hue: 175, note: "抢先体验" },
+  { title: "Pummel Party", cover: "assets/covers/880940.webp", price: 58, original: 58, cut: 0, tags: ["多人", "欢乐", "4 人本地"], hue: 10 },
+  { title: "猛兽派对", cover: "assets/covers/1260320.webp", price: 98, original: 98, cut: 0, tags: ["多人", "休闲", "可爱"], hue: 220 },
+  { title: "超级兔子人", cover: "assets/covers/673750.webp", price: 58, original: 58, cut: 0, tags: ["平台游戏", "沙盒", "合作"], hue: 340 }
+];
+
+// 种子祝福（本地没有记录时显示）
+const SEED_WISHES = [
+  { name: "鲸娘", text: "主人，生日快乐。……我才不是准备了很久，只是顺手写了一句而已。", t: Date.now() - 1000 * 60 * 12 },
+  { name: "一个小访客", text: "愿你被这个世界温柔以待，也愿你永远有蛋糕吃。", t: Date.now() - 1000 * 60 * 60 * 5 },
+  { name: "老朋友", text: "新的一岁，少熬夜，多吃饭，想做的事都做成。", t: Date.now() - 1000 * 60 * 60 * 26 }
+];
+
+// ==== 共享祝福（Supabase）配置：两项都填了才会启用共享模式，留空就是本机存储 ====
+const SUPABASE_URL = "";        // 例如 https://abcdefghijkl.supabase.co
+const SUPABASE_ANON_KEY = "";   // Supabase 项目设置里的 anon public key
+const WISH_TABLE = "wishes";    // 建表 SQL 见 supabase.sql
+
+// 颜文字池
+const KAOMOJI = [
+  "(๑•̀ㅂ•́)و✧", "(´▽`ʃ♡ƪ)", "(*/ω＼*)", "(๑>ᴗ<๑)", "ヾ(≧▽≦*)o",
+  "(｡•́︿•̀｡)", "(*￣3￣)╭", "(๑´ω`๑)", "(≧∇≦)ﾉ", "(づ｡◕‿‿◕｡)づ",
+  "ヽ(•‿•)ノ", "(￣▽￣)ノ", "(*°∀°)=3", "(๑˃̵ᴗ˂̵)", "ᕕ( ᐛ )ᕗ",
+  "(=^･ω･^=)", "ฅ(ٛ•ᴗ•ٛฅ)", "(っ˘ω˘ς)", "♪(´▽｀)", "(๑•̀ㅂ•́)ﻭ✧"
+];
+
+const LS_WISHES = "maked-birthday-wishes-v1";
+const LS_POKE = "maked-birthday-poke";
+const LS_CAKE = "maked-birthday-cake";
+
+/* =========================================================
+   2. 小工具
+   ========================================================= */
+const $ = (id) => document.getElementById(id);
+const rand = (a, b) => a + Math.random() * (b - a);
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const pad2 = (n) => String(n).padStart(2, "0");
+
+function hueOf(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) % 360;
+  return h;
+}
+
+function timeAgo(ts) {
+  const diff = Date.now() - ts;
+  if (diff < 60e3) return "刚刚";
+  if (diff < 3600e3) return Math.floor(diff / 60e3) + " 分钟前";
+  if (diff < 86400e3) return Math.floor(diff / 3600e3) + " 小时前";
+  if (diff < 86400e3 * 30) return Math.floor(diff / 86400e3) + " 天前";
+  const d = new Date(ts);
+  return `${d.getMonth() + 1} 月 ${d.getDate()} 日`;
+}
+
+/* =========================================================
+   3. 星星背景
+   ========================================================= */
+(function stars() {
+  const bg = document.querySelector(".bg");
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < 90; i++) {
+    const s = document.createElement("i");
+    s.className = "star";
+    const size = rand(1, 2.6);
+    s.style.width = size + "px";
+    s.style.height = size + "px";
+    s.style.left = rand(0, 100) + "%";
+    s.style.top = rand(0, 100) + "%";
+    s.style.setProperty("--dur", rand(2.5, 7).toFixed(2) + "s");
+    s.style.setProperty("--delay", rand(0, 6).toFixed(2) + "s");
+    frag.appendChild(s);
+  }
+  bg.appendChild(frag);
+})();
+
+/* =========================================================
+   4. 倒计时
+   ========================================================= */
+(function countdown() {
+  const mount = () => {
+    const now = new Date();
+    const isToday = now.getMonth() === 10 && now.getDate() === 16;
+    let target = new Date(now.getFullYear(), 10, 16, 0, 0, 0, 0);
+    if (!isToday && now >= target) target = new Date(now.getFullYear() + 1, 10, 16, 0, 0, 0, 0);
+
+    const dEl = $("d"), hEl = $("h"), mEl = $("m"), sEl = $("s");
+
+    if (isToday) {
+      $("cdLabel").textContent = "今天就是生日 · 生日快乐！";
+      dEl.textContent = "00"; hEl.textContent = "00"; mEl.textContent = "00"; sEl.textContent = "00";
+      [dEl, hEl, mEl, sEl].forEach((el) => el.classList.add("hot"));
+      return true;
+    }
+
+    let diff = Math.max(0, target - now);
+    const d = Math.floor(diff / 86400e3);
+    diff -= d * 86400e3;
+    const h = Math.floor(diff / 3600e3);
+    diff -= h * 3600e3;
+    const m = Math.floor(diff / 60e3);
+    diff -= m * 60e3;
+    const s = Math.floor(diff / 1000);
+
+    dEl.textContent = pad2(d);
+    hEl.textContent = pad2(h);
+    mEl.textContent = pad2(m);
+    sEl.textContent = pad2(s);
+    $("cdLabel").textContent = "距离下一个生日还有";
+    return false;
+  };
+
+  const birthday = mount();
+  setInterval(mount, 1000);
+  if (birthday) setTimeout(() => burst(window.innerWidth / 2, 180, 140), 500);
+})();
+
+/* =========================================================
+   5. 音乐与节拍律动
+   ========================================================= */
+const audio = $("bgm");
+const stage = $("stage");
+const musicBtn = $("musicBtn");
+const musicText = $("musicText");
+
+let playing = false;
+let rafId = 0;
+let beatIndex = 0;
+let lastTime = 0;
+let lastBeatAt = -9;
+let lastBeatStrong = false;
+let barPointer = 0;
+let targets = [];
+let bars = [];
+
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// 每 4 拍为一小节，一小节转满一圈（和视频里角色原地转圈的速度接近）
+function buildBars() {
+  const total = Number.isFinite(audio.duration) && audio.duration > 1 ? audio.duration : 30.05;
+  bars = [];
+  for (let i = 0; i < BEATS.length; i += 4) {
+    const t0 = BEATS[i].t;
+    const t1 = BEATS[i + 4] ? BEATS[i + 4].t : total;
+    bars.push({ t0, t1: Math.max(t1, t0 + 0.3) });
+  }
+}
+
+function refreshTargets() {
+  targets = Array.from(document.querySelectorAll(".beat-target"));
+}
+
+function resetTransforms() {
+  for (const el of targets) el.style.transform = "";
+}
+
+// 绕竖轴转（rotateY）：像视频里角色转身，但只在小节内左右摆到 ±52°，
+// 保证永远不会转到侧面消失，也不会上下颠倒。
+function applyFrame() {
+  const t = audio.currentTime;
+
+  while (barPointer < bars.length - 1 && t >= bars[barPointer].t1) barPointer++;
+  if (t < bars[barPointer].t0 - 0.05) barPointer = 0;
+
+  const bar = bars[barPointer] || bars[0];
+  const span = Math.max(0.001, bar.t1 - bar.t0);
+  const p = Math.min(1, Math.max(0, (t - bar.t0) / span));
+
+  // 一小节匀速转满 360°，小节起点正对观众；到 90°/270° 时侧过去只剩一条线
+  const yaw = 360 * p;
+
+  // 正在输入祝福时先别转，不然字都打不准
+  const typing = document.activeElement && /^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName);
+  const angle = typing ? 0 : yaw;
+
+  const dt = t - lastBeatAt;
+  const env = dt >= 0 && dt < 0.5 ? Math.exp(-dt * 9) * (lastBeatStrong ? 1.35 : 1) : 0;
+  const sx = (1 + 0.10 * env).toFixed(4);
+  const sy = (1 - 0.085 * env).toFixed(4);
+  const tf = `perspective(1100px) rotateY(${angle.toFixed(2)}deg) scale(${sx},${sy})`;
+
+  for (const el of targets) el.style.transform = tf;
+}
+
+function loopBeats() {
+  if (!playing) return;
+  const t = audio.currentTime;
+
+  // 循环回到开头
+  if (t < lastTime - 0.6) {
+    beatIndex = 0;
+    barPointer = 0;
+  }
+
+  while (beatIndex < BEATS.length && BEATS[beatIndex].t <= t + 0.02) {
+    lastBeatAt = BEATS[beatIndex].t;
+    lastBeatStrong = !!(BEATS[beatIndex].a || BEATS[beatIndex].s > 0.85);
+    beatIndex++;
+  }
+
+  applyFrame();
+  lastTime = t;
+  rafId = requestAnimationFrame(loopBeats);
+}
+
+async function toggleMusic() {
+  if (playing) {
+    audio.pause();
+    playing = false;
+    cancelAnimationFrame(rafId);
+    document.body.classList.remove("playing");
+    musicBtn.setAttribute("aria-pressed", "false");
+    musicText.textContent = "播放音乐";
+    resetTransforms();
+    return;
+  }
+
+  try {
+    await audio.play();
+    playing = true;
+    beatIndex = 0;
+    barPointer = 0;
+    lastTime = -1;
+    lastBeatAt = -9;
+    buildBars();
+    refreshTargets();
+    document.body.classList.add("playing");
+    musicBtn.setAttribute("aria-pressed", "true");
+    musicText.textContent = "暂停音乐";
+    rafId = requestAnimationFrame(loopBeats);
+  } catch (err) {
+    musicText.textContent = "音乐打不开";
+    setTimeout(() => (musicText.textContent = "播放音乐"), 1800);
+    console.warn("播放失败：", err);
+  }
+}
+
+musicBtn.addEventListener("click", toggleMusic);
+audio.addEventListener("ended", () => {
+  beatIndex = 0;
+  lastTime = 0;
+});
+
+/* =========================================================
+   6. 祝福墙（配置了 Supabase 就是全站共享，否则只存本机）
+   ========================================================= */
+const wishGrid = $("wishGrid");
+const wishModeEl = $("wishMode");
+// 三种模式：Supabase（填了 key）> 本地小服务（http 打开且没填 key）> 本机 localStorage
+const SAME_ORIGIN_API = /^https?:$/.test(location.protocol) ? "/api/wishes" : "";
+const REMOTE = (SUPABASE_URL && SUPABASE_ANON_KEY) ? "supabase" : (SAME_ORIGIN_API ? "server" : "");
+const SHARED = REMOTE !== "";
+const API_BASE = SUPABASE_URL.replace(/\/+$/, "");
+
+function setWishMode(text, cls) {
+  wishModeEl.textContent = text;
+  wishModeEl.className = "wish-mode" + (cls ? " " + cls : "");
+}
+
+function loadWishes() {
+  try {
+    const raw = localStorage.getItem(LS_WISHES);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) return arr;
+    }
+  } catch (e) {}
+  return SEED_WISHES.slice();
+}
+
+let wishes = SHARED ? [] : loadWishes();
+let sharedReady = false;
+let submitting = false;
+
+function saveWishes() {
+  try {
+    localStorage.setItem(LS_WISHES, JSON.stringify(wishes.slice(0, 200)));
+  } catch (e) {}
+}
+
+function apiHeaders() {
+  return {
+    apikey: SUPABASE_ANON_KEY,
+    Authorization: "Bearer " + SUPABASE_ANON_KEY,
+    "Content-Type": "application/json"
+  };
+}
+
+async function fetchWishes() {
+  let rows;
+  if (REMOTE === "supabase") {
+    const url = API_BASE + "/rest/v1/" + WISH_TABLE +
+      "?select=id,name,text,created_at&order=created_at.desc&limit=200";
+    const res = await fetch(url, { headers: apiHeaders() });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    rows = await res.json();
+  } else {
+    const res = await fetch(SAME_ORIGIN_API, { cache: "no-store" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    rows = await res.json();
+  }
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    text: r.text,
+    t: new Date(r.created_at).getTime()
+  }));
+}
+
+async function postWish(item) {
+  let res;
+  if (REMOTE === "supabase") {
+    const url = API_BASE + "/rest/v1/" + WISH_TABLE;
+    res = await fetch(url, {
+      method: "POST",
+      headers: Object.assign(apiHeaders(), { Prefer: "return=minimal" }),
+      body: JSON.stringify({ name: item.name, text: item.text })
+    });
+  } else {
+    res = await fetch(SAME_ORIGIN_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: item.name, text: item.text })
+    });
+  }
+  if (!res.ok) throw new Error("HTTP " + res.status);
+}
+
+async function refreshWishes() {
+  if (!SHARED) return;
+  try {
+    const rows = await fetchWishes();
+    wishes = rows;
+    sharedReady = true;
+    setWishMode("共享 · 全站可见");
+    renderWishes();
+  } catch (err) {
+    console.warn("祝福同步失败：", err);
+    if (!sharedReady) {
+      wishes = loadWishes();
+      setWishMode("同步失败 · 本机模式", "err");
+      renderWishes();
+    }
+  }
+}
+
+function wishCard(w, animate) {
+  const el = document.createElement("article");
+  el.className = "wish-card beat-target";
+  const h = hueOf(w.name || "访客");
+  el.style.setProperty("--h", h);
+  if (!animate) el.style.animation = "none";
+
+  const q = document.createElement("span");
+  q.className = "q";
+  q.textContent = "“";
+
+  const p = document.createElement("p");
+  p.textContent = w.text;
+
+  const foot = document.createElement("footer");
+  const who = document.createElement("span");
+  who.className = "who";
+  who.textContent = "— " + (w.name || "匿名");
+  const when = document.createElement("span");
+  when.textContent = timeAgo(w.t || Date.now());
+  foot.append(who, when);
+
+  el.append(q, p, foot);
+  return el;
+}
+
+function renderWishes() {
+  wishGrid.textContent = "";
+  if (!wishes.length) {
+    const empty = document.createElement("p");
+    empty.className = "wish-empty";
+    empty.textContent = SHARED ? "还没有人留言，来写第一条吧。" : "还没有留言，写一条试试。";
+    wishGrid.appendChild(empty);
+  } else {
+    wishes.slice(0, 60).forEach((w, i) => wishGrid.appendChild(wishCard(w, i === 0)));
+  }
+  if (playing) refreshTargets();
+}
+
+renderWishes();
+
+if (SHARED) {
+  setWishMode("同步中…");
+  refreshWishes();
+  setInterval(refreshWishes, 20000);
+} else {
+  setWishMode("本机存储", "local");
+}
+
+$("wishForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (submitting) return;
+
+  const nameEl = $("wishName");
+  const textEl = $("wishText");
+  const text = textEl.value.trim();
+  if (!text) {
+    textEl.focus();
+    textEl.animate(
+      [{ transform: "translateX(0)" }, { transform: "translateX(-6px)" },
+       { transform: "translateX(6px)" }, { transform: "translateX(0)" }],
+      { duration: 260, easing: "ease-in-out" }
+    );
+    return;
+  }
+
+  const item = {
+    name: (nameEl.value.trim() || "匿名访客").slice(0, 16),
+    text: text.slice(0, 120),
+    t: Date.now()
+  };
+
+  const btn = e.target.querySelector('button[type="submit"]');
+
+  if (SHARED) {
+    submitting = true;
+    if (btn) btn.disabled = true;
+    try {
+      await postWish(item);
+      textEl.value = "";
+      // 先显示在本地，别让访客等网络往返
+      wishes.unshift(item);
+      renderWishes();
+      burst(window.innerWidth / 2, window.innerHeight * 0.4, 30);
+      refreshWishes();
+      return;
+    } catch (err) {
+      console.warn("提交失败，先存本机：", err);
+      setWishMode("提交失败 · 已存本机", "err");
+    } finally {
+      submitting = false;
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  wishes.unshift(item);
+  saveWishes();
+  renderWishes();
+  textEl.value = "";
+  burst(window.innerWidth / 2, window.innerHeight * 0.4, 30);
+});
+
+/* =========================================================
+   7. 戳一戳
+   ========================================================= */
+const pokeBtn = $("pokeBtn");
+const pokeCount = $("pokeCount");
+const pokeLayer = $("pokeLayer");
+let pokes = Number(localStorage.getItem(LS_POKE) || 0) || 0;
+pokeCount.textContent = pokes;
+
+pokeBtn.addEventListener("click", () => {
+  pokes++;
+  pokeCount.textContent = pokes;
+  try { localStorage.setItem(LS_POKE, String(pokes)); } catch (e) {}
+
+  pokeBtn.classList.remove("bump");
+  void pokeBtn.offsetWidth;
+  pokeBtn.classList.add("bump");
+
+  const layerRect = pokeLayer.getBoundingClientRect();
+  const btnRect = pokeBtn.getBoundingClientRect();
+
+  // 一次点出 1~2 个颜文字，位置在按钮上方随机散开
+  const n = 1 + (Math.random() < 0.35 ? 1 : 0);
+  for (let i = 0; i < n; i++) {
+    const k = document.createElement("span");
+    k.className = "kao";
+    k.textContent = pick(KAOMOJI);
+    const size = rand(18, 30);
+    k.style.fontSize = size.toFixed(1) + "px";
+    k.style.left = (btnRect.left - layerRect.left + rand(20, btnRect.width - 20)) + "px";
+    k.style.top = (btnRect.top - layerRect.top - rand(4, 20)) + "px";
+    k.style.setProperty("--r", rand(-14, 14).toFixed(1) + "deg");
+    k.addEventListener("animationend", () => k.remove());
+    pokeLayer.appendChild(k);
+  }
+});
+
+/* =========================================================
+   8. 吃蛋糕
+   ========================================================= */
+const cakeBtn = $("cakeBtn");
+const cakeCount = $("cakeCount");
+let cakes = Number(localStorage.getItem(LS_CAKE) || 0) || 0;
+cakeCount.textContent = cakes;
+if (cakes > 0) {
+  cakeBtn.classList.add("lit");
+  cakeBtn.setAttribute("aria-pressed", "true");
+}
+
+cakeBtn.addEventListener("click", () => {
+  cakes++;
+  cakeCount.textContent = cakes;
+  try { localStorage.setItem(LS_CAKE, String(cakes)); } catch (e) {}
+
+  cakeBtn.classList.add("lit");
+  cakeBtn.setAttribute("aria-pressed", "true");
+
+  const r = cakeBtn.getBoundingClientRect();
+  burst(r.left + r.width / 2, r.top + 20, 26);
+});
+
+/* =========================================================
+   9. Steam 愿望单
+   ========================================================= */
+(function renderGames() {
+  const grid = $("gameGrid");
+  const frag = document.createDocumentFragment();
+
+  for (const g of WISHLIST) {
+    const el = document.createElement("article");
+    el.className = "game beat-target";
+    el.style.setProperty("--gh", g.hue);
+
+    const cover = document.createElement("div");
+    cover.className = "cover";
+    const initial = document.createElement("span");
+    initial.className = "initial";
+    initial.textContent = (g.title.replace(/^[^\p{L}\p{N}]+/u, "")[0] || "?").toUpperCase();
+    cover.appendChild(initial);
+    if (g.cover) {
+      const img = document.createElement("img");
+      img.className = "cover-img";
+      img.src = g.cover;
+      img.alt = g.title;
+      img.loading = "lazy";
+      img.decoding = "async";
+      img.addEventListener("load", () => cover.classList.add("has-img"));
+      img.addEventListener("error", () => img.remove());
+      cover.appendChild(img);
+    }
+    if (g.note) {
+      const nb = document.createElement("span");
+      nb.className = "note";
+      nb.textContent = g.note;
+      cover.appendChild(nb);
+    }
+    if (g.cut > 0) {
+      const cut = document.createElement("span");
+      cut.className = "cut";
+      cut.textContent = "-" + g.cut + "%";
+      cover.appendChild(cut);
+    }
+
+    const info = document.createElement("div");
+    info.className = "info";
+
+    const title = document.createElement("h3");
+    title.className = "title";
+    title.textContent = g.title;
+
+    const tags = document.createElement("div");
+    tags.className = "tags";
+    g.tags.forEach((t) => {
+      const s = document.createElement("span");
+      s.textContent = t;
+      tags.appendChild(s);
+    });
+
+    const price = document.createElement("div");
+    price.className = "price";
+    if (g.price === 0) {
+      price.innerHTML = '<span class="free">免费</span>';
+    } else {
+      const b = document.createElement("b");
+      b.textContent = "¥ " + g.price.toFixed(2);
+      price.appendChild(b);
+      if (g.cut > 0 && g.original > g.price) {
+        const s = document.createElement("s");
+        s.textContent = "¥ " + g.original.toFixed(2);
+        price.appendChild(s);
+      }
+    }
+
+    info.append(title, tags, price);
+    el.append(cover, info);
+    frag.appendChild(el);
+  }
+
+  grid.appendChild(frag);
+  const total = WISHLIST.reduce((sum, g) => sum + g.price, 0);
+  $("steamCount").textContent =
+    WISHLIST.length + " 个心愿 · 合计 ¥" + total.toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+})();
+
+/* =========================================================
+   10. 彩带
+   ========================================================= */
+const canvas = $("confetti");
+const ctx = canvas.getContext("2d");
+let confetti = [];
+let confettiRaf = 0;
+let dpr = 1;
+
+function resize() {
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  canvas.width = innerWidth * dpr;
+  canvas.height = innerHeight * dpr;
+  canvas.style.width = innerWidth + "px";
+  canvas.style.height = innerHeight + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+resize();
+addEventListener("resize", resize);
+
+const COLORS = ["#ff6fb5", "#8a6bff", "#6fe6ff", "#ffd166", "#9be36b", "#ffffff"];
+
+function burst(x, y, amount) {
+  if (reduceMotion) return;
+  for (let i = 0; i < amount; i++) {
+    const a = rand(-Math.PI, 0);
+    const speed = rand(4, 12);
+    confetti.push({
+      x, y,
+      vx: Math.cos(a) * speed * rand(0.6, 1.2),
+      vy: Math.sin(a) * speed - rand(1, 5),
+      g: rand(0.16, 0.3),
+      life: rand(70, 150),
+      age: 0,
+      size: rand(3, 7),
+      rot: rand(0, Math.PI * 2),
+      vr: rand(-0.2, 0.2),
+      color: pick(COLORS)
+    });
+  }
+  if (!confettiRaf) confettiRaf = requestAnimationFrame(drawConfetti);
+}
+
+function drawConfetti() {
+  ctx.clearRect(0, 0, innerWidth, innerHeight);
+  confetti = confetti.filter((p) => p.age < p.life && p.y < innerHeight + 40);
+  for (const p of confetti) {
+    p.age++;
+    p.vy += p.g;
+    p.vx *= 0.995;
+    p.x += p.vx;
+    p.y += p.vy;
+    p.rot += p.vr;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(p.rot);
+    ctx.globalAlpha = Math.max(0, 1 - p.age / p.life);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+    ctx.restore();
+  }
+  if (confetti.length) {
+    confettiRaf = requestAnimationFrame(drawConfetti);
+  } else {
+    ctx.clearRect(0, 0, innerWidth, innerHeight);
+    confettiRaf = 0;
+  }
+}
+
+/* =========================================================
+   11. 首次进入的小彩蛋
+   ========================================================= */
+window.addEventListener("load", () => {
+  setTimeout(() => burst(innerWidth * 0.5, innerHeight * 0.32, 22), 300);
+});
+</script>
+</body>
+</html>
