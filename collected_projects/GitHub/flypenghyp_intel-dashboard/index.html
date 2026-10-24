@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>全球态势感知 · 实时情报仪表盘</title>
+<link rel="stylesheet" href="style.css">
+<link rel=stylesheet href=theme-v2.css>
+<link rel=stylesheet href=theme-watch.css>
+</head>
+<body>
+
+<!-- 紧急告警横幅 -->
+<div id="alertBanner" class="alert-banner hidden">
+  <span class="ab-icon">⚠</span>
+  <div class="ab-body">
+    <div class="ab-title" id="abTitle"></div>
+    <div class="ab-meta" id="abMeta"></div>
+  </div>
+  <button class="ab-close" onclick="GD.dismissBanner()">✕</button>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="dot-live" id="liveDot"></span>
+    <h1>全球态势感知</h1>
+    <span class="sub">经济 · 军事 · 政策　实时情报聚合</span>
+  </div>
+  <div class="stats" id="statsBar">
+    <div class="stat"><b id="sTotal">-</b><span>24h 情报</span></div>
+    <div class="stat warn"><b id="sUrgent">-</b><span>24h 紧急</span></div>
+    <div class="stat danger"><b id="sAlerts">-</b><span>24h 告警</span></div>
+    <div class="stat"><b id="sPending">-</b><span>待 AI 研判</span></div>
+    <div class="stat"><b id="sUpdated">-</b><span>最后更新</span></div>
+  </div>
+  <div class="tools">
+    <span class="asset-nav">
+      <a class="lt" href="domains.html" title="五大领域（财经/政策/军事/科技/生物）" target="_blank">🎯 五大领域</a>
+      <a class="lt" href="assets.html?class=futures" title="国际期货影响页" target="_blank">🛢 期货</a>
+      <a class="lt" href="assets.html?class=crypto" title="币圈影响页" target="_blank">🪙 币圈</a>
+      <a class="lt" href="assets.html?class=us" title="美股影响页" target="_blank">🇺🇸 美股</a>
+      <a class="lt" href="assets.html?class=cny" title="A股影响页" target="_blank">🇨🇳 A股</a>
+    </span>
+    <span class="layout-tg">
+      <button class="lt" data-layout="dashboard" title="地图+图表+信息流">看板</button>
+      <button class="lt active" data-layout="compact2" title="地图缩到 170px，信息流更大">紧凑</button>
+      <button class="lt" data-layout="feedonly" title="隐藏地图与图表，信息流占满整列">纯列表</button>
+    </span>
+    <a id="tunnelLink" class="btn" href="#" target="_blank" rel="noopener" style="display:none" title="外网访问地址（隧道重启会变）">&#127760; 外网</a>
+    <span id="srcHealth" class="src-health" title="数据源健康">源 —</span>
+    <button id="soundBtn" class="btn on" onclick="GD.toggleSound()">🔔 声音开</button>
+    <button class="btn" onclick="GD.refreshAll()">⟳ 刷新</button>
+    <span class="conn" id="connState">连接中…</span>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- 左：过滤器 -->
+  <aside class="panel left">
+    <div class="p-title">分类筛选</div>
+    <div class="chips" id="catChips">
+      <button class="chip active" data-cat="all">全部</button>
+      <button class="chip" data-cat="economy">💰 经济</button>
+      <button class="chip" data-cat="military">🛡 军事</button>
+      <button class="chip" data-cat="policy">📜 政策</button>
+      <button class="chip" data-cat="other">◻ 其他</button>
+    </div>
+
+    <div class="p-title">级别</div>
+    <div class="chips" id="lvlChips">
+      <button class="chip active" data-lvl="">全部</button>
+      <button class="chip" data-lvl="medium">中</button>
+      <button class="chip" data-lvl="high">高</button>
+      <button class="chip" data-lvl="critical">紧急</button>
+    </div>
+
+    <div class="p-title">时间窗</div>
+    <div class="chips" id="hourChips">
+      <button class="chip" data-hours="6">6h</button>
+      <button class="chip active" data-hours="24">24h</button>
+      <button class="chip" data-hours="72">3天</button>
+      <button class="chip" data-hours="168">7天</button>
+    </div>
+
+    <div class="p-title">搜索</div>
+    <input id="q" class="search" placeholder="关键词 / 地区，回车搜索" onkeydown="if(event.key==='Enter')GD.applyFilters()">
+
+    <div class="p-title">数据源状态 <small id="srcSum"></small></div>
+    <div class="src-list" id="srcList"></div>
+  </aside>
+
+  <!-- 中：地图 + 信息流 -->
+  <section class="panel center">
+    <div class="map-wrap">
+      <div class="map-head">
+        <span>全球事件分布</span>
+        <span class="legend">
+          <i class="lg critical"></i>紧急
+          <i class="lg high"></i>高
+          <i class="lg medium"></i>中
+          <i class="lg low"></i>常规
+        </span>
+        <span class="map-hint" id="mapHint">点击标记可筛选该地区事件</span>
+      </div>
+      <svg id="map" viewBox="0 0 1000 500" preserveAspectRatio="xMidYMid meet"></svg>
+      <div id="mapTip" class="map-tip hidden"></div>
+    </div>
+
+    <!-- 可视化看板 -->
+    <div class="viz">
+      <div class="viz-card wide">
+        <div class="viz-title">24 小时事件趋势 <span id="vizTrendSum" class="viz-note"></span></div>
+        <svg id="chartTrend" class="viz-svg"></svg>
+      </div>
+      <div class="viz-card">
+        <div class="viz-title">分类占比</div>
+        <svg id="chartCat" class="viz-svg"></svg>
+      </div>
+      <div class="viz-card">
+        <div class="viz-title">级别分布</div>
+        <svg id="chartLvl" class="viz-svg"></svg>
+      </div>
+      <div class="viz-card">
+        <div class="viz-title">热点地区 Top</div>
+        <svg id="chartGeo" class="viz-svg"></svg>
+      </div>
+    </div>
+
+    <!-- 走向判断（经济 + 供应链） -->
+    <div class="outlook" id="outlookStrip">
+      <span class="ol-h">走向判断</span>
+      <span class="ol-chip" id="olEcon">经济：—</span>
+      <span class="ol-chip" id="olSc">供应链：—</span>
+      <span class="ol-chip" id="olCrypto">💰 加密：—</span>
+      <span class="ol-chip" id="olEquity">📈 股市：—</span>
+      <span class="ol-note" id="olNote">等待智能体团队给出判断…</span>
+    </div>
+
+    <div class="feed-head">
+      <span class="fh-title">信息流</span>
+      <span class="origin-filter">
+        <button class="of active" data-origin="all">全部</button>
+        <button class="of" data-origin="global">🌐 全球</button>
+        <button class="of" data-origin="domestic">国内</button>
+      </span>
+      <span class="origin-filter quick-filter">
+        <button class="qf active" data-quick="">全部</button>
+        <button class="qf" data-quick="mkt">💰市场</button>
+        <button class="qf" data-quick="important">⚠重要&gt;50</button>
+      </span>
+      <span class="feed-count" id="feedCount"></span>
+      <span class="feed-stamp" id="feedStamp"></span>
+      <label class="onlyai"><input type="checkbox" id="onlyAI"> 有研判</label>
+      <label class="onlyai"><input type="checkbox" id="onlyDecision"> 决策</label>
+      <label class="onlyai"><input type="checkbox" id="pinImportant" checked> 置顶</label>
+      <label class="onlyai"><input type="checkbox" id="hidePending" checked> 隐英文</label>
+      <label class="onlyai"><input type="checkbox" id="expandAll"> 展开</label>
+      <label class="auto"><input type="checkbox" id="autoScroll" checked> 自动滚</label>
+    </div>
+    <div class="filter-bar hidden" id="filterBar"></div>
+    <div class="feed" id="feed"></div>
+  </section>
+
+  <!-- 右：告警 / 简报 / 日志 -->
+  <aside class="panel right">
+    <div class="tabs">
+      <button class="tab active" data-tab="alerts">🚨 告警 <small id="alertCount"></small></button>
+      <button class="tab" data-tab="briefs">📋 简报 <small id="briefCount"></small></button>
+      <button class="tab" data-tab="ledger">📒 日志 <small id="ledgerCount"></small></button>
+    </div>
+
+    <div class="tabpane" id="pane-alerts">
+      <div class="alerts" id="alertList"></div>
+
+      <div class="p-title">AI 研判队列</div>
+      <div class="queue" id="queueList"></div>
+      <div class="hint">
+        智能体团队每 30 分钟读取该队列：为每条产出<b>专业研判 + 建议（含置信度）</b>，
+        把英文稿译成中文，并识别"已落地的决策"。结论回写到条目、可能升级告警，
+        紧急与高级别会记入告警日志。
+      </div>
+    </div>
+
+    <div class="tabpane hidden" id="pane-briefs">
+      <div class="briefs" id="briefList"></div>
+    </div>
+
+    <div class="tabpane hidden" id="pane-ledger">
+      <div class="hint" style="margin-bottom:8px">
+        追加式日志：只记录<b>紧急</b>与<b>高</b>级别事件及其 AI 复核结论。<br>
+        文件：<code>logs/alert-ledger.md</code>（可读）与 <code>data/ledger.jsonl</code>（机器可读）
+      </div>
+      <div class="ledger" id="ledgerList"></div>
+    </div>
+  </aside>
+</main>
+
+<!-- 悬停详情浮层 -->
+<div id="detailPop" class="detail-pop hidden"></div>
+
+<script src="world_map.js"></script>
+<script src="snapshot-data.js"></script>
+<script src="app.js"></script>
+<div style="position:fixed;left:8px;bottom:8px;z-index:9;background:rgba(19,29,44,.92);border:1px solid #1e2b3d;border-radius:6px;padding:4px 8px;font-size:11px;color:#7b8ea8">GitHub Pages 静态快照 · 每 10 分钟更新 · 实时版看本机</div></body>
+</html>

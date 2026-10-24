@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>资产影响 · 全球态势感知</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  /* 资产页专用样式（复用主看板的配色变量） */
+  body{overflow:auto}
+  .wrap{max-width:1280px;margin:0 auto;padding:16px}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap}
+  .tab{padding:7px 16px;border:1px solid var(--line);border-radius:8px;background:var(--panel);
+        color:var(--txt2);text-decoration:none;font-size:13px;transition:.15s}
+  .tab:hover{border-color:var(--line2);color:var(--txt)}
+  .tab.on{background:linear-gradient(180deg,#1d3350,#16263c);border-color:#3b82f6;color:#dbeafe;font-weight:600}
+  .sect{margin:18px 0 8px;display:flex;align-items:center;gap:10px}
+  .sect h2{font-size:14px;margin:0;letter-spacing:1px;color:var(--txt)}
+  .sect .note{color:var(--txt3);font-size:12px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .q{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+  .q .n{color:var(--txt2);font-size:12px;display:flex;justify-content:space-between;gap:6px}
+  .q .p{font-size:19px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums}
+  .q .c{font-size:12px;margin-top:2px;font-variant-numeric:tabular-nums}
+  .q .u{color:var(--txt3);font-size:11px}
+  .up{color:#e5484d}     /* 中国市场惯例：红涨 */
+  .down{color:#2e9e6b}   /* 绿跌 */
+  .flat{color:var(--txt2)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);
+        font-size:12px;color:var(--txt2)}
+  .chip b{color:var(--txt)}
+  .ev{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+  .ev .h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .ev .t{font-size:13.5px;color:var(--txt);font-weight:600;text-decoration:none}
+  .ev .t:hover{color:#7dd3fc}
+  .ev .meta{color:var(--txt3);font-size:11.5px;margin-top:4px}
+  .ev .ai{color:#9fb4d0;font-size:12.5px;margin-top:6px;line-height:1.6}
+  .ev .act{color:#7dd3fc;font-size:12px;margin-top:4px}
+  .lv{padding:1px 7px;border-radius:4px;font-size:11px;font-weight:700}
+  .lv-critical{background:rgba(229,72,77,.18);color:#ff8a8d;border:1px solid rgba(229,72,77,.4)}
+  .lv-high{background:rgba(232,163,61,.16);color:#f0bb72;border:1px solid rgba(232,163,61,.35)}
+  .lv-medium{background:rgba(46,158,107,.16);color:#6fd3a5;border:1px solid rgba(46,158,107,.35)}
+  .lv-low{background:rgba(74,107,138,.16);color:#8fa3bf;border:1px solid rgba(74,107,138,.35)}
+  .sc{color:var(--txt3);font-size:11px}
+  .hint{color:var(--txt3);font-size:12px;padding:10px 0}
+  .err{color:#ff8a8d;font-size:12px}
+</style>
+<link rel=stylesheet href=theme-v2.css>
+<link rel=stylesheet href=theme-watch.css>
+<script src="snapshot-data.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="dot-live"></span>
+    <h1>资产影响</h1>
+    <span class="sub">情报 → 影响 → 价格</span>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div style="margin-left:auto;display:flex;gap:12px;align-items:center">
+    <span class="sub" id="stamp"></span>
+    <a class="tab" href="/">← 返回看板</a>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="sect"><h2 id="viewName">加载中</h2><span class="note" id="viewDesc"></span></div>
+
+  <div class="sect"><h2>💹 行情</h2><span class="note" id="quoteNote"></span></div>
+  <div class="grid" id="quotes"></div>
+
+  <div class="sect"><h2>🧭 影响判断</h2><span class="note" id="dirNote"></span></div>
+  <div class="chips" id="dirs"></div>
+  <div class="sect"><h2>🎯 关注指标</h2><span class="note">来自 AI 研判的 watch 字段（多次出现=多位分析师同时认为关键）</span></div>
+  <div class="chips" id="watch"></div>
+
+  <div class="sect"><h2>📰 相关事件</h2><span class="note" id="evNote"></span></div>
+  <div id="events"></div>
+  <div class="hint" id="hint"></div>
+</div>
+
+<script>
+(function () {
+  var CLS = [
+    ['futures', '国际期货'], ['crypto', '币圈'], ['us', '美股'], ['cny', 'A股']
+  ];
+  var cur = 'futures';
+  var LV = { critical: '紧急', high: '高', medium: '中', low: '常规' };
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function pct(v) {
+    if (v == null || isNaN(v)) return '';
+    var s = (v > 0 ? '+' : '') + Number(v).toFixed(2) + '%';
+    return s;
+  }
+  function cls(v) {
+    if (v == null || isNaN(v) || Math.abs(v) < 0.005) return 'flat';
+    return v > 0 ? 'up' : 'down';
+  }
+  function fmtPrice(v) {
+    if (v == null || isNaN(v)) return '-';
+    if (v >= 10000) return Number(v).toFixed(0);
+    if (v >= 100) return Number(v).toFixed(2);
+    return Number(v).toFixed(3);
+  }
+
+  function renderTabs() {
+    document.getElementById('tabs').innerHTML = CLS.map(function (c) {
+      return '<a class="tab' + (c[0] === cur ? ' on' : '') + '" href="?class=' + c[0] + '">' + c[1] + '</a>';
+    }).join('');
+  }
+
+  function renderQuotes(list, ts) {
+    var host = document.getElementById('quotes');
+    if (!list || !list.length) {
+      host.innerHTML = '<div class="hint">行情暂不可用（数据源无响应）</div>';
+      return;
+    }
+    document.getElementById('quoteNote').textContent = '来源：新浪财经 / binance.vision ｜ 快照 ' + (ts || '');
+    host.innerHTML = list.map(function (q) {
+      var c = cls(q.chg_pct);
+      return '<div class="q"><div class="n"><span>' + esc(q.name) + '</span></div>' +
+        '<div class="p ' + c + '">' + fmtPrice(q.price) + '</div>' +
+        '<div class="c ' + c + '">' + pct(q.chg_pct) + ' <span class="u">' + esc(q.unit || '') + '</span></div></div>';
+    }).join('');
+  }
+
+  function renderDirs(dirs, label, total) {
+    var host = document.getElementById('dirs');
+    var keys = Object.keys(dirs || {});
+    document.getElementById('dirNote').textContent = label + ' ｜ 共 ' + (total || 0) + ' 条相关信息';
+    if (!keys.length) { host.innerHTML = '<div class="hint">暂无 AI 走向判断（相关条目均未进入研判）</div>'; return; }
+    host.innerHTML = keys.map(function (k) {
+      return '<span class="chip">' + esc(k) + ' <b>' + dirs[k] + '</b></span>';
+    }).join('');
+  }
+
+  function renderWatch(list) {
+    var host = document.getElementById('watch');
+    if (!list || !list.length) { host.innerHTML = '<div class="hint">暂无</div>'; return; }
+    host.innerHTML = list.map(function (w) {
+      return '<span class="chip">' + esc(w.name) + (w.count > 1 ? ' <b>×' + w.count + '</b>' : '') + '</span>';
+    }).join('');
+  }
+
+  function renderEvents(events, total) {
+    var host = document.getElementById('events');
+    document.getElementById('evNote').textContent = '共 ' + (total || 0) + ' 条，显示相关性最高的 ' + (events || []).length + ' 条';
+    if (!events || !events.length) {
+      host.innerHTML = '<div class="hint">过去 24 小时没有与本品类相关的情报。</div>';
+      return;
+    }
+    host.innerHTML = events.map(function (e) {
+      var lv = e.llm_level || e.level || 'low';
+      var title = e.title_zh || e.title || '';
+      var link = e.url && /^https?:/.test(e.url);
+      var t = link ? '<a class="t" href="' + esc(e.url) + '" target="_blank" rel="noopener">' + esc(title) + '</a>'
+                   : '<span class="t">' + esc(title) + '</span>';
+      var ai = e.llm_note ? '<div class="ai">AI：' + esc(e.llm_note) + '</div>'
+        : (e.llm_analysis ? '<div class="ai">' + esc(String(e.llm_analysis).slice(0, 160)) + '…</div>' : '');
+      var act = e.llm_action ? '<div class="act">建议：' + esc(String(e.llm_action).slice(0, 90)) + '</div>' : '';
+      return '<div class="ev"><div class="h"><span class="lv lv-' + esc(lv) + '">' + (LV[lv] || lv) + '</span>' +
+        '<span class="sc">' + (e.score || 0) + ' 分</span>' + t + '</div>' +
+        '<div class="meta">' + esc(e.source_name || '') + ' ｜ ' + esc(e.geo_name || '—') +
+        ' ｜ ' + esc((e.fetched_at || '').slice(5, 16)) + '</div>' + ai + act + '</div>';
+    }).join('');
+  }
+
+  function load() {
+    var q = new URLSearchParams(location.search);
+    cur = q.get('class') || 'futures';
+    renderTabs();
+    fetch('/api/assets?class=' + encodeURIComponent(cur) + '&hours=24&limit=40')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) throw new Error(d.error || 'api error');
+        var v = d.view;
+        document.getElementById('viewName').textContent = v.name;
+        document.getElementById('viewDesc').textContent = v.desc;
+        document.title = v.name + '影响 · 全球态势感知';
+        renderQuotes(v.quotes, v.quotes_ts);
+        renderDirs(v.directions, v.label, v.total);
+        renderWatch(v.watch);
+        renderEvents(v.events, v.total);
+        document.getElementById('stamp').textContent = '更新 ' + new Date().toLocaleTimeString('zh-CN', { hour12: false });
+        var hint = document.getElementById('hint');
+        if (cur === 'crypto') {
+          hint.textContent = '说明：本机数据源对币圈覆盖有限（24 小时相关条目通常个位数），行情部分为实时、事件部分偏少。如需补强，建议接入加密垂直 RSS。';
+        } else { hint.textContent = ''; }
+        if ((v.quote_errors || []).length) {
+          hint.className = 'err';
+          hint.textContent = '部分行情源异常：' + v.quote_errors.join('；');
+        }
+      })
+      .catch(function (e) {
+        document.getElementById('events').innerHTML = '<div class="err">加载失败：' + esc(e.message) + '</div>';
+      });
+  }
+
+  load();
+  setInterval(load, 60000);
+})();
+</script>
+<div style="position:fixed;left:8px;bottom:8px;z-index:9;background:rgba(19,29,44,.92);border:1px solid #1e2b3d;border-radius:6px;padding:4px 8px;font-size:11px;color:#7b8ea8">GitHub Pages 静态快照 · 每 10 分钟更新 · 实时版看本机</div></body>
+</html>

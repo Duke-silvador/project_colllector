@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+    <meta name="theme-color" content="#060709">
+
+<script>
+(() => {
+  try {
+    const theme = localStorage.getItem("CMTheme") ||
+      (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    document.documentElement.dataset.theme = theme;
+    const lang = localStorage.getItem("CMLang") || "ar";
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+  } catch (_) {}
+})();
+</script>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coding Master - لوحة التحكم</title>
+    <link rel="stylesheet" href="/src/styles/style.css">
+    <link rel="icon" href="/assets/logo.png" type="image/png">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- مكتبة Supabase الرسمية -->
+<style>
+        .admin-section {
+            padding: 60px 0 100px;
+            min-height: 85vh;
+        }
+
+        .admin-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .admin-header h1 {
+            font-size: 2.5rem;
+            font-weight: 900;
+            color: #fff;
+        }
+
+        /* كارت تسجيل الدخول للوحة */
+        .login-card {
+            max-width: 450px;
+            margin: 40px auto;
+            background: #14151c;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+        }
+
+        .login-card h3 {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+        }
+
+        .login-card input {
+            width: 100%;
+            background: #090a0c;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            padding: 14px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            text-align: center;
+            font-size: 1.1rem;
+            outline: none;
+        }
+
+        /* الجدول وحاوية الرسائل */
+        .dashboard-container {
+            display: none;
+        }
+
+        .stats-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #14151c;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px 30px;
+            border-radius: 16px;
+            margin-bottom: 30px;
+        }
+
+        .refresh-btn {
+            background: #ffffff;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 30px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .refresh-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .messages-table-wrapper {
+            overflow-x: auto;
+            background: #14151c;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .messages-table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: right;
+        }
+
+        .messages-table th,
+        .messages-table td {
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .messages-table th {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-gray);
+            font-size: 0.9rem;
+        }
+
+        .messages-table td {
+            font-size: 0.95rem;
+            color: #fff;
+        }
+
+        .msg-text-cell {
+            max-width: 250px;
+            word-wrap: break-word;
+            line-height: 1.5;
+        }
+
+        .delete-btn {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid #ef4444;
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+
+        .delete-btn:hover {
+            background: #ef4444;
+            color: #fff;
+        }
+
+        .secret-code {
+            font-family: monospace;
+            background: rgba(255, 255, 255, 0.08);
+            padding: 4px 8px;
+            border-radius: 6px;
+        }
+
+        [dir="ltr"] .messages-table {
+            text-align: left;
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="navbar">
+        <div class="logo">
+            <img src="/assets/logo.png" alt="Coding Master Logo">
+            <span>Coding Master - Admin</span>
+        </div>
+
+        <nav class="nav-pill desktop-nav">
+            <a href="index.html" class="nav-link">الرئيسية</a>
+            <a href="about.html" class="nav-link">من نحن</a>
+            <a href="contact.html" class="nav-link">تواصل معنا</a>
+            <a href="download.html" class="nav-link">التنزيلات</a>
+        </nav>
+
+        <div class="nav-left-icons">
+            <button class="en-btn desktop-lang" onclick="toggleLanguage()">
+                <span id="btnLangText">English</span> <i class="fa-solid fa-globe"></i>
+            </button>
+            <button class="mobile-dots-btn" onclick="openMobileMenu()">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </header>
+
+    <div id="mobileMenuOverlay" class="mobile-menu-overlay">
+        <button class="close-menu-btn" onclick="closeMobileMenu()"><i class="fas fa-times"></i></button>
+        <nav class="mobile-nav-links">
+            <a href="index.html">الرئيسية</a>
+            <a href="about.html">من نحن</a>
+            <a href="contact.html">تواصل معنا</a>
+            <a href="download.html">التنزيلات</a>
+
+            <button class="en-btn mobile-lang-btn" onclick="toggleLanguage()"
+                style="margin: 0 auto; justify-content: center; display: flex;">
+                <span class="lang-text">English</span> <i class="fa-solid fa-globe"></i>
+            </button>
+        </nav>
+    </div>
+
+    <section class="admin-section">
+        <div class="container">
+            <div class="admin-header">
+                <h1>لوحة إدارة الرسائل</h1>
+                <p>مراجعة بيانات التواصل المحفوظة في Supabase</p>
+            </div>
+
+            <!-- بطاقة تسجيل الدخول الأدمن -->
+            <div id="loginCard" class="login-card">
+                <h3><i class="fas fa-user-shield"></i> تسجيل دخول المسؤول</h3>
+                <input type="password" id="adminPassInput" placeholder="أدخل كلمة مرور الإدارة...">
+                <button class="refresh-btn" style="width: 100%;" onclick="checkAdminPass()">دخول اللوحة</button>
+            </div>
+
+            <!-- جدول البيانات (يظهر بعد كلمة السر) -->
+            <div id="dashboardContainer" class="dashboard-container">
+                <div class="stats-bar">
+                    <div>
+                        <h2>إجمالي الرسائل: <span id="totalMsgCount" style="color:#10b981;">0</span></h2>
+                    </div>
+                    <button class="refresh-btn" onclick="fetchMessages()"><i class="fas fa-sync-alt"></i> تحديث
+                        البيانات</button>
+                </div>
+
+                <div class="messages-table-wrapper">
+                    <table class="messages-table">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>الاسم</th>
+                                <th>البريد</th>
+                                <th>العنوان</th>
+                                <th>رمز الحساب</th>
+                                <th>الهاتف</th>
+                                <th>الرسالة</th>
+                                <th>الحالة</th>
+                                <th>التاريخ</th>
+                                <th>إجراء</th>
+                            </tr>
+                        </thead>
+                        <tbody id="messagesTableBody">
+                            <!-- سيتم إضافة الصفوف هنا ديناميكياً -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <footer class="modern-footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>&copy; 2026 Coding Master. جميع الحقوق محفوظة - لوحة الإدارة.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // ترجمة الواجهة
+        const translationDict = [
+            { ar: 'الرئيسية', en: 'Home' }, { ar: 'من نحن', en: 'About Us' }, { ar: 'تواصل معنا', en: 'Contact Us' }, { ar: 'التنزيلات', en: 'Downloads' },
+            { ar: 'لوحة إدارة الرسائل', en: 'Admin Messages Panel' }, { ar: 'تحديث البيانات', en: 'Refresh Data' },
+            { ar: 'إجمالي الرسائل:', en: 'Total Messages:' }
+        ];
+
+        function applyLanguage(lang) {
+            document.documentElement.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+            document.querySelectorAll('.lang-text, #btnLangText').forEach(btn => {
+                btn.innerHTML = lang === 'ar' ? 'English' : 'العربية';
+            });
+            localStorage.setItem('CMLang', lang);
+        }
+
+        function toggleLanguage() {
+            let newLang = (localStorage.getItem('CMLang') || 'ar') === 'ar' ? 'en' : 'ar';
+            applyLanguage(newLang);
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+            if (localStorage.getItem('CMLang') === 'en') applyLanguage('en');
+        });
+    </script>
+  <script type="module" src="/src/web/site.ts"></script>
+<script type="module" src="/src/web/admin-panel.ts"></script>
+</body>
+
+</html>

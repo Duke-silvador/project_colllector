@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>五大领域 · 全球态势感知</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  body{overflow:auto}
+  .wrap{max-width:1180px;margin:0 auto;padding:16px}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap}
+  .tab{padding:7px 16px;border:1px solid var(--line);border-radius:8px;background:var(--panel);
+       color:var(--txt2);text-decoration:none;font-size:13px}
+  .tab:hover{border-color:var(--line2);color:var(--txt)}
+  .tab.on{background:linear-gradient(180deg,#1d3350,#16263c);border-color:#3b82f6;color:#dbeafe;font-weight:600}
+  .tab .n{color:var(--txt3);font-size:11px;margin-left:4px}
+  .sect{margin:18px 0 8px;display:flex;align-items:center;gap:10px}
+  .sect h2{font-size:14px;margin:0;letter-spacing:1px}
+  .sect .note{color:var(--txt3);font-size:12px}
+  .ev{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+  .ev .h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .ev .t{font-size:13.5px;font-weight:600;color:var(--txt);text-decoration:none}
+  .ev .t:hover{color:#7dd3fc}
+  .ev .meta{color:var(--txt3);font-size:11.5px;margin-top:4px}
+  .ev .ai{color:#9fb4d0;font-size:12.5px;margin-top:6px;line-height:1.6}
+  .ev .act{color:#7dd3fc;font-size:12px;margin-top:4px}
+  .lv{padding:1px 7px;border-radius:4px;font-size:11px;font-weight:700}
+  .lv-critical{background:rgba(229,72,77,.18);color:#ff8a8d;border:1px solid rgba(229,72,77,.4)}
+  .lv-high{background:rgba(232,163,61,.16);color:#f0bb72;border:1px solid rgba(232,163,61,.35)}
+  .lv-medium{background:rgba(46,158,107,.16);color:#6fd3a5;border:1px solid rgba(46,158,107,.35)}
+  .lv-low{background:rgba(74,107,138,.16);color:#8fa3bf;border:1px solid rgba(74,107,138,.35)}
+  .sc{color:var(--txt3);font-size:11px}
+  .hint{color:var(--txt3);font-size:12px;padding:10px 0}
+  .lvtags{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 2px}
+  .lvtags span{padding:3px 9px;border-radius:999px;border:1px solid var(--line);font-size:12px;color:var(--txt2)}
+</style>
+<link rel=stylesheet href=theme-v2.css>
+<link rel=stylesheet href=theme-watch.css>
+<script src="snapshot-data.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><span class="dot-live"></span><h1>五大领域</h1><span class="sub">财经 · 政策 · 军事 · 科技 · 生物</span></div>
+  <div style="margin-left:auto;display:flex;gap:12px;align-items:center">
+    <span class="sub" id="stamp"></span>
+    <a class="tab" href="/">← 返回看板</a>
+  </div>
+</header>
+<div class="wrap">
+  <div class="tabs" id="tabs" style="margin-top:14px"></div>
+  <div class="sect"><h2 id="vName">加载中</h2><span class="note" id="vDesc"></span></div>
+  <div class="lvtags" id="lvTags"></div>
+  <div class="sect"><h2>📰 相关情报</h2><span class="note" id="evNote"></span></div>
+  <div id="events"></div>
+  <div class="hint" id="hint"></div>
+</div>
+<script>
+(function () {
+  var ORDER = ['finance', 'policy', 'military', 'tech', 'bio'];
+  var NAME = { finance: '💰 财经', policy: '📜 政策', military: '🛡 军事', tech: '🔬 科技', bio: '🧬 生物' };
+  var cur = 'finance', counts = {};
+  var LV = { critical: '紧急', high: '高', medium: '中', low: '常规' };
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+
+  function renderTabs() {
+    document.getElementById('tabs').innerHTML = ORDER.map(function (d) {
+      var n = counts[d] ? counts[d].total : '';
+      return '<a class="tab' + (d === cur ? ' on' : '') + '" href="?domain=' + d + '">' +
+        NAME[d] + (n !== '' ? '<span class="n">' + n + '</span>' : '') + '</a>';
+    }).join('');
+  }
+  function renderEvents(v) {
+    document.getElementById('vName').textContent = v.name;
+    document.getElementById('vDesc').textContent = v.desc + ' ｜ 近 ' + v.hours + ' 小时 ' + v.total + ' 条';
+    var lv = v.levels || {};
+    document.getElementById('lvTags').innerHTML = ['critical','high','medium','low'].filter(function(k){return lv[k];})
+      .map(function (k) { return '<span class="lv lv-' + k + '">' + LV[k] + ' ' + lv[k] + '</span>'; }).join('');
+    document.getElementById('evNote').textContent = '共 ' + v.total + ' 条，显示前 ' + v.events.length + ' 条（按紧急度）';
+    var host = document.getElementById('events');
+    if (!v.events.length) { host.innerHTML = '<div class="hint">近 24 小时该领域暂无相关情报。</div>'; return; }
+    host.innerHTML = v.events.map(function (e) {
+      var level = e.llm_level || e.level || 'low';
+      var title = e.title_zh || e.title || '';
+      var t = (e.url && /^https?:/.test(e.url))
+        ? '<a class="t" href="' + esc(e.url) + '" target="_blank" rel="noopener">' + esc(title) + '</a>'
+        : '<span class="t">' + esc(title) + '</span>';
+      var ai = e.llm_note ? '<div class="ai">AI：' + esc(e.llm_note) + '</div>'
+        : (e.llm_analysis ? '<div class="ai">' + esc(String(e.llm_analysis).slice(0, 150)) + '…</div>' : '');
+      var act = e.llm_action ? '<div class="act">建议：' + esc(String(e.llm_action).slice(0, 80)) + '</div>' : '';
+      return '<div class="ev"><div class="h"><span class="lv lv-' + esc(level) + '">' + (LV[level] || level) + '</span>' +
+        '<span class="sc">' + (e.score || 0) + ' 分</span>' + t + '</div>' +
+        '<div class="meta">' + esc(e.source_name || '') + ' ｜ ' + esc(e.geo_name || '—') + ' ｜ ' +
+        esc((e.fetched_at || '').slice(5, 16)) + '</div>' + ai + act + '</div>';
+    }).join('');
+  }
+  function load() {
+    var q = new URLSearchParams(location.search);
+    cur = q.get('domain') || 'finance';
+    fetch('/api/domains?hours=24').then(function (r) { return r.json(); }).then(function (d) {
+      if (d.ok) { counts = d.counts || {}; renderTabs(); }
+    }).catch(function(){});
+    fetch('/api/domains?domain=' + encodeURIComponent(cur) + '&hours=24&limit=40')
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) throw new Error(d.error || 'api error');
+        renderTabs(); renderEvents(d.view);
+        document.getElementById('stamp').textContent = '更新 ' + new Date().toLocaleTimeString('zh-CN', { hour12: false });
+      })
+      .catch(function (e) {
+        document.getElementById('events').innerHTML = '<div class="hint">加载失败：' + esc(e.message) + '</div>';
+      });
+  }
+  load();
+  setInterval(load, 120000);
+})();
+</script>
+<div style="position:fixed;left:8px;bottom:8px;z-index:9;background:rgba(19,29,44,.92);border:1px solid #1e2b3d;border-radius:6px;padding:4px 8px;font-size:11px;color:#7b8ea8">GitHub Pages 静态快照 · 每 10 分钟更新 · 实时版看本机</div></body>
+</html>

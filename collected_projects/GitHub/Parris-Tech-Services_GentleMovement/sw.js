@@ -1,0 +1,12 @@
+const CACHE='gentle-movement-v15-shell-first';
+const FILES=['./voicebank/src/index.js','./voicebank/src/browser.js','./voicebank/adapters/gentle-movement.js','./audio/voicebank-manifest.json','./','./index.html','./app.js','./auto-mode.js','./premium-voice.js','./coach-tracks.js','./data.js','./programmes.js','./exercise-feedback.js','./clinician-report.js','./clinician-report-view.js','./movement-guides.js','./archive-schema.js','./style.css','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png','./audio/elevenlabs/manifest.json'];
+self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting())));
+self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener('fetch',e=>{
+ if(e.request.method!=='GET'||new URL(e.request.url).origin!==self.location.origin)return;
+ e.respondWith(fetch(e.request).then(r=>{
+  if(r.ok&&!r.redirected){const clone=r.clone();e.waitUntil(caches.open(CACHE).then(c=>c.put(e.request,clone)).catch(()=>{}));}
+  return r;
+ }).catch(()=>caches.match(e.request).then(r=>r||(e.request.mode==='navigate'?caches.match('./index.html'):Response.error()))));
+});
+self.addEventListener('notificationclick',e=>{e.notification.close();e.waitUntil(clients.openWindow(self.registration.scope+'#today'))});
