@@ -1,0 +1,2 @@
+window.validation_plots = [
+];

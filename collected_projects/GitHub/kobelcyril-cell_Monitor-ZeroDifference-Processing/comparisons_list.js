@@ -1,0 +1,2 @@
+window.comparison_plots = [
+];
