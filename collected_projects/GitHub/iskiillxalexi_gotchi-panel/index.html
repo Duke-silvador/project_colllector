@@ -1,0 +1,1145 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>Gotchi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=DM+Sans:wght@400;500;700&family=Silkscreen:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: one narrow column, read top to bottom. The pet first, then bones, then how the runs are doing.
+   Look: a handheld pet device (coral shell, olive LCD, pixel type) on a cool paper-blue ground. */
+:root {
+  --bg: #edeff7;
+  --surface: #ffffff;
+  --surface-2: #e4e7f3;
+  --ink: #1b2040;
+  --ink-2: #565c85;
+  --line: #d0d4e8;
+  --accent: #3447ff;
+  --accent-ink: #ffffff;
+  --shell: #ff5a4f;
+  --shell-2: #e44236;
+  --shell-ink: #2b0b08;
+  --good: #11704f;
+  --good-bg: #d8f2e6;
+  --warn: #8a5600;
+  --warn-bg: #fcebc6;
+  --bad: #b3202f;
+  --bad-bg: #fbd9dc;
+  --lcd: #c5d39c;
+  --lcd-ink: #26331a;
+  --lcd-dim: #9fb176;
+  --display: 'Bricolage Grotesque', 'Avenir Next', system-ui, sans-serif;
+  --body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --pixel: 'Silkscreen', 'Courier New', monospace;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12142a;
+    --surface: #1c2040;
+    --surface-2: #282d57;
+    --ink: #eef0ff;
+    --ink-2: #a7add4;
+    --line: #353b69;
+    --accent: #919cff;
+    --accent-ink: #10122a;
+    --shell: #ff6a5f;
+    --shell-2: #e9564b;
+    --good: #66d9a9;
+    --good-bg: #123a2c;
+    --warn: #f2bd5a;
+    --warn-bg: #3d2f10;
+    --bad: #ff8590;
+    --bad-bg: #45161d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #12142a;
+  --surface: #1c2040;
+  --surface-2: #282d57;
+  --ink: #eef0ff;
+  --ink-2: #a7add4;
+  --line: #353b69;
+  --accent: #919cff;
+  --accent-ink: #10122a;
+  --shell: #ff6a5f;
+  --shell-2: #e9564b;
+  --good: #66d9a9;
+  --good-bg: #123a2c;
+  --warn: #f2bd5a;
+  --warn-bg: #3d2f10;
+  --bad: #ff8590;
+  --bad-bg: #45161d;
+  color-scheme: dark;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 15px/1.5 var(--body);
+  padding-top: calc(20px + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(48px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+[hidden] { display: none !important; }
+
+.wrap { max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+.wrap > * { min-width: 0; }
+
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+h1 { margin: 0; font: 800 26px/1 var(--display); letter-spacing: -0.02em; }
+h2 { margin: 0; font: 700 12.5px/1.2 var(--body); letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-2); }
+.head-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 11px; border-radius: 999px;
+  font: 700 12.5px/1.1 var(--body);
+  background: var(--surface-2); color: var(--ink);
+}
+.pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
+.pill.ok { background: var(--good-bg); color: var(--good); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+
+.banner { border-radius: 14px; padding: 12px 14px; font-weight: 500; }
+.banner.bad { background: var(--bad-bg); color: var(--bad); }
+.banner.warn { background: var(--warn-bg); color: var(--warn); }
+.banner.idle { background: var(--surface-2); color: var(--ink); }
+.banner a { color: inherit; font-weight: 700; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 16px; min-width: 0; }
+.card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sub { margin: 4px 0 0; color: var(--ink-2); font-size: 14px; }
+
+button { font: inherit; }
+.btn {
+  appearance: none; border: 0; cursor: pointer; min-height: 44px;
+  padding: 11px 16px; border-radius: 12px;
+  background: var(--accent); color: var(--accent-ink);
+  font: 700 15px/1.2 var(--body);
+}
+.btn.ghost { background: transparent; color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--line); }
+.btn.small { min-height: 36px; padding: 7px 12px; font-size: 13.5px; border-radius: 10px; }
+.btn:disabled { opacity: 0.6; cursor: progress; }
+.link { appearance: none; border: 0; background: none; padding: 8px 0; color: var(--accent); font: 700 14.5px/1.2 var(--body); cursor: pointer; text-align: left; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+/* Lock screen */
+.lock { display: grid; gap: 12px; }
+.lock p { margin: 0; color: var(--ink-2); }
+label.field { display: grid; gap: 6px; font-weight: 700; font-size: 14px; }
+input[type="text"] {
+  width: 100%; padding: 14px; border-radius: 12px;
+  border: 1.5px solid var(--line); background: var(--bg); color: var(--ink);
+  font: 500 17px/1.2 var(--mono); letter-spacing: 0.06em; text-transform: uppercase;
+}
+.check { display: flex; align-items: center; gap: 10px; color: var(--ink-2); font-size: 14px; }
+.check input { width: 20px; height: 20px; accent-color: var(--accent); }
+.error { margin: 0; color: var(--bad); font-weight: 500; }
+details { border-top: 1px solid var(--line); padding-top: 12px; }
+summary { cursor: pointer; font-weight: 700; color: var(--accent); min-height: 32px; }
+.keybox { display: grid; gap: 10px; margin-top: 10px; }
+.keyout { margin: 0; padding: 12px; border-radius: 10px; background: var(--bg); font: 600 15px/1.4 var(--mono); letter-spacing: 0.05em; overflow-wrap: anywhere; user-select: all; }
+
+/* Accounts */
+.tabs { display: flex; gap: 6px; padding: 4px; background: var(--surface-2); border-radius: 14px; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  appearance: none; border: 0; cursor: pointer; flex: 1 0 auto; min-height: 40px; min-width: 44px;
+  padding: 8px 14px; border-radius: 10px; background: transparent; color: var(--ink-2);
+  font: 700 14px/1.2 var(--body); white-space: nowrap;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+}
+.tab[aria-pressed="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 0 var(--line); }
+.tab.add { flex: 0 0 auto; font-size: 22px; line-height: 1; color: var(--accent); }
+.tdot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.tdot.bad { background: var(--bad); }
+.tdot.warn { background: var(--warn); }
+.formcard { display: grid; gap: 12px; }
+.formcard > * { min-width: 0; }
+.hint { margin: 0; color: var(--ink-2); font-size: 13.5px; }
+input.plain { text-transform: none; letter-spacing: normal; font: 500 16px/1.3 var(--body); }
+input.secret { -webkit-text-security: disc; font-family: var(--mono); }
+.steps { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-size: 14px; display: grid; gap: 4px; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.actions .hint { flex-basis: 100%; }
+.btn.danger { background: var(--bad-bg); color: var(--bad); box-shadow: none; }
+
+/* Device */
+.shell { background: var(--shell); border-radius: 34px 34px 44px 44px; padding: 14px 14px 12px; box-shadow: inset 0 -6px 0 var(--shell-2); }
+.lcd { background: var(--lcd); color: var(--lcd-ink); border-radius: 16px; padding: 12px 14px 12px; box-shadow: inset 0 0 0 3px var(--lcd-dim); display: grid; gap: 8px; }
+.lcd-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; }
+.px { font: 400 13px/1.2 var(--pixel); text-transform: uppercase; letter-spacing: 0.04em; overflow-wrap: anywhere; }
+.px.dim { color: var(--lcd-ink); opacity: 0.7; white-space: nowrap; }
+.sprite { width: min(62%, 200px); height: auto; justify-self: center; display: block; }
+.lcd-xp { display: grid; gap: 5px; }
+.seg { height: 10px; background: var(--lcd-dim); border-radius: 2px; overflow: hidden; }
+.seg i { display: block; height: 100%; width: 0; background: var(--lcd-ink); }
+.mood { margin: 10px 4px 0; color: var(--shell-ink); font-weight: 700; font-size: 14px; }
+
+.meters { display: grid; grid-template-columns: 1fr; gap: 14px; margin: 14px 0 0; }
+.meter-top { display: flex; justify-content: space-between; gap: 10px; font-weight: 700; font-size: 14px; }
+.meter-top span:last-child { font-variant-numeric: tabular-nums; color: var(--ink-2); }
+.bar { height: 10px; border-radius: 6px; background: var(--surface-2); overflow: hidden; margin-top: 6px; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 6px; }
+@media (min-width: 440px) { .meters { grid-template-columns: 1fr 1fr; gap: 14px 22px; } }
+
+/* Bones */
+.big { margin: 10px 0 2px; font: 800 46px/1 var(--display); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.spark { width: 100%; height: auto; display: block; margin-top: 12px; }
+.spark text { font: 500 10px var(--body); fill: var(--ink-2); }
+.spark .grid { stroke: var(--line); stroke-width: 1; }
+.spark .area { fill: var(--accent); fill-opacity: 0.14; }
+.spark .line { fill: none; stroke: var(--accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.spark .dot { fill: var(--accent); stroke: var(--surface); stroke-width: 3; }
+.next { margin-top: 14px; display: grid; gap: 4px; }
+.next-row { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+.next-row strong { font-variant-numeric: tabular-nums; }
+
+/* Rows and heartbeat */
+.rows { list-style: none; margin: 10px 0 0; padding: 0; }
+.rows li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.rows li:first-child { border-top: 0; }
+.rows .state { color: var(--ink-2); font-variant-numeric: tabular-nums; text-align: right; }
+.rows .state.ok { color: var(--good); font-weight: 700; }
+.rows .state.bad { color: var(--bad); font-weight: 700; }
+.beats { display: grid; grid-template-columns: repeat(24, 1fr); gap: 4px; margin-top: 12px; }
+.beats i { aspect-ratio: 1; border-radius: 3px; background: var(--surface-2); }
+.beats i.ok { background: var(--good); }
+.beats i.fail { background: var(--bad); }
+.beats i.dry { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-2); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 10px 0 0; padding: 0; list-style: none; color: var(--ink-2); font-size: 13px; }
+.legend li { display: flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; background: var(--good); }
+.legend .fail { background: var(--bad); }
+.legend .dry { background: transparent; box-shadow: inset 0 0 0 1.5px var(--ink-2); }
+
+footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; color: var(--ink-2); font-size: 13.5px; }
+footer a { color: var(--accent); font-weight: 700; }
+.foot-links { display: flex; gap: 14px; flex-wrap: wrap; }
+
+@media (prefers-reduced-motion: no-preference) { .seg i, .bar i { transition: width 0.4s ease; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg width="28" height="32" viewBox="0 0 14 16" shape-rendering="crispEdges" aria-hidden="true">
+        <path fill="var(--shell)" d="M5 0h4v1h2v1h1v2h1v5h1v4h-1v2H1v-2H0V9h1V4h1V2h1V1h2z"/>
+        <path fill="var(--lcd)" d="M4 6h6v5H4z"/>
+        <path fill="var(--lcd-ink)" d="M6 8h1v1H6z"/>
+      </svg>
+      <h1>Gotchi</h1>
+    </div>
+    <div class="head-right">
+      <span class="pill" id="status-pill" hidden></span>
+      <button class="btn ghost small" id="lock-btn" type="button" hidden>Lås</button>
+    </div>
+  </header>
+
+  <div class="banner" id="banner" role="status" hidden></div>
+
+  <!-- Accounts: one tab per account, plus a plus button -->
+  <div class="tabs" id="tabs" role="group" aria-label="Konton" hidden></div>
+
+  <section class="card formcard" id="acct-form" aria-labelledby="form-title" hidden>
+    <h2 id="form-title">Lägg till konto</h2>
+    <p class="hint">Lägg bara till konton du själv äger. Cookien krypteras med din licensnyckel innan den sparas.</p>
+    <label class="field" for="acct-label">Namn, valfritt
+      <input class="plain" type="text" id="acct-label" maxlength="24" placeholder="Till exempel Alt" autocomplete="off" spellcheck="false">
+    </label>
+    <label class="field" for="acct-cookie">Cookie
+      <input class="plain secret" type="text" id="acct-cookie" placeholder="namn=värde" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+    </label>
+    <details>
+      <summary>Hur hämtar jag cookien?</summary>
+      <ol class="steps">
+        <li>Öppna en privat flik i Safari och logga in på nerfofficial.org med kontot.</li>
+        <li>Öppna api.nerfofficial.org/api/dinogame/pet i samma flik.</li>
+        <li>Cookie-Editor → Export → Header String, och klistra in här.</li>
+        <li>Tryck inte Logout på sajten efteråt. Då slutar cookien gälla.</li>
+      </ol>
+    </details>
+    <p class="error" id="acct-error" role="alert" hidden></p>
+    <div class="actions">
+      <button class="btn" type="button" id="acct-save">Spara konto</button>
+      <button class="btn ghost" type="button" id="acct-cancel">Avbryt</button>
+    </div>
+  </section>
+
+  <section class="card formcard" id="empty" hidden>
+    <h2>Inga konton ännu</h2>
+    <p class="sub">Lägg till ett konto du själv äger. Boten sköter djuret och hämtar dagsbelöningen varje timme.</p>
+    <div class="actions">
+      <button class="btn" type="button" id="empty-add">Lägg till konto</button>
+    </div>
+  </section>
+
+  <section class="card" id="pending" hidden>
+    <h2>Väntar på första körningen</h2>
+    <p class="sub">Kontot är sparat. Det körs första gången nästa timme, eller så fort du startar flödet Gotchi i GitHub Actions.</p>
+  </section>
+
+  <!-- Locked -->
+  <section class="card lock" id="lock" aria-labelledby="lock-title">
+    <h2 id="lock-title">Lås upp</h2>
+    <p>Datan i panelen är krypterad med din licensnyckel. Nyckeln skickas aldrig någonstans, den används bara här på enheten.</p>
+    <form id="lock-form" class="lock" autocomplete="off">
+      <label class="field" for="key">Licensnyckel
+        <input type="text" id="key" name="key" placeholder="GTCH-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+      </label>
+      <label class="check" for="remember"><input type="checkbox" id="remember"> Kom ihåg på den här enheten</label>
+      <p class="error" id="lock-error" role="alert" hidden></p>
+      <button class="btn" id="unlock-btn" type="submit">Lås upp</button>
+    </form>
+    <details>
+      <summary>Skapa en ny licensnyckel</summary>
+      <div class="keybox">
+        <p>Skapa nyckeln här, lägg den som hemligheten <strong>LICENSE_KEY</strong> i GitHub och spara den i din lösenordshanterare. Går den förlorad går datan inte att läsa, och då skapar du en ny.</p>
+        <button class="btn ghost" type="button" id="gen-btn">Skapa nyckel</button>
+        <p class="keyout" id="gen-out" hidden></p>
+        <button class="btn ghost small" type="button" id="copy-btn" hidden>Kopiera</button>
+      </div>
+    </details>
+    <button class="link" type="button" id="demo-btn">Visa med exempeldata</button>
+  </section>
+
+  <!-- Unlocked -->
+  <main class="wrap" id="app" hidden style="padding:0">
+    <section class="card" aria-labelledby="pet-name">
+      <div class="shell">
+        <div class="lcd">
+          <div class="lcd-top"><span class="px" id="pet-name">–</span><span class="px dim" id="pet-level"></span></div>
+          <svg class="sprite" id="sprite" viewBox="0 0 16 14" shape-rendering="crispEdges" role="img" aria-label="Ditt djur"></svg>
+          <div class="lcd-xp">
+            <div class="seg"><i id="xp-fill"></i></div>
+            <span class="px dim" id="xp-text"></span>
+          </div>
+        </div>
+        <p class="mood" id="mood"></p>
+      </div>
+      <dl class="meters" id="meters" style="margin-bottom:0"></dl>
+    </section>
+
+    <section class="card" aria-labelledby="bones-title">
+      <h2 id="bones-title">Bones</h2>
+      <p class="big" id="balance">–</p>
+      <p class="sub" id="balance-sub"></p>
+      <svg class="spark" id="spark" viewBox="0 0 320 96" role="img" aria-label="Bones-saldo över tid"></svg>
+      <div class="next">
+        <div class="next-row"><span>Nästa dagsbelöning</span><strong id="next-text">–</strong></div>
+        <div class="bar"><i id="next-fill" style="width:0"></i></div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="run-title">
+      <div class="card-head"><h2 id="run-title">Senaste körningen</h2><span class="pill" id="run-pill"></span></div>
+      <p class="sub" id="run-when"></p>
+      <ul class="rows" id="run-rows"></ul>
+    </section>
+
+    <section class="card" aria-labelledby="beat-title">
+      <h2 id="beat-title">Körningar, senaste två dygnen</h2>
+      <div class="beats" id="beats" role="img" aria-label="Resultat för varje körning"></div>
+      <ul class="legend">
+        <li><i></i>Lyckades</li>
+        <li><i class="fail"></i>Misslyckades</li>
+        <li><i class="dry"></i>Torrkörning</li>
+      </ul>
+    </section>
+
+    <footer>
+      <span id="updated"></span>
+      <span class="foot-links"><a id="actions-link" href="#" target="_blank" rel="noopener" hidden>Öppna Actions</a></span>
+    </footer>
+  </main>
+
+  <div class="actions" id="acct-actions" hidden>
+    <button class="btn ghost small" type="button" id="acct-edit">Byt cookie</button>
+    <button class="btn ghost small" type="button" id="acct-remove">Ta bort kontot</button>
+  </div>
+</div>
+
+<script src="license.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var L = window.GotchiLicense;
+  var $ = function (id) { return document.getElementById(id); };
+  var KEY_STORE = "gotchi.key";
+  var DATA_URL = "data/panel.enc.json";
+  var STALE_MS = 3 * 60 * 60 * 1000;
+  var REFRESH_MS = 5 * 60 * 1000;
+  var DAY_MS = 24 * 60 * 60 * 1000;
+
+  var LIST_PATH = "data/accounts.enc.json";
+  var ID_RE = /^[a-z0-9]{4,32}$/;
+  var PANEL_REPO_RE = /^[A-Za-z0-9_-][\w.-]*\/[A-Za-z0-9_-][\w.-]*$/;
+  var COOKIE_RE = /^[\x20-\x7e]{1,8192}$/;
+
+  var state = {
+    key: "", accounts: [], currentId: "", panel: null, meta: null, listOk: true, demo: false, timer: 0,
+    formOpen: false, editId: "", busy: false, confirming: false, confirmTimer: 0, notice: null, rev: 0
+  };
+
+  var store = {
+    get: function () { try { return localStorage.getItem(KEY_STORE) || ""; } catch (e) { return ""; } },
+    set: function (v) { try { localStorage.setItem(KEY_STORE, v); } catch (e) { /* storage unavailable */ } },
+    del: function () { try { localStorage.removeItem(KEY_STORE); } catch (e) { /* storage unavailable */ } }
+  };
+
+  /* ---------- Formatting ---------- */
+
+  var rtf = new Intl.RelativeTimeFormat("sv", { numeric: "auto" });
+
+  function ago(iso) {
+    var s = Math.round((Date.now() - Date.parse(iso)) / 1000);
+    if (!isFinite(s)) return "okänt";
+    if (s < 90) return "nyss";
+    var m = Math.round(s / 60);
+    if (m < 90) return rtf.format(-m, "minute");
+    var h = Math.round(m / 60);
+    if (h < 36) return rtf.format(-h, "hour");
+    return rtf.format(-Math.round(h / 24), "day");
+  }
+
+  function span(sec) {
+    sec = Math.max(0, Math.round(sec));
+    var h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
+    if (h && m) return h + " tim " + m + " min";
+    if (h) return h + " tim";
+    if (m) return m + " min";
+    return "under en minut";
+  }
+
+  function num(v) {
+    return typeof v === "number" && isFinite(v) ? v.toLocaleString("sv-SE") : "–";
+  }
+
+  function pct(v) {
+    var n = Number(v);
+    return isFinite(n) ? Math.max(0, Math.min(100, n)) : 0;
+  }
+
+  var ACTION_NAMES = { feed: "Mata", play: "Leka", clean: "Rengör", sleep: "Sova", "daily-reward": "Dagsbelöning" };
+  function actionName(a) {
+    return ACTION_NAMES[a] || (String(a).charAt(0).toUpperCase() + String(a).slice(1));
+  }
+
+  var ERRORS = {
+    network: "Nätverksfel mot spelets API.",
+    "rate-limited": "Spelets API bad oss vänta.",
+    "pet-unreadable": "Det gick inte att läsa djuret."
+  };
+
+  function el(tag, cls, text) {
+    var node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  /* ---------- Pixel pet ---------- */
+
+  // '#' = ink, '+' = dim. 16 x 14, facing right, tail to the left.
+  var SPRITE = [
+    ".......+.+......",
+    "......#####.....",
+    ".....#######....",
+    ".....#######....",
+    ".....########...",
+    ".....########...",
+    "#....#######....",
+    "##..########....",
+    ".##########.....",
+    "..#########.....",
+    "..#########.....",
+    "...##...##......",
+    "...##...##......",
+    "................"
+  ];
+
+  function drawSprite(sleeping) {
+    var grid = SPRITE.map(function (row) { return row.split(""); });
+    grid[3][9] = "."; // eye
+    if (sleeping) {
+      grid[3][8] = ".";
+      [[0, 13], [0, 14], [0, 15], [1, 14], [2, 13], [2, 14], [2, 15]].forEach(function (p) { grid[p[0]][p[1]] = "+"; });
+    }
+    var svg = $("sprite");
+    svg.textContent = "";
+    var ns = "http://www.w3.org/2000/svg";
+    grid.forEach(function (row, y) {
+      row.forEach(function (c, x) {
+        if (c === ".") return;
+        var r = document.createElementNS(ns, "rect");
+        r.setAttribute("x", x); r.setAttribute("y", y);
+        r.setAttribute("width", 1); r.setAttribute("height", 1);
+        r.setAttribute("fill", c === "#" ? "var(--lcd-ink)" : "var(--lcd-dim)");
+        svg.appendChild(r);
+      });
+    });
+  }
+
+  /* ---------- Charts ---------- */
+
+  function balancePoints(history) {
+    var pts = [];
+    (history || []).forEach(function (h) {
+      if (typeof h.balance !== "number") return;
+      var last = pts[pts.length - 1];
+      if (!last || last.v !== h.balance) pts.push({ t: Date.parse(h.at), v: h.balance });
+    });
+    return pts.slice(-30);
+  }
+
+  function drawSpark(pts) {
+    var svg = $("spark"), ns = "http://www.w3.org/2000/svg";
+    svg.textContent = "";
+    function add(name, attrs, text) {
+      var n = document.createElementNS(ns, name);
+      Object.keys(attrs).forEach(function (k) { n.setAttribute(k, attrs[k]); });
+      if (text !== undefined) n.textContent = text;
+      svg.appendChild(n);
+      return n;
+    }
+    if (pts.length < 2) {
+      add("text", { x: 0, y: 48 }, pts.length ? "Kurvan ritas när fler dagsbelöningar har claimats." : "Inget saldo ännu.");
+      return;
+    }
+    var L0 = 40, R0 = 312, T0 = 10, B0 = 84;
+    var min = Math.min.apply(null, pts.map(function (p) { return p.v; }));
+    var max = Math.max.apply(null, pts.map(function (p) { return p.v; }));
+    if (min === max) { min -= 1; max += 1; }
+    var t0 = pts[0].t, t1 = pts[pts.length - 1].t || t0 + 1;
+    var X = function (t) { return L0 + ((t - t0) / (t1 - t0 || 1)) * (R0 - L0); };
+    var Y = function (v) { return B0 - ((v - min) / (max - min)) * (B0 - T0); };
+
+    [T0, (T0 + B0) / 2, B0].forEach(function (y) { add("line", { "class": "grid", x1: L0, x2: R0, y1: y, y2: y }); });
+    add("text", { x: 0, y: T0 + 4 }, num(Math.round(max)));
+    add("text", { x: 0, y: B0 + 4 }, num(Math.round(min)));
+
+    var d = pts.map(function (p, i) { return (i ? "L" : "M") + X(p.t).toFixed(1) + " " + Y(p.v).toFixed(1); }).join(" ");
+    add("path", { "class": "area", d: d + " L" + R0 + " " + B0 + " L" + L0 + " " + B0 + " Z" });
+    add("path", { "class": "line", d: d });
+    var end = pts[pts.length - 1];
+    add("circle", { "class": "dot", cx: X(end.t).toFixed(1), cy: Y(end.v).toFixed(1), r: 5 });
+  }
+
+  function drawBeats(history) {
+    var box = $("beats");
+    box.textContent = "";
+    var items = (history || []).slice(-48);
+    for (var i = 0; i < 48 - items.length; i++) box.appendChild(el("i"));
+    items.forEach(function (h) {
+      var cls = h.dry ? "dry" : h.ok ? "ok" : "fail";
+      var cell = el("i", cls);
+      cell.title = new Date(h.at).toLocaleString("sv-SE") + (h.ok ? "" : " – misslyckades");
+      box.appendChild(cell);
+    });
+  }
+
+  /* ---------- Rendering ---------- */
+
+  function repoLink(repo, path) {
+    return /^[\w.-]+\/[\w.-]+$/.test(repo || "") ? "https://github.com/" + repo + path : "";
+  }
+
+  function health(data) {
+    var l = data.latest || {};
+    var stale = Date.now() - Date.parse(data.updated) > STALE_MS;
+    if (l.error === "cookie") {
+      return { level: "bad", pill: "Cookien har gått ut", text: "Kontot nekade inloggningen. Tryck Byt cookie nedan och klistra in en ny." };
+    }
+    if (l.error) {
+      return { level: "warn", pill: "Senaste körningen misslyckades", text: (ERRORS[l.error] || "Något gick fel.") + " Nästa körning försöker igen." };
+    }
+    if (stale) {
+      return { level: "warn", pill: "Tyst ett tag", text: "Det har gått över tre timmar sedan senaste körningen. Kolla fliken Actions.", link: repoLink(data.repo, "/actions"), linkText: "Öppna Actions" };
+    }
+    if (l.dryRun) return { level: "idle", pill: "Torrkörning", text: "Senaste körningen var en torrkörning. Inget claimades." };
+    return { level: "ok", pill: "Allt rullar", text: "" };
+  }
+
+  function render(data, acct) {
+    var l = data.latest || {};
+    var pet = l.pet || {};
+    var h = health(data);
+
+    // Status
+    var pill = $("status-pill");
+    pill.hidden = false; pill.className = "pill " + (h.level === "idle" ? "" : h.level); pill.textContent = h.pill;
+    showBanner(bannerParts(acct, h.text ? { level: h.level, text: h.text, link: h.link, linkText: h.linkText } : null));
+
+    // Pet
+    $("pet-name").textContent = pet.name || "Okänt djur";
+    $("pet-level").textContent = pet.level != null ? "Nv " + pet.level : "";
+    var xp = Number(pet.experience), next = Number(pet.experienceToNext);
+    $("xp-fill").style.width = (next > 0 && isFinite(xp) ? pct((xp / next) * 100) : 0) + "%";
+    $("xp-text").textContent = next > 0 ? num(xp) + " / " + num(next) + " XP" : "";
+    drawSprite(!!pet.isSleeping);
+    var wake = Date.parse(pet.sleepUntil);
+    $("mood").textContent = pet.isSleeping
+      ? "Sover" + (isFinite(wake) && wake > Date.now() ? ", vaknar om " + span((wake - Date.now()) / 1000) : "")
+      : "Vaken" + (l.petStale ? " vid senaste lyckade läsning" : "");
+
+    var meters = $("meters");
+    meters.textContent = "";
+    [["hunger", "Hunger"], ["happiness", "Glädje"], ["cleanliness", "Renlighet"], ["energy", "Energi"]].forEach(function (m) {
+      var v = pct(pet[m[0]]);
+      var box = el("div");
+      var top = el("div", "meter-top");
+      top.appendChild(el("span", "", m[1])); top.appendChild(el("span", "", pet[m[0]] == null ? "–" : Math.round(v) + "%"));
+      var bar = el("div", "bar"); bar.setAttribute("role", "meter");
+      bar.setAttribute("aria-label", m[1]); bar.setAttribute("aria-valuemin", 0); bar.setAttribute("aria-valuemax", 100); bar.setAttribute("aria-valuenow", Math.round(v));
+      var fill = el("i"); fill.style.width = v + "%"; bar.appendChild(fill);
+      box.appendChild(top); box.appendChild(bar); meters.appendChild(box);
+    });
+
+    // Bones
+    var pts = balancePoints(data.history);
+    $("balance").textContent = data.balance ? num(data.balance.value) : "–";
+    var sub = [];
+    if (pts.length >= 2) {
+      var delta = pts[pts.length - 1].v - pts[pts.length - 2].v;
+      sub.push((delta >= 0 ? "+" : "") + num(delta) + " sedan förra claimen");
+    }
+    if (data.lastReward) sub.push("Senast: +" + num(data.lastReward.bones) + " bones, +" + num(data.lastReward.xp) + " XP, " + ago(data.lastReward.at));
+    $("balance-sub").textContent = sub.join(" · ") || "Saldot dyker upp efter första claimen.";
+    drawSpark(pts);
+
+    var nextAt = Date.parse(data.nextDailyAt);
+    if (isFinite(nextAt)) {
+      var left = nextAt - Date.now();
+      $("next-text").textContent = left > 0 ? "om " + span(left / 1000) : "redo att claimas";
+      $("next-fill").style.width = pct((1 - Math.max(0, left) / DAY_MS) * 100) + "%";
+    } else { $("next-text").textContent = "okänt"; $("next-fill").style.width = "0"; }
+
+    // Latest run
+    var rp = $("run-pill");
+    rp.className = "pill " + (l.error ? "bad" : l.dryRun ? "" : "ok");
+    rp.textContent = l.error ? "Fel" : l.dryRun ? "Torrkörning" : "Lyckades";
+    $("run-when").textContent = ago(l.at || data.updated) + " · " + new Date(l.at || data.updated).toLocaleString("sv-SE", { dateStyle: "medium", timeStyle: "short" });
+    var rows = $("run-rows");
+    rows.textContent = "";
+    function row(name, text, cls) {
+      var li = el("li"); li.appendChild(el("span", "", name)); li.appendChild(el("span", "state " + (cls || ""), text)); rows.appendChild(li);
+    }
+    if (l.error) row("Körning", ERRORS[l.error] || (l.error === "cookie" ? "Cookien nekades" : "Misslyckades"), "bad");
+    if (l.daily) row("Dagsbelöning", l.daily.claimed ? "+" + num(l.daily.bones) + " bones" : l.daily.nextAt ? "om " + span((Date.parse(l.daily.nextAt) - Date.now()) / 1000) : "redo", l.daily.claimed ? "ok" : "");
+    var done = {};
+    (l.actions || []).forEach(function (a) { done[a.name] = a.ok; });
+    Object.keys(l.cooldowns || {}).forEach(function (name) {
+      var cd = l.cooldowns[name];
+      if (name in done) row(actionName(name), done[name] ? "Gjort" : "Nekades", done[name] ? "ok" : "bad");
+      else row(actionName(name), cd > 0 ? "Cooldown " + cd + " min" : (pet.isSleeping ? "Djuret sover" : "Redo"));
+    });
+    if (!rows.children.length) row("Inga handlingar", "–");
+
+    drawBeats(data.history);
+
+    $("updated").textContent = (state.demo ? "Exempeldata · " : "") + "Uppdaterad " + ago(data.updated);
+    $("updated").title = new Date(data.updated).toLocaleString("sv-SE");
+    var link = $("actions-link"), url = repoLink(data.repo, "/actions");
+    if (url) { link.href = url; link.hidden = false; } else link.hidden = true;
+  }
+
+  /* ---------- Accounts ---------- */
+
+  function findAccount(id) {
+    for (var i = 0; i < state.accounts.length; i++) if (state.accounts[i].id === id) return state.accounts[i];
+    return null;
+  }
+
+  function currentAccount() { return findAccount(state.currentId) || state.accounts[0] || null; }
+
+  function cleanLabel(v) { return String(v == null ? "" : v).replace(/\s+/g, " ").trim().slice(0, 24); }
+
+  // Reduces the stored list to what the page may show. Cookies never enter the page state.
+  function listAccounts(items) {
+    var seen = {}, out = [];
+    (items || []).forEach(function (it) {
+      if (!it || typeof it.id !== "string" || !ID_RE.test(it.id) || seen[it.id]) return;
+      seen[it.id] = true;
+      out.push({ id: it.id, label: cleanLabel(it.label) || "Konto" });
+    });
+    return out;
+  }
+
+  function newId() {
+    var chars = "0123456789abcdefghijklmnopqrstuvwxyz", bytes = new Uint8Array(8), id = "";
+    window.crypto.getRandomValues(bytes);
+    for (var i = 0; i < bytes.length; i++) id += chars.charAt(bytes[i] % chars.length);
+    return id;
+  }
+
+  function defaultLabel(items) {
+    var used = {};
+    items.forEach(function (it) { if (it) used[cleanLabel(it.label)] = true; });
+    for (var n = items.length + 1; ; n++) if (!used["Konto " + n]) return "Konto " + n;
+  }
+
+  function applyList(items) {
+    var prev = {};
+    state.accounts.forEach(function (a) { prev[a.id] = a.data; });
+    state.accounts = listAccounts(items).map(function (a) {
+      return { id: a.id, label: a.label, data: prev[a.id] || null };
+    });
+  }
+
+  /* ---------- GitHub: the account list lives in the panel repo ---------- */
+
+  function validPanel(p) {
+    return p && typeof p.repo === "string" && typeof p.token === "string" && p.token && PANEL_REPO_RE.test(p.repo)
+      ? { repo: p.repo, token: p.token } : null;
+  }
+
+  function ghUrl(panel) { return "https://api.github.com/repos/" + panel.repo + "/contents/" + LIST_PATH; }
+
+  function ghHeaders(panel, write) {
+    var h = { Accept: "application/vnd.github+json", Authorization: "Bearer " + panel.token };
+    if (write) h["Content-Type"] = "application/json";
+    return h;
+  }
+
+  async function readListApi(panel) {
+    var res = await fetch(ghUrl(panel) + "?ref=main&t=" + Date.now(), { headers: ghHeaders(panel, false), cache: "no-store" });
+    if (res.status === 404) return { blob: null, sha: "" };
+    if (res.status === 401 || res.status === 403) throw new Error("noaccess");
+    if (!res.ok) throw new Error("http");
+    var file = await res.json();
+    if (typeof file.content !== "string" || !file.sha) throw new Error("http");
+    return { blob: JSON.parse(atob(file.content.replace(/\s/g, ""))), sha: file.sha };
+  }
+
+  async function decodeList(blob, key) {
+    if (!blob) return [];
+    var data;
+    try { data = await L.decryptBlob(blob, key); } catch (e) { throw new Error("unreadable"); }
+    return Array.isArray(data && data.accounts) ? data.accounts : [];
+  }
+
+  // Read-only view of the list: the API is current, Pages can lag a minute or two behind a save.
+  async function readList(panel, key) {
+    if (panel) {
+      try {
+        var r = await readListApi(panel);
+        return { items: await decodeList(r.blob, key), ok: true };
+      } catch (e) {
+        if (e.message === "unreadable") return { items: [], ok: false };
+      }
+    }
+    try {
+      var res = await fetch(LIST_PATH + "?t=" + Date.now(), { cache: "no-store" });
+      if (res.status === 404) return { items: [], ok: true };
+      if (!res.ok) return { items: [], ok: false };
+      return { items: await decodeList(await res.json(), key), ok: true };
+    } catch (e) {
+      return { items: [], ok: false };
+    }
+  }
+
+  // Read, change, write. A save made at the same time by someone else makes GitHub answer 409
+  // or 422; then the list is read again and the change is applied once more.
+  async function mutateAccounts(change) {
+    var panel = state.panel;
+    if (!panel) throw new Error("notoken");
+    for (var attempt = 0; attempt < 3; attempt++) {
+      var current = await readListApi(panel);
+      var next = change((await decodeList(current.blob, state.key)).slice());
+      var blob = await L.encryptBlob({ v: 1, accounts: next }, state.key);
+      var body = { message: "Update accounts", content: btoa(JSON.stringify(blob)), branch: "main" };
+      if (current.sha) body.sha = current.sha;
+      var res = await fetch(ghUrl(panel), { method: "PUT", headers: ghHeaders(panel, true), body: JSON.stringify(body) });
+      if (res.ok) { state.rev++; return next; }
+      if (res.status === 401 || res.status === 403) throw new Error("noaccess");
+      if (res.status !== 409 && res.status !== 422) throw new Error("http");
+    }
+    throw new Error("conflict");
+  }
+
+  /* ---------- Views ---------- */
+
+  function showBanner(parts) {
+    var banner = $("banner");
+    banner.textContent = "";
+    if (!parts.length) { banner.hidden = true; return; }
+    var p = parts[parts.length - 1];
+    banner.className = "banner " + p.level;
+    banner.appendChild(document.createTextNode(p.text + " "));
+    if (p.link) { var a = el("a", "", p.linkText); a.href = p.link; a.target = "_blank"; a.rel = "noopener"; banner.appendChild(a); }
+    banner.hidden = false;
+  }
+
+  // Messages for the banner, weakest first: the last one is the one that shows.
+  function bannerParts(acct, own) {
+    var parts = [];
+    if (state.demo) parts.push({ level: "idle", text: "Exempeldata. Inget av det här är ditt riktiga djur." });
+    if (!state.listOk) parts.push({ level: "warn", text: MESSAGES.unreadable });
+    state.accounts.forEach(function (a) {
+      if (a === acct || !a.data) return;
+      var h = health(a.data);
+      if (h.level === "bad" || h.level === "warn") parts.push({ level: h.level, text: a.label + ": " + h.pill + "." });
+    });
+    if (state.meta && Date.now() - Date.parse(state.meta.updated) > STALE_MS) {
+      parts.push({ level: "warn", text: "Det har gått över tre timmar sedan flödet senast körde. Kolla fliken Actions.", link: repoLink(state.meta.repo, "/actions"), linkText: "Öppna Actions" });
+    }
+    if (own && own.text) parts.push(own);
+    if (state.notice) parts.push(state.notice);
+    return parts;
+  }
+
+  function renderTabs() {
+    var box = $("tabs");
+    box.textContent = "";
+    var adding = state.formOpen && !state.editId;
+    var shown = currentAccount();
+    state.accounts.forEach(function (a) {
+      var h = a.data ? health(a.data) : null;
+      var tab = el("button", "tab");
+      tab.type = "button";
+      var on = !!shown && a.id === shown.id && !adding;
+      tab.setAttribute("aria-pressed", on ? "true" : "false");
+      if (h && (h.level === "bad" || h.level === "warn")) {
+        tab.appendChild(el("span", "tdot " + h.level));
+        tab.setAttribute("aria-label", a.label + ", " + h.pill);
+      }
+      tab.appendChild(el("span", "", a.label));
+      tab.addEventListener("click", function () { selectAccount(a.id); });
+      box.appendChild(tab);
+      if (on && typeof tab.scrollIntoView === "function") tab.scrollIntoView({ block: "nearest", inline: "center" });
+    });
+    var plus = el("button", "tab add", "+");
+    plus.type = "button";
+    plus.setAttribute("aria-label", "Lägg till konto");
+    plus.setAttribute("aria-pressed", adding ? "true" : "false");
+    plus.addEventListener("click", function () { if (!state.busy) openForm(""); });
+    box.appendChild(plus);
+  }
+
+  function renderActions(acct, form) {
+    $("acct-actions").hidden = form || !acct;
+  }
+
+  function renderPending(acct) {
+    var pill = $("status-pill");
+    pill.hidden = false; pill.className = "pill"; pill.textContent = "Väntar på körning";
+    showBanner(bannerParts(acct, null));
+  }
+
+  function renderEmpty() {
+    $("status-pill").hidden = true;
+    showBanner(bannerParts(null, null));
+  }
+
+  function view() {
+    var acct = currentAccount();
+    var form = state.formOpen;
+    renderTabs();
+    $("tabs").hidden = false;
+    $("acct-form").hidden = !form;
+    $("empty").hidden = form || !!acct;
+    $("app").hidden = form || !acct || !acct.data;
+    $("pending").hidden = form || !acct || !!acct.data;
+    renderActions(acct, form);
+    if (form) { $("status-pill").hidden = true; $("banner").hidden = true; }
+    else if (!acct) renderEmpty();
+    else if (acct.data) render(acct.data, acct);
+    else renderPending(acct);
+  }
+
+  function selectAccount(id) {
+    if (state.busy) return;
+    cancelConfirm();
+    state.currentId = id; state.formOpen = false; state.editId = ""; state.notice = null;
+    $("acct-cookie").value = "";
+    view();
+  }
+
+  function setBusy(busy) {
+    state.busy = busy;
+    ["acct-save", "acct-cancel", "acct-edit", "acct-remove"].forEach(function (id) { $(id).disabled = busy; });
+    $("acct-save").textContent = busy ? "Sparar…" : state.editId ? "Spara" : "Spara konto";
+  }
+
+  /* ---------- Add, change and remove ---------- */
+
+  function showFormError(text) {
+    var err = $("acct-error");
+    err.hidden = !text; err.textContent = text || "";
+  }
+
+  function openForm(editId) {
+    cancelConfirm();
+    var acct = editId ? findAccount(editId) : null;
+    state.formOpen = true; state.editId = acct ? acct.id : ""; state.notice = null;
+    $("form-title").textContent = acct ? "Byt cookie för " + acct.label : "Lägg till konto";
+    $("acct-label").value = acct ? acct.label : "";
+    $("acct-cookie").value = "";
+    $("acct-cookie").placeholder = acct ? "Ny cookie. Lämna tom för att bara byta namn." : "namn=värde";
+    $("acct-save").textContent = acct ? "Spara" : "Spara konto";
+    showFormError("");
+    view();
+  }
+
+  function closeForm() {
+    state.formOpen = false; state.editId = "";
+    $("acct-cookie").value = "";
+    showFormError("");
+    view();
+  }
+
+  async function saveForm() {
+    if (state.busy || !state.formOpen) return;
+    var editing = state.editId;
+    var label = cleanLabel($("acct-label").value);
+    var cookie = $("acct-cookie").value.replace(/^\s*cookie\s*:\s*/i, "").trim();
+    if ((!editing || cookie) && (!COOKIE_RE.test(cookie) || cookie.indexOf("=") < 1)) { showFormError(MESSAGES.badcookie); return; }
+    if (state.demo) { showFormError(MESSAGES.demo); return; }
+    var id = editing || newId();
+    showFormError("");
+    setBusy(true);
+    try {
+      var next = await mutateAccounts(function (items) {
+        var at = -1;
+        items.forEach(function (it, i) { if (it && it.id === id) at = i; });
+        if (editing) {
+          if (at < 0) throw new Error("gone");
+          var item = Object.assign({}, items[at]);
+          if (label) item.label = label;
+          if (cookie) item.cookie = cookie;
+          items[at] = item;
+        } else {
+          items.push({ id: id, label: label || defaultLabel(items), cookie: cookie, added: new Date().toISOString() });
+        }
+        return items;
+      });
+      applyList(next);
+      state.currentId = id; state.formOpen = false; state.editId = "";
+      state.notice = { level: "idle", text: editing ? "Sparat. Nästa körning använder den nya cookien." : "Kontot är sparat." };
+      $("acct-cookie").value = "";
+      setBusy(false);
+      view();
+    } catch (e) {
+      setBusy(false);
+      showFormError(MESSAGES[e.message] || MESSAGES.http);
+    }
+  }
+
+  function cancelConfirm() {
+    window.clearTimeout(state.confirmTimer);
+    state.confirming = false;
+    var btn = $("acct-remove");
+    btn.textContent = "Ta bort kontot"; btn.className = "btn ghost small";
+  }
+
+  async function removeAccount() {
+    var acct = currentAccount();
+    if (state.busy || !acct) return;
+    if (!state.confirming) {
+      var btn = $("acct-remove");
+      state.confirming = true;
+      btn.textContent = "Tryck igen för att ta bort"; btn.className = "btn danger small";
+      state.confirmTimer = window.setTimeout(cancelConfirm, 4000);
+      return;
+    }
+    cancelConfirm();
+    if (state.demo) { state.notice = { level: "idle", text: MESSAGES.demo }; view(); return; }
+    setBusy(true);
+    try {
+      var next = await mutateAccounts(function (items) {
+        return items.filter(function (it) { return !it || it.id !== acct.id; });
+      });
+      applyList(next);
+      state.currentId = state.accounts.length ? state.accounts[0].id : "";
+      state.notice = { level: "idle", text: "Kontot är borttaget. Cookien är raderad ur listan." };
+    } catch (e) {
+      state.notice = { level: "bad", text: MESSAGES[e.message] || MESSAGES.http };
+    }
+    setBusy(false);
+    view();
+  }
+
+  /* ---------- Flow ---------- */
+
+  function showLock(message) {
+    window.clearInterval(state.timer);
+    cancelConfirm();
+    state.key = ""; state.accounts = []; state.panel = null; state.meta = null; state.currentId = ""; state.listOk = true;
+    state.demo = false; state.formOpen = false; state.editId = ""; state.busy = false; state.notice = null; state.rev++;
+    $("acct-cookie").value = ""; $("acct-label").value = "";
+    ["app", "tabs", "acct-form", "empty", "pending", "acct-actions"].forEach(function (id) { $(id).hidden = true; });
+    $("lock").hidden = false;
+    $("lock-btn").hidden = true; $("status-pill").hidden = true; $("banner").hidden = true;
+    var err = $("lock-error");
+    err.hidden = !message; err.textContent = message || "";
+  }
+
+  function showApp(res) {
+    state.accounts = res.accounts; state.panel = res.panel; state.meta = res.meta; state.listOk = res.listOk;
+    if (!findAccount(state.currentId)) state.currentId = state.accounts.length ? state.accounts[0].id : "";
+    $("lock").hidden = true; $("lock-btn").hidden = false;
+    view();
+    window.clearInterval(state.timer);
+    state.timer = window.setInterval(function () { if (!document.hidden) refresh(); }, REFRESH_MS);
+  }
+
+  async function fetchEncrypted(url, key) {
+    var res = await fetch(url + "?t=" + Date.now(), { cache: "no-store" });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error("http");
+    var blob = await res.json();
+    try { return await L.decryptBlob(blob, key); } catch (e) { throw new Error("badkey"); }
+  }
+
+  // A pet that has not run yet has no status file: null. A failed fetch keeps what is shown.
+  async function loadExtra(id, key) {
+    try { return await fetchEncrypted("data/status-" + id + ".enc.json", key); } catch (e) { return undefined; }
+  }
+
+  async function load(key) {
+    var meta = await fetchEncrypted(DATA_URL, key);
+    if (!meta) throw new Error("nodata");
+    var panel = validPanel(meta.panel);
+    var list = await readList(panel, key);
+    var prev = {};
+    state.accounts.forEach(function (a) { prev[a.id] = a.data; });
+    var extras = await Promise.all(listAccounts(list.items).map(async function (a) {
+      var data = await loadExtra(a.id, key);
+      return { id: a.id, label: a.label, data: data === undefined ? prev[a.id] || null : data };
+    }));
+    return { accounts: extras, panel: panel, listOk: list.ok, meta: { updated: meta.updated, repo: meta.repo } };
+  }
+
+  var MESSAGES = {
+    nodata: "Ingen data ännu. Kör flödet Gotchi en gång i GitHub Actions och försök igen.",
+    badkey: "Nyckeln passar inte datan. Kontrollera att samma nyckel ligger som hemligheten LICENSE_KEY.",
+    http: "Det gick inte att hämta datan. Försök igen om en stund.",
+    unreadable: "Kontolistan går inte att läsa med den här nyckeln. Inget har ändrats.",
+    notoken: "Panelen saknar skrivrätt. Kör flödet Gotchi en gång till i GitHub Actions och försök sedan igen.",
+    noaccess: "GitHub nekade åtkomsten. Panelens token har gått ut eller saknar rätt att skriva.",
+    conflict: "Listan ändrades samtidigt av något annat. Försök igen.",
+    gone: "Kontot finns inte längre i listan.",
+    badcookie: "Klistra in cookien som en enda rad (Header String), till exempel namn=värde.",
+    demo: "Det här är exempeldata. Lås upp med din nyckel för att ändra konton."
+  };
+
+  async function unlock(key, remember, silent) {
+    if (L.normalizeKey(key).length < 20) { showLock("Nyckeln ser för kort ut. Den börjar med GTCH och har fem grupper."); return; }
+    var btn = $("unlock-btn");
+    btn.disabled = true; btn.textContent = "Låser upp…";
+    try {
+      var res = await load(key);
+      state.key = key; state.demo = false;
+      if (remember) store.set(key);
+      showApp(res);
+    } catch (e) {
+      if (silent && e.message === "badkey") store.del();
+      showLock(silent && e.message !== "nodata" ? "" : (MESSAGES[e.message] || MESSAGES.http));
+    } finally {
+      btn.disabled = false; btn.textContent = "Lås upp";
+    }
+  }
+
+  async function refresh() {
+    if (state.demo || !state.key || state.formOpen || state.busy) return;
+    var rev = state.rev;
+    try {
+      var res = await load(state.key);
+      if (rev === state.rev && !state.formOpen && !state.busy) showApp(res);
+    } catch (e) { /* keep showing the last data */ }
+  }
+
+  /* ---------- Example data ---------- */
+
+  function demoData() {
+    var H = 3600000, now = Date.now(), hist = [], bal = 1180, i;
+    for (i = 59; i >= 0; i--) {
+      if (i % 24 === 7) bal += 55;
+      var bad = i === 31 || i === 30;
+      hist.push({ at: new Date(now - i * H - 17 * 60000).toISOString(), ok: !bad, dry: i === 59, error: bad ? "network" : null, balance: bal, level: 7, xp: 412 });
+    }
+    var claimedAt = new Date(now - 7 * H - 17 * 60000);
+    return {
+      v: 1, updated: hist[hist.length - 1].at, repo: "exempel/the-isle",
+      latest: {
+        at: hist[hist.length - 1].at, ok: true, dryRun: false,
+        pet: { name: "Mossa", level: 7, experience: 412, experienceToNext: 600, hunger: 72, happiness: 88, cleanliness: 54, energy: 35, isSleeping: false },
+        daily: { claimed: false, nextAt: new Date(claimedAt.getTime() + DAY_MS).toISOString() },
+        actions: [{ name: "feed", ok: true }], cooldowns: { feed: 0, play: 38, clean: 0, sleep: 12 }
+      },
+      lastReward: { at: claimedAt.toISOString(), bones: 55, xp: 40 },
+      balance: { value: bal, at: claimedAt.toISOString() },
+      nextDailyAt: new Date(claimedAt.getTime() + DAY_MS).toISOString(),
+      history: hist
+    };
+  }
+
+  // A second example account whose cookie has expired, to show how a problem looks.
+  function demoExpired() {
+    var d = demoData();
+    d.latest.ok = false; d.latest.error = "cookie"; d.latest.petStale = true;
+    d.latest.pet.name = "Pelle"; d.latest.pet.level = 3; d.balance.value = 240;
+    return d;
+  }
+
+  function startDemo() {
+    state.demo = true; state.key = ""; state.panel = null; state.formOpen = false; state.notice = null;
+    state.currentId = "demo0001";
+    showApp({
+      accounts: [{ id: "demo0001", label: "Alex", data: demoData() }, { id: "demo0002", label: "Alt", data: demoExpired() }],
+      panel: null, listOk: true, meta: { updated: new Date().toISOString(), repo: "exempel/the-isle" }
+    });
+  }
+
+  /* ---------- Wiring ---------- */
+
+  $("lock-form").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    unlock($("key").value, $("remember").checked, false);
+  });
+  $("lock-btn").addEventListener("click", function () { store.del(); $("key").value = ""; showLock(""); });
+  $("demo-btn").addEventListener("click", startDemo);
+  $("gen-btn").addEventListener("click", function () {
+    var out = $("gen-out"); out.textContent = L.generateKey(); out.hidden = false; $("copy-btn").hidden = false;
+  });
+  $("copy-btn").addEventListener("click", function () {
+    var text = $("gen-out").textContent, btn = $("copy-btn");
+    function done(msg) { btn.textContent = msg; window.setTimeout(function () { btn.textContent = "Kopiera"; }, 1800); }
+    function select() {
+      var r = document.createRange(); r.selectNodeContents($("gen-out"));
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r); done("Markerad, kopiera själv");
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { done("Kopierad"); }, select);
+    else select();
+  });
+  $("empty-add").addEventListener("click", function () { if (!state.busy) openForm(""); });
+  $("acct-save").addEventListener("click", saveForm);
+  $("acct-cancel").addEventListener("click", function () { if (!state.busy) closeForm(); });
+  $("acct-edit").addEventListener("click", function () { if (!state.busy) openForm(state.currentId); });
+  $("acct-remove").addEventListener("click", removeAccount);
+  ["acct-label", "acct-cookie"].forEach(function (id) {
+    $(id).addEventListener("keydown", function (ev) { if (ev.key === "Enter") { ev.preventDefault(); saveForm(); } });
+  });
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
+
+  if (location.hash === "#demo") startDemo();
+  else if (store.get()) { $("key").value = store.get(); $("remember").checked = true; unlock(store.get(), true, true); }
+})();
+</script>
+</body>
+</html>
