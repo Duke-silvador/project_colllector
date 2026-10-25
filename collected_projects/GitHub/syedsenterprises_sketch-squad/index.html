@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Sketch Squad — Draw &amp; Guess Party Game</title>
+<link rel="stylesheet" href="styles.css">
+<script type="importmap">
+{
+  "imports": {
+    "firebase-app": "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js",
+    "firebase-auth": "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js",
+    "firebase-database": "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js"
+  }
+}
+</script>
+</head>
+<body>
+<header class="topbar">
+  <div class="logo">🎨 Sketch Squad</div>
+  <div id="room-chip" class="room-chip hidden">
+    Room <strong id="room-code-label"></strong>
+    <button id="copy-code-btn" type="button" title="Copy room code">📋 Copy</button>
+  </div>
+</header>
+
+<div id="conn-banner" class="banner hidden">⚠️ Connection lost — reconnecting… your game will resume automatically.</div>
+<div id="notice" class="banner info hidden"></div>
+
+<main>
+  <!-- ============ HOME ============ -->
+  <section id="view-home" class="view">
+    <h1>Draw it. Guess it. Win it.</h1>
+    <p class="tagline">A party game for 2–8 friends. No login, no install — just a room code.</p>
+
+    <div id="server-warning" class="card warning hidden">
+      ⚙️ <strong>Game server not configured yet.</strong><br>
+      This copy has no Firebase settings, so rooms can't sync yet. Add the
+      config to <code>firebase-config.js</code> and reload — see README.md.
+    </div>
+
+    <div class="card">
+      <label for="name-input">Your display name</label>
+      <input id="name-input" type="text" maxlength="20" placeholder="e.g. Alex" autocomplete="off">
+      <div class="row">
+        <button id="create-btn" type="button" class="btn primary big">➕ Create room</button>
+      </div>
+      <div class="divider">or join a friend's room</div>
+      <div class="row">
+        <input id="code-input" type="text" maxlength="4" placeholder="CODE" autocomplete="off" class="code-input">
+        <button id="join-btn" type="button" class="btn big">🚪 Join room</button>
+      </div>
+      <p id="home-error" class="error hidden"></p>
+    </div>
+
+    <details class="card howto" open>
+      <summary>📖 How to play (10 seconds)</summary>
+      <ol>
+        <li>One player draws a secret word. Everyone else guesses.</li>
+        <li>Guess right fast = more points. The drawer earns points too.</li>
+        <li>Everyone draws once. Most points at the end wins!</li>
+      </ol>
+      <p class="muted">The host starts the game. Each turn lasts 60 seconds. Wrong guesses show in chat — right guesses stay secret until the reveal.</p>
+    </details>
+  </section>
+
+  <!-- ============ LOBBY ============ -->
+  <section id="view-lobby" class="view hidden">
+    <h2>Lobby — waiting for players</h2>
+    <p class="muted">Share the room code above. The game starts when the host taps Start (2–8 players).</p>
+    <div class="card">
+      <h3>Players (<span id="lobby-count">0</span>/8)</h3>
+      <ul id="lobby-players" class="player-list"></ul>
+      <p id="lobby-error" class="error hidden"></p>
+      <button id="start-btn" type="button" class="btn primary big hidden">▶️ Start game</button>
+      <p id="start-hint" class="muted">Waiting for the host to start… (need at least 2 players)</p>
+    </div>
+    <details class="card howto">
+      <summary>📖 How to play</summary>
+      <ol>
+        <li>One player draws a secret word. Everyone else guesses.</li>
+        <li>Guess right fast = more points. The drawer earns points too.</li>
+        <li>Everyone draws once. Most points at the end wins!</li>
+      </ol>
+    </details>
+  </section>
+
+  <!-- ============ GAME ============ -->
+  <section id="view-game" class="view hidden">
+    <div id="turn-banner" class="turn-banner">Waiting…</div>
+    <div class="game-grid">
+      <div class="game-main">
+        <div class="canvas-wrap">
+          <canvas id="draw-canvas" width="1000" height="600"></canvas>
+          <div id="timer" class="timer">60</div>
+        </div>
+
+        <div id="word-pick" class="card hidden">
+          <h3>Your turn! Pick a word to draw:</h3>
+          <div id="word-choices" class="row"></div>
+          <p class="muted">Category hints are shown. Guessers never see these words.</p>
+        </div>
+
+        <div id="toolbar" class="toolbar hidden">
+          <div class="colors" id="color-palette"></div>
+          <div class="sizes">
+            <button type="button" data-size="4" class="size-btn">● Small</button>
+            <button type="button" data-size="9" class="size-btn active">● Medium</button>
+            <button type="button" data-size="16" class="size-btn">● Large</button>
+          </div>
+          <button id="eraser-btn" type="button" class="btn">🧽 Eraser</button>
+          <button id="clear-btn" type="button" class="btn danger">🗑️ Clear</button>
+        </div>
+
+        <div id="reveal-box" class="card reveal hidden">
+          <h3 id="reveal-word"></h3>
+          <ul id="reveal-points"></ul>
+          <p class="muted">Next turn starts shortly…</p>
+        </div>
+      </div>
+
+      <aside class="game-side">
+        <div class="card">
+          <h3>🏆 Scoreboard</h3>
+          <ul id="scoreboard" class="player-list"></ul>
+        </div>
+        <div class="card chat-card">
+          <h3>💬 Guesses</h3>
+          <ul id="chat-list" class="chat-list"></ul>
+          <div id="guess-row" class="row">
+            <input id="guess-input" type="text" maxlength="60" placeholder="Type your guess…" autocomplete="off">
+            <button id="guess-btn" type="button" class="btn primary">Send</button>
+          </div>
+          <p id="guess-note" class="muted hidden">You're drawing this turn — no guessing for you!</p>
+        </div>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ============ PODIUM ============ -->
+  <section id="view-podium" class="view hidden">
+    <h2>🏆 Final scores</h2>
+    <div id="podium" class="podium"></div>
+    <div class="card">
+      <h3>Full standings</h3>
+      <ul id="final-scores" class="player-list"></ul>
+      <button id="play-again-btn" type="button" class="btn primary big hidden">🔄 Play again (same room)</button>
+      <p id="play-again-hint" class="muted">Waiting for the host to start a new game…</p>
+    </div>
+  </section>
+</main>
+
+<footer class="muted center">Sketch Squad — a Draw &amp; Guess party game. No account needed, just a room code.</footer>
+
+<script src="firebase-config.js"></script>
+<script src="words.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
