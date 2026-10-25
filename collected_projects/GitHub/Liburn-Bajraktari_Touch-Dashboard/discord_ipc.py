@@ -1,0 +1,541 @@
+"""
+discord_ipc.py — Discord Rich-Presence IPC client for Touch Dashboard.
+
+Connects to the locally-running Discord (or arRPC/Vesktop) process via
+a named socket / Windows named pipe, subscribes to voice state events,
+and exposes mute/deafen controls.
+"""
+from __future__ import annotations
+
+import json
+import re
+import logging
+import os
+import socket
+import struct
+import sys
+import time
+import uuid
+import urllib.parse
+
+logger = logging.getLogger(__name__)
+
+
+def _event_active(data: dict, legacy_key: str) -> bool:
+    """A camera / screen share event's state: "active", or an older field name."""
+    for key in ("active", legacy_key, "enabled"):
+        if key in data:
+            return bool(data[key])
+    return False
+
+
+_TOKEN_IN_TEXT = re.compile(r"(access token:?\s*)[A-Za-z0-9._~+/-]{8,}", re.IGNORECASE)
+
+
+def _redact(res) -> str:
+    """An IPC reply for the log, without the access token Discord echoes in errors."""
+    return _TOKEN_IN_TEXT.sub(r"\1<redacted>", str(res))
+
+
+class DiscordIPC:
+    """
+    Manages a persistent connection to the Discord IPC socket.
+    Thread-safe; meant to run in its own daemon thread via `loop()`.
+    """
+
+    def __init__(self, client_id: str, client_secret: str,
+                 access_token: str = "", config_save_fn=None):
+        self.client_id     = client_id
+        self.client_secret = client_secret
+        self.access_token  = access_token
+        self._config_save  = config_save_fn  # callable(token: str) → None
+
+        self._sock: socket.socket | None = None
+        self._win_pipe = None              # open() file handle on Windows
+
+        self.connected      = False
+        self.running        = False
+        self.auth_pending   = False
+        self.needs_reauth   = False
+        self.voice_supported = False
+        self.vesktop_ipc_warning = False
+        self.voice_state    = {"mute": False, "deaf": False, "video": False, "screenshare": False}
+        self.voice_channel: dict | None = None
+        self.pre_deafen_mute = False
+        # Channel tracking (see _request_channel): the signed-in user's id, the
+        # channel whose voice events we are subscribed to, and whether a fresh
+        # snapshot of it is on its way (events are dropped until it lands).
+        self.user_id: str | None = None
+        self._vc_sub: str | None = None
+        self._vc_pending = False
+
+        # Hooks set by the server to trigger a data push after state changes
+        self.on_state_change = None   # asyncio-safe callable
+        self.on_auth_error = None     # callable(auth_url: str) → None
+
+    # ── pipe discovery ─────────────────────────────────────────────────────────
+
+    def _get_pipe_paths(self) -> list[str]:
+        if sys.platform.startswith("win"):
+            paths = []
+            for i in range(10):
+                p = f"\\\\.\\pipe\\discord-ipc-{i}"
+                if os.path.exists(p):
+                    paths.append(p)
+            return paths
+
+        # Linux / macOS: search runtime dirs
+        env_vars = ("XDG_RUNTIME_DIR", "TMPDIR", "TMP", "TEMP")
+        bases = [os.environ[v] for v in env_vars if os.environ.get(v)]
+        bases += [f"/run/user/{os.getuid()}", "/tmp"]
+
+        found: list[str] = []
+        for base in bases:
+            for i in range(10):
+                for candidate in (
+                    os.path.join(base, f"discord-ipc-{i}"),
+                    os.path.join(base, "app/com.discordapp.Discord", f"discord-ipc-{i}"),
+                    os.path.join(base, "app/dev.vencord.Vesktop", f"discord-ipc-{i}"),
+                    os.path.join(base, "snap/discord/current", f"discord-ipc-{i}"),
+                ):
+                    if os.path.exists(candidate) and candidate not in found:
+                        found.append(candidate)
+        return found
+
+    # ── low-level I/O ──────────────────────────────────────────────────────────
+
+    def _sock_send(self, data: bytes) -> None:
+        if sys.platform.startswith("win") and self._win_pipe:
+            self._win_pipe.write(data)
+            self._win_pipe.flush()
+        elif self._sock:
+            self._sock.sendall(data)
+
+    def _sock_recv(self, length: int) -> bytes:
+        buf = b""
+        while len(buf) < length:
+            if sys.platform.startswith("win") and self._win_pipe:
+                chunk = self._win_pipe.read(length - len(buf))
+            elif self._sock:
+                chunk = self._sock.recv(length - len(buf))
+            else:
+                return b""
+            if not chunk:
+                return b""
+            buf += chunk
+        return buf
+
+    def send(self, opcode: int, payload: dict) -> None:
+        logger.debug(f"DISCORD SEND [{opcode}]: {payload}")
+        data = json.dumps(payload).encode("utf-8")
+        try:
+            self._sock_send(struct.pack("<II", opcode, len(data)) + data)
+        except Exception:
+            self.connected = False
+
+    def recv(self) -> dict | None:
+        try:
+            header = self._sock_recv(8)
+            if not header or len(header) < 8:
+                return None
+            _opcode, length = struct.unpack("<II", header)
+            payload = self._sock_recv(length)
+            if not payload:
+                return None
+            res = json.loads(payload.decode("utf-8"))
+            logger.debug(f"DISCORD RECV: {res}")
+            return res
+        except socket.timeout:
+            return {}
+        except Exception as e:
+            logger.debug(f"DISCORD RECV error: {e}")
+            return None
+
+    # ── connection ─────────────────────────────────────────────────────────────
+
+    def check_vesktop_ipc(self) -> None:
+        """Check if Vesktop is currently running."""
+        try:
+            import psutil
+            for p in psutil.process_iter(['name']):
+                if p.info['name'] and 'vesktop' in p.info['name'].lower():
+                    if not self.vesktop_ipc_warning:
+                        logger.warning("Vesktop detected! Note that Vesktop (arRPC) does not support Voice Control via RPC.")
+                    self.vesktop_ipc_warning = True
+                    return
+        except Exception:
+            pass
+        self.vesktop_ipc_warning = False
+
+    def connect(self) -> bool:
+        for path in self._get_pipe_paths():
+            try:
+                if sys.platform.startswith("win"):
+                    # Use binary mode with no buffering for reliable pipe I/O
+                    self._win_pipe = open(path, "r+b", buffering=0)
+                    self._sock = None
+                else:
+                    self._sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                    self._sock.connect(path)
+                    self._sock.settimeout(2.0)
+                    self._win_pipe = None
+
+                self.send(0, {"v": 1, "client_id": self.client_id})
+                res = self.recv()
+                if not res:
+                    self._close_transport(); continue
+
+                if not self.access_token:
+                    self.auth_pending = True
+                    self.connected = True
+                    if self.on_auth_error:
+                        self.on_auth_error(self.get_auth_url())
+                    return True
+
+                self._authenticate()
+                self.connected = True
+                return True
+
+            except Exception as e:
+                logger.debug(f"Discord connect error on '{path}': {e}")
+                self._close_transport()
+
+        self.check_vesktop_ipc()
+        return False
+
+    def _close_transport(self) -> None:
+        for attr in ("_sock", "_win_pipe"):
+            obj = getattr(self, attr, None)
+            if obj:
+                try: obj.close()
+                except Exception: pass
+            setattr(self, attr, None)
+
+    def close(self) -> None:
+        self.connected = False
+        self._close_transport()
+        # Subscriptions end with the connection; the next one starts over.
+        self._vc_sub = None
+        self._vc_pending = False
+
+    # ── authentication ─────────────────────────────────────────────────────────
+
+    def get_auth_url(self) -> str:
+        scopes = "rpc rpc.notifications.read rpc.voice.read rpc.video.read rpc.screenshare.read rpc.activities.write rpc.screenshare.write rpc.video.write rpc.voice.write"
+        params = urllib.parse.urlencode({
+            "client_id": self.client_id,
+            "response_type": "code",
+            "redirect_uri": "http://127.0.0.1:8888/disc_callback",
+            "scope": scopes
+        })
+        return f"https://discord.com/oauth2/authorize?{params}"
+
+    def exchange_code(self, code: str) -> bool:
+        """Exchange an OAuth2 code for an access token (HTTP, blocking)."""
+        try:
+            import requests
+            data = {
+                "client_id":     self.client_id,
+                "client_secret": self.client_secret,
+                "grant_type":    "authorization_code",
+                "code":          code,
+                "redirect_uri":  "http://127.0.0.1:8888/disc_callback",
+            }
+            r = requests.post(
+                "https://discord.com/api/oauth2/token",
+                data=data,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=5,
+            )
+            if r.status_code == 200:
+                self.access_token = r.json().get("access_token", "")
+                if self._config_save:
+                    self._config_save(self.access_token)
+                return True
+            logger.error(f"Discord token exchange: {r.status_code} {r.text}")
+        except Exception as e:
+            logger.error(f"Discord token exchange exception: {e}")
+        return False
+
+    def _authenticate(self) -> None:
+        self.send(1, {
+            "cmd": "AUTHENTICATE",
+            "args": {"access_token": self.access_token},
+            "nonce": str(uuid.uuid4()),
+        })
+        res = self.recv()
+        if res and res.get("evt") != "ERROR":
+            # Who we are: a VOICE_STATE_DELETE for this id means we left the channel.
+            uid = ((res.get("data") or {}).get("user") or {}).get("id")
+            self.user_id = str(uid) if uid else None
+        if res and res.get("evt") == "ERROR":
+            logger.error(f"Discord auth error: {_redact(res)}")
+            self.access_token = ""
+            if self._config_save:
+                self._config_save("")
+            self.auth_pending = True
+            if self.on_auth_error:
+                self.on_auth_error(self.get_auth_url())
+            return
+
+        for evt in ("VOICE_SETTINGS_UPDATE", "VOICE_CHANNEL_SELECT",
+                    "VIDEO_STATE_UPDATE", "SCREENSHARE_STATE_UPDATE"):
+            self.send(1, {"cmd": "SUBSCRIBE", "evt": evt, "args": {}, "nonce": str(uuid.uuid4())})
+        self.send(1, {"cmd": "GET_VOICE_SETTINGS",        "args": {}, "nonce": "GET_VOICE"})
+        self._request_channel()
+        self.auth_pending = False
+
+    # ── IPC event loop ─────────────────────────────────────────────────────────
+
+    def loop(self) -> None:
+        self.running = True
+        while self.running:
+            if self.needs_reauth and self.connected:
+                self.needs_reauth = False
+                self._authenticate()
+
+            if not self.connected:
+                if not self.connect():
+                    time.sleep(5)
+                    continue
+
+            try:
+                if self._sock:
+                    self._sock.settimeout(5.0)
+                res = self.recv()
+                if res is None:
+                    self.close(); continue
+                if res:
+                    self._handle(res)
+            except Exception as e:
+                logger.error(f"Discord loop error: {e}")
+                self.close()
+                time.sleep(2)
+
+    def _trigger(self) -> None:
+        """Notify server that state changed (calls the registered hook if any)."""
+        if self.on_state_change:
+            try:
+                self.on_state_change()
+            except Exception:
+                pass
+
+    def _handle(self, res: dict) -> None:
+        evt = res.get("evt")
+        cmd = res.get("cmd")
+        nonce = res.get("nonce")
+        data  = res.get("data") or {}
+
+        if evt == "ERROR":
+            if nonce == "GET_GUILD_VC":
+                # Missing rpc.guilds.read scope — force re-auth
+                self.access_token = ""
+                if self._config_save:
+                    self._config_save("")
+                self.auth_pending = True
+                self._trigger()
+            elif cmd == "GET_SELECTED_VOICE_CHANNEL":
+                logger.error(f"Discord IPC error: {_redact(res)}")
+                self._vc_pending = False
+            elif nonce == "AUTHORIZE_REQ":
+                logger.error(f"Discord IPC AUTHORIZE failed (restricted scopes?): {res}. Falling back to browser.")
+                if self.on_auth_error:
+                    self.on_auth_error(self.get_auth_url())
+            else:
+                logger.error(f"Discord IPC error: {_redact(res)}")
+            return
+
+        # Authorization via local IPC (in-app OAuth)
+        if cmd == "AUTHORIZE" and "code" in data:
+            if self.exchange_code(data["code"]):
+                self._authenticate()
+            return
+
+        # Voice settings
+        if evt in ("VOICE_SETTINGS_UPDATE",) or cmd in ("GET_VOICE_SETTINGS", "SET_VOICE_SETTINGS") or nonce == "GET_VOICE":
+            self.voice_supported = True
+            if "mute" in data: self.voice_state["mute"] = data["mute"]
+            if "deaf" in data: self.voice_state["deaf"] = data["deaf"]
+            self._trigger()
+            return
+
+        # Video / screenshare state
+        # Camera / screen share: Discord sends {"active": bool, ...} (screen share
+        # also pid/application) and only on a change; there is no GET for them.
+        if evt == "VIDEO_STATE_UPDATE":
+            self.voice_state["video"] = _event_active(data, "video_enabled")
+            self._trigger()
+            return
+
+        if evt == "SCREENSHARE_STATE_UPDATE":
+            self.voice_state["screenshare"] = _event_active(data, "screenshare_enabled")
+            self._trigger()
+            return
+
+        # Voice channel. Discord's VOICE_STATE_* events carry no channel id, so
+        # the client must be subscribed to exactly one channel at a time: on any
+        # change it unsubscribes from the old channel, subscribes to the new one,
+        # and only then takes a snapshot. Until that snapshot lands, voice events
+        # are dropped, so none from the old channel leak into the new list.
+        if evt == "VOICE_CHANNEL_SELECT":
+            cid = data.get("channel_id")
+            if not cid:
+                self._leave_channel()
+                return
+            self._subscribe_channel(str(cid))
+            self._request_channel()
+            return
+
+        if cmd == "GET_SELECTED_VOICE_CHANNEL":
+            cid = data.get("id")
+            if not cid:
+                self._leave_channel()
+                return
+            cid = str(cid)
+            if cid != self._vc_sub:
+                # Moved without a VOICE_CHANNEL_SELECT (Discord does not always
+                # send one when someone else moves you): subscribe, then look again.
+                self._subscribe_channel(cid)
+                self._request_channel()
+                return
+            self._vc_pending = False
+            self._apply_channel(data)
+            return
+
+        if evt in ("VOICE_STATE_CREATE", "VOICE_STATE_UPDATE", "VOICE_STATE_DELETE",
+                   "SPEAKING_START", "SPEAKING_STOP"):
+            if self._vc_pending or not self.voice_channel:
+                return
+            # Newer clients name the channel; anything for another one is stale.
+            ev_cid = data.get("channel_id")
+            if ev_cid and str(ev_cid) != str(self.voice_channel.get("id")):
+                return
+
+        # Voice state changes
+        if evt in ("VOICE_STATE_CREATE", "VOICE_STATE_UPDATE"):
+            user = data.get("user", {})
+            uid  = str(user.get("id") or "")
+            if uid:
+                u = self.voice_channel["users"].setdefault(uid, {"id": uid, "speaking": False})
+                u["name"]   = data.get("nick") or user.get("global_name") or user.get("username")
+                u["avatar"] = user.get("avatar")
+                vs = data.get("voice_state", {})
+                u["mute"] = vs.get("mute") or vs.get("self_mute")
+                u["deaf"] = vs.get("deaf") or vs.get("self_deaf")
+            self._trigger()
+            return
+
+        if evt == "VOICE_STATE_DELETE":
+            uid = str((data.get("user") or {}).get("id") or "")
+            if uid and uid == self.user_id:
+                # We left this channel: moved by someone, or hung up. Ask where we are now.
+                self._request_channel()
+                return
+            if uid in self.voice_channel["users"]:
+                del self.voice_channel["users"][uid]
+            self._trigger()
+            return
+
+        if evt in ("SPEAKING_START", "SPEAKING_STOP"):
+            uid = str(data.get("user_id") or "")
+            if uid in self.voice_channel["users"]:
+                self.voice_channel["users"][uid]["speaking"] = (evt == "SPEAKING_START")
+            self._trigger()
+            return
+
+        if nonce == "GET_GUILD_VC" and self.voice_channel:
+            if data and evt != "ERROR":
+                g_id = str(data.get("id") or "")
+                if str(self.voice_channel.get("guild_id")) == g_id:
+                    self.voice_channel["guild_name"] = data.get("name")
+                    self._trigger()
+            return
+
+    # ── voice channel tracking ─────────────────────────────────────────────────
+
+    _CHANNEL_EVENTS = ("VOICE_STATE_CREATE", "VOICE_STATE_UPDATE", "VOICE_STATE_DELETE",
+                       "SPEAKING_START", "SPEAKING_STOP")
+
+    def _request_channel(self) -> None:
+        """Ask which channel we are in; voice events wait for the answer."""
+        self._vc_pending = True
+        self.send(1, {"cmd": "GET_SELECTED_VOICE_CHANNEL", "args": {}, "nonce": "GET_VC"})
+
+    def _set_channel_events(self, cmd: str, cid: str) -> None:
+        for evt in self._CHANNEL_EVENTS:
+            self.send(1, {"cmd": cmd, "evt": evt, "args": {"channel_id": cid}, "nonce": str(uuid.uuid4())})
+
+    def _subscribe_channel(self, cid: str) -> None:
+        """Listen to cid's voice events, and only to them."""
+        if cid == self._vc_sub:
+            return
+        if self._vc_sub:
+            self._set_channel_events("UNSUBSCRIBE", self._vc_sub)
+        self._set_channel_events("SUBSCRIBE", cid)
+        self._vc_sub = cid
+
+    def _leave_channel(self) -> None:
+        """Not in a call: stop listening; the camera and screen share end with the call."""
+        if self._vc_sub:
+            self._set_channel_events("UNSUBSCRIBE", self._vc_sub)
+        self._vc_sub = None
+        self._vc_pending = False
+        self.voice_channel = None
+        self.voice_state["video"] = False
+        self.voice_state["screenshare"] = False
+        self._trigger()
+
+    def _apply_channel(self, data: dict) -> None:
+        """Replace the channel with Discord's snapshot of it. A refresh of the
+        same channel keeps the server name and who is speaking."""
+        prev = self.voice_channel or {}
+        same = str(prev.get("id")) == str(data.get("id"))
+        same_guild = bool(data.get("guild_id")) and str(prev.get("guild_id")) == str(data.get("guild_id"))
+        users: dict[str, dict] = {}
+        for vs in data.get("voice_states", []):
+            user = vs.get("user", {})
+            uid = str(user.get("id") or "")
+            if not uid:
+                continue
+            vstate = vs.get("voice_state", {})
+            users[uid] = {
+                "id": uid,
+                "name": vs.get("nick") or user.get("global_name") or user.get("username"),
+                "avatar": user.get("avatar"),
+                "mute": vstate.get("mute") or vstate.get("self_mute"),
+                "deaf": vstate.get("deaf") or vstate.get("self_deaf"),
+                "speaking": bool(same and prev.get("users", {}).get(uid, {}).get("speaking")),
+            }
+        self.voice_channel = {
+            "id": data.get("id"), "name": data.get("name"),
+            "guild_id": data.get("guild_id"),
+            "guild_name": prev.get("guild_name") if same_guild else None,
+            "users": users,
+        }
+        if data.get("guild_id") and not same_guild:
+            self.send(1, {"cmd": "GET_GUILD",
+                          "args": {"guild_id": str(data["guild_id"]), "timeout": 3},
+                          "nonce": "GET_GUILD_VC"})
+        self._trigger()
+
+    # ── voice controls ─────────────────────────────────────────────────────────
+
+    def set_voice(self, mute: bool | None = None, deaf: bool | None = None) -> None:
+        if not self.connected:
+            return
+        args: dict = {}
+        if mute is not None: args["mute"] = mute
+        if deaf is not None: args["deaf"] = deaf
+        self.send(1, {"cmd": "SET_VOICE_SETTINGS", "args": args, "nonce": str(uuid.uuid4())})
+
+    def toggle_video(self) -> None:
+        """Toggle the local camera on/off. Requires rpc.video.write scope."""
+        if not self.connected:
+            return
+        self.send(1, {"cmd": "TOGGLE_VIDEO", "args": {}, "nonce": str(uuid.uuid4())})
+
+    def toggle_screenshare(self) -> None:
+        """Open the screenshare picker (or stop if already sharing). Requires rpc.screenshare.write scope."""
+        if not self.connected:
+            return
+        self.send(1, {"cmd": "TOGGLE_SCREENSHARE", "args": {}, "nonce": str(uuid.uuid4())})

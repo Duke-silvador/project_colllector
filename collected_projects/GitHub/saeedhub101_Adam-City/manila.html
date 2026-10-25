@@ -1,0 +1,514 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Manila — Data Explorer</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.2/dist/maplibre-gl.css">
+<style>
+:root{color-scheme:dark;--bg:#0c141b;--panel:#121f29;--line:#2a414f;--text:#eaf3f7;--muted:#9db2bf;--accent:#6de0c7}
+*{box-sizing:border-box}html,body,#map{width:100%;height:100%;margin:0}body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text)}#map{position:absolute;inset:0}
+.panel{position:absolute;z-index:4;top:10px;right:10px;width:min(355px,calc(100vw - 20px));max-height:calc(100dvh - 20px);overflow:auto;background:#101c25f5;border:1px solid var(--line);border-radius:14px;padding:13px;box-shadow:0 10px 35px #0006;backdrop-filter:blur(12px);transition:height .22s ease,max-height .22s ease}.panel.panel-short{height:30dvh;max-height:30dvh}
+h1{font-size:18px;margin:0 0 5px}.intro{font-size:11px;line-height:1.6;color:var(--muted);margin-bottom:10px}.section{border-top:1px solid var(--line);padding-top:9px;margin-top:9px}.section-title{font-weight:750;color:var(--accent);font-size:12px;margin-bottom:7px}.layer{display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.4;margin:7px 0}.layer input{accent-color:var(--accent);width:16px;height:16px;flex:0 0 auto;margin:1px 0 0}.meta{font-size:10px;color:var(--muted);line-height:1.6;overflow-wrap:anywhere}.status{border-top:1px solid var(--line);margin-top:10px;padding-top:8px;font-size:11px;line-height:1.5;overflow-wrap:anywhere}.error{color:#ffd6d6}.btn{background:#203641;color:var(--text);border:1px solid #395663;border-radius:7px;padding:7px 9px;font:inherit;font-size:11px;cursor:pointer}.btn:hover{border-color:var(--accent)}#info{display:none;margin-top:8px;padding:9px;background:#192c37;border-radius:8px;font-size:11px;line-height:1.6;overflow-wrap:anywhere}
+.part-toggle{display:flex;gap:9px;align-items:center;margin:9px 0;padding:9px 10px;border:1px solid var(--line);border-radius:9px;background:#142630;cursor:pointer;font-size:12px}.part-toggle input{appearance:none;-webkit-appearance:none;width:19px;height:19px;flex:0 0 19px;margin:0;border:2px solid #76909d;border-radius:4px;background:#0c171e;display:grid;place-items:center}.part-toggle input:checked{background:var(--accent);border-color:var(--accent)}.part-toggle input:checked:after{content:'✓';font-size:15px;font-weight:900;line-height:1;color:#08201d}.part-toggle .part-name{font-weight:750}.part-toggle .part-file{display:block;color:var(--muted);font-size:10px;direction:ltr;text-align:right;overflow-wrap:anywhere}
+.vector-heading{display:flex;align-items:center;justify-content:space-between;gap:8px}.collapse-btn{font-size:17px;line-height:1;min-width:30px;padding:3px 8px}.attribution{position:absolute;bottom:8px;left:8px;background:#101c25e8;padding:5px 8px;border-radius:6px;font-size:10px;z-index:2;direction:ltr}
+@media(max-width:560px){.panel{top:6px;right:6px;width:min(315px,calc(100vw - 12px));max-height:62dvh;padding:10px}h1{font-size:16px}.layer{font-size:11px;margin:6px 0}}
+</style>
+</head>
+<body>
+<div id="map" aria-label="خريطة بيانات مانيلا"></div>
+<section class="panel">
+<h1>MANILA · DATA EXPLORER</h1>
+<div class="intro">عارض ثلاثي الأبعاد لمانيلا. اختر طبقات المتجهات من PBF لمقارنة بيانات المباني والطرق والمياه والأماكن.</div>
+<div class="section">
+<div class="section-title">الخريطة الأساسية</div>
+<label class="layer"><input id="baseMap" type="checkbox" checked> خريطة OpenFreeMap الأساسية (الشوارع والمياه والتسميات)</label>
+<label class="layer"><input id="baseBuildings" type="checkbox" checked> مباني الخريطة الأساسية ثلاثية الأبعاد</label>
+</div>
+<div class="section" id="vectorSection">
+<div class="section-title vector-heading"><span>طبقات المتجهات من PBF</span><button class="btn collapse-btn" id="toggleVector" aria-expanded="true" aria-label="تصغير أو تكبير لوحة التحكم">−</button></div>
+<div id="vectorBody"><div id="layerList"></div></div>
+</div>
+<div class="section">
+<div class="section-title">نتيجة تطبيق تقرير الأدلة على PBF</div>
+<div id="applySummary" class="meta">جارٍ قراءة ملخص التطبيق المنشور…</div>
+</div>
+<div class="section">
+<div class="section-title">بلاطات المتجهات PBF</div>
+<div class="meta">تُقرأ الطرق والمياه والأماكن وبقية الطبقات من الطبقات الداخلية للبلاطات نفسها، مثلما تُقرأ المباني من building. المستويات المحلية المتاحة: 10–14.</div>
+<div class="meta"><a style="color:var(--accent)" href="Manila/vector-tiles/" target="_blank" rel="noopener">فتح مجلد vector-tiles في المستودع</a></div>
+</div>
+<div id="status" class="status">جارٍ تشغيل الخريطة…</div>
+<div id="info"></div>
+</section>
+<div class="attribution">OpenFreeMap · OpenStreetMap contributors</div>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
+<script>
+(async()=>{
+const status=document.getElementById('status'),info=document.getElementById('info'),list=document.getElementById('layerList');
+const map=new maplibregl.Map({container:'map',style:'https://tiles.openfreemap.org/styles/liberty',center:[120.9918,14.5707],zoom:15,pitch:57,bearing:-18,antialias:true});
+window.manilaMap=map;map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'bottom-left');map.addControl(new maplibregl.ScaleControl({unit:'metric'}),'bottom-left');
+const defs=[
+['building','المباني — المصدر 2 من PBF','building','#c9bba8','building'],
+['building_roof_detail','أسطح المباني المحسنة داخل PBF','building_roof_detail','#a99b89','roof'],
+['building_sign_detail','مرشحات لافتات المحلات داخل PBF','building_sign_detail','#f2c94c','sign'],
+['aerodrome_label','تسميات المطارات','aerodrome_label','#e5c875','point'],
+['aeroway','ممرات ومرافق الطيران','aeroway','#d9b66f','line'],
+['boundary','الحدود','boundary','#bc8be0','line'],
+['housenumber','أرقام المباني','housenumber','#f2e7c9','point'],
+['landcover','الغطاء الأرضي','landcover','#81bd8c','fill'],
+['landuse','استخدامات الأراضي','landuse','#75a98a','fill'],
+['mountain_peak','قمم الجبال','mountain_peak','#e4c77c','point'],
+['park','الحدائق','park','#4cb982','fill'],
+['place','الأماكن والتجمعات','place','#e9d4a0','point'],
+['poi','نقاط الاهتمام والخدمات','poi','#ffb86c','point'],
+['transportation','الطرق والنقل','transportation','#70bce7','line'],
+['transportation_name','أسماء الطرق','transportation_name','#b8dcf0','line'],
+['water','المسطحات المائية','water','#4da9e8','fill'],
+['water_name','أسماء المياه','water_name','#87d5f3','point'],
+['waterway','المجاري المائية','waterway','#55b8ee','line']
+];
+const loaded=new Map(),checkboxes=new Map();
+const escapeHtml=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function setVisibility(ids,on){ids.forEach(id=>{if(map.getLayer(id))map.setLayoutProperty(id,'visibility',on?'visible':'none')})}
+function featurePopup(e){const f=e.features&&e.features[0];if(!f)return;const p=f.properties||{};let rows=Object.entries(p).slice(0,35).map(([k,v])=>'<div><b>'+escapeHtml(k)+'</b>: '+escapeHtml(typeof v==='object'?JSON.stringify(v):v??'')+'</div>').join('');info.style.display='block';info.innerHTML='<b>خصائص المعلم</b>'+rows;new maplibregl.Popup({maxWidth:'340px'}).setLngLat(e.lngLat).setHTML('<div style="direction:ltr;text-align:left;max-height:260px;overflow:auto">'+rows+'</div>').addTo(map)}
+function addCheckbox(def){
+const [key,label,sourceLayer,color,kind]=def;const wrap=document.createElement('label');wrap.className='layer';
+const cb=document.createElement('input');cb.type='checkbox';cb.checked=false;wrap.append(cb,document.createTextNode(label+' · PBF:'+sourceLayer));list.append(wrap);checkboxes.set(key,cb);
+cb.addEventListener('change',async()=>{try{await loadLayer(def,cb.checked)}catch(e){status.className='status error';status.textContent='فشل تحميل طبقة PBF '+def[2]+': '+e.message;cb.checked=false}});
+}
+async function loadLayer(def,on){
+const [key,label,sourceLayer,color,kind]=def;
+if(loaded.has(key)){setVisibility(loaded.get(key),on);return}
+if(!on)return;
+status.className='status';status.textContent='جارٍ ربط طبقة '+sourceLayer+' من بلاطات PBF…';
+const sourceId='manila-'+key;
+const tileTemplate=new URL('Manila/vector-tiles/',window.location.href).href+'{z}/{x}/{y}.pbf';
+map.addSource(sourceId,{type:'vector',tiles:[tileTemplate],minzoom:10,maxzoom:14,scheme:'xyz'});
+const ids=[];
+if(kind==='building'){
+const extrusion=sourceId+'-3d';map.addLayer({id:extrusion,type:'fill-extrusion',source:sourceId,'source-layer':sourceLayer,filter:['==',['geometry-type'],'Polygon'],paint:{'fill-extrusion-color':['match',['to-string',['coalesce',['get','class'],['get','building'],['get','type'],'yes']],'commercial','#d6b18a','retail','#e0c49b','industrial','#aab6bd','residential','#c8b9a6','apartments','#c4b5a2','office','#b8c6ce',color],'fill-extrusion-height':['max',2,['to-number',['coalesce',['get','render_height'],['get','height'],['get','building:height']],['*',['to-number',['get','building:levels'],0],3.2],5]],'fill-extrusion-base':['max',0,['to-number',['coalesce',['get','render_min_height'],['get','min_height']],0]],'fill-extrusion-opacity':0.94,'fill-extrusion-vertical-gradient':true}});ids.push(extrusion);
+}else if(kind==='roof'){
+const id=sourceId+'-roof-3d';map.addLayer({id,type:'fill-extrusion',source:sourceId,'source-layer':sourceLayer,paint:{'fill-extrusion-color':['coalesce',['get','roof_color'],color],'fill-extrusion-height':['max',2,['to-number',['get','roof_height'],5]],'fill-extrusion-base':['max',0,['to-number',['get','roof_base'],0]],'fill-extrusion-opacity':0.98,'fill-extrusion-vertical-gradient':false}});ids.push(id);
+}else if(kind==='sign'){
+const id=sourceId+'-sign';map.addLayer({id,type:'symbol',source:sourceId,'source-layer':sourceLayer,layout:{'text-field':['coalesce',['get','sign_text'],'SIGN'],'text-size':['interpolate',['linear'],['zoom'],12,9,16,13],'text-font':['Open Sans Bold','Arial Unicode MS Bold'],'text-offset':[0,1.0],'text-anchor':'bottom','text-allow-overlap':true},paint:{'text-color':['coalesce',['get','sign_color'],color],'text-halo-color':'#ffffff','text-halo-width':1.2}});ids.push(id);
+}else if(kind==='fill'){
+const id=sourceId+'-fill';map.addLayer({id,type:'fill',source:sourceId,'source-layer':sourceLayer,paint:{'fill-color':color,'fill-opacity':0.27,'fill-outline-color':color}});ids.push(id);
+const line=sourceId+'-outline';map.addLayer({id:line,type:'line',source:sourceId,'source-layer':sourceLayer,paint:{'line-color':color,'line-width':0.7,'line-opacity':0.8}});ids.push(line);
+}else if(kind==='line'){
+const id=sourceId+'-line';map.addLayer({id,type:'line',source:sourceId,'source-layer':sourceLayer,paint:{'line-color':color,'line-width':['interpolate',['linear'],['zoom'],8,0.5,15,2.5],'line-opacity':0.9}});ids.push(id);
+}else{
+const id=sourceId+'-point';map.addLayer({id,type:'circle',source:sourceId,'source-layer':sourceLayer,paint:{'circle-radius':['interpolate',['linear'],['zoom'],8,2,15,5],'circle-color':color,'circle-stroke-color':'#14232d','circle-stroke-width':0.7}});ids.push(id);
+}
+for(const id of ids){map.on('click',id,featurePopup);map.on('mouseenter',id,()=>map.getCanvas().style.cursor='pointer');map.on('mouseleave',id,()=>map.getCanvas().style.cursor='')}
+loaded.set(key,ids);setVisibility(ids,on);status.textContent='تم ربط طبقة '+label+' مباشرة من PBF، source-layer: '+sourceLayer+'.';
+}
+
+// Independent GeoJSON checkboxes: each checkbox loads exactly one requested file.
+function addSingleGeoJsonCheckbox(config){
+  const wrap=document.createElement('label');wrap.className='layer';
+  const cb=document.createElement('input');cb.type='checkbox';
+  const labelText=document.createElement('span');labelText.textContent=config.label;
+  wrap.append(cb,labelText);
+  const fourth=checkboxes.get('aeroway')?.parentElement;
+  if(fourth&&fourth.parentElement===list) fourth.insertAdjacentElement('afterend',wrap); else list.append(wrap);
+
+  const sourceId='manila-geojson-'+config.key;
+  const layerId=sourceId+'-3d';
+  let loaded=false,loading=false;
+  const reportError=e=>{
+    if(e?.sourceId!==sourceId)return;
+    status.className='status error';
+    status.textContent='فشل تحميل '+config.label+': '+(e.error?.message||'تعذر جلب ملف GeoJSON أو تحليله');
+  };
+  map.on('error',reportError);
+
+  cb.addEventListener('change',async()=>{
+    const fillId=sourceId+'-2d-fill',outlineId=sourceId+'-2d-outline';
+    if(!cb.checked){
+      [layerId,fillId,outlineId].forEach(id=>{if(map.getLayer(id))map.setLayoutProperty(id,'visibility','none')});
+      status.className='status';status.textContent='تم إخفاء '+config.label+'.';
+      return;
+    }
+    if(loaded){
+      [layerId,fillId,outlineId].forEach(id=>{if(map.getLayer(id))map.setLayoutProperty(id,'visibility','visible')});
+      status.className='status';status.textContent='تم إظهار '+config.label+'.';
+      return;
+    }
+    if(loading){cb.checked=false;return}
+    loading=true;cb.disabled=true;
+    status.className='status';status.textContent='جارٍ تحميل '+config.label+'…';
+    try{
+      map.addSource(sourceId,{type:'geojson',data:new URL(config.url,window.location.href).href,maxzoom:14});
+      // Use the same GeoJSON building rendering settings as the verified Ermita fallback button.
+      const buildingColor=['coalesce',['get','render_color'],['get','colour'],['get','building:colour'],['get','building_colour'],['match',['get','class'],'commercial','#c9b8a4','industrial','#b9b7b1','public','#c4c9ce','residential','#d8cdbd','#c9bfb0']];
+      const firstSymbolLayer=(map.getStyle().layers||[]).find(layer=>layer.type==='symbol');
+      map.addLayer({id:layerId,type:'fill-extrusion',source:sourceId,
+        filter:['==',['geometry-type'],'Polygon'],
+        paint:{
+          'fill-extrusion-color':buildingColor,
+          'fill-extrusion-height':['max',3,['case',['>', ['to-number',['get','render_height'],0],0],['to-number',['get','render_height'],0],['>', ['to-number',['get','height'],0],0],['to-number',['get','height'],0],['>', ['to-number',['get','building:levels'],0],0],['*',['to-number',['get','building:levels'],0],3.15],['>', ['to-number',['get','levels'],0],0],['*',['to-number',['get','levels'],0],3.15],5]],
+          'fill-extrusion-base':['max',0,['case',['>', ['to-number',['get','render_min_height'],0],0],['to-number',['get','render_min_height'],0],['>', ['to-number',['get','min_height'],0],0],['to-number',['get','min_height'],0],0]],
+          'fill-extrusion-opacity':0.97,'fill-extrusion-vertical-gradient':true
+        }},firstSymbolLayer?.id);
+      map.on('click',layerId,featurePopup);
+      map.on('mouseenter',layerId,()=>map.getCanvas().style.cursor='pointer');
+      map.on('mouseleave',layerId,()=>map.getCanvas().style.cursor='');
+
+      await new Promise((resolve,reject)=>{
+        let done=false;
+        const finish=(err)=>{
+          if(done)return;done=true;map.off('sourcedata',check);clearTimeout(timer);
+          if(err)reject(err);else resolve();
+        };
+        const check=e=>{
+          if(e?.sourceId===sourceId&&e.isSourceLoaded)finish();
+        };
+        const timer=setTimeout(()=>finish(new Error('انتهت مهلة انتظار تحميل الملف بعد 90 ثانية.')),90000);
+        map.on('sourcedata',check);
+        const source=map.getSource(sourceId);
+        if(source?.loaded&&source.loaded())finish();
+      });
+      loaded=true;
+      const count=map.querySourceFeatures(sourceId).length;
+      status.className='status';status.textContent='تم تحميل '+config.label+'؛ معالم GeoJSON المقروءة في مستوى العرض الحالي: '+count+'. تم عرض المجسمات ثلاثية الأبعاد فقط.';
+    }catch(e){
+      cb.checked=false;
+      if(map.getLayer(layerId))map.setLayoutProperty(layerId,'visibility','none');
+      status.className='status error';status.textContent='تعذر عرض '+config.label+': '+(e?.message||e);
+    }finally{loading=false;cb.disabled=false}
+  });
+}
+
+const geoJsonBase='complete_data/OSM/data/buildings/Ermita/ermita-buildings-master.parts/part-001-readable-parts/';
+[
+  {key:'part-005',label:'مباني GeoJSON — building-fallback.geojson',url:'complete_data/OFT/building-fallback.geojson'}
+].forEach(addSingleGeoJsonCheckbox);
+
+// Replace the former GeoJSON file 80, 11, and 4 controls with compact GLB toggles.
+function addFinalGlbCheckbox(part){
+  const wrap=document.createElement('label');wrap.className='layer';
+  const cb=document.createElement('input');cb.type='checkbox';cb.id='final-detail-glb-part-'+part;
+  const labelText=document.createElement('span');
+  labelText.textContent='تفاصيل الأسطح والواجهات — GLB part'+part;
+  wrap.append(cb,labelText);
+  const fourth=checkboxes.get('aeroway')?.parentElement;
+  if(fourth&&fourth.parentElement===list)fourth.insertAdjacentElement('afterend',wrap);else list.append(wrap);
+}
+for(let part=1;part<=4;part++)addFinalGlbCheckbox(part);
+
+
+// Requested standalone GLB checkboxes (kept separate from the PBF layers).
+function addRequestedGlbCheckbox(key,label,path){
+ const wrap=document.createElement('label');wrap.className='part-toggle';
+ const cb=document.createElement('input');cb.type='checkbox';cb.id='requested-glb-'+key;
+ const textWrap=document.createElement('span');
+ textWrap.innerHTML='<span class="part-name">'+escapeHtml(label)+'</span><span class="part-file">'+escapeHtml(path)+'</span>';
+ wrap.append(cb,textWrap);
+ list.append(wrap);
+}
+addRequestedGlbCheckbox('extruded','مباني Ermita ثلاثية الأبعاد — GLB','ermita/3d/generated/ermita-buildings-extruded.glb');
+addRequestedGlbCheckbox('facades','تفاصيل واجهات مباني Ermita — GLB','ermita/3d/generated/ermita-buildings-facade-details.glb');
+
+defs.forEach(addCheckbox);
+
+// Additional building datasets requested by the user: sources 1, 2, and 4.
+// These controls are independent; each displays only its own selected dataset.
+function normalizeBuildingData(textValue){
+  const asFeature=obj=>{
+    if(!obj||typeof obj!=='object')return null;
+    if(obj.type==='Feature'&&obj.geometry)return obj;
+    if(obj.type==='FeatureCollection'&&Array.isArray(obj.features))return obj.features;
+    if(obj.feature&&obj.feature.type==='Feature')return obj.feature;
+    if(obj.geometry&&obj.geometry.type&&Array.isArray(obj.geometry.coordinates)){
+      const props=obj.properties&&typeof obj.properties==='object'?obj.properties:Object.fromEntries(Object.entries(obj).filter(([k])=>!['geometry','type','id'].includes(k)));
+      return {type:'Feature',...(obj.id!==undefined?{id:obj.id}:{}),geometry:obj.geometry,properties:props};
+    }
+    if(['Polygon','MultiPolygon','Point','MultiPoint','LineString','MultiLineString','GeometryCollection'].includes(obj.type)&& (obj.coordinates||obj.geometries)){
+      return {type:'Feature',geometry:obj,properties:obj.properties||{}};
+    }
+    return null;
+  };
+  try {
+    const parsed=JSON.parse(textValue);
+    if(parsed.type==='FeatureCollection')return {type:'FeatureCollection',features:parsed.features||[]};
+    if(parsed.type==='Feature')return {type:'FeatureCollection',features:[parsed]};
+    if(Array.isArray(parsed))return {type:'FeatureCollection',features:parsed.flatMap(f=>{const v=asFeature(f);return Array.isArray(v)?v:v?[v]:[]})};
+    const converted=asFeature(parsed);
+    if(Array.isArray(converted))return {type:'FeatureCollection',features:converted};
+    if(converted)return {type:'FeatureCollection',features:[converted]};
+  } catch(e) {}
+  const features=[];
+  for(const line of textValue.split(/\\r?\\n/)){
+    const trimmed=line.trim(); if(!trimmed)continue;
+    try {
+      const obj=JSON.parse(trimmed);
+      const converted=asFeature(obj);
+      if(Array.isArray(converted))features.push(...converted);
+      else if(converted)features.push(converted);
+    } catch(e) {}
+  }
+  if(!features.length)throw new Error('لم يمكن تحليل الملف كـ GeoJSON أو GeoJSONL');
+  return {type:'FeatureCollection',features};
+}
+async function readBuildingFile(url){
+  const response=await fetch(url);
+  if(!response.ok)throw new Error('HTTP '+response.status+' — '+url);
+  const buffer=await response.arrayBuffer();
+  const bytes=new Uint8Array(buffer);
+  let dataBuffer=buffer;
+  if(bytes.length>=2&&bytes[0]===0x1f&&bytes[1]===0x8b){
+    if(!('DecompressionStream' in window))throw new Error('المتصفح لا يدعم فك ضغط gzip لهذا الملف');
+    dataBuffer=await new Response(new Blob([buffer]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+  }
+  return normalizeBuildingData(new TextDecoder('utf-8').decode(dataBuffer));
+}
+function addBuildingDatasetCheckbox(config){
+  const wrap=document.createElement('label');wrap.className='part-toggle';
+  const cb=document.createElement('input');cb.type='checkbox';
+  const label=document.createElement('span');label.innerHTML='<span class="part-name">'+escapeHtml(config.label)+'</span><span class="part-file">'+escapeHtml(config.description)+'</span>';
+  wrap.append(cb,label);
+  const fourth=checkboxes.get('aeroway')?.parentElement;
+  if(fourth&&fourth.parentElement===list)fourth.insertAdjacentElement('afterend',wrap);else list.prepend(wrap);
+  const sourceId='manila-extra-'+config.key;
+  const fillId=sourceId+'-fill',outlineId=sourceId+'-outline',extrusionId=sourceId+'-3d';
+  let loaded=false,loading=false;
+  cb.addEventListener('change',async()=>{
+    if(!cb.checked){
+      [fillId,outlineId,extrusionId].forEach(id=>{if(map.getLayer(id))map.setLayoutProperty(id,'visibility','none')});
+      status.className='status';status.textContent='تم إخفاء '+config.label+'.';return;
+    }
+    if(loaded){[fillId,outlineId,extrusionId].forEach(id=>{if(map.getLayer(id))map.setLayoutProperty(id,'visibility','visible')});return;}
+    if(loading){cb.checked=false;return;}
+    loading=true;cb.disabled=true;status.className='status';status.textContent='جارٍ قراءة '+config.label+'…';
+    try{
+      const collections=await Promise.all(config.urls.map(readBuildingFile));
+      const features=collections.flatMap(fc=>fc.features||[]);
+      if(!features.length)throw new Error('لم يعثر الملف على معالم مبانٍ');
+      map.addSource(sourceId,{type:'geojson',data:{type:'FeatureCollection',features},maxzoom:14});
+      // Match the original Ermita page's 3D building paint logic exactly.
+      const color=['coalesce',['get','render_color'],['get','colour'],['get','building:colour'],['get','building_colour'],['match',['get','class'],'commercial','#c9b8a4','industrial','#b9b7b1','public','#c4c9ce','residential','#d8cdbd','#c9bfb0']];
+      const firstSymbolLayer=(map.getStyle().layers||[]).find(layer=>layer.type==='symbol');
+      map.addLayer({id:extrusionId,type:'fill-extrusion',source:sourceId,filter:['==',['geometry-type'],'Polygon'],paint:{
+        'fill-extrusion-color':color,
+        'fill-extrusion-height':['max',3,['case',['>', ['to-number',['get','render_height'],0],0],['to-number',['get','render_height'],0],['>', ['to-number',['get','height'],0],0],['to-number',['get','height'],0],['>', ['to-number',['get','building:levels'],0],0],['*',['to-number',['get','building:levels'],0],3.15],['>', ['to-number',['get','levels'],0],0],['*',['to-number',['get','levels'],0],3.15],5]],
+        'fill-extrusion-base':['max',0,['case',['>', ['to-number',['get','render_min_height'],0],0],['to-number',['get','render_min_height'],0],['>', ['to-number',['get','min_height'],0],0],['to-number',['get','min_height'],0],0]],
+        'fill-extrusion-opacity':0.97,'fill-extrusion-vertical-gradient':true
+      }},firstSymbolLayer?.id);
+      map.on('click',extrusionId,featurePopup);
+      loaded=true;
+      status.className='status';status.textContent='تم تحميل '+config.label+' بنجاح؛ عدد المعالم في المصدر: '+features.length+'.';
+    }catch(e){
+      cb.checked=false;status.className='status error';status.textContent='فشل تحميل '+config.label+': '+(e?.message||e);
+      [fillId,outlineId,extrusionId].forEach(id=>{if(map.getLayer(id))map.removeLayer(id)});
+      if(map.getSource(sourceId))map.removeSource(sourceId);
+    }finally{loading=false;cb.disabled=false;}
+  });
+}
+[
+ {key:'source-ermita-fallback',label:'مباني OpenFreeMap المحلية — Ermita',description:'ermita/maps/sources/openfreemap/building-fallback.geojson',urls:['ermita/maps/sources/openfreemap/building-fallback.geojson']}
+].forEach(addBuildingDatasetCheckbox);
+
+const baseBuildings=[];
+document.getElementById('toggleVector').addEventListener('click',()=>{const panel=document.querySelector('.panel'),btn=document.getElementById('toggleVector'),isShort=panel.classList.toggle('panel-short');btn.textContent=isShort?'+':'−';btn.setAttribute('aria-expanded',String(!isShort));btn.setAttribute('aria-label',isShort?'تكبير لوحة التحكم':'تصغير لوحة التحكم');});
+map.on('load',()=>{
+fetch('Manila/3d-rag/apply-report.json').then(r=>{if(!r.ok)throw new Error('HTTP '+r.status);return r.json()}).then(r=>{const el=document.getElementById('applySummary');el.innerHTML='<b>حالة التطبيق:</b> '+escapeHtml(r.status||'غير معروف')+'<br><b>بلاطات PBF التي تغيرت:</b> '+escapeHtml(r.changed_tile_count??'—')+' / '+escapeHtml(r.pbf_files_scanned??'—')+'<br><b>المباني التي تغيرت خصائصها:</b> '+escapeHtml(r.changed_building_features??'—')+'<br><b>الخصائص التي طُبقت:</b> '+escapeHtml(r.changed_property_count??'—')+'<br><b>الهندسة والإحداثيات:</b> لم تتغير<br><a style="color:var(--accent)" href="Manila/3d-rag/apply-report.json" target="_blank" rel="noopener">فتح التقرير الكامل</a>';}).catch(e=>{document.getElementById('applySummary').textContent='تعذر تحميل تقرير التطبيق: '+e.message});
+const styleLayers=map.getStyle().layers||[];
+for(const l of styleLayers){if(l.type==='fill-extrusion'&&/building/i.test(l.id+' '+(l['source-layer']||''))){baseBuildings.push(l.id);}}
+document.getElementById('baseBuildings').addEventListener('change',e=>baseBuildings.forEach(id=>{if(map.getLayer(id))map.setLayoutProperty(id,'visibility',e.target.checked?'visible':'none')}));
+document.getElementById('baseMap').addEventListener('change',e=>{for(const l of map.getStyle().layers||[]){if(baseBuildings.includes(l.id))continue;if(l.type==='background')continue;if(map.getLayer(l.id))map.setLayoutProperty(l.id,'visibility',e.target.checked?'visible':'none')}});
+status.textContent='الخريطة جاهزة؛ فعّل طبقات PBF من القائمة لمعاينة البيانات.';
+});
+map.on('error',e=>{if(e.error)console.warn('MapLibre',e.error.message)});
+})();
+</script>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"}}
+</script>
+
+<script type="module">
+/* Final generated detail overlays; one independent checkbox per GLB. */
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_decoder.module.js';
+
+(async()=>{
+ const status=document.getElementById('status'), info=document.getElementById('info');
+ const waitForMap=()=>new Promise((resolve,reject)=>{
+  let tries=0;const check=()=>{
+   if(window.manilaMap?.isStyleLoaded())return resolve(window.manilaMap);
+   if(++tries>600)return reject(new Error('انتهت مهلة انتظار الخريطة'));
+   setTimeout(check,100);
+  };check();
+ });
+ let map;
+ try{map=await waitForMap();}catch(e){showError('تعذر تهيئة ملفات GLB النهائية: '+e.message);return;}
+ for(let part=1;part<=4;part++)setupPart(part);
+ setupRequestedGlb('extruded',{
+  label:'مباني Ermita ثلاثية الأبعاد',
+  glb:'ermita/3d/generated/ermita-buildings-extruded.glb',
+  origin:'ermita/3d/generated/facade-model-origin.json',
+  zOffset:0
+ });
+ setupRequestedGlb('facades',{
+  label:'تفاصيل واجهات مباني Ermita',
+  glb:'ermita/3d/generated/ermita-buildings-facade-details.glb',
+  origin:'ermita/3d/generated/facade-model-origin.json',
+  zOffset:0
+ });
+
+ function setupRequestedGlb(key,config){
+  const toggle=document.getElementById('requested-glb-'+key);
+  if(!toggle){showError('لم يتم العثور على زر GLB: '+config.label);return;}
+  const layerId='manila-requested-glb-'+key;
+  let loading=false,ready=false,model=null,renderer=null,camera=null,scene=null,anchor=null,meters=1,matrixWarned=false;
+  const fail=err=>{
+   loading=false;ready=false;
+   try{if(map.getLayer(layerId))map.removeLayer(layerId);}catch(_){}
+   model=null;renderer=null;camera=null;scene=null;
+   showError('فشل تحميل '+config.label+': '+(err?.message||err));
+  };
+  const ensureLayer=async()=>{
+   if(loading||ready)return;
+   loading=true;status.className='status';status.textContent='جارٍ تحميل '+config.label+'…';
+   try{
+    const originResponse=await fetch(new URL(config.origin,location.href));
+    if(!originResponse.ok)throw new Error('Origin JSON HTTP '+originResponse.status);
+    const origin=await originResponse.json();
+    const lon=Number(origin.longitude??origin.origin_wgs84?.longitude);
+    const lat=Number(origin.latitude??origin.origin_wgs84?.latitude);
+    const altitude=Number(origin.anchor_altitude_m??0)+Number(config.zOffset||0);
+    if(!Number.isFinite(lon)||!Number.isFinite(lat)||!Number.isFinite(altitude))throw new Error('إحداثيات أصل GLB غير صالحة');
+    anchor=maplibregl.MercatorCoordinate.fromLngLat({lng:lon,lat},altitude);
+    meters=anchor.meterInMercatorCoordinateUnits();
+    const customLayer={
+     id:layerId,type:'custom',renderingMode:'3d',
+     onAdd(mapInstance,gl){
+      renderer=new THREE.WebGLRenderer({canvas:mapInstance.getCanvas(),context:gl,antialias:true});
+      renderer.autoClear=false;
+      renderer.outputColorSpace=THREE.SRGBColorSpace;
+      renderer.toneMapping=THREE.NoToneMapping;
+      camera=new THREE.Camera();scene=new THREE.Scene();
+      scene.add(new THREE.AmbientLight(0xffffff,2.2));
+      scene.add(new THREE.HemisphereLight(0xffffff,0x777777,1.4));
+      const sun=new THREE.DirectionalLight(0xffffff,2.2);sun.position.set(-45,-35,90).normalize();scene.add(sun);
+      const loader=new GLTFLoader();loader.setMeshoptDecoder(MeshoptDecoder);
+      loader.load(new URL(config.glb,location.href).href,gltf=>{
+       model=gltf.scene;
+       model.traverse(object=>{
+        if(!object.isMesh)return;
+        const materials=Array.isArray(object.material)?object.material:[object.material];
+        for(const material of materials){
+         if(!material)continue;
+         if(material.vertexColors&&(!object.geometry||!object.geometry.getAttribute('color')))material.vertexColors=false;
+         material.needsUpdate=true;
+        }
+        if(object.geometry&&!object.geometry.getAttribute('normal'))object.geometry.computeVertexNormals();
+       });
+       model.visible=!!toggle.checked;scene.add(model);
+       ready=true;loading=false;mapInstance.triggerRepaint();
+       status.className='status';status.textContent='تم تحميل '+config.label+' بنجاح.';
+      },progress=>{
+       status.textContent='تحميل '+config.label+': '+(progress.total?Math.round(progress.loaded/progress.total*100)+'%':Math.round(progress.loaded/1048576)+' MiB');
+      },err=>fail(err||new Error('تعذرت قراءة GLB')));
+     },
+     render(gl,args){
+      if(!renderer||!model||!model.visible)return;
+      const values=args?.defaultProjectionData?.mainMatrix||args?.modelViewProjectionMatrix||((Array.isArray(args)||ArrayBuffer.isView(args))?args:null);
+      if(!values||values.length!==16){
+       if(!matrixWarned){matrixWarned=true;showError('حُمّل '+config.label+' لكن تعذرت قراءة مصفوفة عرض الخريطة.');}
+       return;
+      }
+      const matrix=Array.from(values,Number);if(matrix.some(v=>!Number.isFinite(v)))return;
+      const projection=new THREE.Matrix4().fromArray(matrix);
+      const transform=new THREE.Matrix4().makeTranslation(anchor.x,anchor.y,anchor.z)
+       .scale(new THREE.Vector3(meters,-meters,meters));
+      camera.projectionMatrix.copy(projection).multiply(transform);
+      camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+      renderer.resetState();renderer.render(scene,camera);renderer.resetState();
+     }
+    };
+    map.addLayer(customLayer);
+    if(map.getLayer(layerId))map.moveLayer(layerId);
+   }catch(err){fail(err);}
+  };
+  toggle.addEventListener('change',()=>{
+   if(toggle.checked){if(!ready)ensureLayer();else if(model){model.visible=true;map.triggerRepaint();}}
+   else if(model){model.visible=false;map.triggerRepaint();status.className='status';status.textContent='تم إخفاء '+config.label+'.';}
+  });
+ }
+ function showError(message){if(info){info.style.display='block';info.textContent=message;}if(status){status.className='status error';status.textContent=message;}}
+ function setupPart(part){
+  const toggle=document.getElementById('final-detail-glb-part-'+part);
+  if(!toggle){showError('لم يتم العثور على مفتاح GLB للجزء '+part+'.');return;}
+  const layerId='manila-final-detail-glb-'+part;
+  const root='complete_data/OSM/data/buildings/Ermita/';
+  const originUrl=new URL(root+'part'+part+'/part'+part+'-origin.json',location.href).href;
+  const glbUrl=new URL(root+'enhanced/part'+part+'-roof-storefront-details.glb',location.href).href;
+  let loading=false,ready=false,model=null,renderer=null,camera=null,scene=null,anchor=null,meters=1,projectedMeters=1,matrixWarned=false;
+  function fail(err){
+   loading=false;ready=false;
+   try{if(map.getLayer(layerId))map.removeLayer(layerId);}catch(_){}
+   model=null;renderer=null;camera=null;scene=null;
+   showError('فشل تحميل GLB النهائي للجزء '+part+': '+(err?.message||err));
+  }
+  async function ensureLayer(){
+   if(loading||ready)return;loading=true;
+   try{
+    const response=await fetch(originUrl);if(!response.ok)throw new Error('Origin JSON HTTP '+response.status);
+    const origin=await response.json();
+    const lon=Number(origin.origin_wgs84?.longitude),lat=Number(origin.origin_wgs84?.latitude);
+    if(!Number.isFinite(lon)||!Number.isFinite(lat))throw new Error('إحداثيات الأصل غير صالحة');
+    anchor=maplibregl.MercatorCoordinate.fromLngLat({lng:lon,lat},0);
+    meters=anchor.meterInMercatorCoordinateUnits();projectedMeters=meters;
+    const customLayer={
+     id:layerId,type:'custom',renderingMode:'3d',
+     onAdd(mapInstance,gl){
+      renderer=new THREE.WebGLRenderer({canvas:mapInstance.getCanvas(),context:gl,antialias:true});renderer.autoClear=false;
+      camera=new THREE.Camera();scene=new THREE.Scene();
+      scene.add(new THREE.AmbientLight(0xffffff,2.0));
+      const sun=new THREE.DirectionalLight(0xffffff,2.0);sun.position.set(-45,-35,90).normalize();scene.add(sun);
+      const loader=new GLTFLoader();loader.setMeshoptDecoder(MeshoptDecoder);
+      loader.load(glbUrl,gltf=>{
+       model=gltf.scene;model.visible=!!toggle.checked;scene.add(model);
+       ready=true;loading=false;mapInstance.triggerRepaint();
+       if(status)status.textContent='تم تحميل GLB النهائي للجزء '+part+' بنجاح.';
+      },progress=>{
+       if(status)status.textContent='تحميل GLB النهائي للجزء '+part+': '+(progress.total?Math.round(progress.loaded/progress.total*100)+'%':Math.round(progress.loaded/1048576)+' MiB');
+      },err=>fail(err||new Error('تعذّر قراءة GLB')));
+     },
+     render(gl,args){
+      if(!renderer||!model||!model.visible)return;
+      // MapLibre v5 supplies defaultProjectionData.mainMatrix; retain fallbacks
+      // for compatible custom-layer render signatures instead of silently skipping.
+      const values=args?.defaultProjectionData?.mainMatrix||args?.modelViewProjectionMatrix||
+       ((Array.isArray(args)||ArrayBuffer.isView(args))?args:null);
+      if(!values||values.length!==16){
+       if(!matrixWarned){matrixWarned=true;showError('تم تحميل GLB للجزء '+part+' لكن الخريطة لم توفر مصفوفة العرض المتوقعة؛ تعذر رسم المجسم.');}
+       return;
+      }
+      const matrix=Array.from(values,Number);if(matrix.some(v=>!Number.isFinite(v)))return;
+      const projection=new THREE.Matrix4().fromArray(matrix);
+      const localTransform=new THREE.Matrix4().makeTranslation(anchor.x,anchor.y,anchor.z)
+       .scale(new THREE.Vector3(projectedMeters,-projectedMeters,meters));
+      camera.projectionMatrix.copy(projection).multiply(localTransform);
+      camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+      renderer.resetState();renderer.render(scene,camera);renderer.resetState();
+     }
+    };
+    map.addLayer(customLayer);if(map.getLayer(layerId))map.moveLayer(layerId);
+   }catch(err){fail(err);}
+  }
+  toggle.addEventListener('change',()=>{
+   if(toggle.checked){if(!ready)ensureLayer();else if(model){model.visible=true;map.triggerRepaint();}}
+   else if(model){model.visible=false;map.triggerRepaint();if(status)status.textContent='تم إخفاء GLB النهائي للجزء '+part+'.';}
+  });
+ }
+})();
+</script>
+
+
+<script type="module" src="ermita/scripts/microsoft-roof-overlay.js?v=2"></script>
+</body>
+</html>

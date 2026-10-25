@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ADAM CITY — OSM Layer Test</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.2/dist/maplibre-gl.css">
+<style>
+:root{color-scheme:dark;--panel:rgba(16,26,35,.96);--line:#344654;--text:#eef4f7;--muted:#a7b8c4;--accent:#67d5c2}
+*{box-sizing:border-box}html,body,#map{height:100%;width:100%;margin:0}body{font-family:system-ui,sans-serif;background:#101a23;color:var(--text)}#map{position:absolute;inset:0}
+.panel{position:absolute;z-index:5;top:10px;right:10px;width:min(300px,calc(100vw - 20px));height:auto;max-height:72dvh;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#67d5c2 #172631;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:0 8px 26px #0005;backdrop-filter:blur(12px)}
+.panel::-webkit-scrollbar{width:7px}.panel::-webkit-scrollbar-track{background:#172631;border-radius:8px}.panel::-webkit-scrollbar-thumb{background:#527c83;border-radius:8px}.panel::-webkit-scrollbar-thumb:hover{background:#67d5c2}
+.panel .status{position:sticky;bottom:-12px;background:var(--panel);padding-bottom:8px}
+h1{font-size:16px;margin:0 0 5px}.sub{font-size:11px;line-height:1.5;color:var(--muted);margin-bottom:10px}.group{border-top:1px solid var(--line);padding-top:8px;margin-top:8px}.group-title{font-size:12px;color:var(--accent);font-weight:700;margin-bottom:5px}.row{display:flex;align-items:flex-start;gap:8px;margin:7px 0;font-size:12px;line-height:1.4}input{accent-color:var(--accent);width:16px;height:16px;flex:0 0 auto;margin-top:1px}.status{font-size:10px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere;margin-top:9px;border-top:1px solid var(--line);padding-top:8px}#error{display:none;color:#ffdadd;background:#542c31;padding:8px;border-radius:7px;font-size:11px;margin-top:8px;direction:ltr;overflow-wrap:anywhere}.attribution{position:absolute;bottom:8px;left:8px;z-index:2;background:#101a23df;padding:5px 8px;border-radius:6px;font-size:10px;direction:ltr}
+@media(max-width:520px){.panel{top:6px;right:6px;width:min(270px,calc(100vw - 12px));max-height:55dvh;padding:9px}h1{font-size:14px}.row{font-size:11px;margin:5px 0}}
+</style></head>
+<body>
+<div id="map" aria-label="خريطة ثلاثية الأبعاد لإرميتا ومالاتي"></div>
+<section class="panel">
+<h1>ADAM CITY · TEST</h1>
+<div class="sub">مفاتيح للمصادر الأصلية وطبقات OSM المستقلة.</div>
+<div class="group"><div class="group-title">المصدر الأصلي للخريطة</div>
+<label class="row"><input type="checkbox" id="baseGround" checked> إظهار أرضية الخريطة الأصلية (الشوارع، المياه، الحدائق والتسميات)</label>
+<label class="row"><input type="checkbox" id="baseBuildings" checked> إظهار مباني المصدر الأصلية ثلاثية الأبعاد</label>
+</div>
+<div class="group"><div class="group-title">مجلدات OSM — طبقات مستقلة</div>
+<label class="row"><input type="checkbox" id="osm-raw"> 1. raw — بيانات OSM الخام (ليست طبقة خريطة مباشرة)</label>
+<label class="row"><input type="checkbox" id="osm-features"> 2. features — جميع المعالم الجغرافية</label>
+<label class="row"><input type="checkbox" id="osm-tags"> 3. tags — جدول الوسوم (بيانات وصفية وليست طبقة مكانية)</label>
+<label class="row"><input type="checkbox" id="roxas-boulevard-glb"> 4.1 Roxas Boulevard — مباني GLB (طبقة مستقلة)</label>
+<label class="row"><input type="checkbox" id="osm-roads" checked> 5. roads — الطرق وتفاصيل هندستها</label>
+<label class="row"><input type="checkbox" id="enhanced-glb-part-1"> 5.1 GLB — الجزء 1 (مواد وواجهات ونوافذ)</label>
+<label class="row"><input type="checkbox" id="enhanced-glb-part-2"> 5.2 GLB — الجزء 2 (مواد وواجهات ونوافذ)</label>
+<label class="row"><input type="checkbox" id="enhanced-glb-part-3"> 5.3 GLB — الجزء 3 (مواد وواجهات ونوافذ)</label>
+<label class="row"><input type="checkbox" id="enhanced-glb-part-4"> 5.4 GLB — الجزء 4 (مواد وواجهات ونوافذ)</label>
+<label class="row"><input type="checkbox" id="robinsons-enhancement"> Robinsons Place Manila — نموذج ثلاثي الأبعاد مستقل جديد</label>
+<label class="row"><input type="checkbox" id="osm-thematic"> 6. thematic — المتاجر والعلامات والتفاصيل الموضوعية</label>
+<label class="row"><input type="checkbox" id="osm-pedestrian"> 7. pedestrian — تفاصيل المشاة</label>
+<label class="row"><input type="checkbox" id="osm-addresses"> 8. addresses — العناوين وأسماء الشوارع والرموز البريدية</label>
+<label class="row"><input type="checkbox" id="osm-administrative"> 9. administrative — الحدود الإدارية</label>
+<label class="row"><input type="checkbox" id="osm-places"> 10. places — المتاجر والطعام والصحة والتعليم والخدمات</label>
+<label class="row"><input type="checkbox" id="osm-nature"> 11. nature — المياه والأشجار والحدائق والغطاء النباتي</label>
+
+</div>
+<div class="status" id="status">جارٍ تحميل خريطة المصدر…</div><div id="error"></div>
+</section>
+<div class="attribution">OpenFreeMap / OpenMapTiles · © OpenStreetMap contributors</div>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
+<script>
+(async function(){
+ const status=document.getElementById('status'), errorBox=document.getElementById('error');
+ const url=p=>new URL(p,location.href).href;
+ let style;
+ try{const res=await fetch('https://tiles.openfreemap.org/styles/liberty');if(!res.ok)throw new Error('Style HTTP '+res.status);style=await res.json();}
+ catch(e){errorBox.style.display='block';errorBox.textContent='تعذر تحميل نمط OpenFreeMap: '+e.message;status.textContent='تعذر تحميل الخريطة الأساسية.';return;}
+ const originalLayers=style.layers.map(l=>({...l}));
+ const baseBuildingIds=originalLayers.filter(l=>l.type==='fill-extrusion'&&(/building/i.test(l.id+' '+(l['source-layer']||'')))).map(l=>l.id);
+ const map=new maplibregl.Map({container:'map',style,center:[120.9918,14.5707],zoom:15,pitch:55,bearing:-18,antialias:true}); window.adamCityMap=map;
+ map.addControl(new maplibregl.NavigationControl({visualizePitch:true}),'bottom-left');
+ map.addControl(new maplibregl.ScaleControl({unit:'metric'}),'bottom-left');
+ const visibility=(id,on)=>{if(map.getLayer(id))map.setLayoutProperty(id,'visibility',on?'visible':'none');};
+ const setGroup=(ids,on)=>ids.forEach(id=>visibility(id,on));
+ const groups={raw:[],features:[],tags:[],buildings:[],roads:[],thematic:[],pedestrian:[],addresses:[],administrative:[],places:[],nature:[]};
+ const sourcePaths=[];
+ function addSourceLayer(key,sourceId,path,kind,color){
+   const resolvedUrl=url(path);sourcePaths.push({sourceId,path,resolvedUrl});
+   map.addSource(sourceId,{type:'geojson',data:resolvedUrl});
+   const ids=[];
+   if(kind==='buildings'){
+     // OSM exports retain the original tags inside properties.tags; support both nested and flattened schemas.
+     const tag=(name)=>['coalesce',['get',name],['get',name,['get','tags']]];
+     const height=tag('height'), levels=['coalesce',['get','building:levels'],['get','building:levels',['get','tags']],['get','levels'],['get','levels',['get','tags']]];
+     const id=sourceId+'-3d';map.addLayer({id,type:'fill-extrusion',source:sourceId,filter:['==',['geometry-type'],'Polygon'],layout:{visibility:'none'},paint:{
+       'fill-extrusion-color':['coalesce',['get','render_color'],['get','colour'],['get','building:colour'],['get','building:colour',['get','tags']],color||'#c8bca9'],
+       'fill-extrusion-height':['max',3,['case',['>', ['to-number',height,0],0],['to-number',height,0],['>', ['to-number',levels,0],0],['*',['to-number',levels,0],3.15],5]],
+       'fill-extrusion-base':['max',0,['to-number',tag('min_height'),0]],'fill-extrusion-opacity':0.92,'fill-extrusion-vertical-gradient':true}});ids.push(id);
+   }else{
+     const fill=sourceId+'-fill',line=sourceId+'-line',circle=sourceId+'-point';
+     map.addLayer({id:fill,type:'fill',source:sourceId,layout:{visibility:'none'},paint:{'fill-color':color||'#5aa99b','fill-opacity':0.24,'fill-outline-color':color||'#5aa99b'}});ids.push(fill);
+     map.addLayer({id:line,type:'line',source:sourceId,layout:{visibility:'none','line-cap':'round','line-join':'round'},paint:{'line-color':color||'#5aa99b','line-width':['interpolate',['linear'],['zoom'],10,1,16,2.5],'line-opacity':0.9}});ids.push(line);
+     map.addLayer({id:circle,type:'circle',source:sourceId,layout:{visibility:'none'},paint:{'circle-radius':['interpolate',['linear'],['zoom'],10,2,16,5],'circle-color':color||'#5aa99b','circle-stroke-color':'#ffffff','circle-stroke-width':0.7}});ids.push(circle);
+   }
+   groups[key].push(...ids);
+ }
+ function bind(key){const el=document.getElementById('osm-'+key);el.addEventListener('change',()=>{setGroup(groups[key],el.checked);if(key==='raw'||key==='tags')status.textContent=key==='raw'?'raw يحتوي بيانات المصدر الخام، ولا يُرسم مباشرة على الخريطة.':'tags عبارة عن جداول وسوم CSV، ولا تُرسم مباشرة كمعالم جغرافية.';});}
+ map.on('error',e=>{if(e.error){const source=e.sourceId?' | source='+e.sourceId:'';const msg='خطأ في تحميل طبقة: '+e.error.message+source;status.textContent=msg;errorBox.style.display='block';errorBox.textContent=msg+' — راجع مسار GeoJSON أو استجابة GitHub Pages.';console.error('ADAM CITY map error',e);}});
+ map.on('load',()=>{
+  try{
+   addSourceLayer('features','osm-features-src','complete_data/OSM/data/features/ermita-features.geojson','map','#8ab5c5');
+   addSourceLayer('roads','osm-roads-src','complete_data/OSM/data/roads/ermita-road-network.geojson','map','#f0c979');
+   addSourceLayer('roads','osm-road-engineering-src','complete_data/OSM/data/roads/ermita-road-engineering-details.geojson','map','#e28c63');
+   addSourceLayer('thematic','osm-branded-stores-src','complete_data/OSM/data/thematic/ermita-branded-stores.geojson','map','#e9a5d1');
+   addSourceLayer('thematic','osm-signals-src','complete_data/OSM/data/thematic/ermita-street-signs-and-signals.geojson','map','#ffd166');
+   addSourceLayer('pedestrian','osm-pedestrian-src','complete_data/OSM/data/pedestrian/ermita-pedestrian-street-details.geojson','map','#9ee493');
+   addSourceLayer('addresses','osm-addresses-src','complete_data/OSM/data/addresses/ermita-addresses-street-names-postcodes.geojson','map','#f4f1bb');
+   addSourceLayer('administrative','osm-admin-src','complete_data/OSM/data/administrative/ermita-administrative-boundaries.geojson','map','#a78bfa');
+   addSourceLayer('places','osm-places-src','complete_data/OSM/data/places/ermita-shops-food-health-education-religion-services.geojson','map','#ff8fab');
+   addSourceLayer('nature','osm-water-src','complete_data/OSM/data/nature/ermita-water-and-natural-features.geojson','map','#67c9e8');
+   addSourceLayer('nature','osm-vegetation-src','complete_data/OSM/data/nature/ermita-trees-parks-vegetation.geojson','map','#71c982');
+   // Bind all eleven OSM directory toggles; raw and tags are inventory/data tables rather than direct map layers.
+   ['raw','features','tags','roads','thematic','pedestrian','addresses','administrative','places','nature'].forEach(bind);
+   // Show the two core spatial OSM layers immediately so the test page visibly verifies the local datasets.
+   setGroup(groups.roads,true);
+   // The custom 3D facade layer must render AFTER OSM extrusions added above; otherwise solid buildings cover the windows.
+   if(map.getLayer('windows-facade-details')) map.moveLayer('windows-facade-details');
+   document.getElementById('baseGround').addEventListener('change',ev=>originalLayers.filter(l=>!baseBuildingIds.includes(l.id)).forEach(l=>visibility(l.id,ev.target.checked)));
+   document.getElementById('baseBuildings').addEventListener('change',ev=>setGroup(baseBuildingIds,ev.target.checked));
+   status.textContent='الخريطة جاهزة. طبقات OSM مضافة؛ فعّل مربعات الاختيار لإظهارها. مجلدا raw وtags جداول/بيانات خام وليسا طبقات مكانية مباشرة.';
+  }catch(e){errorBox.style.display='block';errorBox.textContent='تعذر تجهيز طبقات OSM: '+(e.message||e);status.textContent='تم تحميل الخريطة الأساسية، لكن بعض طبقات OSM لم تُجهّز.';}
+ });
+})();
+</script>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"}}
+</script>
+<script>
+window.addEventListener("error",function(ev){
+ const target=ev.target;
+ if(target && target.tagName==="SCRIPT"){
+  const box=document.getElementById("error"),status=document.getElementById("status");
+  if(box){box.style.display="block";box.textContent="فشل تحميل مكتبة JavaScript: "+(target.src||ev.message||"module script");}
+  if(status)status.textContent="توقف تحميل نموذج windows بسبب خطأ JavaScript.";
+ }
+});
+window.addEventListener("unhandledrejection",function(ev){
+ const box=document.getElementById("error"),status=document.getElementById("status");
+ if(box){box.style.display="block";box.textContent="خطأ JavaScript غير معالج: "+(ev.reason?.message||String(ev.reason));}
+ if(status)status.textContent="توقف تحميل نموذج windows بسبب خطأ JavaScript.";
+});
+</script>
+
+
+
+
+
+<script type="module">
+/* Four independent GLB part layers. Load Parts1.glb–Parts4.glb directly.
+   Keep the existing origin sidecars and the same MapLibre/Three.js transform. */
+import * as THREE from 'three';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_decoder.module.js';
+
+(async function(){
+ const status=document.getElementById('status'), errorBox=document.getElementById('error');
+ const waitMap=()=>new Promise((resolve,reject)=>{
+  let tries=0;const check=()=>{if(window.adamCityMap?.isStyleLoaded())return resolve(window.adamCityMap);
+   if(++tries>600)return reject(new Error('انتهت مهلة انتظار الخريطة'));setTimeout(check,100);};check();
+ });
+ try{
+  const map=await waitMap();
+  for(let part=1;part<=4;part++) setupEnhancedPart(map,part);
+ }catch(err){
+  if(errorBox){errorBox.style.display='block';errorBox.textContent='تعذر تجهيز طبقات GLB: '+(err?.message||err);}
+ }
+ function setupEnhancedPart(map,part){
+  const toggle=document.getElementById('enhanced-glb-part-'+part);
+  const id='ermita-enhanced-building-glb-part-'+part;
+  const base='complete_data/OSM/data/buildings/Ermita/';
+  const manifestUrl=new URL(base+'enhanced/part'+part+'-regions.json',location.href).href;
+  const modelUrl=new URL(base+'Parts'+part+'.glb',location.href).href;
+  const originUrl=new URL(base+'part'+part+'/part'+part+'-origin.json',location.href).href;
+  let loading=false,ready=false,model=null,renderer=null,camera=null,scene=null,anchor=null,meters=1,projectedMeters=1,matrixWarned=false;
+  const showError=err=>{
+   loading=false;ready=false;
+   // Remove a partially loaded custom layer so retrying the checkbox cannot hit a duplicate-layer error.
+   try{if(map.getLayer(id))map.removeLayer(id);}catch(_){}
+   model=null;renderer=null;camera=null;scene=null;
+   if(errorBox){errorBox.style.display='block';errorBox.textContent='تعذر تحميل GLB الجزء '+part+': '+(err?.message||err);}
+   if(status)status.textContent='فشل تحميل GLB الجزء '+part+'. ألغِ التفعيل ثم أعده للمحاولة.';
+  };
+  async function ensureLayer(){
+   if(ready||loading)return;loading=true;
+   try{
+    const response=await fetch(originUrl);if(!response.ok)throw new Error('Origin JSON HTTP '+response.status);
+    const origin=await response.json();
+    const lon=Number(origin.origin_wgs84.longitude),lat=Number(origin.origin_wgs84.latitude);
+    if(!Number.isFinite(lon)||!Number.isFinite(lat))throw new Error('إحداثيات أصل الجزء غير صحيحة');
+    anchor=maplibregl.MercatorCoordinate.fromLngLat({lng:lon,lat},0);
+    meters=anchor.meterInMercatorCoordinateUnits();
+    projectedMeters=meters*Math.cos(lat*Math.PI/180);
+    const layer={
+     id,type:'custom',renderingMode:'3d',
+     onAdd(mapInstance,gl){
+      renderer=new THREE.WebGLRenderer({canvas:mapInstance.getCanvas(),context:gl,antialias:true});renderer.autoClear=false;
+      camera=new THREE.Camera();scene=new THREE.Scene();
+      scene.add(new THREE.AmbientLight(0xffffff,2.0));
+      const light=new THREE.DirectionalLight(0xffffff,2.0);light.position.set(0,-70,100).normalize();scene.add(light);
+      const loader=new GLTFLoader();loader.setMeshoptDecoder(MeshoptDecoder);
+      loader.load(modelUrl,gltf=>{
+       model=gltf.scene;
+       model.visible=!!toggle.checked;
+       scene.add(model);
+       let meshCount=0;model.traverse(o=>{if(o.isMesh)meshCount++;});
+       ready=true;loading=false;
+       window['adamEnhancedPart'+part+'Ready']=true;
+       window['adamSetEnhancedPart'+part+'Visible']=visible=>{if(model)model.visible=visible;mapInstance.triggerRepaint();};
+       if(status)status.textContent='تم تحميل ملف GLB الأصلي للجزء '+part+' | meshes='+meshCount+' | '+(model.visible?'ظاهر':'مخفي');
+       mapInstance.triggerRepaint();
+      },progress=>{
+       if(status)status.textContent='تحميل GLB الأصلي الجزء '+part+': '+(progress.total?Math.round(progress.loaded/progress.total*100)+'%':Math.round(progress.loaded/1048576)+' MiB');
+      },err=>showError(new Error('فشل تحميل الملف الأصلي '+modelUrl+': '+(err?.message||err))));
+     },
+     render(gl,args){
+      if(!renderer||!model||!model.visible)return;
+      const values=args?.defaultProjectionData?.mainMatrix||args?.modelViewProjectionMatrix||
+       ((Array.isArray(args)||ArrayBuffer.isView(args))?args:null);
+      if(!values||values.length!==16){
+       if(!matrixWarned){matrixWarned=true;if(errorBox){errorBox.style.display='block';errorBox.textContent='تم تحميل GLB للجزء '+part+' لكن MapLibre لم يوفر مصفوفة العرض المتوقعة.';}}
+       return;
+      }
+      const matrix=Array.from(values,Number);if(matrix.some(v=>!Number.isFinite(v)))return;
+      const projection=new THREE.Matrix4().fromArray(matrix);
+      // Match the previously working GLB transform: horizontal EPSG:3857 meters
+      // require the latitude cosine correction; vertical meters use Mercator units.
+      const localTransform=new THREE.Matrix4().makeTranslation(anchor.x,anchor.y,anchor.z)
+       .scale(new THREE.Vector3(projectedMeters,-projectedMeters,meters));
+      camera.projectionMatrix.copy(projection).multiply(localTransform);
+      camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+      renderer.resetState();renderer.render(scene,camera);renderer.resetState();
+     }
+    };
+    map.addLayer(layer);if(map.getLayer(id))map.moveLayer(id);
+   }catch(err){showError(err);}
+  }
+  toggle.addEventListener('change',async()=>{
+   if(toggle.checked){
+    if(!ready)await ensureLayer();
+    else if(model){model.visible=true;map.triggerRepaint();}
+   }else if(model){model.visible=false;map.triggerRepaint();}
+   if(!toggle.checked&&status)status.textContent='تم إخفاء GLB الجزء '+part+'.';
+  });
+ }
+})();
+</script>
+
+<script type="module" src="./complete_data/OSM/Markets/robinsons-rebuilt-model.js?v=3"></script>
+
+<script type="module" src="ermita/scripts/microsoft-roof-overlay.js?v=2"></script>
+</body></html>
