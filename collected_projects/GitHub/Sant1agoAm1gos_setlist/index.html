@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="uk"><head><meta charset="utf-8"><title>Сетліст</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#000;--card:#111114;--c2:#1b1b20;--tx:#f4f4f5;--mu:#8b8b94;--ac:#8b5cf6;--ac2:#c4b5fd;--bd:#26262c;--ch:#a78bfa}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.45 -apple-system,'Inter','Segoe UI',Roboto,sans-serif}
+main{max-width:560px;margin:0 auto;padding:20px 16px 60px}
+input,textarea,select,button{font:inherit;color:inherit}
+.eyebrow{color:var(--ac2);font-size:12px;letter-spacing:.14em;text-transform:uppercase;font-weight:600}
+.t{background:none;border:0;outline:0;width:100%;padding:0}
+#title{font-size:30px;font-weight:800;letter-spacing:-.02em;margin-top:6px}#date{color:var(--mu);margin-top:2px}
+.bar{display:flex;justify-content:space-between;align-items:center;margin:22px 0 12px;color:var(--mu);font-size:14px}
+button{background:var(--c2);border:1px solid var(--bd);border-radius:12px;padding:8px 14px;cursor:pointer;min-height:40px}
+button:active{transform:scale(.97)}button.p{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:600}
+button.x{color:#f87171;background:none}
+.song{display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--bd);border-radius:16px;padding:12px 12px 12px 8px;margin-bottom:8px;user-select:none}
+.song{transition:transform .25s cubic-bezier(.2,.8,.2,1),box-shadow .2s,border-color .2s;will-change:transform}
+.song.drag{transition:box-shadow .2s,border-color .2s;border-color:var(--ac);box-shadow:0 14px 40px #8b5cf666;background:var(--c2);position:relative;z-index:5}
+#app>*{animation:in .35s cubic-bezier(.2,.8,.2,1) both}
+@keyframes in{from{opacity:0;transform:translateY(10px)}}
+.song:active:not(.drag){background:var(--c2)}
+.h{touch-action:none;cursor:grab;color:var(--mu);font-size:20px;padding:8px 6px;line-height:1}
+.n{color:var(--mu);font-weight:700;width:18px;text-align:center;font-variant-numeric:tabular-nums}
+.sb{flex:1;min-width:0;cursor:pointer}.sn{font-weight:650;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{font-size:13px;font-weight:700;padding:4px 10px;border-radius:99px;background:var(--c2);white-space:nowrap}
+.pill.k{background:#8b5cf622;color:var(--ac2)}
+.back{background:none;border:0;color:var(--ac2);padding:0;min-height:0;margin-bottom:14px}
+.box{background:var(--card);border:1px solid var(--bd);border-radius:18px;padding:16px;margin-top:12px}
+label{display:block;color:var(--mu);font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+.r{display:flex;align-items:center;gap:10px}.big{font-size:44px;font-weight:800;letter-spacing:-.03em;min-width:80px;text-align:center}
+select,textarea{width:100%;background:var(--c2);border:1px solid var(--bd);border-radius:12px;padding:10px}
+.step{width:44px;padding:0;font-size:20px}textarea{min-height:200px;font:14px/1.5 ui-monospace,Menlo,monospace}
+pre{font:15px/1.55 ui-monospace,Menlo,monospace;white-space:pre-wrap;margin:0;overflow-x:auto}.ch{color:var(--ch);font-weight:600}
+.g{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+#st{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--c2);border:1px solid var(--bd);border-radius:99px;padding:8px 16px;font-size:14px;opacity:0;transition:opacity .25s;pointer-events:none}
+@media print{button,.h{display:none}}
+.seg{display:flex;background:var(--c2);border:1px solid var(--bd);border-radius:12px;padding:3px;gap:3px}
+.seg button{flex:1;border:0;background:none;min-height:34px;border-radius:9px;color:var(--mu);padding:4px 8px}
+.seg button.on{background:var(--ac);color:#fff;font-weight:600}
+.noanim>*{animation:none!important}
+.meta{color:var(--mu);font-size:13px;margin-top:8px}.r select{flex:1;min-width:0}
+input.bpm{width:100px;text-align:center;font-size:28px;font-weight:800;background:var(--c2);border:1px solid var(--bd);border-radius:12px;padding:6px 4px;-moz-appearance:textfield}
+input.bpm::-webkit-outer-spin-button,input.bpm::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+</style></head><body><main>
+<div id="app"></div></main><div id="st"></div>
+<script>
+const MAJ=['C','Db','D','Eb','E','F','F#','G','Ab','A','Bb','B'],MIN=['Cm','C#m','Dm','Ebm','Em','Fm','F#m','Gm','G#m','Am','Bbm','Bm'];
+const SH=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'],FL=['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+const FLATK=['F','Bb','Eb','Ab','Db','Gb','Dm','Gm','Cm','Fm','Bbm','Ebm'],LET={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+const defAcc=k=>FLATK.includes(k)?'b':'#';
+const kIdx=k=>{const r=(k||'C').replace(/m$/,'');let i=FL.indexOf(r);if(i<0)i=SH.indexOf(r);return i<0?0:i};
+const CH=/^([A-H][#b]?)((?:maj|min|dim|aug|sus|add|m|M|[0-9#b+\-()°])*)(?:\/([A-H][#b]?))?$/;
+const FILL=/^(?:[|\/:.()\-–—]+|[xXхХ×]\d+|\d+[xXхХ×])$/;
+function chordLine(line){const w=line.trim().split(/\s+/);if(!w[0])return false;let c=0;
+  for(let i=0;i<w.length;i++){const x=w[i];if(CH.test(x))c++;else if(FILL.test(x)||(i===0&&/^\S+:$/.test(x)))continue;else return false}
+  return c>0}
+const SEC=/^(?:куплет|приспів|міст|інтро|інструментал|вставка|програш|кода|кінцівка|verse|chorus|pre-?chorus|bridge|intro|outro|interlude|instrumental|tag)(?:[\s\d:.\-–]|$)/i;
+const isHead=l=>{const t=l.trim();return t.length<=32&&!chordLine(l)&&(SEC.test(t)||/^\S.*:\s*([xXхХ×]\d+)?$/.test(t)||/^\[.*\]$/.test(t))};
+const isG=t=>t.split('\n').some(l=>chordLine(l)&&l.trim().split(/\s+/).some(w=>/^H/.test(w)&&CH.test(w)));
+const rIdx=(r,g)=>{const l=r[0],a=r[1],b=l==='H'?11:(l==='B'&&g)?10:LET[l];return(b+(a==='#'?1:a==='b'?-1:0)+12)%12};
+const nm=(i,acc,g)=>g&&i===10?'B':g&&i===11?'H':(acc==='b'?FL:SH)[i];
+function tr(text,s,acc,g){return text.split('\n').map(line=>{if(!chordLine(line))return line;let out='';
+  line.replace(/\S+/g,(w,i)=>{const m=w.match(CH);let t=w;
+    if(m)t=nm((rIdx(m[1],g)+s)%12,acc,g)+m[2]+(m[3]?'/'+nm((rIdx(m[3],g)+s)%12,acc,g):'');
+    if(out.length<i)out+=' '.repeat(i-out.length);else if(out&&!out.endsWith(' '))out+=' ';
+    out+=t;return w});return out}).join('\n')}
+const show=s=>{if(s.key===s.base&&!s.acc)return s.txt;return tr(s.txt,((kIdx(s.key)-kIdx(s.base))%12+12)%12,s.acc||defAcc(s.key),isG(s.txt))};
+const kl=(k,g)=>g?k.replace(/^Bb/,'\0').replace(/^B/,'H').replace(/^\0/,'B'):k;
+function viewText(t,m){if(m==='all')return t;
+  const L=t.split('\n').filter(l=>{const c=chordLine(l);return m==='lyrics'?!c:(c||isHead(l)||!l.trim())});
+  if(m==='chords')return L.map(l=>chordLine(l)?l.trim().split(/\s+/).join('  '):l).join('\n').replace(/\n{3,}/g,'\n\n').trim();
+  return L.join('\n').replace(/\n{3,}/g,'\n\n').trim()}
+//--PURE-END
+let S=[],H=['Сетліст',''],view=null,editTxt=false,TOKEN='',R='',vm='all';
+try{TOKEN=localStorage.getItem('gh_token')||'';vm=localStorage.getItem('vm')||'all'}catch(e){}
+function repo(){const h=location.hostname;if(h.endsWith('.github.io'))return h.split('.')[0]+'/'+(location.pathname.split('/')[1]||'');
+  try{return localStorage.getItem('gh_repo')||''}catch(e){return ''}}
+R=repo();
+const $=id=>document.getElementById(id),get=id=>S.find(x=>x.id==id);
+const E=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function setSt(t){const s=$('st');s.textContent=t;s.style.opacity=t?1:0;if(t.includes('✓'))setTimeout(()=>{s.style.opacity=0},1800)}
+let timer,chain=Promise.resolve();
+function save(){if(!TOKEN)return;setSt('Збереження…');clearTimeout(timer);
+  timer=setTimeout(()=>{chain=chain.then(push).then(()=>setSt('Збережено ✓'),e=>setSt('Помилка збереження: '+e.message))},700)}
+async function push(n=0){if(!R)throw new Error('не знайдено репозиторій: натисни Вийти, потім Увійти');
+  const url=`https://api.github.com/repos/${R}/contents/data.json`,h={Authorization:'Bearer '+TOKEN,Accept:'application/vnd.github+json'};
+  const g=await fetch(url+'?t='+Date.now(),{headers:h});if(!g.ok&&g.status!=404)throw new Error(g.status+' - не вдалося прочитати data.json');
+  const sha=g.ok?(await g.json()).sha:undefined;
+  const content=btoa(unescape(encodeURIComponent(JSON.stringify({title:H[0],date:H[1],songs:S},null,1))));
+  const p=await fetch(url,{method:'PUT',headers:h,body:JSON.stringify({message:'Оновлення сетліста',content,sha})});
+  if(!p.ok){if((p.status==409||p.status==422)&&n<2)return push(n+1);let m='';try{m=(await p.json()).message}catch(e){}throw new Error(p.status+(m?' - '+m:''))}}
+async function load(){let d=null;
+  try{if(TOKEN&&R){const r=await fetch(`https://api.github.com/repos/${R}/contents/data.json?t=${Date.now()}`,{headers:{Authorization:'Bearer '+TOKEN,Accept:'application/vnd.github.raw+json'}});if(r.ok)d=await r.json()}}catch(e){}
+  if(!d)try{d=await (await fetch('data.json?t='+Date.now())).json()}catch(e){}
+  if(d){S=d.songs||[];H=[d.title||H[0],d.date||'']}
+  S.forEach(s=>{s.base=s.base||s.key;s.acc=s.acc||null;s.bpm=s.bpm||80;s.txt=s.txt||''})}
+async function login(){if(TOKEN){TOKEN='';try{localStorage.removeItem('gh_token')}catch(e){}return home()}
+  R=repo();if(!R){R=prompt('Репозиторій у форматі логін/назва (наприклад ivan/setlist):')||'';if(!R)return}
+  const t=(prompt('Встав токен GitHub (його бачиш тільки ти):')||'').trim();if(!t)return;
+  try{const r=await fetch('https://api.github.com/repos/'+R,{headers:{Authorization:'Bearer '+t}});const j=await r.json();
+    if(!r.ok||!j.permissions||!j.permissions.push)return alert('Токен не підходить до цього репозиторію або не має права запису.');
+    TOKEN=t;try{localStorage.setItem('gh_token',t);localStorage.setItem('gh_repo',R)}catch(e){}await load();home()}
+  catch(e){alert('Не вдалося перевірити токен.')}}
+function home(){view=null;editTxt=false;$('app').className='';const A=!!TOKEN;
+  $('app').innerHTML=`<div class="eyebrow">Сетліст</div>
+<input class="t" id="title" value="${E(H[0])}" ${A?'':'readonly'}><input class="t" id="date" value="${E(H[1])}" ${A?'':'readonly'}>
+<div class="bar"><span>${S.length} пісень · ~${Math.round(S.length*4.5)} хв${A?' · тримай ⠿ і перетягуй':''}</span>${A?'<button class="p" onclick="add()">+ Пісня</button>':''}</div>
+<div id="list">${S.map((s,i)=>`<div class="song" data-id="${s.id}">${A?'<span class="h">⠿</span>':'<span style="width:8px"></span>'}<span class="n">${i+1}</span>
+<div class="sb" onclick="go(${s.id})"><div class="sn">${E(s.name)||'Без назви'}</div></div><span class="pill k">${kl(s.key,isG(s.txt))}</span><span class="pill">${s.bpm}</span></div>`).join('')||'<p style="color:var(--mu)">Список порожній</p>'}</div>
+<div style="margin-top:18px;display:flex;gap:8px"><button onclick="cp()">Скопіювати</button><button onclick="print()">Друк</button><button onclick="login()" style="margin-left:auto;opacity:.7">${A?'Вийти':'Увійти'}</button></div>`;
+  if(A){$('title').oninput=e=>{H[0]=e.target.value;save()};$('date').oninput=e=>{H[1]=e.target.value;save()};
+    document.querySelectorAll('.h').forEach(h=>h.onpointerdown=dragStart)}}
+function dragStart(e){e.preventDefault();const card=e.target.closest('.song'),items=[...$('list').children],from=items.indexOf(card),
+  step=card.offsetHeight+8,y0=e.clientY,s0=scrollY;let y=y0,to=from,raf;
+  card.classList.add('drag');try{e.target.setPointerCapture(e.pointerId)}catch(_){}
+  const upd=()=>{const dy=y-y0+scrollY-s0;card.style.transform=`translateY(${dy}px) scale(1.03)`;
+    to=Math.max(0,Math.min(items.length-1,Math.round(from+dy/step)));
+    items.forEach((c,i)=>{if(c!==card)c.style.transform=from<i&&i<=to?`translateY(${-step}px)`:to<=i&&i<from?`translateY(${step}px)`:''})};
+  const loop=()=>{if(y<90)scrollBy(0,-10);else if(y>innerHeight-90)scrollBy(0,10);upd();raf=requestAnimationFrame(loop)};
+  const mv=ev=>{y=ev.clientY};
+  const up=()=>{cancelAnimationFrame(raf);removeEventListener('pointermove',mv);removeEventListener('pointerup',up);removeEventListener('pointercancel',up);
+    card.classList.remove('drag');card.style.transform=`translateY(${(to-from)*step}px)`;
+    setTimeout(()=>{const o=S.splice(from,1)[0];S.splice(to,0,o);save();home()},260)};
+  addEventListener('pointermove',mv);addEventListener('pointerup',up);addEventListener('pointercancel',up);loop()}
+function add(){if(!TOKEN)return;const s={id:Date.now(),name:'',key:'C',base:'C',acc:null,bpm:80,txt:''};S.push(s);save();editTxt=true;go(s.id)}
+function go(id,fresh=true){view=id;const s=get(id);if(!s)return home();const g=isG(s.txt),A=!!TOKEN,ea=s.acc||defAcc(s.key);
+  $('app').className=fresh?'':'noanim';
+  const opt=k=>`<option value="${k}" ${k==s.key?'selected':''}>${kl(k,g)}</option>`;
+  const sel=`<select onchange="tk(${id},this.value)"><optgroup label="Мажор">${MAJ.map(opt).join('')}</optgroup><optgroup label="Мінор">${MIN.map(opt).join('')}</optgroup></select>`;
+  const seg=`<div class="seg" style="flex:1">${[['all','Усе'],['chords','Акорди'],['lyrics','Текст']].map(([k,n])=>`<button class="${vm==k?'on':''}" onclick="setVm('${k}')">${n}</button>`).join('')}</div>`;
+  const body=A&&editTxt?`<textarea id="tx" placeholder="Акорди пиши окремим рядком над текстом">${E(show(s))}</textarea>`:
+    `<pre>${viewText(show(s),vm).split('\n').map(l=>chordLine(l)?'<span class="ch">'+E(l)+'</span>':E(l)).join('\n')||'<span style="color:var(--mu)">Порожньо</span>'}</pre>`;
+  $('app').innerHTML=`<button class="back" onclick="home()">← Сетліст</button>
+<input class="t" id="nm" style="font-size:26px;font-weight:800" placeholder="Назва пісні" value="${E(s.name)}" ${A?'':'readonly'}>
+${A?`<div class="box"><label>${editTxt?'Тональність акордів у тексті':'Тональність'}</label><div class="r">
+${editTxt?sel:`<button class="step" onclick="tp(${id},-1)">−</button>${sel}<button class="step" onclick="tp(${id},1)">+</button><button class="step" title="♭ / ♯" onclick="ta(${id})">${ea==='b'?'♭':'♯'}</button>`}</div>
+${!editTxt&&s.key!==s.base?`<div class="meta">оригінал: ${kl(s.base,g)}</div>`:''}</div>
+<div class="box"><label>Темп, BPM</label><div class="r"><button class="step" onclick="bp(${id},-1)">−</button>
+<input class="bpm" type="number" inputmode="numeric" min="30" max="300" value="${s.bpm}" oninput="bi(${id},this)" onchange="bc(${id},this)" onkeydown="if(event.key==='Enter')this.blur()">
+<button class="step" onclick="bp(${id},1)">+</button></div></div>`:
+`<div class="box r" style="gap:12px"><span class="pill k" style="font-size:20px">${kl(s.key,g)}</span><span class="pill" style="font-size:20px">${s.bpm} BPM</span></div>`}
+<div class="box"><div class="r" style="margin-bottom:12px">${editTxt?'<label style="margin:0;flex:1">Акорди й текст</label>':seg}
+${A?`<button onclick="editTxt=!editTxt;go(${id},false)">${editTxt?'Готово':'Редагувати'}</button>`:''}</div>${body}</div>
+${A?`<button class="x" style="margin-top:14px" onclick="del(${id})">Видалити пісню</button>`:''}`;
+  if(A){$('nm').oninput=e=>{s.name=e.target.value;save()};if($('tx'))$('tx').oninput=e=>{s.txt=e.target.value;s.base=s.key;s.acc=null;save()}}}
+function setVm(v){vm=v;try{localStorage.setItem('vm',v)}catch(e){}go(view,false)}
+function tk(id,k){const s=get(id);if(editTxt){s.txt=show(s);s.base=k}s.key=k;s.acc=null;save();go(id,false)}
+function tp(id,d){const s=get(id),n=((kIdx(s.key)+d)%12+12)%12;tk(id,(s.key.endsWith('m')?MIN:MAJ)[n])}
+function ta(id){const s=get(id);s.acc=(s.acc||defAcc(s.key))==='b'?'#':'b';save();go(id,false)}
+const cl=v=>Math.max(30,Math.min(300,v));
+function bp(id,d){const s=get(id);s.bpm=cl(s.bpm+d);save();go(id,false)}
+function bi(id,el){const v=parseInt(el.value,10);if(v>=30&&v<=300){get(id).bpm=v;save()}}
+function bc(id,el){const s=get(id),v=parseInt(el.value,10);s.bpm=cl(isNaN(v)?s.bpm:v);el.value=s.bpm;save()}
+function del(id){if(confirm('Видалити пісню?')){S=S.filter(x=>x.id!=id);save();home()}}
+function cp(){const t=H[0]+'\n'+S.map((s,i)=>`${i+1}. ${s.name} — ${kl(s.key,isG(s.txt))}, ${s.bpm} BPM`).join('\n');
+  (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>alert('Скопійовано'),()=>prompt('Скопіюй:',t))}
+load().then(home);
+</script></body></html>

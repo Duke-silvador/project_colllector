@@ -150,6 +150,66 @@
   }
 })();
 
+// The App Wire — cookie consent: first-visit Accept/Decline, choice stored,
+// re-openable from the footer "Cookie settings" link. Accept calls the
+// DigitalPlat consent API when it is available; it does not by itself
+// switch DigitalPlat from anonymous to identified ("known") visitor mode.
+(function () {
+  var KEY = 'appwire_cookie_choice';
+  var banner = null;
+  function setConsentCookie(v) {
+    try { document.cookie = 'appwire_consent=' + v + '; max-age=' + (180 * 24 * 60 * 60) + '; path=/; SameSite=Lax'; } catch (err) {}
+  }
+  function applyConsent(v) {
+    try {
+      var sdk = window.digitalplatAnalytics;
+      if (sdk && typeof sdk.setConsent === 'function') { sdk.setConsent(v === 'accepted' ? 'granted' : 'denied'); }
+    } catch (err) {}
+  }
+  function choose(v) {
+    try { localStorage.setItem(KEY, v); } catch (err) {}
+    setConsentCookie(v);
+    applyConsent(v);
+    if (banner) { banner.classList.add('hidden'); }
+  }
+  function showBanner() {
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.className = 'cookie-banner';
+      banner.setAttribute('role', 'dialog');
+      banner.setAttribute('aria-label', 'Cookie consent');
+      banner.innerHTML = '<p>We use cookies for anonymous site analytics and, once approved, Google AdSense ads. You can accept cookies or decline them. See our <a href="/privacy-policy.html">Privacy Policy</a>.</p>' +
+        '<div class="cookie-actions">' +
+        '<button class="cookie-btn cookie-accept" type="button">Accept cookies</button>' +
+        '<button class="cookie-btn cookie-decline" type="button">Decline</button></div>';
+      banner.querySelector('.cookie-accept').addEventListener('click', function () { choose('accepted'); });
+      banner.querySelector('.cookie-decline').addEventListener('click', function () { choose('declined'); });
+      document.body.appendChild(banner);
+    }
+    banner.classList.remove('hidden');
+  }
+  try {
+    var saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (err) {}
+    if (saved === 'accepted' || saved === 'declined') { applyConsent(saved); }
+    else { showBanner(); }
+  } catch (err) { showBanner(); }
+  var foot = document.querySelector('footer.site .copyright');
+  if (foot && !foot.querySelector('.cookie-settings')) {
+    var btn = document.createElement('button');
+    btn.className = 'cookie-settings';
+    btn.type = 'button';
+    btn.textContent = 'Cookie settings';
+    btn.addEventListener('click', function () {
+      try { localStorage.removeItem(KEY); } catch (err) {}
+      setConsentCookie('');
+      showBanner();
+    });
+    foot.appendChild(document.createTextNode(' · '));
+    foot.appendChild(btn);
+  }
+})();
+
 // The App Wire — analytics: track Google Play download clicks as a conversion event.
 // Found in the DigitalPlat SDK itself: track() only QUEUES the event — it is sent
 // by a 5-second timer or on page close. So merely holding navigation 350ms was not
