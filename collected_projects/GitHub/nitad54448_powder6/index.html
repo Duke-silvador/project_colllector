@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Powder 6: Rietveld, Le Bail and WPPF refinement of powder diffraction patterns, with structure solution.">
+<title>Powder 6</title>
+<link rel="stylesheet" href="powder6.css">
+<!-- before the first paint, so it stays synchronous -->
+<script src="js/rietveld/rv_theme_startup.js"></script>
+<!-- Deferred scripts run in this order once the page is parsed. js/rietveld/rv_app.js checks that every
+     module it needs is present before it starts. -->
+<!-- shared modules: readers, CIF reader, scattering factors, peak shapes, cell, WPPF linear algebra,
+     polarisation and French-Wilson, the structure report, the space-group browser -->
+<script defer src="lib/jszip.min.js"></script>
+<script defer src="js/constants.js"></script>
+<script defer src="js/crystal.js"></script>
+<script defer src="js/profile.js"></script>
+<script defer src="js/wppf_linear.js"></script>
+<script defer src="js/polarization.js"></script>
+<script defer src="js/scatterers.js"></script>
+<script defer src="js/cif_reader.js"></script>
+<script defer src="js/data_io.js"></script>
+<script defer src="js/parsers.js"></script>
+<script defer src="js/cif_structure.js"></script>
+<script defer src="js/wyckoff_report.js"></script>
+<script defer src="js/density3d.js"></script>
+<script defer src="js/spacegroup_ui.js"></script>
+<script defer src="js/sg_convert.js"></script>
+<script defer src="js/sg_subgroups.js"></script>
+<!-- the fit (also run by js/rietveld_worker.js) and the program -->
+<script defer src="js/atomic_constraints.js"></script>
+<script defer src="js/wyckoff_limits.js"></script>
+<script defer src="js/distance_rules.js"></script>
+<script defer src="js/fourier_map.js"></script>
+<script defer src="js/atom_restraints.js"></script>
+<script defer src="js/molecule_rules.js"></script>
+<script defer src="js/rietveld_core.js"></script>
+<script defer src="js/pt_gpu.js"></script>
+<script defer src="js/rietveld/rv_ui.js"></script>
+<script defer src="js/rietveld/rv_plot2d.js"></script>
+<script defer src="js/rietveld/rv_state.js"></script>
+<script defer src="js/rietveld/rv_plots.js"></script>
+<script defer src="js/rietveld/rv_phases.js"></script>
+<script defer src="js/rietveld/rv_panels.js"></script>
+<script defer src="js/rietveld/rv_results.js"></script>
+<script defer src="js/absorption_table.js"></script>
+<script defer src="js/rietveld/rv_absorption.js"></script>
+<script defer src="js/rietveld/rv_datasets.js"></script>
+<script defer src="js/rietveld/rv_commands.js"></script>
+<script defer src="js/rietveld/rv_sgtest.js"></script>
+<script defer src="js/cf_adaptive.js"></script>
+<script defer src="js/rietveld/rv_solve.js"></script>
+<script defer src="js/rietveld/rv_fourier.js"></script>
+<script defer src="js/rietveld/rv_pdf.js"></script>
+<script defer src="js/rietveld/rv_gsas2.js"></script>
+<script defer src="js/rietveld/rv_constraints.js"></script>
+<script defer src="js/rietveld/rv_restraints.js"></script>
+<script defer src="js/rietveld/rv_wyhelper.js"></script>
+<script defer src="js/rietveld/rv_rietveld_structure.js"></script>
+<script defer src="js/rietveld/rv_fit_history.js"></script>
+<script defer src="js/rietveld/rv_project.js"></script>
+<script defer src="js/rietveld/rv_workspace.js"></script>
+<script defer src="js/rietveld/rv_layout.js"></script>
+<script defer src="js/rietveld/rv_app.js"></script>
+</head>
+<body>
+<noscript><p class="load-error">Powder 6 requires JavaScript. Enable it in your browser, then reload this page.</p></noscript>
+<a class="skip-link" href="#work">Skip to the workspace</a>
+<!-- =====================================================================
+     POWDER 6. One window: several phases against several powder patterns,
+     each calculation uses Rietveld, Le Bail or WPPF (chosen in Commands → Method),
+     each pattern on its own or all of them in one global fit.
+     Two panels: Commands (left) set up the work, Results (right) show it.
+     Commands → Structure works on the intensities of a WPPF phase: space-group
+     test, charge flipping and the Wyckoff search, whose atoms go back to the
+     phase for a Rietveld fit.
+     This markup is the complete layout; scripts fill it but do not rearrange it.
+     ===================================================================== -->
+<header class="top">
+  <div class="brand"><svg class="glyph" viewBox="0 0 26 20" aria-hidden="true" focusable="false"><path d="M1 17.5h5.2l1.6-2.2 1.2 2.2h3.4l1.3-14.2 1.5 14.2h2.6l1.3-6.6 1.1 6.6H25" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="mark">Powder 6</span></div>
+  <button type="button" class="hbtn" id="btn-about" aria-controls="pane-about" aria-expanded="false" title="About Powder 6">About</button>
+  <button type="button" id="swap-panels" class="hbtn" title="Swap command and results panels" aria-pressed="false">⇄ Panels</button>
+  <div class="menus" role="group" aria-label="Commands menus">
+    <button type="button" class="menu-btn" data-menu="file" aria-haspopup="menu" aria-expanded="false">File</button>
+    <button type="button" class="menu-btn" data-menu="data" aria-haspopup="menu" aria-expanded="false">Data</button>
+    <button type="button" class="menu-btn" data-menu="refine" aria-haspopup="menu" aria-expanded="false">Refine</button>
+  </div>
+  <button type="button" id="btn-report" class="hbtn" title="PDF report of the selected completed run, or of the working plots"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" d="M4 1.8h5.6L12.5 4.7v9.5H4z M9.4 1.8v3.1h3.1 M6 8h4.5 M6 10.4h4.5"/></svg><span>Report</span></button>
+  <button type="button" id="btn-fit" class="fit-btn" title="Fit the selected datasets with the method selected in Commands; F9"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M4 2.5v11L13 8z"/></svg><span>FIT</span></button>
+  <button type="button" id="theme-toggle" class="theme-switch" role="switch" aria-checked="false"><span class="track" aria-hidden="true"><i></i></span><span>Dark</span></button>
+</header>
+
+<main class="work dual-panels" id="work" tabindex="-1">
+  <!-- ================================================================ Results -->
+  <section class="stage results-panel" aria-label="Results">
+    <nav id="result-tabs" class="tabs panel-tabs" role="tablist" aria-label="Result views">
+      <button type="button" role="tab" id="tab-pattern" data-tab="pattern" aria-controls="pane-pattern" aria-selected="true" title="Observed and calculated patterns, reflections, background anchors, excluded regions and difference">Plots</button><button type="button" role="tab" id="tab-result-lebail" data-result-method="lebail" aria-controls="pane-solve" aria-selected="false" tabindex="-1">Le Bail</button><button type="button" role="tab" id="tab-result-wppf" data-result-method="wppf" aria-controls="pane-solve" aria-selected="false" tabindex="-1">WPPF</button><button type="button" role="tab" id="tab-result-rietveld" data-result-method="rietveld" aria-controls="pane-solve" aria-selected="false" tabindex="-1">Rietveld</button><button type="button" role="tab" id="tab-structure-results" data-tab="structure-results" aria-controls="pane-structure-results" aria-selected="false" tabindex="-1">Structure</button><button type="button" role="tab" id="tab-log" data-tab="log" aria-controls="pane-log" aria-selected="false" tabindex="-1">Log</button><button type="button" role="tab" id="tab-history" data-tab="history" aria-controls="pane-history" aria-selected="false" tabindex="-1">History</button>
+    </nav>
+    <div class="ptools" id="ptools">
+      <div class="seg views" role="group" aria-label="Intensity scale">
+        <button type="button" data-yscale="lin" aria-pressed="true" title="Linear intensity">Linear</button><button type="button" data-yscale="sqrt" aria-pressed="false" title="Square-root intensity: weak peaks next to strong ones">√I</button><button type="button" data-yscale="log" aria-pressed="false" title="Logarithmic intensity">log I</button>
+      </div>
+      <span class="tool-sep" aria-hidden="true"></span>
+      <label class="chk"><input type="checkbox" id="show-anchors"> Anchors</label>
+      <label class="chk" title="Background of each dataset, dashed. Spline anchors: filled magenta squares are refinable; hollow grey squares are fixed."><input type="checkbox" id="show-bkg"> Backgnd</label>
+      <label class="chk" title="The pattern of each phase on top of the background, in the colour of the phase"><input type="checkbox" id="show-phases"> Phases</label>
+      <label class="chk" title="One row of reflection ticks per phase, at the bottom of the plot"><input type="checkbox" id="show-ticks"> Refl</label>
+      <label class="chk" title="Subtract the calculated background from all plotted observations and curves. Display only; fits retain the original observations. Linear scale keeps negative intensities visible."><input type="checkbox" id="no-background"> Subtract</label>
+      <span class="tool-sep" aria-hidden="true"></span>
+      <button type="button" data-plot-action="auto" hidden>Autoscale</button>
+      <button type="button" data-plot-action="png">Save PNG</button>
+      <span class="note" id="plot-note"></span>
+      <span class="info-tip">
+        <button type="button" class="info-btn" aria-label="Mouse controls of the plot" aria-describedby="plot-help">i</button>
+        <span class="info-pop" id="plot-help" role="tooltip">
+          <b>Drag</b><span>zoom to a box; a thin box zooms one axis</span>
+          <b>Wheel</b><span>zoom; Alt + wheel zooms the intensity</span>
+          <b>Shift-drag</b><span>pan (right-drag pans too)</span>
+          <b>Double-click</b><span>reset the view</span>
+          <b>Ctrl+click</b><span>add a background anchor at the cursor, or remove the one under it</span>
+          <b>Right-drag an anchor</b><span>move it; Esc cancels</span>
+          <b>Ctrl+Shift+drag</b><span>select an excluded region</span>
+          <b>Click a legend entry</b><span>hide or show it</span>
+        </span>
+      </span>
+    </div>
+    <div id="plot-selection" class="plot-selection">
+      <label>View <select id="plot-mode"><option value="overlay">Overlay fit selection</option><option value="overview">Overview of fit selection</option><option value="focus">Inspect one dataset</option></select></label>
+      <label>Inspect <select id="inspect-dataset" aria-label="Dataset to inspect"></select></label>
+      <button data-inspect-step="-1" aria-label="Previous dataset">←</button><button data-inspect-step="1" aria-label="Next dataset">→</button>
+      <span id="plot-selection-note" class="hint"></span>
+    </div>
+    <div class="pane plot-pane" id="pane-pattern" role="tabpanel" aria-labelledby="tab-pattern"><div class="plot-host" id="pat-host"></div><div class="plot-host res" id="diff-host"></div></div>
+
+    <!-- Le Bail, WPPF and Rietveld results: one selected run -->
+    <div class="pane solve-pane fit-results-pane" id="pane-solve" role="tabpanel" aria-labelledby="tab-result-lebail">
+      <div class="result-runbar"><label>Run <select id="result-run-select" aria-label="Result run"></select></label><button type="button" data-run-action="restore">Use as start</button><button type="button" data-run-action="keep">Keep</button><button type="button" data-run-action="history">Manage history</button></div>
+      <div id="calculation-body">
+        <p id="last-result-state" class="result-state hint"></p>
+        <!-- Le Bail -->
+        <div class="calc-layout" data-layout="lebail">
+          <details class="acc" data-acc="lebail-results" open><summary><span class="acc-t">Results and quantitative analysis</span><span class="acc-s" data-res-title="summary"></span></summary><div class="acc-body" data-res-part="summary"></div></details>
+          <details class="acc" data-acc="lebail-atoms"><summary><span class="acc-t" data-res-title="atoms">Atoms</span></summary><div class="acc-body" data-res-part="atoms"></div></details>
+          <details class="acc" data-acc="lebail-refl"><summary><span class="acc-t" data-res-title="refl">Intensities</span></summary><div class="acc-body" data-res-part="refl"></div></details>
+        </div>
+        <!-- WPPF -->
+        <div class="calc-layout" data-layout="wppf">
+          <details class="acc" data-acc="wppf-results" open><summary><span class="acc-t">Results and quantitative analysis</span><span class="acc-s" data-res-title="summary"></span></summary><div class="acc-body" data-res-part="summary"></div></details>
+          <details class="acc" data-acc="wppf-atoms"><summary><span class="acc-t" data-res-title="atoms">Atoms</span></summary><div class="acc-body" data-res-part="atoms"></div></details>
+          <details class="acc" data-acc="wppf-intensities"><summary><span class="acc-t" data-res-title="refl">Intensities</span></summary><div class="acc-body" data-res-part="refl"></div></details>
+        </div>
+        <!-- Rietveld -->
+        <div class="calc-layout" data-layout="rietveld">
+          <details class="acc" data-acc="rietveld-results" open><summary><span class="acc-t">Results and quantitative analysis</span><span class="acc-s" data-res-title="summary"></span></summary><div class="acc-body" data-res-part="summary"></div></details>
+          <details class="acc" data-acc="rietveld-structure"><summary><span class="acc-t">3D structure</span></summary><div class="acc-body" data-res-part="structure"></div></details>
+          <details class="acc" data-acc="rietveld-atoms"><summary><span class="acc-t" data-res-title="atoms">Atoms</span></summary><div class="acc-body" data-res-part="atoms"></div></details>
+          <details class="acc" data-acc="rietveld-refl"><summary><span class="acc-t" data-res-title="refl">Reflections</span></summary><div class="acc-body" data-res-part="refl"></div></details>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane log-pane" id="pane-log" role="tabpanel" aria-labelledby="tab-log"><ol id="log-list" class="log"></ol></div>
+
+    <div class="pane about-pane" id="pane-about" role="region" aria-labelledby="btn-about">
+      <article class="about">
+        <p class="sub" id="about-version"></p>
+        <h1>About Powder 6</h1>
+        <p><b>Commands</b> and <b>Results</b> have independent tabs. Each coloured <b>Datasets</b> tab contains that dataset’s values and refine/fixed controls, including background X/Y, resolution and phase contributions. Bounds, sharing and links are edited there too. <b>Phases</b> contains shared definitions and starting models; <b>Method</b> chooses the next calculation; <b>Settings</b> contains numerical conditions. Results has separate <b>Le Bail</b>, <b>WPPF</b> and <b>Rietveld</b> tabs showing one selected run. Choosing a previous run preserves the working setup; <b>Use as start</b> restores it explicitly. Press <b>FIT</b> or F9 from any view. Use <b>⇄ Panels</b> to swap the two panels.</p>
+        <p>The dataset checkboxes define both the fit and plot selection. Choose All datasets, or a range with Shift+click, for large batches. Clicking a selected dataset inspects it without changing that selection. Plots offers Overlay, Overview and Inspect one dataset. Anchors, Backgnd, Phases, Refl and Subtract have independent display controls.</p>
+        <p>Ctrl+click places an anchor at both cursor coordinates; right-drag moves it, Escape cancels the move. Edit exact X (2θ), Y (intensity) and the Y refinement checkbox in <b>Datasets → dataset tab → Background</b>. Magenta filled anchors are refinable; grey hollow anchors are fixed. A yellow line identifies the anchor being edited. Ctrl+Shift+drag edits exclusions.</p>
+        <p>Each method retains its own setup and current result. <b>History</b> stores completed fits by method, with grouped individual batches and complete global fits, and every charge-flipping and Wyckoff solution. For the chosen run it lists everything: settings, phases, statistics, every parameter with its uncertainty, instrument, and for solutions their sites. Set restores a record; Keep protects it from automatic pruning; Delete asks first. <b>Save History…</b> and the report buttons write the records, with all their results, as JSON or text. The default automatic budget is 100 MB, with 20 recent unkept records for each method and, separately, for charge flipping and for the Wyckoff search; current and kept results are protected. Ctrl+Z undoes recent editing. Log contains detailed messages.</p>
+        <p>Save a compressed <b>.project</b> file (projects saved as .powder6 or .archive open too) to retain observations, model definitions, method states, groups, history and structure candidates. Observations, the WPPF precision block and each structure solution are stored once. Compact history and CF density-map inclusion are optional. A saved project is the state the page compares against: it asks before leaving only when something changed after it. Open the file later using File or drag and drop; this is how History is read back.</p>
+        <p><b>Commands → Structure → Space group</b> contains <b>Test</b> for the systematic absences of powder intensities and <b>ADDSYM</b> for an atomic model. ADDSYM’s <b>Find higher symmetry…</b> calls the public, locally bundled <a href="https://github.com/spglib/moyo" target="_blank" rel="noopener">Moyo</a> WebAssembly engine (0.21.0, <a href="lib/moyo/LICENSE-MIT" target="_blank" rel="noopener">MIT license</a>). ADDSYM is the interface label; the engine is Moyo rather than PLATON’s ADDSYM implementation. Choose either the starting model or a dataset’s Rietveld coordinates and cell, including its saved Rietveld model while using Le Bail or WPPF. The report gives the returned group and atomic mismatches; conversion is previewed with the selected model. ADDSYM works without a WPPF fit. See <a href="Powder6_documentation.html#s-addsym" target="_blank" rel="noopener">atomic-model symmetry</a> and <a href="Powder6_documentation.html#moyo-code" target="_blank" rel="noopener">the bundled Moyo code and license</a>.</p>
+        <p><b>Convert…</b> next to the space group of a phase describes the structure in another space group or setting: the cell, the atomic positions and the values of every dataset are transformed with it, sites split for a subgroup and merge for a supergroup (only when the structure has that symmetry). The transformation is found automatically or entered as new axes and origin.</p>
+        <p>Instrument resolution belongs to explicitly selected datasets. Sample presets target a phase and datasets. CF and Wyckoff candidates can be copied to an existing or new phase, with affected datasets shown before transfer. The source solution remains in History.</p>
+        <p><b>Datasets: Constraints, Restraints and Links.</b> Constraints impose exact atomic equivalences, sums and holds; sum refine checkboxes act on the whole equation. Restraints apply soft distance and angle rules whenever their textbox contains rules. Helper collects proposals in Geometry, Molecule and Suggest tabs: Copy puts them on the clipboard, and only pasting into the dataset textbox applies them. Duplicate pasted rules are rejected. Links impose target = multiplier &times; source + offset across chosen parameters and datasets; the source refine flag controls refinement, and either value can be edited within limits. Limits and global sharing have their own Parameter links and sharing accordion below Links. The last Copy accordion copies values or flags once; it does not create a link. See the <a href="Powder6_documentation.html#constraints" target="_blank" rel="noopener">complete guide and examples</a>.</p>
+        <table class="grid"><tbody><tr><th>Parameter ownership</th><th>Controls</th></tr>
+          <tr><td>Acquisition / dataset</td><td>Wavelength, radiation, polarization, range, excluded regions and background; zero point defaults to local.</td></tr>
+          <tr><td>Sample geometry</td><td>Displacement and transparency, local unless explicitly shared.</td></tr>
+          <tr><td>Phase</td><td>Space group, unit cell, atoms and preferred-orientation direction.</td></tr>
+          <tr><td>Phase in a dataset</td><td>Scale, orientation strength and sample microstructure. Separated CW profiles use dataset-owned U,V,W,X,Y,Z and axial-asymmetry terms plus phase-in-dataset size and microstrain. Isotropic, uniaxial, ellipsoidal size and Stephens quartic strain are available. Calibrate the instrument with a standard, then keep it fixed for sample fits. Older effective-profile models remain available.</td></tr>
+        </tbody></table>
+        <h2>Working with it</h2><p>Dataset setup is in Commands → Datasets. The expandable <b>Datasets for fitting and plotting</b> list selects patterns; coloured tabs choose the dataset to inspect and edit. Hundreds of independent fits are queued with only the active worker jobs prepared in memory. Busy calculations lock editing; Stop or Escape cancels a fit or structure search.</p>
+        <ol>
+          <li>File, read powder patterns from the Datasets tab, or drop them on the window (Bruker, PANalytical, Rigaku, Philips, GSAS, CIF, two-column ASCII). New datasets appear at the top of the list. Set the wavelength, polarisation and anomalous scattering in Instrument (Datasets tab), the background in Background, the regions to leave out in Exclusions.</li>
+          <li>Read a CIF for each phase, or make a new phase from its space group and cell: without atoms it is fitted by Le Bail or WPPF.</li>
+          <li>In Datasets, use <b>Phases…</b> (or <b>Refine → Phases of the datasets…</b>) to define which phases each dataset contains.</li>
+          <li>In each dataset tab, set values and tick individual parameters or use the group checkboxes: background/scales, zero/lattice, Sample and Resolution; Rietveld also offers positions, B and occupancies. Sample selects phase broadening; Resolution selects instrument broadening independently. Press Fit (F9). Le Bail or WPPF first, to settle the cell and the peak shape, is the usual start. Global fits the selected patterns together: select A and C to refine what they share with those two only.</li>
+          <li>With a WPPF fit done, open Commands → Structure to extract intensities, test the space group and solve the structure. Inspect output in Results → Structure, export the atoms to the phase, switch Method to Rietveld and fit again.</li>
+          <li>Results shows the selected completed run: R factors, weight fractions, atoms, reflections and extracted intensities. Its run selector opens previous calculations; exports and Report use the selected run. History offers Set, Keep, Delete, reports and storage controls.</li>
+        </ol>
+        <h2>The model</h2>
+        <p>y<sub>calc</sub>(2θ) = background + Σ<sub>phases</sub> Σ<sub>hkl</sub> I<sub>hkl</sub> · Ω(2θ − 2θ<sub>hkl</sub>), Ω the peak shape of unit area, Kα2 included. Rietveld: I = S · m · Lp · P · |F|², with S the scale of the phase in the pattern, m the multiplicity, Lp the Lorentz-polarisation factor, P the March–Dollase factor and F the structure factor from the atoms. Le Bail: I is the share of the observed counts that the reflection gets in proportion to its calculated profile (Le Bail, Duroy and Fourquet 1988), partitioned again from flat at every cycle. WPPF: I is a free variable of the least-squares fit, non-negative, solved exactly at every step (variable projection, Golub and Pereyra 1973), so its standard uncertainty and its correlation with the cell and profile are those of a full Pawley refinement. The background is a Chebyshev series over the fitted range or a monotone cubic spline through anchors; points in excluded regions are calculated but not fitted. Choose Levenberg–Marquardt (LM), or parallel tempering (PT) followed by LM, in Settings → Numerical conditions. Both respect limits and weights 1/σ²; standard uncertainties come from the normal matrix scaled by χ². Weight fractions (Rietveld phases) follow Hill and Howard.</p>
+        <h2>Mouse and keys</h2>
+        <table class="grid"><tbody>
+          <tr><td>Plots</td><td>drag to zoom, shift-drag or right-drag to pan, wheel zooms 2θ about the cursor (Alt: intensity), double-click to autoscale; the difference plot follows</td></tr>
+          <tr><td>Background, regions</td><td>Ctrl+click places a background anchor at both cursor coordinates (on an anchor: removes it) and makes the background a spline. Right-drag an anchor to move it; Escape cancels the move. Filled magenta anchors are refinable; hollow grey anchors are fixed. A yellow vertical line marks the anchor being edited in its Datasets tab. Ctrl+Shift+drag marks an excluded region; Ctrl+Shift+click in one removes it. Placement and exclusions use the first selected dataset; dragging edits the anchor under the cursor.</td></tr>
+          <tr><td>Parameter</td><td>mouse wheel or arrow keys change the value; Shift for larger steps, Alt for smaller ones</td></tr>
+          <tr><td>Dataset parameters</td><td>Coloured tabs or ← → next to the dataset name inspect another dataset without changing the fit selection. A group header folds the group; its checkbox changes refinement flags only in the active dataset. In Global mode a padlock shares the parameter (closed) or not (open); right-click on it for the datasets that share it.</td></tr>
+          <tr><td>Phases list</td><td>click or use ↑ ↓ to select the active phase, whose definition the Phases tab shows. Assign phases to datasets with Datasets → Phases… or Refine → Phases of the datasets…</td></tr>
+          <tr><td>Dataset list</td><td>Checkboxes select fit and plot datasets; click a selected dataset to inspect it. Ctrl+A selects all; Shift+click selects a range; Ctrl+click adds one; Delete removes datasets, F2 or double-click renames, drag reorders.</td></tr>
+          <tr><td>Anywhere</td><td>F9 fit, Ctrl+S save the project, Ctrl+Z undo</td></tr>
+        </tbody></table>
+        <h2>Requirements</h2>
+        <p>Open <code>index.html</code> through a web server (it reads sg/all.json and scatters/), for example <code>python -m http.server</code> in its folder, then <code>http://localhost:8000/index.html</code>. Fits, charge flipping and the Wyckoff search run in Web Workers. Parallel-tempering fits and charge flipping can use WebGPU and have CPU fallbacks. The Wyckoff search requires WebGPU for sampling and fitness evaluation, with CPU control and final coordinate refinement; see <a href="Powder6_documentation.html#s-wy-gpu" target="_blank" rel="noopener">GPU and CPU execution</a>.</p>
+        <p>The methods (WPPF, Le Bail, exact overlaps, constraints, the space-group test, charge flipping, the Wyckoff search) are explained in the documentation, with where each one stops being trustworthy. Powder 6 descends from PowderV2 (Dragoe, N. (2001). <i>J. Appl. Cryst.</i> 34, 535).</p>
+        <p>Full documentation: <a href="Powder6_documentation.html" target="_blank" rel="noopener">Powder6_documentation.html</a> (commands, file formats, parameters, structure solution, troubleshooting).</p>
+        <p class="hint">Charge flipping: Oszlányi and Sütő (2004). Space-group test: Markvardsen, David, Johnson and Shankland (2001). Peak shapes: Thompson, Cox and Hastings (1987).</p>
+      </article>
+    </div>
+
+    <div class="pane history-pane" id="pane-history" role="tabpanel" aria-labelledby="tab-history">
+      <p class="hint">Set restores the saved model and settings into the working setup. Keep protects a run from automatic removal without changing the setup. Ctrl+Z undoes recent edits, including a deleted run. History is read back as part of a saved project.</p>
+      <p class="buttons history-io"><button data-workspace-undo>Undo last edit</button><button data-history-save title="Every record with its model, settings, parameters, results and observations, as JSON. To reopen History in Powder 6, save the project.">Save History…</button><button data-history-report="all" title="Everything listed for every run, as a text report">Save report of all runs</button></p>
+      <p id="fit-history-size" class="hint"></p>
+      <nav class="calculation-tabs" role="tablist" aria-label="History method"><button data-history-method="rietveld" role="tab">Rietveld</button><button data-history-method="lebail" role="tab">Le Bail</button><button data-history-method="wppf" role="tab">WPPF</button></nav>
+      <div id="fit-history-list"></div>
+    </div>
+
+    <section id="pane-structure-results" class="pane structure-results-pane" role="tabpanel" aria-labelledby="tab-structure-results">
+      <nav class="structure-result-tabs" role="tablist" aria-label="Structure results"><button type="button" role="tab" data-structure-result="sgt">Space group</button><button type="button" role="tab" data-structure-result="cf">Charge flipping</button><button type="button" role="tab" data-structure-result="wy">Wyckoff</button><button type="button" role="tab" data-structure-result="fo">Fourier map</button></nav>
+      <div id="structure-runbar" class="result-runbar"><label>Run <select id="structure-run-select" aria-label="Structure run"></select></label></div>
+      <div id="structure-result-sgt" class="structure-result-body"><p class="hint">Set up a structure calculation in Commands → Structure to see its output here.</p></div>
+      <div id="structure-result-cf" class="structure-result-body"><p class="hint">Set up a structure calculation in Commands → Structure to see its output here.</p></div>
+      <div id="structure-result-wy" class="structure-result-body"><p class="hint">Set up a structure calculation in Commands → Structure to see its output here.</p></div>
+      <div id="structure-result-fo" class="structure-result-body"><p class="hint">Compute a Fourier map in Commands → Structure to see it here.</p></div>
+    </section>
+  </section>
+
+  <!-- ================================================================ Commands -->
+  <aside class="side command-panel" aria-label="Commands">
+    <nav id="command-tabs" class="tabs panel-tabs" role="tablist" aria-label="Command views">
+      <button type="button" role="tab" id="tab-datasets" data-tab="datasets" aria-controls="pane-datasets" aria-selected="false" tabindex="-1" title="Dataset assignments, instrument, background, exclusions and batch refinement">Datasets</button><button type="button" role="tab" id="tab-phases" data-tab="phases" aria-controls="pane-phases" aria-selected="false" tabindex="-1" title="Shared phase definitions and starting model: name, colour, space group, cell and atoms">Phases</button><button type="button" role="tab" id="tab-method" data-tab="method" aria-controls="pane-method" aria-selected="false" tabindex="-1" title="Choose the next calculation">Method</button><button type="button" role="tab" id="tab-structure" data-tab="structure" aria-controls="pane-structure" aria-selected="false" tabindex="-1">Structure</button><button type="button" role="tab" id="tab-settings" data-tab="settings" aria-controls="pane-settings" aria-selected="false" tabindex="-1" class="settings-btn" title="Numerical conditions, plot settings and history storage"><svg viewBox="0 0 20 20" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M11.3 1.5l.4 2.3c.6.2 1.1.5 1.6.9l2.2-.8 1.3 2.2-1.8 1.5c.1.6.1 1.2 0 1.8l1.8 1.5-1.3 2.2-2.2-.8c-.5.4-1 .7-1.6.9l-.4 2.3H8.7l-.4-2.3c-.6-.2-1.1-.5-1.6-.9l-2.2.8-1.3-2.2L5 9.4c-.1-.6-.1-1.2 0-1.8L3.2 6.1l1.3-2.2 2.2.8c.5-.4 1-.7 1.6-.9l.4-2.3h2.6zM10 6.3a2.2 2.2 0 100 4.4 2.2 2.2 0 000-4.4z" transform="translate(0 1.5)"/></svg><span>Settings</span></button>
+    </nav>
+    <div id="command-body" class="command-body">
+
+      <!-- Datasets -->
+      <div class="pane datasets-pane" id="pane-datasets" role="tabpanel" aria-labelledby="tab-datasets">
+        <div id="datasets-empty">
+          <div class="dataset-toolbar">
+            <button type="button" data-dataset-action="read">Read patterns…</button>
+            <button type="button" data-dataset-action="simulate">Simulate…</button>
+          </div>
+          <p class="empty-pane">No datasets yet. Read patterns, drop them on this window, or <button type="button" class="link" data-dataset-action="demo">load the demo</button> (NaCl and Si, measured with Cu and Co radiation).</p>
+        </div>
+        <div id="dataset-content" hidden>
+          <div class="dataset-toolbar">
+            <button type="button" data-dataset-action="read">Read patterns…</button>
+            <button type="button" data-dataset-action="simulate">Simulate…</button>
+            <button type="button" id="ds-phases" class="mini" title="Add or remove phases for each dataset">Phases…</button><button type="button" id="ds-resolution" class="mini" title="Instrument profile and calibration">Profile</button><button type="button" id="ds-inst" class="mini" title="Wavelength, radiation, polarisation and anomalous scattering">Instrument…</button><button type="button" id="ds-bkg" class="mini" title="Background of the selected datasets: Chebyshev terms or a spline through anchors">Background…</button>
+          </div>
+          <details class="acc dataset-accordion fit-selection" id="fit-selection" data-acc="dataset-selection">
+            <summary><span class="acc-t">Datasets</span> <span id="fit-selection-count"></span></summary>
+            <section class="side-data" id="sp-datasets">
+              <div class="dataset-scope"></div>
+              <div class="side-h"><span id="ds-count" class="sub"></span></div>
+              <input type="search" id="dataset-search" placeholder="Find datasets…" aria-label="Find datasets">
+              <div id="ds-list" class="ds-list" tabindex="0" role="listbox" aria-multiselectable="true" aria-label="Datasets selected for plotting and fitting"></div>
+            <div class="fit-line" data-fitmode-visibility hidden>
+              <span class="fit-lbl">Mode</span>
+              <div class="seg" role="group" aria-label="Batch fit mode">
+                <button type="button" data-fitmode="single" aria-pressed="true">Individual</button><button type="button" data-fitmode="global" aria-pressed="false">Global</button>
+              </div>
+            </div>
+            <div class="buttons">
+              <span class="hint" id="dataset-summary"></span>
+            </div>
+            <p class="hint">Individual fits refine each dataset separately. Global fits tie parameters marked shared.</p>
+            </section>
+          </details>
+          <details class="acc dataset-accordion dataset-card" id="dataset-editor" data-acc="dataset-editor" open>
+            <summary><span class="acc-t" id="dataset-editor-name">Dataset</span></summary>
+            <div class="acc-body">
+            <nav id="dataset-tabs" class="dataset-tabs" role="tablist" aria-label="Dataset parameters" hidden></nav>
+            <section id="dataset-detail" aria-labelledby="dataset-editor-name">
+              <div id="dataset-values"></div>
+              <div><div id="ds-info" class="ds-info param-stats"></div></div>
+              <div>
+                <div class="fit-steps">
+                  <span class="fit-lbl">Refine parameter groups</span>
+                  <div class="fit-groups" role="group" aria-label="Refinement parameter groups">
+                    <label><input type="checkbox" data-fit-group="scale"><span id="fit-background-label">Background</span></label>
+                    <label><input type="checkbox" data-fit-group="cell">Zero / lattice</label>
+                    <label title="Refine sample size and strain, or effective peak-shape parameters for legacy profiles"><input type="checkbox" data-fit-group="profile">Sample</label>
+                    <label title="Refine instrumental resolution coefficients separately from sample broadening"><input type="checkbox" data-fit-group="resolution">Resolution</label>
+                    <label data-rietveld-only><input type="checkbox" data-fit-group="atoms">Atomic positions</label>
+                    <label data-rietveld-only title="Isotropic displacement parameter B = 8π² Uiso"><input type="checkbox" data-fit-group="adp">B (Å²; Uiso × 8π²)</label>
+                    <label data-rietveld-only><input type="checkbox" data-fit-group="occupancy">Fractional occupancies</label>
+                  </div>
+                  <p class="hint">Each checkbox changes only its group in this dataset. Sample selects phase broadening; Resolution selects instrument broadening. A dash means some parameters are ticked. Edit individual values and flags below. FIT or F9 calculates the datasets selected on the right.</p>
+                </div>
+                <section class="dataset-parameters" id="sp-params">
+                  <div class="side-h param-head"><span class="sub">Values of</span><span id="param-ds" class="sub strong"></span><span id="param-more" class="sub"></span><span class="tool-gap"></span><span class="ds-step" role="group" aria-label="Show another dataset"><button type="button" id="param-prev" aria-label="Previous dataset">←</button><button type="button" id="param-next" aria-label="Next dataset">→</button></span></div>
+                  <div id="param-list" class="param-list"></div>
+                  <div id="param-stats" class="param-stats" hidden></div>
+
+                </section>
+              </div>
+              <details class="object-group" id="dataset-limits-group">
+                <summary><span class="acc-t">Parameter links and sharing</span><button type="button" class="help-q acc-help" data-acc-help data-help="A refinement keeps every parameter between its limits (type inf for none). Ticked “shared”, a parameter gets one value for all the datasets of a global fit that hold its phase (Sharing in the global fit, Refine menu, keeps some of them apart); unticked, one value per dataset. Scales and background stay local. Zero, displacement and transparency default to local and can be shared explicitly." aria-label="About parameter limits and sharing">?</button></summary>
+                <div id="dataset-limits-host">
+                  <section>
+                    <div id="limits"></div>
+                    <p class="buttons"><button type="button" id="lim-reset">All limits and shared flags to their defaults</button></p>
+                  </section>
+                  <button type="button" id="fit-sharing" class="mini" title="Which selected datasets share each group of parameters in the global fit" data-dataset-sharing>Sharing…</button>
+                </div>
+              </details>
+              <details class="object-group">
+                <summary><span class="acc-t">Constraints</span><button type="button" class="help-q acc-help" data-acc-help data-constraints-help aria-label="Constraint rules help">?</button></summary>
+                <div id="dataset-constraints-host"><p class="hint">Choose a relationship and parameter, select the atoms below, then click Add. Constraints apply to the phase in every Rietveld dataset.</p><div class="acc-body ac-host" id="dataset-atomic-constraints"></div></div>
+              </details>
+              <details class="object-group"><summary><span class="acc-t">Restraints</span><button type="button" class="help-q acc-help" data-acc-help data-restraints-help aria-label="Restraint rules and tolerances">?</button></summary><div class="acc-body" id="dataset-restraints"></div></details>
+              <details class="object-group" id="dataset-links-group"><summary><span class="acc-t">Links</span><button type="button" class="help-q acc-help" data-acc-help data-help="A dependent parameter follows one independent source exactly. Links can connect different phases or datasets for this method." aria-label="About parameter links">?</button></summary><div id="dataset-links"></div></details>
+              <details class="object-group" id="dataset-copy"><summary><span class="sub">Copy</span></summary><div class="acc-body"><div class="clone-bar"><label><input type="checkbox" id="clone-values" checked> Values</label><label><input type="checkbox" id="clone-flags" checked> Refinement flags</label><label>To <select id="clone-target" aria-label="Copy to dataset"></select></label><button type="button" id="clone-all">Copy</button></div></div></details>
+            </section>
+            </div>
+          </details>
+
+        </div>
+      </div>
+
+      <!-- Phases -->
+      <div class="pane phase-pane" id="pane-phases" role="tabpanel" aria-labelledby="tab-phases">
+        <div class="phase-bar">
+          <button type="button" data-act="new">New phase…</button>
+          <button type="button" data-act="cif">Read CIF…</button>
+          <button type="button" data-act="simulate">Simulate…</button>
+        </div>
+        <details id="phase-selection" class="fit-selection" hidden>
+          <summary>Choose a phase</summary>
+          <section class="side-phases">
+            <div class="side-h"><span id="ph-count" class="sub"></span></div>
+            <div id="ph-list" class="ds-list" tabindex="0" role="listbox" aria-label="Phases"></div>
+            <p class="hint">Select a phase to edit its shared definition here. Dataset-specific phase values and assignments are edited in Datasets.</p>
+          </section>
+        </details>
+        <div class="phase-accordions" id="phase-accordions"></div>
+        <div class="phase-body" id="phase-body"></div>
+      </div>
+
+      <!-- Method -->
+      <section id="pane-method" class="pane method-pane" role="tabpanel" aria-labelledby="tab-method">
+        <div class="solve-sticky" id="solve-sticky">
+          <div class="calculation-tabs" role="radiogroup" aria-label="Calculation method" id="method-selector">
+            <button type="button" role="radio" data-calculation="lebail" aria-checked="true">Le Bail</button>
+            <button type="button" role="radio" data-calculation="wppf" aria-checked="false" tabindex="-1">WPPF</button>
+            <button type="button" role="radio" data-calculation="rietveld" aria-checked="false" tabindex="-1">Rietveld</button>
+          </div>
+          <div class="solve-actions" role="toolbar" aria-label="Calculation actions">
+            <button type="button" class="primary" data-workflow="fit">Fit selected datasets</button>
+          </div>
+          <p class="hint method-instructions" id="calculation-target">Set values and refinement flags in Datasets and FIT from any view.</p>
+          <p class="method-warning warn" id="calculation-summary" role="status" hidden></p>
+        </div>
+        <section id="method-setup" class="method-setup" aria-label="Calculation setup">
+          <div id="method-refine-controls">
+            <section class="fitbar solve-fit" role="group" aria-label="Fit">
+              <p class="fit-target" id="fit-target"></p>
+              <div class="fit-line">
+                <span class="fit-lbl" id="fit-mode-lbl">Mode</span>
+                <div class="seg" id="fit-mode" role="group" aria-label="Fit mode">
+                  <button type="button" data-fitmode="single" aria-pressed="true" title="Each selected dataset gets its own refinement">Individual</button><button type="button" data-fitmode="global" aria-pressed="false" title="One refinement of all selected datasets with shared parameters">Global</button>
+                </div>
+                <span class="fit-sep" id="fit-mode-sep" aria-hidden="true"></span>
+                <span class="fit-kv"><span class="fit-lbl">Algorithm</span> <b id="fit-algorithm"></b></span>
+                <span class="fit-kv" title="LM iterations per stage; edit in Settings"><span class="fit-lbl">Max iterations</span> <b id="fit-max-iter"></b></span>
+                <span class="fit-kv" title="Relative change of χ², twice in a row; edit in Settings"><span class="fit-lbl">Min χ² change</span> <b id="fit-tol"></b></span>
+                <button type="button" class="mini" data-workflow="refinement-settings" title="Numerical conditions: algorithm, iterations, tolerance and weights">Settings »</button>
+              </div>
+              <p class="hint fit-mode-hint" id="fit-mode-hint"></p>
+            </section>
+          </div>
+        </section>
+      </section>
+
+      <!-- Structure: built by js/rietveld/rv_solve.js (extraction, space group, charge flipping, Wyckoff search) -->
+      <section id="pane-structure" class="pane structure-pane" role="tabpanel" aria-labelledby="tab-structure">
+        <div><div class="solve" id="solve"></div></div>
+      </section>
+
+      <!-- Settings -->
+      <div class="pane settings-pane" id="pane-settings" role="tabpanel" aria-labelledby="tab-settings">
+        <div class="settings" id="settings-form"></div>
+        <section class="block">
+          <h2>Settings</h2>
+          <p class="buttons"><button type="button" id="set-reset">Reset settings</button></p>
+        </section>
+      </div>
+    </div>
+  </aside>
+  <div class="side-grip" id="side-grip" role="separator" aria-orientation="vertical" aria-label="Resize command and results panels" tabindex="0" title="Drag left or right to resize the panels. Arrow keys also resize; double-click resets."><span class="grip-handle" aria-hidden="true">⋮</span></div>
+</main>
+
+<footer class="status">
+  <button type="button" class="cmd-help" id="cmd-help" title="List the commands (cmd)" aria-label="List the commands">?</button>
+  <label class="cmd"><span aria-hidden="true">›</span><input id="cmdline" placeholder="Command, e.g. method&gt;&gt;wppf, fit, cmd, help" spellcheck="false" autocomplete="off" aria-label="Command line"></label>
+  <div id="status-msg" class="msg" role="status" aria-live="polite"></div>
+  <div class="progress" id="fit-progress" hidden><div class="track"><i></i></div><span></span></div>
+</footer>
+
+<!-- the one running panel: every calculation (fits, extraction, space-group test, charge flipping, Wyckoff search) shows here, with its only Stop -->
+<div id="busy-guard" class="busy-guard" hidden>
+  <div class="busy-card" role="status" aria-live="polite">
+    <div class="busy-main">
+      <span class="busy-spin" aria-hidden="true"></span>
+      <div class="busy-text"><b id="busy-label" class="busy-label">Calculation running…</b><span id="busy-detail" class="busy-detail"></span></div>
+      <button type="button" id="busy-cancel" class="danger stop-btn" title="Stop the calculation (Esc)"><span aria-hidden="true">■</span> Stop <kbd>Esc</kbd></button>
+    </div>
+    <div class="busy-track indet" id="busy-track"><i></i></div>
+  </div>
+</div>
+<dialog id="dlg"></dialog>
+<div id="menu-pop" class="menu-pop" role="menu" hidden></div>
+<div class="drop-hint" aria-hidden="true">Drop powder patterns, structure CIFs or a project to read them</div>
+<datalist id="sg-list"></datalist>
+<datalist id="scat-list"></datalist>
+
+<!-- the space-group browser (js/spacegroup_ui.js) -->
+<div id="sg-modal-overlay" class="sg-modal-overlay" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="sg-modal-title">
+  <div class="sg-modal">
+    <div class="sg-modal-header" id="sg-modal-title">Space group</div>
+    <div class="sg-modal-body">
+      <div class="sg-modal-left">
+        <div class="sg-filter-label">Crystal system</div>
+        <div class="sg-filter-row" id="sg-chip-row-system"></div>
+        <div class="sg-filter-label">Bravais centring</div>
+        <div class="sg-filter-row" id="sg-chip-row-centering"></div>
+        <div class="sg-filter-label" id="sg-chip-row-axes-label" hidden>Axis choice</div>
+        <div class="sg-filter-row" id="sg-chip-row-axes" hidden></div>
+        <div class="sg-filter-label">Search</div>
+        <div class="sg-search-row">
+          <input type="text" id="sg-search-number" placeholder="Number (e.g. 19)" autocomplete="off" spellcheck="false" inputmode="numeric" aria-label="Space-group number">
+          <input type="text" id="sg-search-text" placeholder="Symbol or Hall (e.g. P21/c, Fd-3m, I 4bd)" autocomplete="off" spellcheck="false" aria-label="Space-group symbol or Hall symbol">
+        </div>
+        <div class="sg-list-wrap" id="sg-list-wrap"><div class="sg-list-empty">No space groups match these filters.</div></div>
+      </div>
+      <div class="sg-modal-right" id="sg-explain"><div class="sg-explain-empty">Pick a row from the list, or narrow it down with the filters and the search fields. Filters combine with AND.</div></div>
+    </div>
+    <div class="sg-modal-footer">
+      <button type="button" id="sg-btn-cancel">Cancel</button>
+      <button type="button" id="sg-btn-reset">Reset</button>
+      <button type="button" class="primary" id="sg-btn-apply" disabled>Apply</button>
+    </div>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,879 @@
+#!/usr/bin/env python3
+"""Renders the markdown tables of the LLM-serving research record.
+
+usage: tables.py LLM_SHARE_RESULTS HOSTMM_RESULTS OUTPUT_DIR
+"""
+import csv
+import os
+import sys
+
+engine_root, hostmm_root, out = sys.argv[1], sys.argv[2], sys.argv[3]
+os.makedirs(out, exist_ok=True)
+
+
+def rows(path):
+    with open(path, newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
+def write(name, text):
+    with open(os.path.join(out, name), "w") as handle:
+        handle.write(text)
+
+
+CONFIG_NAMES = {
+    "mig": "one MIG instance each (alternating)",
+    "timeslice": "one MIG instance, time-sliced",
+    "mps": "one MIG instance, one MPS server",
+    "mig_mps": "two MIG instances, an MPS server in each",
+}
+CONFIG_ORDER = ["timeslice", "mig", "mps", "mig_mps"]
+
+# --- one serving process -------------------------------------------------------
+path = os.path.join(engine_root, "20261005-engine-single-v1", "engine_single_summary.csv")
+if os.path.exists(path):
+    names = {"copy": "device copy (upstream)",
+             "inplace": "in place, CPU reads every page at load",
+             "inplace_noread": "in place, no CPU read"}
+    text = ("| Weights | Runs (failed) | Identical text | Prompt (tokens/s) | "
+            "Generation (tokens/s) | Generation against device copy | Load (ms) | "
+            "Memory outside the model file (MiB) | Model file mapped (MiB) |\n"
+            "|---|---:|---:|---:|---:|---|---:|---:|---:|\n")
+    for r in rows(path):
+        text += (f"| {names[r['mode']]} | {r['runs']} ({r['failed_runs']}) | "
+                 f"{r['identical_text_runs']}/{r['runs']} | {float(r['prompt_tps']):.0f} | "
+                 f"{float(r['generation_tps']):.2f} | {float(r['generation_vs_copy']):.3f}x "
+                 f"[{float(r['lower_ci95']):.3f}, {float(r['upper_ci95']):.3f}] | "
+                 f"{float(r['load_ms']):.0f} | {r['device_memory_mib']} | "
+                 f"{r['model_mapped_mib']} |\n")
+    write("engine_single.md", text)
+
+# --- page size of the mapped model ---------------------------------------------
+path = os.path.join(engine_root, "20261005-engine-pages-v1", "engine_pages_summary.csv")
+if os.path.exists(path):
+    names = {"copy": "device copy (upstream)",
+             "inplace_4k": "in place, ext4 page cache (4 KiB)",
+             "inplace_thp": "in place, tmpfs with huge pages (2 MiB)",
+             "inplace_hugetlb": "in place, hugetlbfs (2 MiB)"}
+    text = ("| Weights | Runs (failed) | Identical text | Prompt (tokens/s) | "
+            "Generation (tokens/s) | Generation against device copy | Load (ms) |\n"
+            "|---|---:|---:|---:|---:|---|---:|\n")
+    for r in rows(path):
+        text += (f"| {names[r['mode']]} | {r['runs']} ({r['failed_runs']}) | "
+                 f"{r['identical_text_runs']}/{r['runs']} | {float(r['prompt_tps']):.0f} | "
+                 f"{float(r['generation_tps']):.2f} | {float(r['generation_vs_copy']):.3f}x "
+                 f"[{float(r['lower_ci95']):.3f}, {float(r['upper_ci95']):.3f}] | "
+                 f"{float(r['load_ms']):.0f} |\n")
+    write("engine_pages.md", text)
+
+# --- N serving processes ---------------------------------------------------------
+path = os.path.join(engine_root, "20261005-engine-agents-v1", "engine_agents_summary.csv")
+if os.path.exists(path):
+    data = {(r["config"], r["mode"], r["agents"]): r for r in rows(path)}
+    text = ("| Compute shared by | Agents | Generation, device copy (tokens/s, sum) | "
+            "Generation, in place (tokens/s, sum) | In place / device copy | "
+            "Memory, device copy (MiB) | Memory, in place (MiB) |\n"
+            "|---|---:|---:|---:|---:|---:|---:|\n")
+    for config in CONFIG_ORDER:
+        for agents in ["1", "2", "4", "8"]:
+            copy = data.get((config, "copy", agents))
+            inplace = data.get((config, "inplace", agents))
+            if not copy or not inplace:
+                continue
+            text += (f"| {CONFIG_NAMES[config]} | {agents} | "
+                     f"{float(copy['generation_tps_total']):.1f} +/- {float(copy['generation_total_ci95']):.1f} | "
+                     f"{float(inplace['generation_tps_total']):.1f} +/- {float(inplace['generation_total_ci95']):.1f} | "
+                     f"{float(inplace['generation_tps_total']) / float(copy['generation_tps_total']):.3f}x | "
+                     f"{float(copy['memory_total_mib']):.0f} | {float(inplace['memory_total_mib']):.0f} |\n")
+    write("engine_agents.md", text)
+
+# --- one process, N sequences ----------------------------------------------------
+path = os.path.join(engine_root, "20261005-engine-batched-v1", "engine_batched_summary.csv")
+if os.path.exists(path):
+    data = [r for r in rows(path) if r["mode"] in ("copy", "inplace")]
+    table = {(r["mode"], r["sequences"]): r for r in data}
+    text = ("| Sequences in one process | Generation, device copy (tokens/s, sum) | "
+            "Generation, in place (tokens/s, sum) | Per sequence, in place (tokens/s) |\n"
+            "|---:|---:|---:|---:|\n")
+    for sequences in sorted({r["sequences"] for r in data}, key=int):
+        copy = table.get(("copy", sequences))
+        inplace = table.get(("inplace", sequences))
+        if not copy or not inplace:
+            continue
+        text += (f"| {sequences} | {float(copy['generation_tps_total']):.1f} | "
+                 f"{float(inplace['generation_tps_total']):.1f} | "
+                 f"{float(inplace['generation_tps_per_sequence']):.1f} |\n")
+    write("engine_batched.md", text)
+
+# --- a batching server per MIG instance ------------------------------------------
+path = os.path.join(engine_root, "20261005-engine-groups-v1", "engine_groups_summary.csv")
+if os.path.exists(path):
+    names = {"copy": "device copy", "inplace": "in place"}
+    text = ("| Weights | Sequences per server | Runs (failed) | Generation, both servers (tokens/s) | "
+            "12-SM instance | 8-SM instance | Memory outside the model file (MiB) | "
+            "Model file mapped (MiB) | Total (MiB) |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        text += (f"| {names[r['mode']]} | {r['sequences_per_server']} | "
+                 f"{r['runs']} ({r['failed_runs']}) | "
+                 f"{float(r['generation_tps_total']):.1f} +/- {float(r['generation_tps_sd']):.1f} | "
+                 f"{float(r['instance_a_tps']):.1f} | {float(r['instance_b_tps']):.1f} | "
+                 f"{r['device_memory_mib']} | {r['model_mapped_mib']} | "
+                 f"{r['memory_total_mib']} |\n")
+    write("engine_groups.md", text)
+
+# --- prompt prefix ----------------------------------------------------------------
+path = os.path.join(engine_root, "20261005-engine-prefix-v1", "engine_prefix_summary.csv")
+if os.path.exists(path):
+    text = ("| Prefix (tokens) | Process that recomputes it (ms) | of which prompt evaluation (ms) | "
+            "Process that restores it from the cache file (ms) | Cache file (MiB) | "
+            "KiB per token |\n|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        text += (f"| {r['prefix_tokens']} | {r['recompute_wall_ms']} | {r['prefill_ms']} | "
+                 f"{r['restore_wall_ms']} | {r['cache_mib']} | {r['cache_kib_per_token']} |\n")
+    write("engine_prefix.md", text)
+
+# --- agents that start from one computed prefix ----------------------------------
+KV_MODES = {
+    "recompute": "recompute",
+    "restore": "copy from the state file (upstream)",
+    "cow": "copy-on-write mapping, 2 MiB file",
+    "cow_small": "copy-on-write mapping, 4 KiB file",
+    "extent": "extent, whole tail allocated",
+    "extent_lazy": "extent, tail follows use",
+    "extent_lazy_small": "extent, tail follows use, 4 KiB file",
+}
+kv_dir = os.path.join(engine_root, "20261006-engine-kvshare-v1")
+path = os.path.join(kv_dir, "engine_kvshare_publish.csv")
+if os.path.exists(path):
+    names = {"device": "save the state file (upstream)",
+             "huge": "publish, cache file with 2 MiB pages",
+             "small": "publish, cache file with 4 KiB pages"}
+    text = ("| Prefix (tokens) | Way | Runs (failed) | Compute the prefix (ms) | "
+            "Hand it over (ms) | State file (MiB) | Cache file in use (MiB) |\n"
+            "|---:|---|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        used = "-" if r["store"] == "device" else r["file_used_mib"]
+        text += (f"| {r['prefix_tokens']} | {names[r['store']]} | {r['runs']} ({r['failed_runs']}) | "
+                 f"{r['prefix_ms']} | {float(r['publish_ms']):.1f} | "
+                 f"{float(r['state_mib']):.2f} | {used} |\n")
+    write("kv_publish.md", text)
+path = os.path.join(kv_dir, "engine_kvshare_summary.csv")
+if os.path.exists(path):
+    data = rows(path)
+    for size in sorted({r["paragraphs"] for r in data}, key=int):
+        text = ("| Agents | Way to obtain the prefix | Texts equal to copy | "
+                "Texts equal to recompute: publisher's instance, other instance | Attach (ms) | "
+                "First token after process start (ms) | Generation, sum (tokens/s) | "
+                "Generation against copy | Memory of the agents (MiB) | "
+                "Prefix pages the agents map: resident sum / proportional sum (MiB) |\n"
+                "|---:|---|---:|---:|---:|---:|---:|---|---:|---:|\n")
+        for r in data:
+            if r["paragraphs"] != size:
+                continue
+            ratio = "-"
+            if r["mode"] != "restore":
+                ratio = (f"{float(r['generation_vs_restore']):.3f}x "
+                         f"[{float(r['lower_ci95']):.3f}, {float(r['upper_ci95']):.3f}]")
+            mapped = "-"
+            if r["mode"] not in ("recompute", "restore"):
+                mapped = f"{r['prefix_rss_mib']} / {r['prefix_pss_mib']}"
+            other = "-"
+            if int(r["other_instance_compared"]) > 0:
+                other = f"{r['other_instance_equal_to_recompute']}/{r['other_instance_compared']}"
+            copy = "-" if r["mode"] == "recompute" else f"{r['texts_equal_to_restore']}/{r['texts_compared']}"
+            text += (f"| {r['agents']} | {KV_MODES[r['mode']]} | {copy} | "
+                     f"{r['own_instance_equal_to_recompute']}/{r['own_instance_compared']}, {other} | "
+                     f"{float(r['attach_ms']):.0f} | {r['first_token_ms']} | "
+                     f"{float(r['generation_tps_total']):.1f} | {ratio} | "
+                     f"{r['memory_mib']} | {mapped} |\n")
+        tokens = next(r["prefix_tokens"] for r in data if r["paragraphs"] == size)
+        write(f"kv_agents_{tokens}.md", text)
+
+# --- a parent that forks its state -----------------------------------------------
+path = os.path.join(engine_root, "20261006-engine-kvfork-v1", "engine_kvfork_summary.csv")
+if os.path.exists(path):
+    names = {"copy": "copy (state file with the rows)", "extent": "extent (freeze and map)"}
+    text = ("| Hand-over | Runs (failed processes) | Pause of the parent (ms) | State file (MiB) | "
+            "Parent text equal to alone | Child texts equal to copy | "
+            "Child texts equal to alone: parent's instance, other instance | Child attach (ms) | "
+            "Child first token (ms) | Memory of the children (MiB) | "
+            "Prefix pages the children map: resident sum / proportional sum (MiB) |\n"
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        mapped = "-" if r["mode"] == "copy" else f"{r['prefix_rss_mib']} / {r['prefix_pss_mib']}"
+        text += (f"| {names[r['mode']]} | {r['runs']} ({r['failed_processes']}) | "
+                 f"{float(r['publish_ms']):.1f} | {float(r['state_mib']):.2f} | "
+                 f"{r['parent_texts_equal']}/{r['runs']} | "
+                 f"{r['child_texts_equal_to_copy']}/{r['children_started']} | "
+                 f"{r['own_instance_equal_to_alone']}/{r['own_instance_compared']}, "
+                 f"{r['other_instance_equal_to_alone']}/{r['other_instance_compared']} | "
+                 f"{float(r['child_attach_ms']):.0f} | {r['child_first_token_ms']} | "
+                 f"{r['children_memory_mib']} | {mapped} |\n")
+    write("kv_fork.md", text)
+
+# --- the cache of a prefix, bit for bit, across repetitions and instances ----------
+path = os.path.join(engine_root, "20261006-engine-kvdet-v1", "engine_kvdet_summary.csv")
+if os.path.exists(path):
+    text = ("| Prefix (tokens) | Runs (failed) | Distinct caches, 12-SM instance | "
+            "Distinct caches, 8-SM instance | Runs with the same bits in both instances | "
+            "16-bit values that differ (mean) | Largest difference | First tensor that differs |\n"
+            "|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        text += (f"| {r['prefix_tokens']} | {r['runs']} ({r['failed']}) | "
+                 f"{r['distinct_caches_instance_a']} | {r['distinct_caches_instance_b']} | "
+                 f"{r['runs_with_equal_caches_across_instances']}/{r['runs']} | "
+                 f"{r['values_that_differ_mean']} | {r['largest_difference']} | "
+                 f"{r['first_tensor_that_differs']} |\n")
+    write("kv_det.md", text)
+
+# --- composing shared and private device memory ----------------------------------
+path = os.path.join(engine_root, "20261006-vmm-routes-v1", "vmm_routes_summary.csv")
+if os.path.exists(path):
+    placements = {"same_instance": "two processes in one MIG instance",
+                  "across_instances": "one process in each MIG instance",
+                  "same_mps_server": "two clients of one MPS server"}
+    text = ("| Placement | Shared and private device memory composed | Refusal | "
+            "Read-only access to the shared part | Producer's data unchanged |\n"
+            "|---|---:|---|---|---:|\n")
+    for r in rows(path):
+        refusal = "-" if r["refusal"] == "-" else f"`{r['refusal']}`"
+        text += (f"| {placements[r['placement']]} | {r['works']}/{r['runs']} | {refusal} | "
+                 f"{r['read_only_access']} | {r['producer_intact']}/{r['works']} |\n")
+    write("vmm_routes.md", text)
+
+# --- copy-on-write with and without the remedies ----------------------------------
+path = os.path.join(engine_root, "20261006-engine-kvcow-v1", "engine_kvcow_summary.csv")
+if os.path.exists(path):
+    names = {"restore": "copy from the state file (upstream)",
+             "cow": "copy-on-write, 2 MiB file, CPU read pass",
+             "cow_noread": "copy-on-write, 2 MiB file, no read pass",
+             "cow_small": "copy-on-write, 4 KiB file, CPU read pass",
+             "cow_small_noread": "copy-on-write, 4 KiB file, no read pass",
+             "extent_lazy": "extent, tail follows use"}
+    text = ("| Agents | Way to obtain the prefix | Runs (failed agents) | Texts equal to copy | "
+            "Decode of the agent's own task (ms) | First token after process start (ms) | "
+            "Generation against copy | Memory of the agents (MiB) | "
+            "Per agent above extents (MiB) | "
+            "Prefix pages the agents map: resident sum / proportional sum (MiB) |\n"
+            "|---:|---|---:|---:|---:|---:|---|---:|---:|---:|\n")
+    for r in rows(path):
+        ratio = "-"
+        if r["mode"] != "restore":
+            ratio = (f"{float(r['generation_vs_restore']):.3f}x "
+                     f"[{float(r['lower_ci95']):.3f}, {float(r['upper_ci95']):.3f}]")
+        mapped = "-" if r["mode"] == "restore" else f"{r['prefix_rss_mib']} / {r['prefix_pss_mib']}"
+        text += (f"| {r['agents']} | {names[r['mode']]} | {r['runs']} ({r['failed_agents']}) | "
+                 f"{r['texts_equal_to_restore']}/{r['texts_compared']} | {r['suffix_ms']} | "
+                 f"{r['first_token_ms']} | {ratio} | {r['memory_mib']} | "
+                 f"{r['memory_per_agent_above_extent_mib']} | {mapped} |\n")
+    write("kv_cow.md", text)
+
+# --- where the generation speed goes -----------------------------------------------
+speed_runs = [("20261006-engine-kvspeed-v1", "12-SM"), ("20261006-engine-kvspeed-long-v1", "12-SM"),
+              ("20261006-engine-kvspeed-6sm-v1", "8-SM"), ("20261006-engine-kvspeed-6sm-long-v1", "8-SM")]
+names = {"device": "device memory, prefix computed (upstream)",
+         "anon": "private host memory, 2 MiB pages, prefix computed",
+         "anon_lazy": "private host memory that follows use, 4 KiB pages, prefix computed",
+         "restore": "device memory, prefix copied from the state file",
+         "extent": "mapped prefix, private tail on 2 MiB pages",
+         "extent_lazy": "mapped prefix, private tail that follows use"}
+text = ("| MIG instance | Prefix (tokens) | Tokens generated | Processes | Cache | Runs (failed) | "
+        "Generation, sum (tokens/s) | Against device memory |\n|---|---:|---:|---:|---|---:|---:|---|\n")
+found = False
+for tag, instance in speed_runs:
+    path = os.path.join(engine_root, tag, "engine_kvspeed_summary.csv")
+    if not os.path.exists(path):
+        continue
+    found = True
+    generated = "?"
+    with open(os.path.join(engine_root, tag, "metadata.txt")) as handle:
+        for line in handle:
+            if line.startswith("n_gen="):
+                generated = line.strip().split("=", 1)[1]
+    for r in rows(path):
+        ratio = "-"
+        if r["mode"] != "device":
+            ratio = (f"{float(r['generation_vs_device']):.3f}x "
+                     f"[{float(r['lower_ci95']):.3f}, {float(r['upper_ci95']):.3f}]")
+        text += (f"| {instance} | {r['prefix_tokens']} | {generated} | {r['processes']} | "
+                 f"{names[r['mode']]} | {r['runs']} ({r['failed_agents']}) | "
+                 f"{float(r['generation_tps_total']):.2f} | {ratio} |\n")
+if found:
+    write("kv_speed.md", text)
+
+# --- agents that may share a process ------------------------------------------------
+path = os.path.join(engine_root, "20261006-engine-kvbatch-v1", "engine_kvbatch_summary.csv")
+if os.path.exists(path):
+    names = {"one_server": "one server in the 12-SM instance, 8 sequences",
+             "two_servers_compute": "a server in each instance, 4 sequences each; each computes the prefix",
+             "two_servers_copy": "a server in each instance; the second copies the state file",
+             "two_servers_extent": "a server in each instance; the second maps the published prefix"}
+    text = ("| Configuration | Runs (failed servers) | Generation, all agents (tokens/s) | "
+            "12-SM server | 8-SM server | First server ready (s) | All agents ready (s) | "
+            "Hand-over (ms) | State file (MiB) | Memory of all servers (MiB) | "
+            "Texts equal to the copy configuration |\n"
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        second = "-" if r["config"] == "one_server" else f"{float(r['generation_tps_6sm']):.1f}"
+        hand = "-" if float(r["publish_ms"]) == 0 else f"{float(r['publish_ms']):.1f}"
+        state = "-" if float(r["state_mib"]) == 0 else f"{float(r['state_mib']):.2f}"
+        text += (f"| {names[r['config']]} | {r['runs']} ({r['failed_servers']}) | "
+                 f"{float(r['generation_tps_total']):.1f} | {float(r['generation_tps_12sm']):.1f} | "
+                 f"{second} | {float(r['ready_first_server_ms']) / 1000:.1f} | "
+                 f"{float(r['ready_all_servers_ms']) / 1000:.1f} | {hand} | {state} | "
+                 f"{r['memory_mib']} | {r['texts_equal_to_copy']}/{r['texts_compared']} |\n")
+    write("kv_batch.md", text)
+
+# --- the device-memory counterpart, in the engine ------------------------------------
+path = os.path.join(engine_root, "20261006-engine-kvvmm-v1", "engine_kvvmm_summary.csv")
+if os.path.exists(path):
+    instances = {"fafc828a": "12-SM", "31ffbfe4": "8-SM"}
+    names = {"copy": "copy (state file with the rows)",
+             "extent": "host memory: mapped file, private tail",
+             "vmm": "device memory: shared allocations, private tail",
+             "extent_cross": "host memory, one child in the other instance",
+             "vmm_cross": "device memory, one child in the other instance"}
+    text = ("| Parent's instance | Prefix (tokens) | Hand-over | Runs | Pause of the parent (ms) | "
+            "State file (MiB) | Children that ran | Child texts equal to copy | "
+            "Child attach (ms) | Child first token (ms) | Child generation (tokens/s, each) | "
+            "Parent generation (tokens/s) | Memory of the children (MiB) |\n"
+            "|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        ran = f"{r['children_finished']}/{r['children_started']}"
+        if int(r["children_finished"]) == 0:
+            cells = "- | - | - | -"
+        else:
+            cells = (f"{r['child_texts_equal_to_copy']}/{r['children_finished']} | "
+                     f"{float(r['child_attach_ms']):.0f} | {r['child_first_token_ms']} | "
+                     f"{float(r['child_generation_tps']):.2f}")
+        text += (f"| {instances.get(r['parent_mig'], r['parent_mig'])} | {r['prefix_tokens']} | "
+                 f"{names[r['mode']]} | {r['runs']} | {float(r['publish_ms']):.1f} | "
+                 f"{float(r['state_mib']):.2f} | {ran} | {cells} | "
+                 f"{float(r['parent_generation_tps']):.2f} | {r['children_memory_mib']} |\n")
+    write("kv_vmm.md", text)
+
+# --- extents under every way of sharing the GPU -------------------------------
+path = os.path.join(engine_root, "20261006-engine-kvmps-v1", "engine_kvmps_summary.csv")
+if os.path.exists(path):
+    data = rows(path)
+    table = {(r["config"], r["children"], r["prefix_tokens"], r["mode"]): r for r in data}
+    names = {"timeslice": "time slicing", "mps": "one MPS server",
+             "mig": "two MIG instances", "mig_mps": "one MPS server per MIG instance"}
+    text = ("| Compute shared by | Children | Prefix (tokens) | Memory, copy / extents (MiB) | "
+            "Throughput, copy / extents (tokens/s) | Extents / copy | "
+            "Parent pause, copy / extents (ms) | Attach, copy / extents (ms) | "
+            "Extent texts equal to copy |\n"
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+    cells = sorted({(r["config"], r["children"], r["prefix_tokens"]) for r in data},
+                   key=lambda cell: (CONFIG_ORDER.index(cell[0]), int(cell[2]), int(cell[1])))
+    for config, children, tokens in cells:
+        copy = table[config, children, tokens, "copy"]
+        extent = table[config, children, tokens, "extent"]
+        text += (f"| {names[config]} | {children} | {int(float(tokens)):,} | "
+                 f"{float(copy['children_memory_mib']):.0f} / "
+                 f"{float(extent['children_memory_mib']):.0f} | "
+                 f"{float(copy['children_tps_sum']):.2f} / "
+                 f"{float(extent['children_tps_sum']):.2f} | "
+                 f"{float(extent['children_tps_sum']) / float(copy['children_tps_sum']):.3f} | "
+                 f"{float(copy['publish_ms']):.1f} / {float(extent['publish_ms']):.1f} | "
+                 f"{float(copy['child_attach_ms']):.1f} / {float(extent['child_attach_ms']):.1f} | "
+                 f"{extent['texts_equal_to_copy']}/{extent['children_finished']} |\n")
+    write("kv_mps.md", text)
+
+# --- five hand-over mechanisms in the same engine ----------------------------
+path = os.path.join(engine_root, "20261006-engine-kvsota-v1", "engine_kvsota_summary.csv")
+if os.path.exists(path):
+    names = {"copy": "copy", "demand": "demand-backed copy",
+             "device": "shared device memory", "cow": "copy-on-write",
+             "extent": "extents"}
+    text = ("| Placement | Hand-over | Children complete | Texts equal to copy | "
+            "Parent pause (ms) | Attach (ms) | First token (ms) | "
+            "Memory (MiB) | Throughput (tokens/s) |\n"
+            "|---|---|---:|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        text += (f"| {r['placement']} | {names[r['mode']]} | "
+                 f"{r['children_finished']}/{r['children_started']} | "
+                 f"{r['texts_equal_to_copy']}/{r['children_finished']} | "
+                 f"{float(r['publish_ms']):.2f} | {float(r['child_attach_ms']):.1f} | "
+                 f"{r['child_first_token_ms']} | {r['children_memory_mib']} | "
+                 f"{float(r['children_tps_sum']):.2f} |\n")
+    write("kv_sota.md", text)
+
+# --- a two-level tree of agents ----------------------------------------------
+path = os.path.join(engine_root, "20261006-engine-kvtree-v1", "engine_kvtree_summary.csv")
+if os.path.exists(path):
+    names = {"copy": "copy", "flat": "one published prefix",
+             "chain": "extent chain, 2 MiB pages",
+             "chain_small": "extent chain, 4 KiB pages"}
+    text = ("| Tree | Runs (failed, timed out) | Root / leader publish (ms) | "
+            "Leaf attach (ms) | Leaf first token (ms) | Memory (MiB) | "
+            "Leaves complete | Exact texts | Minimum common tokens | Files removed |\n"
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        leader = "-" if float(r["leader_publish_ms"]) == 0 else f"{float(r['leader_publish_ms']):.2f}"
+        removed = "-" if r["mode"] == "copy" else f"{r['files_removed_runs']}/{r['runs']}"
+        text += (f"| {names[r['mode']]} | {r['runs']} ({r['failed_processes']}, {r['timed_out']}) | "
+                 f"{float(r['root_publish_ms']):.2f} / {leader} | "
+                 f"{float(r['leaf_attach_ms']):.1f} | {r['leaf_first_token_ms']} | "
+                 f"{r['tree_memory_mib']} | {r['leaves_finished']} | "
+                 f"{r['leaf_texts_equal_to_copy']}/{r['token_sequences_compared']} | "
+                 f"{r['min_common_tokens_to_copy']} | {removed} |\n")
+    write("kv_tree.md", text)
+
+# --- scaling, models, and an agent trace -------------------------------------
+scale_runs = (("Qwen2.5 7B", "20261006-engine-kvscale-v1"),
+              ("Llama 3.1 8B", "20261006-engine-kvscale-llama8b-v1"),
+              ("Qwen2.5 14B", "20261006-engine-kvscale-qwen14b-v1"),
+              ("Qwen2.5 7B, agent trace", "20261006-engine-kvscale-agent-v1"))
+text = ("| Workload | Agents | Mode | Runs (failed agents) | Exact texts | Attach (ms) | "
+        "First token (ms) | Throughput (tokens/s) | Extents / copy | "
+        "Memory (MiB) | Memory saved (MiB) |\n"
+        "|---|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+found = False
+for label, directory in scale_runs:
+    path = os.path.join(engine_root, directory, "engine_kvscale_summary.csv")
+    if not os.path.exists(path):
+        continue
+    found = True
+    for r in rows(path):
+        exact = f"{r['texts_equal_to_restore']}/{r['texts_compared']}"
+        text += (f"| {label} | {r['agents']} | {r['mode']} | "
+                 f"{r['runs']} ({r['failed_agents']}) | {exact} | "
+                 f"{float(r['attach_ms']):.1f} | {r['first_token_ms']} | "
+                 f"{float(r['generation_tps_total']):.2f} | "
+                 f"{float(r['generation_vs_restore']):.4f} | {r['memory_mib']} | "
+                 f"{r['memory_saved_vs_restore_mib']} |\n")
+if found:
+    write("kv_scale.md", text)
+
+# --- real server route --------------------------------------------------------
+path = os.path.join(engine_root, "20261006-engine-kvserver-v1", "engine_kvserver_summary.csv")
+if os.path.exists(path):
+    text = ("| Mode | Agents | Runs (failed) | Requests complete | Exact texts | "
+            "Minimum common tokens | Save, request / server (ms) | Restore (ms) | "
+            "First token (ms) | Memory / cache file (MiB) |\n"
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        text += (f"| {r['mode']} | {r['agents']} | {r['runs']} ({r['failed']}) | "
+                 f"{r['agents_finished']}/{int(r['runs']) * int(r['agents'])} | "
+                 f"{r['texts_equal_to_copy']}/{r['token_sequences_compared']} | "
+                 f"{r['min_common_tokens_to_copy']} | {float(r['save_request_ms']):.2f} / "
+                 f"{float(r['server_save_ms']):.2f} | {float(r['restore_request_ms']):.1f} | "
+                 f"{r['first_token_ms']} | {r['agents_memory_mib']} / {r['cache_file_mib']} |\n")
+    write("kv_server.md", text)
+
+# --- real server route, published at a token boundary --------------------------
+path = os.path.join(engine_root, "20261007-engine-kvserver2-v1", "engine_kvserver_summary.csv")
+if os.path.exists(path):
+    text = ("| Mode | Agents | Runs (failed) | Requests complete | Exact texts | "
+            "Minimum common tokens | Save, request / server (ms) | Restore (ms) | "
+            "First token (ms) | Memory / cache file (MiB) |\n"
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        text += (f"| {r['mode']} | {r['agents']} | {r['runs']} ({r['failed']}) | "
+                 f"{r['agents_finished']}/{int(r['runs']) * int(r['agents'])} | "
+                 f"{r['texts_equal_to_copy']}/{r['token_sequences_compared']} | "
+                 f"{r['min_common_tokens_to_copy']} | {float(r['save_request_ms']):.2f} / "
+                 f"{float(r['server_save_ms']):.2f} | {float(r['restore_request_ms']):.1f} | "
+                 f"{r['first_token_ms']} | {r['agents_memory_mib']} / {r['cache_file_mib']} |\n")
+    write("kv_server2.md", text)
+
+# --- memory-accounting and enforced-limit behavior ---------------------------
+path = os.path.join(engine_root, "20261006-engine-kvlimit-v1", "engine_kvlimit_summary.csv")
+if os.path.exists(path):
+    text = ("| Phase | Mode | Limit (MiB) | Agent 0 complete / OOM | Agent 0 peak (MiB) | "
+            "Agent 0 task tokens | Other agents complete / OOM | Other texts exact | "
+            "Available-memory drop (MiB) | Charged fraction |\n"
+            "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        text += (f"| {r['phase']} | {r['mode']} | {r['limit_mib']} | "
+                 f"{r['agent0_completed']} / {r['agent0_oom_kills']} | "
+                 f"{r['agent0_peak_mib']} | {r['agent0_task_tokens']} | "
+                 f"{r['others_completed']} / {r['others_oom_kills']} | "
+                 f"{r['others_texts_equal_to_account']}/{r['others']} | "
+                 f"{r['mem_available_drop_mib']} | {float(r['charged_fraction']):.3f} |\n")
+    write("kv_limit.md", text)
+
+# --- raw host/device read path ------------------------------------------------
+path = os.path.join(engine_root, "20261006-read-path-v1", "read_path_summary.csv")
+if os.path.exists(path):
+    text = ("| MIG instance | Size (MiB) | Memory | Runs (failed) | Bandwidth (GiB/s) | "
+            "Against device | 95% CI | Random-page latency (ns/page) |\n"
+            "|---|---:|---|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        text += (f"| {r['instance']} | {r['size_mib']} | {r['kind']} | "
+                 f"{r['runs']} ({r['failed']}) | {float(r['full_gib_per_s']):.2f} | "
+                 f"{float(r['full_vs_device']):.4f} | "
+                 f"[{float(r['lower_ci95']):.4f}, {float(r['upper_ci95']):.4f}] | "
+                 f"{float(r['ns_per_page']):.2f} |\n")
+    write("read_path.md", text)
+
+# --- CUDA VMM attach granularity ---------------------------------------------
+path = os.path.join(engine_root, "20261006-vmm-attach-v1", "vmm_attach_summary.csv")
+if os.path.exists(path):
+    text = ("| Allocation (MiB) | Handles | Runs (failed) | Export (ms) | Attach (ms) | "
+            "Attach (us/handle) | Wrong words |\n"
+            "|---:|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        text += (f"| {r['granule_mib']} | {r['handles']} | {r['runs']} ({r['failed']}) | "
+                 f"{float(r['export_ms']):.3f} | {float(r['attach_ms']):.3f} | "
+                 f"{float(r['attach_us_per_handle']):.1f} | {r['wrong_words']} |\n")
+    write("vmm_attach.md", text)
+
+# --- write protection of imported state --------------------------------------
+path = os.path.join(engine_root, "20261006-protect-v1", "protect_summary.csv")
+if os.path.exists(path):
+    with open(path, newline="") as handle:
+        protected = list(csv.reader(handle))
+    host = dict(zip(protected[0], protected[1]))
+    vmm = dict(zip(protected[2], protected[3]))
+    text = ("| Route | Attempts | Read / access change | Write refused / succeeded | "
+            "Write result | Exporter's state intact |\n"
+            "|---|---:|---:|---:|---|---:|\n"
+            f"| host, read-only mapping | {host['attempts']} | "
+            f"{host['gpu_reads_complete']} reads complete | "
+            f"{host['writes_refused']} refused | `{host['write_error']}` | "
+            f"{host['shared_state_intact']}/{host['attempts']} |\n"
+            f"| device VMM import | {vmm['attempts']} | "
+            f"{vmm['importer_raised_access']} access raises succeeded | "
+            f"{vmm['importer_writes_succeeded']} succeeded | allowed | "
+            f"{vmm['exporter_state_intact']}/{vmm['attempts']} |\n")
+    write("protect.md", text)
+
+# --- unmodified Ollama servers ------------------------------------------------
+path = os.path.join(engine_root, "20261006-ollama-agents-v1", "ollama_agents_summary.csv")
+if os.path.exists(path):
+    text = ("| Servers | Round | Runs | Requests complete | Prompt tokens | First token (ms) | "
+            "Request (ms) | Throughput (tokens/s) | Memory (MiB) | GPU servers | "
+            "Reported VRAM (MiB) |\n"
+            "|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        text += (f"| {r['config']} | {r['round']} | {r['runs']} | "
+                 f"{r['agents_finished']}/{r['agents_started']} | {r['prompt_tokens_evaluated']} | "
+                 f"{r['first_token_ms']} | {r['request_ms']} | "
+                 f"{float(r['generation_tps_sum']):.2f} | {r['memory_mib']} | "
+                 f"{float(r['gpu_servers']):.0f}/{float(r['servers']):.0f} | "
+                 f"{float(r['vram_mib']):.0f} |\n")
+    write("ollama_agents.md", text)
+
+# --- adapters --------------------------------------------------------------------
+path = os.path.join(engine_root, "20261005-engine-adapters-v1", "engine_adapters_summary.csv")
+if os.path.exists(path):
+    names = {"copy": "device copy (upstream)", "inplace": "in place"}
+    text = ("| Base weights | Runs (failed) | Runs with five distinct texts | "
+            "Texts equal to the device-copy text | Memory outside the model file (MiB) | "
+            "Model file mapped (MiB) | Total (MiB) |\n|---|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(path):
+        text += (f"| {names[r['mode']]} | {r['runs']} ({r['failed_runs']}) | "
+                 f"{r['runs_with_five_distinct_texts']}/{r['runs']} | "
+                 f"{r['texts_equal_to_copy']}/{r['texts_compared']} | "
+                 f"{r['device_memory_mib']} | {r['model_mapped_mib']} | "
+                 f"{r['memory_total_mib']} |\n")
+    write("engine_adapters.md", text)
+
+# --- sharing routes --------------------------------------------------------------
+path = os.path.join(engine_root, "20261005-sharing-routes-v2", "sharing_routes_summary.csv")
+if os.path.exists(path):
+    data = {(r["route"], r["placement"]): r for r in rows(path)}
+    placements = [("same_instance", "two processes in one MIG instance"),
+                  ("across_instances", "one process in each MIG instance"),
+                  ("same_mps_server", "two clients of one MPS server")]
+    text = ("| Placement | CUDA IPC | Host page table |\n|---|---|---|\n")
+    for key, label in placements:
+        cells = []
+        for route in ["cuda_ipc", "host_page_table"]:
+            r = data[(route, key)]
+            cell = f"works {r['works']}/{r['runs']}"
+            if r["refusal"] != "-":
+                cell += f" (`{r['refusal']}`)"
+            cells.append(cell)
+        text += f"| {label} | {cells[0]} | {cells[1]} |\n"
+    write("sharing_routes.md", text)
+
+# --- compute-sharing matrix of the sealed base -----------------------------------
+modes_dir = os.path.join(hostmm_root, "20261005-sharing-modes-v1")
+path = os.path.join(modes_dir, "sharing_perf_summary.csv")
+if os.path.exists(path):
+    data = {(r["config"], r["mode"], r["tenants"]): r for r in rows(path)}
+    text = ("| Compute shared by | Tenants | Read at the same time, copies (ms) | "
+            "Read at the same time, shared base (ms) | Slowdown against a tenant alone, shared base | "
+            "Memory, copies (MiB) | Memory, shared base (MiB) |\n"
+            "|---|---:|---:|---:|---:|---:|---:|\n")
+    for config in CONFIG_ORDER:
+        for tenants in ["2", "4", "8"]:
+            copy = data[(config, "copy", tenants)]
+            shared = data[(config, "ro_preread", tenants)]
+            text += (f"| {CONFIG_NAMES[config]} | {tenants} | "
+                     f"{float(copy['concurrent_read_ms']):.1f} | "
+                     f"{float(shared['concurrent_read_ms']):.1f} | "
+                     f"{float(shared['slowdown_when_concurrent']):.2f}x | "
+                     f"{float(copy['memory_mib']):.0f} | {float(shared['memory_mib']):.0f} |\n")
+    write("modes_perf.md", text)
+    fault = rows(os.path.join(modes_dir, "sharing_fault_summary.csv"))
+    relation = {"same_mps_server": "client of the same MPS server",
+                "same_instance": "same MIG instance, time-sliced",
+                "other_instance": "other MIG instance"}
+    names = {"timeslice": "no MPS", "mps": "MPS server in the faulting tenant's instance",
+             "mig_mps": "MPS server in each instance"}
+    text = ("| Configuration | Victim is | Victims | Finished the read in progress | "
+            "Read again afterwards | Base intact |\n|---|---|---:|---:|---:|---:|\n")
+    for config in ["timeslice", "mps", "mig_mps"]:
+        for r in fault:
+            if r["config"] != config:
+                continue
+            who = relation[r["relation"]]
+            if r["relation"] == "other_instance" and r["victim_is_mps_client"] == "1":
+                who += ", client of its own MPS server"
+            text += (f"| {names[config]} | {who} | {r['victims']} | "
+                     f"{r['survived_during']}/{r['victims']} | "
+                     f"{r['survived_after']}/{r['victims']} | "
+                     f"{r['base_intact']}/{r['victims']} |\n")
+    write("modes_fault.md", text)
+
+# --- campaigns of 2026-10-07 ---------------------------------------------------
+STACK_NAMES = {"none": "unmodified", "kv": "prefix mapped", "weights": "weights in place",
+               "both": "both (STATOR)"}
+for tag, name in (("20261007-engine-kvstack-v1", "kv_stack"),
+                  ("20261007-engine-kvstack-huge-v1", "kv_stack_huge"),
+                  ("20261008-engine-kvstack-capacity-140-v1", "kv_stack_capacity")):
+    directory = os.path.join(engine_root, tag)
+    if not os.path.exists(os.path.join(directory, "engine_kvstack_summary.csv")):
+        continue
+    text = ("| Stack | Agents | Failed | Memory (MiB) | 95% CI | Per agent (MiB) | "
+            "Weights load (ms) | Attach (ms) | First token (ms) | Throughput (tokens/s) | "
+            "Speed vs unmodified | median |\n"
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(os.path.join(directory, "engine_kvstack_summary.csv")):
+        if int(r["runs"]) == 0:
+            continue
+        ratio = float(r["vs_none"])
+        text += (f"| {STACK_NAMES[r['mode']]} | {r['agents']} | {r['failed_agents']} | "
+                 f"{r['memory_mib']} | {r['memory_ci95']} | {float(r['memory_per_agent_mib']):.0f} | "
+                 f"{r['weights_load_ms']} | {float(r['attach_ms']):.1f} | {r['first_token_ms']} | "
+                 f"{float(r['generation_tps_total']):.2f} | "
+                 + (f"{ratio:.3f} | {float(r['vs_none_median']):.3f} |\n" if ratio > 0 else "- | - |\n"))
+    write(name + ".md", text)
+    text = ("| Stack | Counts | Largest count | Memory per added agent (MiB) | 95% CI | "
+            "Ratio to unmodified | Shared files (MiB) | Available (MiB) | Agents that fit by the line |\n"
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|\n")
+    for r in rows(os.path.join(directory, "engine_kvstack_fit.csv")):
+        shared = float(r["model_file_shared_mib"]) + float(r["cache_file_shared_mib"])
+        versus = float(r["slope_vs_none"])
+        text += (f"| {STACK_NAMES[r['mode']]} | {r['counts']} | {r['largest_count']} | "
+                 f"{float(r['slope_mib_per_agent']):.1f} | {float(r['slope_ci95']):.1f} | "
+                 + (f"{versus:.4f}" if versus > 0 else "-")
+                 + f" | {shared:.0f} | {r['memory_available_mib']} | {r['agents_that_fit_by_line']} |\n")
+    write(name + "_fit.md", text)
+
+
+
+def render(name, path, columns):
+    """A markdown table of a summary: columns are (header, function of a row)."""
+    if not os.path.exists(path):
+        return
+    text = "| " + " | ".join(header for header, _ in columns) + " |\n"
+    text += "|" + "|".join("---" if index == 0 else "---:" for index in range(len(columns))) + "|\n"
+    for r in rows(path):
+        text += "| " + " | ".join(str(value(r)) for _, value in columns) + " |\n"
+    write(name + ".md", text)
+
+
+def num(key, digits=0, scale=1.0):
+    return lambda r: f"{float(r[key]) / scale:.{digits}f}"
+
+
+def part(done, total):
+    return lambda r: f"{r[done]}/{r[total]}"
+
+
+MECH_COLUMNS = [
+    ("Placement", lambda r: r["placement"]), ("Children", lambda r: r["children"]),
+    ("Prefix (tokens)", lambda r: r["prefix_tokens"]), ("Mode", lambda r: r["mode"]),
+    ("Children complete", part("children_finished", "children_started")),
+    ("Texts equal to copy", part("texts_equal_to_copy", "texts_compared")),
+    ("Parent pause (ms)", num("publish_ms", 2)), ("Attach (ms)", num("child_attach_ms", 1)),
+    ("95% CI", num("child_attach_ci95", 1)), ("First token (ms)", num("child_first_token_ms")),
+    ("Memory (MiB)", num("children_memory_mib")), ("95% CI", num("children_memory_ci95")),
+    ("Throughput (tokens/s)", num("children_tps_sum", 2)),
+    ("Speed vs copy", num("children_tps_vs_copy", 4)), ("median", num("vs_copy_median", 4)),
+]
+for tag, name in (("20261007-engine-kvmech-v1", "kv_mech"), ("20261007-engine-kvablate-v1", "kv_ablate"),
+                  ("20261007-engine-kvlocal-6sm-v1", "kv_local_6sm"),
+                  ("20261007-engine-kvlocal-12sm-v1", "kv_local_12sm")):
+    render(name, os.path.join(engine_root, tag, "engine_kvmech_summary.csv"), MECH_COLUMNS)
+
+render("tlb_probe", os.path.join(engine_root, "20261007-tlb-probe-v1", "tlb_probe_summary.csv"), [
+    ("SMs (runtime)", lambda r: r["sms"]), ("Buffer (MiB)", lambda r: r["size_mib"]),
+    ("Stride (KiB)", lambda r: r["stride_kib"]), ("Memory", lambda r: r["kind"]),
+    ("Runs", lambda r: r["runs"]), ("Scattered reads (Mwords/s)", num("gather_mwords_s", 1)),
+    ("vs device", num("gather_vs_device", 3)), ("low", num("gather_low", 3)), ("high", num("gather_high", 3)),
+    ("Scattered writes (Mwords/s)", num("scatter_mwords_s", 1)),
+    ("vs device", num("scatter_vs_device", 3)), ("low", num("scatter_low", 3)), ("high", num("scatter_high", 3)),
+])
+
+PIPE_COLUMNS = [
+    ("Stack", lambda r: r["mode"]), ("Groups x workers x turns", lambda r: r["shape"]),
+    ("Runs (failed)", lambda r: f"{r['runs']} ({r['failed_processes']})"),
+    ("Prefix (tokens)", lambda r: r["planner_tokens"]),
+    ("Completion (s)", num("wall_s", 1)), ("95% CI", num("wall_ci95", 1)),
+    ("vs stock", num("wall_vs_stock", 3)), ("Memory (MiB)", num("memory_mib")),
+    ("Files (MiB)", num("files_mib")), ("Worker attach (ms)", num("worker_attach_ms", 1)),
+    ("Worker first token (ms)", num("worker_first_token_ms")),
+    ("Energy, input rail (J)", num("vin_total_j")), ("prefix / leaders / workers (J)",
+                                                    lambda r: f"{r['vin_prefix_j']} / {r['vin_leaders_j']} / {r['vin_workers_j']}"),
+    ("vs stock", num("vin_vs_stock", 3)), ("GPU rail (J)", num("gpu_total_j")),
+    ("Worker texts equal to stock", part("worker_texts_equal_to_stock", "worker_texts_compared")),
+]
+for tag, name in (("20261007-engine-kvpipe-v1", "kv_pipe"), ("20261007-engine-kvpipe-huge-v1", "kv_pipe_huge"),
+                  ("20261010-engine-kvpipe-huge-v2", "kv_pipe_huge_v2")):
+    render(name, os.path.join(engine_root, tag, "engine_kvpipe_summary.csv"), PIPE_COLUMNS)
+
+# --- the pages faulted in for the GPU, and the campaigns on the engine that ------
+# --- puts the entries of a divided 2 MiB block back at a publish -----------------
+text_of = lambda key: (lambda r: r[key] if r[key] != "" else "-")
+FAULT_COUNT_COLUMNS = [
+    ("Processes", text_of("kind")), ("Mode", text_of("mode")), ("Runs (failed)", lambda r: f"{r['runs']} ({r['failed']})"),
+    ("Page faults served for the GPU", text_of("fault_pages")), ("lowest", text_of("fault_pages_min")),
+    ("highest", text_of("fault_pages_max")), ("First token (ms)", text_of("first_token_ms")),
+    ("Throughput (tokens/s)", text_of("generation_tps_total")),
+    ("Texts equal to copy", lambda r: f"{r['texts_equal_to_copy']}/{r['texts_compared']}" if r["texts_compared"] else "-"),
+    ("Page faults before the publish", text_of("fault_pages_before_publish")), ("Publish (ms)", text_of("publish_ms")),
+    ("Next task (ms)", text_of("next_task_ms")),
+]
+for tag, name in (("20261010-engine-kvfaultcount-v1", "kv_faultcount_v1"),
+                  ("20261010-engine-kvfaultcount-v2", "kv_faultcount_v2")):
+    render(name, os.path.join(engine_root, tag, "engine_kvfaultcount_summary.csv"), FAULT_COUNT_COLUMNS)
+render("vllm_faultcount", os.path.join(engine_root, "20261010-vllm-faultcount-v1", "vllm_faultcount_summary.csv"), [
+    ("Servers", text_of("mode")), ("Step", text_of("step")), ("Runs (failed)", lambda r: f"{r['runs']} ({r['failed']})"),
+    ("Page faults served for the GPU", text_of("fault_pages")), ("lowest", text_of("fault_pages_min")),
+    ("highest", text_of("fault_pages_max")), ("First token (ms)", text_of("first_token_ms")),
+    ("Request (ms)", text_of("request_ms")), ("Prompt tokens from the cache", text_of("prompt_cached")),
+    ("Texts equal to vllm", lambda r: f"{r['texts_equal_to_vllm']}/{r['texts_compared']}" if r["texts_compared"] else "-"),
+])
+render("kv_mech_v2", os.path.join(engine_root, "20261010-engine-kvmech-v2", "engine_kvmech_summary.csv"), MECH_COLUMNS)
+render("kv_fork_v2", os.path.join(engine_root, "20261010-engine-kvfork-v2", "engine_kvfork_summary.csv"), [
+    ("Hand-over", text_of("mode")), ("Runs (failed processes)", lambda r: f"{r['runs']} ({r['failed_processes']})"),
+    ("Pause of the parent (ms)", num("publish_ms", 2)), ("State file (MiB)", num("state_mib", 2)),
+    ("Parent texts equal", part("parent_texts_equal", "runs")),
+    ("Child texts equal to copy", part("child_texts_equal_to_copy", "children_started")),
+    ("Attach (ms)", num("child_attach_ms", 1)), ("First token (ms)", num("child_first_token_ms")),
+    ("Children memory (MiB)", num("children_memory_mib")), ("Prefix PSS (MiB)", num("prefix_pss_mib")),
+])
+render("kv_mps_v2", os.path.join(engine_root, "20261010-engine-kvmps-v2", "engine_kvmps_summary.csv"), [
+    ("Sharing", lambda r: CONFIG_NAMES[r["config"]]), ("Mode", text_of("mode")),
+    ("Runs (failed processes)", lambda r: f"{r['runs']} ({r['failed_processes']})"),
+    ("Pause of the parent (ms)", num("publish_ms", 2)), ("State file (MiB)", num("state_mib", 2)),
+    ("Attach (ms)", num("child_attach_ms", 1)), ("First token (ms)", num("child_first_token_ms")),
+    ("Children (tokens/s)", num("children_tps_sum", 2)), ("Children memory (MiB)", num("children_memory_mib")),
+    ("Prefix PSS (MiB)", num("prefix_pss_mib")), ("Texts equal to copy", part("texts_equal_to_copy", "children_finished")),
+])
+render("kv_tree_v2", os.path.join(engine_root, "20261010-engine-kvtree-v2", "engine_kvtree_summary.csv"), [
+    ("Mode", text_of("mode")), ("Runs (failed processes)", lambda r: f"{r['runs']} ({r['failed_processes']})"),
+    ("Root publish (ms)", num("root_publish_ms", 2)), ("Leader publish (ms)", num("leader_publish_ms", 2)),
+    ("Leaf attach (ms)", num("leaf_attach_ms", 1)), ("Leaf first token (ms)", num("leaf_first_token_ms")),
+    ("Leaves (tokens/s)", num("leaf_tps_sum", 2)), ("Tree memory (MiB)", num("tree_memory_mib")),
+    ("Segment files (MiB)", num("segment_files_mib")),
+    ("Leaf texts equal to copy", part("leaf_texts_equal_to_copy", "leaves_finished")),
+])
+render("kv_server2_v2", os.path.join(engine_root, "20261010-engine-kvserver2-v2", "engine_kvserver_summary.csv"), [
+    ("Mode", text_of("mode")), ("Agents", text_of("agents")), ("Runs (failed)", lambda r: f"{r['runs']} ({r['failed']})"),
+    ("Save, request / server (ms)", lambda r: f"{float(r['save_request_ms']):.2f} / {float(r['server_save_ms']):.2f}"),
+    ("Restore (ms)", num("restore_request_ms", 1)), ("First token (ms)", num("first_token_ms")),
+    ("Agents (tokens/s)", num("generation_tps_sum", 2)),
+    ("Memory / cache file (MiB)", lambda r: f"{r['agents_memory_mib']} / {r['cache_file_mib']}"),
+    ("Texts equal to copy", part("texts_equal_to_copy", "agents_finished")),
+])
+render("kv_batch_v2", os.path.join(engine_root, "20261010-engine-kvbatch-v2", "engine_kvbatch_summary.csv"), [
+    ("Configuration", text_of("config")), ("Runs (failed servers)", lambda r: f"{r['runs']} ({r['failed_servers']})"),
+    ("All agents ready (ms)", num("ready_all_servers_ms")), ("Throughput (tokens/s)", num("generation_tps_total", 2)),
+    ("12-SM", num("generation_tps_12sm", 2)), ("8-SM", num("generation_tps_6sm", 2)),
+    ("Second server attach (ms)", num("second_server_attach_ms", 1)), ("Publish (ms)", num("publish_ms", 2)),
+    ("State file (MiB)", num("state_mib", 2)), ("Memory (MiB)", num("memory_mib")),
+    ("Texts equal to copy", part("texts_equal_to_copy", "texts_compared")),
+])
+
+render("kv_fault", os.path.join(engine_root, "20261007-engine-kvfault-v1", "engine_kvfault_summary.csv"), [
+    ("GPU sharing", lambda r: r["config"]), ("Fault", lambda r: r["fault"]), ("Runs", lambda r: r["runs"]),
+    ("Agents complete", part("agents_completed", "agents_started")),
+    ("Others complete", part("others_completed", "others_started")),
+    ("Others with the text of the run without a fault", part("others_with_reference_text", "others_started")),
+    ("Writes refused", part("writes_refused", "writes_injected")), ("Error of the write", lambda r: r["write_error"]),
+    ("File intact (runs)", part("file_intact_runs", "runs")),
+])
+
+DEEP_COLUMNS = [
+    ("Hand-over", lambda r: r["mode"]), ("Fan-outs", lambda r: r["fanouts"]),
+    ("Processes (leaves)", lambda r: f"{r['processes']} ({r['leaves']})"),
+    ("Runs (failed)", lambda r: f"{r['runs']} ({r['failed_processes']})"),
+    ("Inner attach / publish (ms)", lambda r: f"{float(r['inner_attach_ms']):.1f} / {float(r['inner_publish_ms']):.2f}"),
+    ("Leaf attach (ms)", num("leaf_attach_ms", 1)), ("Leaf first token (ms)", num("leaf_first_token_ms")),
+    ("Memory (MiB)", num("tree_memory_mib")), ("95% CI", num("tree_memory_ci95")),
+    ("Files: all alive / first subtree left / end (MiB)",
+     lambda r: f"{r['files_all_alive_mib']} / {r['files_first_subtree_left_mib']} / {r['files_end_mib']}"),
+    ("Leaf texts equal to copy", part("leaf_texts_equal_to_copy", "leaf_texts_compared")),
+]
+for tag, name in (("20261007-engine-kvdeep-v1", "kv_deep"), ("20261007-engine-kvdeep-wide-v1", "kv_deep_wide")):
+    render(name, os.path.join(engine_root, tag, "engine_kvdeep_summary.csv"), DEEP_COLUMNS)
+
+SCALE_COLUMNS = [
+    ("Prefix (tokens)", lambda r: r["prefix_tokens"]), ("Agents", lambda r: r["agents"]),
+    ("Mode", lambda r: r["mode"]), ("Runs (failed agents)", lambda r: f"{r['runs']} ({r['failed_agents']})"),
+    ("Exact texts", part("texts_equal_to_restore", "texts_compared")), ("Attach (ms)", num("attach_ms", 1)),
+    ("First token (ms)", num("first_token_ms")), ("Throughput (tokens/s)", num("generation_tps_total", 2)),
+    ("Extents / copy", num("generation_vs_restore", 4)), ("Memory (MiB)", num("memory_mib")),
+]
+for tag, name in (("20261007-engine-kvscale-p20-v1", "kv_scale_p20"), ("20261007-engine-kvscale-p80-v1", "kv_scale_p80"),
+                  ("20261007-engine-kvscale-p600-v1", "kv_scale_p600"),
+                  ("20261007-engine-kvscale-gen2k-v1", "kv_scale_gen2k"),
+                  ("20261007-engine-kvscale-32-v2", "kv_scale_32v2")):
+    render(name, os.path.join(engine_root, tag, "engine_kvscale_summary.csv"), SCALE_COLUMNS)
+
+render("ext_weightshare", os.path.join(engine_root, "20261007-ext-weightshare-v1", "ext_weightshare_summary.csv"), [
+    ("Placement", lambda r: r["placement"]), ("Stack", lambda r: r["stack"]), ("Runs", lambda r: r["runs"]),
+    ("Agents complete", part("agents_finished", "agents_started")),
+    ("In the other instance", part("other_instance_finished", "other_instance_started")),
+    ("Library: workers / fallbacks", lambda r: f"{r['library_workers']} / {r['library_fallbacks']}"),
+    ("Weights load (ms)", num("weights_load_ms")), ("First token (ms)", num("first_token_ms")),
+    ("Throughput (tokens/s)", num("agents_tps_sum", 2)), ("Memory (MiB)", num("memory_mib")),
+    ("95% CI", num("memory_ci95")), ("Texts equal to stock", part("texts_equal_to_stock", "texts_compared")),
+])
+render("weights_publish", os.path.join(engine_root, "20261007-weights-publish-v1", "weights_publish_summary.csv"), [
+    ("File", lambda r: r["file"]), ("Size (GiB)", lambda r: r["gib"]), ("Method", lambda r: r["method"]),
+    ("Runs (failed)", lambda r: f"{r['runs']} ({r['failed']})"), ("Time (s)", num("seconds", 3)),
+    ("95% CI", num("seconds_ci95", 3)), ("GiB/s", num("gib_per_s", 2)), ("Speed-up vs cp", num("speedup_vs_cp", 2)),
+    ("Page cache left (MiB)", num("page_cache_left_mib")), ("Share of the file", num("page_cache_left_share", 3)),
+    ("Largest drop of MemFree (MiB)", num("free_drop_mib")), ("Identical", part("identical", "runs")),
+])
+render("ext_vllm", os.path.join(engine_root, "20261007-ext-vllm-v1", "ext_vllm_summary.csv"), [
+    ("Round", lambda r: r["round"]), ("Servers ready", part("servers_ready", "runs")),
+    ("Agents complete", part("agents_finished", "agents_started")), ("Start-up (ms)", num("startup_ms")),
+    ("Memory when ready (MiB)", num("ready_memory_mib")), ("First token (ms)", num("first_token_ms")),
+    ("Prompt tokens (cached)", lambda r: f"{r['prompt_tokens']} ({r['prompt_cached']})"),
+    ("Throughput (tokens/s)", num("agents_tps_sum", 2)), ("Peak memory (MiB)", num("peak_memory_mib")),
+])
+
+VSHARE_COLUMNS = [
+    ("Mode", lambda r: r["mode"]), ("Servers", lambda r: r["servers"]),
+    ("Cases (failed)", lambda r: f"{r['runs']} ({r['failed_cases']})"),
+    ("Requests complete", part("requests_finished", "requests_started")),
+    ("Memory (MiB)", num("memory_mib")), ("95% CI", num("memory_ci95")),
+    ("vs vllm (MiB)", num("memory_minus_vllm_mib")), ("Peak (MiB)", num("peak_memory_mib")),
+    ("Shared files (MiB)", num("files_mib")),
+    ("Mapped by a later server: weights, prefix (MiB)", lambda r: f"{r['shared_weights_mib']}, {r['shared_kv_mib']}"),
+    ("First token, second server (ms)", num("first_token_ms")), ("95% CI", num("first_token_ci95")),
+    ("Smallest cached share", num("first_cached_lowest", 4)),
+    ("Throughput (tokens/s)", num("both_tps_sum", 2)), ("95% CI", num("both_tps_ci95", 2)),
+    ("vs vllm", num("both_tps_vs_vllm", 4)), ("median", num("both_tps_vs_vllm_median", 4)),
+    ("12-SM, 8-SM (tokens/s)", lambda r: f"{r['tps_first_instance']}, {r['tps_second_instance']}"),
+    ("Start-up, first and later server (ms)", lambda r: f"{r['startup1_ms']}, {r['startup2_ms']}"),
+    ("Weights publish, attach (ms)", lambda r: f"{r['weights_publish_ms']}, {r['weights_attach_ms']}"),
+    ("Prefix attach (ms)", num("kv_attach_ms")),
+    ("LMCache store, retrieve (ms)", lambda r: f"{r['lmcache_store_ms']}, {r['lmcache_retrieve_ms']}"),
+    ("Texts equal to vllm: first, both, alone1, alone2",
+     lambda r: ", ".join(f"{r[k + '_texts_equal']}/{r[k + '_texts_compared']}" for k in ("first", "both", "alone1", "alone2"))),
+]
+for tag, name in (("20261008-vllm-share-v2", "vllm_share"), ("20261007-vllm-share-4srv-v1", "vllm_share_4srv"),
+                  ("20261008-vllm-share-4srv-v3", "vllm_share_4srv_warm")):
+    render(name, os.path.join(engine_root, tag, "vllm_share_summary.csv"), VSHARE_COLUMNS)
+
+print("tables written to", out)
