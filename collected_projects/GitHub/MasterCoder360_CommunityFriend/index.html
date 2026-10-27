@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CommunityFriend</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js"></script>
+</head>
+<body>
+<header>
+    <nav>
+        <button class="logo" onclick="window.location.href='https://community.cosmospark.org'">CommunityFriend</button>
+        <ul class="navlinks">
+            <li><a href="index.html">Home</a></li>
+            <li><a href="event.html">Events</a></li>
+            <li><a href="service.html">Services</a></li>
+        </ul>
+        <div class="btns">
+            <button id="header-login-btn" class="btn" onclick="window.location.href='https://login.cosmospark.org/login'">Login</button>
+            <span id="header-greeting" style="display: none; font-weight: bold; color: #080808; margin-right: 15px;"></span>
+            <button id="header-logout-btn" class="btn" style="display: none;" onclick="handleLogout()">Logout</button>
+        </div>
+    </nav>
+</header>
+
+<main class="glass-box">
+    <h1 class="digital-display">Upcoming Scraped Events</h1>
+    <div id="loading" class="loading-status">Loading community events... Please wait.</div>
+    <div id="events-container" class="events-grid"></div>
+</main>
+
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const eventsContainer = document.getElementById("events-container");
+        const loadingStatus = document.getElementById("loading");
+
+        const API_URL = "https://communityfriend.onrender.com/api/events";
+
+        async function fetchEvents() {
+            try {
+                const response = await fetch(API_URL, {
+                    method: "GET",
+                    mode: "cors",
+                    headers: {
+                        "Accept": "application/json"
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP network error: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                loadingStatus.style.display = "none";
+
+                if (result.success && result.data.length > 0) {
+                 result.data.forEach(event => {
+                const eventCard = document.createElement("div");
+                eventCard.className = "event-card";
+
+                const locationText = event.location ? `<p class="event-location">📍 <strong>Location:</strong> ${event.location}</p>` : '';
+                const urlText = event.url ? `<a href="${event.url}" target="_blank" rel="noopener noreferrer" class="event-link">View Event Details →</a>` : '';
+
+                eventCard.innerHTML = `
+                <h2 class="event-title">${event.title}</h2>
+                <p class="event-date">📅 <strong>Date:</strong> ${event.date}</p>
+                ${locationText}
+                ${urlText}
+                `;
+                eventsContainer.appendChild(eventCard);
+                });
+                } else {
+                    loadingStatus.textContent = "No upcoming events found at this time.";
+                    loadingStatus.style.display = "block";
+                }
+            } catch (error) {
+                console.error("Error connecting to scraper API:", error);
+                loadingStatus.textContent = "Unable to load events. Target URL: " + API_URL;
+                loadingStatus.style.display = "block";
+                loadingStatus.style.color = "red";
+            }
+        }
+
+        fetchEvents();
+    });
+</script>
+</body>
+</html>
