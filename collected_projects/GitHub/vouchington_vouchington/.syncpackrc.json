@@ -1,0 +1,137 @@
+{
+  "$schema": "./node_modules/syncpack/schema.json",
+  "source": [
+    "package.json",
+    "api-fixtures/package.json",
+    "backend/package.json",
+    "backend/{api,config,md,rss,scripts,test-helpers,mcp,types}/package.json",
+    "backend/worker-runtime/package.json",
+    "backend/service-registrations/package.json",
+    "backend/entrypoints/*/package.json",
+    "ci/package.json",
+    "email-templates/package.json",
+    "backend/{agents,data-stores,modules,services,queues,workers}/*/package.json",
+    "web/package.json",
+    "cloudflare-worker/package.json",
+    "lambdas/*/package.json",
+    "playwright/package.json",
+    "static-code-analysis/package.json",
+    "ts-shared/*/package.json"
+  ],
+  "indent": "  ",
+  "sortFirst": [
+    "name",
+    "version",
+    "private",
+    "description",
+    "keywords",
+    "homepage",
+    "bugs",
+    "license",
+    "author",
+    "repository",
+    "files",
+    "workspaces",
+    "type",
+    "main",
+    "exports",
+    "scripts",
+    "dependencies",
+    "devDependencies",
+    "peerDependencies",
+    "optionalDependencies",
+    "engines"
+  ],
+  "sortAz": ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"],
+  "customTypes": {
+    "peerDependencies": { "strategy": "versionsByName", "path": "peerDependencies" },
+    "optionalDependencies": { "strategy": "versionsByName", "path": "optionalDependencies" }
+  },
+  "versionGroups": [
+    {
+      "label": "Local workspace packages must use the workspace:^ specifier (replaces normalizeWorkspaceDependencies).",
+      "dependencies": ["$LOCAL"],
+      "dependencyTypes": ["!local"],
+      "pinVersion": "workspace:^"
+    },
+    {
+      "label": "file: specifiers are banned repo-wide; use workspace:^ for local packages.",
+      "dependencies": ["**"],
+      "specifierTypes": ["file"],
+      "isBanned": true
+    },
+    {
+      "label": "@testing-library/* must only appear in web/package.json (not the repo root).",
+      "dependencies": ["@testing-library/**"],
+      "packages": ["voucha"],
+      "isBanned": true
+    },
+    {
+      "label": "Root package.json must not declare production dependencies (tooling-only)",
+      "packages": ["voucha"],
+      "dependencyTypes": ["prod"],
+      "isBanned": true
+    },
+    {
+      "label": "peerDependencies are banned repo-wide",
+      "dependencyTypes": ["peerDependencies"],
+      "isBanned": true
+    },
+    {
+      "label": "optionalDependencies are banned repo-wide",
+      "dependencyTypes": ["optionalDependencies"],
+      "isBanned": true
+    },
+    {
+      "label": "Internal workspace deps must match the local package version",
+      "dependencies": [
+        "@agents/**",
+        "@backend/**",
+        "@data-stores/**",
+        "@email-templates/**",
+        "@lambdas/**",
+        "@modules/**",
+        "@services/**",
+        "@queues/**",
+        "@workers/**",
+        "@entrypoints/**",
+        "@ts-shared/**",
+        "@voucha/**"
+      ],
+      "policy": "sameRange"
+    },
+    {
+      "label": "Backend glide-mq declarations must snap to @backend/worker-runtime.",
+      "dependencies": ["glide-mq"],
+      "packages": [
+        "@agents/**",
+        "@backend/**",
+        "@data-stores/**",
+        "@modules/**",
+        "@services/**",
+        "@queues/**",
+        "@workers/**",
+        "@entrypoints/**",
+        "@voucha/api",
+        "@voucha/backend",
+        "@entrypoints/api",
+        "@voucha/test-helpers",
+        "@entrypoints/worker-cpu",
+        "@entrypoints/worker-io"
+      ],
+      "snapTo": ["@backend/worker-runtime"]
+    },
+    {
+      "label": "Every other external dependency uses one version across all workspaces (Syncpack's default highest-semver policy)",
+      "dependencies": ["**"]
+    }
+  ],
+  "semverGroups": [
+    {
+      "label": "Every external dependency uses a caret (^) range; the lockfile records the exact install",
+      "dependencies": ["**"],
+      "packages": ["**"],
+      "range": "^"
+    }
+  ]
+}

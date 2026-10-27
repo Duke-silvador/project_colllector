@@ -1,0 +1,1925 @@
+<!doctype html>
+<html lang="en-IE">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Lets "Add to Home Screen" on iPhone open the page full-screen, like an app. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Journal">
+<meta name="theme-color" content="#F7F5EF">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="favicon.png">
+<link rel="manifest" href="manifest.json">
+<title>Learning Journal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
+<style>
+  :root {
+    --cream:#F8F5EE; --white:#FFFFFF; --sage:#5F7A5F; --sage-deep:#4B644B; --pale:#E6EDE1; --dark:#26352A;
+    --muted:#737D6E; --line:#E9E5DB; --peach:#F4E4D4; --red:#9A5D50;
+    --shadow:0 1px 2px rgba(38,53,42,.04), 0 8px 24px rgba(38,53,42,.06);
+    --serif:"Fraunces", Georgia, "Times New Roman", serif;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; color:var(--dark); -webkit-text-size-adjust:100%;
+    font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  html { background:var(--cream); }
+  /* A soft, warm glow at the top of every screen. */
+  body { min-height:100vh; background:radial-gradient(140% 420px at 50% -120px, #F4E1CE 0%, rgba(244,225,206,0) 70%) no-repeat, var(--cream); }
+  button { font-family:inherit; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  button:active { transform:scale(.985); }
+  .ico { display:block; flex:none; }
+
+  .header { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:8px;
+    background:rgba(248,245,238,.82); -webkit-backdrop-filter:blur(14px); backdrop-filter:blur(14px);
+    padding:calc(env(safe-area-inset-top) + 12px) 18px 12px; border-bottom:1px solid rgba(233,229,219,.8); }
+  .header h1 { flex:1; margin:0; text-align:center; font:600 17px/1.2 var(--serif); letter-spacing:-.01em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .sync { width:32px; display:flex; justify-content:flex-end; color:var(--sage); opacity:.75; }
+  .sync.waiting { color:var(--red); opacity:1; }
+  .brand, .back { width:32px; height:32px; display:flex; align-items:center; color:var(--sage); background:none; border:0; padding:0; }
+  .back { margin-left:-6px; }
+
+  main { max-width:640px; margin:0 auto; padding:24px 20px calc(104px + env(safe-area-inset-bottom)); }
+  main.login { min-height:100vh; display:flex; flex-direction:column; justify-content:center;
+    padding:calc(env(safe-area-inset-top) + 36px) 24px 32px; }
+
+  nav { position:fixed; left:0; right:0; bottom:0; z-index:5; display:flex; justify-content:center;
+    background:rgba(255,255,255,.88); -webkit-backdrop-filter:blur(16px); backdrop-filter:blur(16px);
+    border-top:1px solid rgba(233,229,219,.9); padding:7px 4px calc(6px + env(safe-area-inset-bottom)); }
+  nav button { flex:1; max-width:84px; display:flex; flex-direction:column; align-items:center; gap:3px; background:none; border:0;
+    color:var(--muted); font-size:10px; letter-spacing:.01em; padding:0; min-width:0; }
+  nav .icon { display:flex; justify-content:center; width:44px; padding:4px 0; border-radius:14px; transition:background .2s; }
+  nav button.active { color:var(--sage-deep); font-weight:700; }
+  nav button.active .icon { background:var(--pale); }
+
+  .logo { width:72px; height:72px; border-radius:24px; display:flex; align-items:center; justify-content:center;
+    color:var(--sage); margin-bottom:26px; background:linear-gradient(145deg, #EEF3EA, #DCE7D6); box-shadow:var(--shadow); }
+  .eyebrow { font-size:10.5px; font-weight:700; letter-spacing:1.6px; color:var(--sage); margin:0 0 10px; text-transform:uppercase; }
+  .login-title { font:500 48px/1.02 var(--serif); letter-spacing:-.02em; margin:0 0 12px; }
+  .heading { font:500 30px/1.15 var(--serif); letter-spacing:-.015em; margin:0 0 10px; }
+  .body { font-size:15px; color:var(--muted); line-height:23px; margin:0 0 22px; }
+  .panel { background:var(--white); border-radius:22px; padding:18px; border:1px solid rgba(233,229,219,.7);
+    box-shadow:var(--shadow); margin-bottom:18px; }
+  label { display:block; font-size:13px; font-weight:600; margin:8px 0 7px; }
+  input, textarea { display:block; width:100%; border:1px solid var(--line); border-radius:14px; background:#FDFCF9;
+    padding:13px 14px; font:inherit; font-size:16px; color:var(--dark); margin:0 0 13px; -webkit-appearance:none;
+    transition:border-color .15s, box-shadow .15s, background .15s; }
+  textarea { min-height:100px; resize:vertical; line-height:1.45; }
+  input:focus, textarea:focus { outline:none; border-color:var(--sage); background:var(--white); box-shadow:0 0 0 4px rgba(95,122,95,.13); }
+  ::placeholder { color:#A3A99C; }
+  .btn { display:block; width:100%; background:var(--sage); color:var(--white); border:0; padding:15px;
+    border-radius:16px; font-size:15px; font-weight:650; margin:10px 0 4px; box-shadow:0 6px 16px rgba(75,100,75,.22); }
+  .btn.secondary { background:var(--pale); color:var(--dark); box-shadow:none; }
+  .btn.danger { color:var(--red); }
+  .small { font-size:12px; color:var(--muted); line-height:18px; margin:5px 0 9px; }
+  .card-title { font-size:15px; font-weight:600; line-height:20px; }
+  .sub { font-size:13px; color:var(--muted); line-height:19px; margin-top:3px; white-space:pre-wrap; }
+  .link { background:none; border:0; padding:6px 0 0; font-size:13px; color:var(--sage-deep); font-weight:650; margin-top:4px; }
+  .link.danger { color:var(--red); }
+  .arrow { display:flex; color:#A9B3A4; flex:none; }
+  .section-title { font:500 21px/1.25 var(--serif); letter-spacing:-.01em; margin:26px 0 12px; }
+  .section-head { display:flex; justify-content:space-between; align-items:baseline; gap:10px; margin-bottom:12px; }
+  .section-head .section-title { margin-bottom:0; }
+  .section-head > .link { padding:0; margin:0; }
+  .history-box .section-head { align-items:center; }
+
+  .banner { display:flex; align-items:flex-start; gap:14px; border-radius:22px; padding:18px; margin-bottom:22px;
+    border:0; width:100%; text-align:left; color:inherit; background:linear-gradient(135deg, #E4ECDF 0%, #F1EBDD 100%); box-shadow:var(--shadow); }
+  .banner .module-icon { background:rgba(255,255,255,.7); }
+  .card-row { display:flex; align-items:center; gap:14px; background:var(--white); border-radius:20px;
+    border:1px solid rgba(233,229,219,.7); box-shadow:var(--shadow); padding:14px; margin-bottom:12px; width:100%;
+    text-align:left; color:inherit; }
+  .card-row > div { flex:1; min-width:0; }
+  .module-icon { flex:none !important; width:48px; height:48px; border-radius:16px; background:var(--pale); color:var(--sage-deep);
+    display:flex; align-items:center; justify-content:center; font-size:24px; }
+  .module-icon.done { background:var(--sage); color:var(--white); }
+  .list-row { display:flex; align-items:center; gap:12px; padding:15px 0; border:0; border-bottom:1px solid var(--line);
+    background:none; width:100%; text-align:left; color:inherit; }
+  .list-row .sub { flex:1; margin:0; color:var(--dark); font-size:14px; }
+  .number { flex:none; width:32px; height:32px; border-radius:50%; background:var(--pale); display:flex;
+    align-items:center; justify-content:center; font-size:12px; font-weight:600; color:var(--sage-deep); }
+  .number.done { background:var(--sage); color:var(--white); }
+  .prompt-box { background:linear-gradient(135deg, #F7E8D9 0%, #F0DCC9 100%); border-radius:24px; padding:22px; margin-bottom:20px;
+    box-shadow:var(--shadow); }
+  .prompt { font:400 21px/1.35 var(--serif); letter-spacing:-.005em; }
+  .entry { background:var(--white); border-radius:20px; border:1px solid rgba(233,229,219,.7); box-shadow:var(--shadow);
+    padding:16px; margin-bottom:12px; }
+  .goal-card { background:var(--white); border-radius:22px; border:1px solid rgba(233,229,219,.7); box-shadow:var(--shadow);
+    padding:18px; margin-bottom:14px; }
+  .days { display:flex; flex-wrap:wrap; gap:7px; margin:8px 0 10px; }
+  .chip { border:1px solid var(--line); border-radius:999px; padding:8px 13px; background:var(--white); font-size:12.5px; color:var(--dark); }
+  .chip.selected { background:var(--sage); border-color:var(--sage); color:var(--white); font-weight:650; }
+  .status { font-size:10px; color:var(--sage-deep); font-weight:700; margin-bottom:6px; text-transform:uppercase; letter-spacing:.8px; }
+  .goal-card .status { background:var(--pale); padding:4px 9px; border-radius:999px; margin:0; }
+  .prompt-row { display:flex; align-items:center; gap:10px; padding-top:8px; }
+  .prompt-row .sub { flex:1; }
+  .actions { display:flex; align-items:baseline; justify-content:flex-end; gap:18px; }
+  .actions .small { flex:1; }
+  .history-box { border-top:1px solid var(--line); margin-top:12px; padding-top:4px; }
+  .history-box .section-head { margin-bottom:4px; }
+  .version { background:var(--cream); border-radius:14px; padding:12px; margin-bottom:8px; }
+  .privacy { background:var(--pale); border-radius:20px; padding:18px; margin-top:18px; }
+
+  /* Home */
+  .greeting { font:500 34px/1.1 var(--serif); letter-spacing:-.02em; margin:0 0 10px; }
+  .hero .prompt { font-size:23px; margin:2px 0 16px; }
+  .hero .btn { margin:0; display:flex; align-items:center; justify-content:center; gap:8px; }
+  .tiles { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:6px; }
+  .tile { background:var(--white); border:1px solid rgba(233,229,219,.7); box-shadow:var(--shadow); border-radius:20px;
+    padding:14px 12px; text-align:left; color:inherit; display:flex; flex-direction:column; gap:10px; min-width:0; }
+  .tile .module-icon { width:38px; height:38px; border-radius:13px; }
+  .tile b { font-size:14px; font-weight:650; }
+  .tile span.sub { margin:0; font-size:12px; line-height:16px; }
+  .week { display:flex; gap:8px; align-items:flex-end; margin:6px 0 2px; }
+  .week div { flex:1; text-align:center; font-size:10.5px; color:var(--muted); }
+  .week i { display:block; height:34px; border-radius:12px; background:#EFEBE2; margin-bottom:5px; }
+  .week i.on { background:linear-gradient(180deg, #8FA88A, var(--sage)); }
+  .week .today { color:var(--dark); font-weight:700; }
+
+  .matrix-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; margin:8px 0 12px; }
+  table.matrix { border-collapse:collapse; font-size:12px; line-height:17px; min-width:100%; background:var(--white); }
+  table.matrix th, table.matrix td { border:1px solid var(--line); padding:8px; text-align:left; vertical-align:top;
+    min-width:110px; white-space:pre-wrap; }
+  table.matrix th { background:var(--pale); font-weight:600; }
+  table.matrix td { color:var(--muted); }
+  /* The grid people fill in: side categories stay visible while it scrolls sideways. */
+  table.matrix.fill tr > th:first-child { position:sticky; left:0; z-index:1; min-width:96px; max-width:130px; }
+  table.matrix.fill td { padding:0; min-width:150px; }
+  table.matrix.fill textarea { border:0; border-radius:0; margin:0; min-height:96px; height:100%; padding:10px;
+    font-size:16px; resize:none; background:var(--white); }
+  table.matrix.fill textarea:focus { outline:2px solid var(--sage); outline-offset:-2px; }
+  .bubble { max-width:85%; padding:12px 15px; border-radius:20px; margin-bottom:10px; font-size:14px;
+    line-height:21px; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .bubble.me { margin-left:auto; background:var(--sage); color:var(--white); border-bottom-right-radius:4px; }
+  .bubble.coach { background:var(--white); border:1px solid rgba(233,229,219,.7); box-shadow:var(--shadow); border-bottom-left-radius:6px; }
+  .bubble .when { display:block; font-size:10px; opacity:.7; margin-top:4px; }
+  .shared-card { border-left:3px solid currentColor; padding:2px 0 2px 10px; margin-bottom:8px; font-size:12px; line-height:18px; opacity:.95; }
+  .shared-card .card-title, .bubble .eyebrow { color:inherit; }
+  .typing { color:var(--muted); font-size:13px; margin:4px 0 14px; }
+  #toast { position:fixed; left:20px; right:20px; bottom:calc(90px + env(safe-area-inset-bottom)); z-index:10;
+    max-width:600px; margin:0 auto; background:var(--dark); color:var(--white); border-radius:16px; padding:14px;
+    box-shadow:0 10px 30px rgba(38,53,42,.25);
+    text-align:center; font-size:13px; font-weight:600; opacity:0; transition:opacity .2s; pointer-events:none; }
+  #toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" role="status"></div>
+<script>
+// ---------- Online database (Supabase) ----------
+// Paste your project's URL and anon/public key here (Supabase → Project Settings → API).
+// Leave them empty to keep everything on this device only.
+const SUPABASE_URL = 'https://grfbjxokvxalskmqojdt.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_GatKw9YipgS21GsMARcMGw_IpFYF15h';
+
+const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const WEEK = DAYS.slice(1).concat('Sunday');
+const REVIEW_QUESTIONS = ['What progress did I make this week?','What got in the way?','What did I learn?','What is my next small step?'];
+const REVIEW_LABELS = ['Progress','Obstacles','Learning','Next step'];
+const STORAGE_KEY = 'learning-journal/v1';
+
+const initialPrompts = [
+  { id:'p1', text:'What would make this week feel meaningful?', days:['Monday'] },
+  { id:'p2', text:'What has been taking up your energy?', days:['Wednesday'] },
+  { id:'p3', text:'What are you proud of this week?', days:['Friday'] },
+  { id:'p4', text:'What would you like to let go of before next week?', days:['Sunday'] }
+];
+
+// `history` is an append-only log holding a full snapshot of an item every time it is
+// created, edited, paused or deleted. It is the real record: the collections (journal,
+// goals, …) are just the latest snapshot of each item, rebuilt from the log.
+// With the online database set up, the log is stored in Supabase and this object is a
+// copy kept on the phone; `pending` holds changes not yet uploaded.
+const emptyDb = () => ({
+  email:'', name:'', preferredName:'', userId:null, modules:[], prompts:initialPrompts,
+  journal:[], goals:[], reviews:[], reflections:[], activities:[], responses:[], history:[], pending:[],
+  // Shared with other people (online only): activities the admin builds and assigns.
+  shared:{ isAdmin:false, activities:[], assignments:[], people:[], responses:[], changes:[], courses:[], courseAssignments:[] },
+  coach:[] // Copy of this person's conversation with the AI coach (online only).
+});
+
+const KIND = {
+  journal:'Journal entry', goals:'Goal', reviews:'Weekly review',
+  reflections:'Reflection', modules:'Module', prompts:'Prompt',
+  activities:'Activity', responses:'Activity answers'
+};
+
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const live = list => list.filter(x => !x.deleted);
+const fmtDate = iso => new Date(iso).toLocaleDateString('en-IE', { day:'numeric', month:'short', year:'numeric' });
+const fmtDateTime = iso => `${fmtDate(iso)} · ${new Date(iso).toLocaleTimeString('en-IE', { hour:'2-digit', minute:'2-digit' })}`;
+const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[c]);
+
+// Activity templates: a list of questions, or a matrix with categories down the side
+// (rows) and across the top (columns) and an answer in each cell.
+const isMatrix = d => d?.template === 'matrix';
+const lines = value => (value || '').split('\n').map(s => s.trim()).filter(Boolean);
+const matrixTable = (rows, cols, answers) => `<div class="matrix-wrap"><table class="matrix">
+  <tr><th></th>${cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr>
+  ${rows.map((row, r) => `<tr><th>${esc(row)}</th>${cols.map((_, c) => `<td>${esc(answers?.[r]?.[c] || '')}</td>`).join('')}</tr>`).join('')}
+</table></div>`;
+
+// Human-readable lines describing one snapshot of an item.
+function describe(kind, d) {
+  switch (kind) {
+    case 'journal': return [d.prompt && `Prompt: ${d.prompt}`, d.text];
+    case 'goals': return [d.title, d.description, d.targetDate && `Target: ${d.targetDate}`,
+      `Weekly review: ${d.reviewDay}`, `Status: ${d.status}`];
+    case 'reviews': return [d.goalTitle, ...d.answers.map((a, i) => a.trim() && `${REVIEW_LABELS[i]}: ${a}`)];
+    case 'reflections': return [d.activity, d.text];
+    case 'modules': return [d.title, d.subtitle];
+    case 'prompts': return [d.text, `Shown on: ${d.days.join(', ')}`];
+    case 'activities': return [d.title, d.instructions, ...(isMatrix(d)
+        ? [`Matrix · down the side: ${d.matrix.rows.join(', ')}`, `Across the top: ${d.matrix.cols.join(', ')}`]
+        : (d.questions || []).map((q, i) => `${i + 1}. ${q}`)), d.archived && 'Archived'];
+    case 'courses': return [d.title, d.description,
+      `${d.chapters.length} chapter${d.chapters.length === 1 ? '' : 's'}: ${d.chapters.map(c => c.title).join(', ') || 'none'}`,
+      `${activitiesCount(courseActivityIds(d).length)} · ${plural(d.prompts.length, 'scheduled prompt')}`,
+      d.archived && 'Archived'];
+    case 'responses': return [d.activityTitle, ...(isMatrix(d)
+      ? d.rows.flatMap((row, r) => d.cols.map((col, c) => d.answers[r]?.[c]?.trim() && `${row} · ${col}\n${d.answers[r][c]}`))
+      : d.questions.map((q, i) => d.answers[i]?.trim() && `${q}\n${d.answers[i]}`))];
+    default: return [];
+  }
+}
+
+// ---------- State ----------
+
+const online = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+const sb = online && window.supabase
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth:{ storageKey:'learning-journal/auth' } })
+  : null;
+let user = null;
+
+let db = load();
+const ui = {
+  page: (online ? db.userId : db.email) ? 'home' : 'login', moduleId:null, activity:'', goalId:null, reviewId:null,
+  editingId:null, historyFilter:'all', openHistory:new Set(), busy:false, activityId:null, assignmentId:null,
+  sharing:null, coachBusy:false, courseId:null, chapterIndex:0, chapterSearch:null, creatingCourse:false
+};
+// Text typed into any field, keyed by the field's data-draft name, so that
+// re-drawing the screen never loses unsaved writing.
+const drafts = { 'new-day':'Sunday', promptDays:['Monday'], cpDays:[], cpRepeat:'daily', cpUnit:'months', 'cp-length':'1', 'cp-after':'0' };
+
+function load() {
+  let raw = null;
+  try { raw = localStorage.getItem(STORAGE_KEY); } catch {}
+  if (!raw) return emptyDb();
+  try { return { ...emptyDb(), ...JSON.parse(raw) }; }
+  catch {
+    // Keep the unreadable copy rather than overwriting it.
+    try { localStorage.setItem(`${STORAGE_KEY}/unreadable-${Date.now()}`, raw); } catch {}
+    return emptyDb();
+  }
+}
+
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); }
+  catch { flash("Couldn't save on this device."); }
+}
+
+// Add one history entry to `d`, making its snapshot the current version of the item.
+function applyEntry(d, h) {
+  const list = d[h.kind];
+  if (!list) return;
+  const exists = list.some(x => x.id === h.itemId);
+  const append = h.kind === 'modules' || h.kind === 'prompts';
+  d[h.kind] = exists ? list.map(x => x.id === h.itemId ? h.data : x) : append ? [...list, h.data] : [h.data, ...list];
+  d.history = [h, ...d.history];
+}
+
+// Rebuild everything from a set of history entries (duplicates are ignored).
+function rebuild(entries) {
+  const unique = [...new Map(entries.map(h => [h.id, h])).values()]
+    .sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
+  const d = { ...emptyDb(), email:db.email, name:db.name, preferredName:db.preferredName, userId:db.userId, pending:db.pending, shared:db.shared, coach:db.coach };
+  unique.forEach(h => applyEntry(d, h));
+  return d;
+}
+
+// Save the current version of an item and log a full snapshot in history.
+function record(kind, item, action) {
+  const at = new Date().toISOString();
+  const saved = { ...item, createdAt:item.createdAt || at, updatedAt:at };
+  const entry = { id:newId(), at, kind, itemId:saved.id, action, data:saved };
+  db = { ...db, history:[...db.history], pending:online ? [...db.pending, entry] : db.pending };
+  applyEntry(db, entry);
+  save();
+  upload();
+  return saved;
+}
+
+// ---------- Syncing with the online database ----------
+
+const toRow = h => ({ user_id:user.id, id:h.id, at:h.at, kind:h.kind, item_id:h.itemId, action:h.action, data:h.data });
+const fromRow = r => ({ id:r.id, at:r.at, kind:r.kind, itemId:r.item_id, action:r.action, data:r.data });
+
+let uploading = null;
+// Send changes made on this phone to the database. Safe to repeat: rows already
+// stored are skipped, so nothing is ever saved twice.
+function upload() {
+  if (!sb || !user || !db.pending.length || uploading) return uploading;
+  const batch = db.pending.slice(0, 500);
+  uploading = sb.from('history').upsert(batch.map(toRow), { onConflict:'user_id,id', ignoreDuplicates:true })
+    .then(({ error }) => {
+      if (error) throw error;
+      const sent = new Set(batch.map(h => h.id));
+      db = { ...db, pending:db.pending.filter(h => !sent.has(h.id)) };
+      save();
+    })
+    .catch(() => {}) // No connection: the changes stay waiting and are retried later.
+    .finally(() => {
+      uploading = null;
+      showSync();
+      if (db.pending.length && navigator.onLine) setTimeout(upload, 5000);
+    });
+  return uploading;
+}
+
+// Fetch the full history from the database (e.g. changes made on another device).
+async function download() {
+  if (!sb || !user) return;
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await sb.from('history').select('*')
+      .order('at', { ascending:true }).order('id', { ascending:true }).range(from, from + 999);
+    if (error) throw error;
+    rows.push(...data);
+    if (data.length < 1000) break;
+  }
+  const before = db.history.length;
+  db = rebuild([...rows.map(fromRow), ...db.pending]);
+  save();
+  // Don't redraw under someone who is typing; the next tap will show the new data.
+  const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+  if (db.history.length !== before && !typing) render();
+}
+
+async function sync() {
+  await upload();
+  try { await download(); } catch {}
+  try { await loadShared(); } catch {} // Keeps the last copy if offline.
+  try { await loadCoach(); } catch {}
+  showSync();
+}
+
+// ---------- Shared activities (online) ----------
+
+const fromActivity = r => ({ id:r.id, title:r.title, instructions:r.instructions, questions:r.questions,
+  template:r.template || 'questions', matrix:r.matrix?.rows ? r.matrix : { rows:[], cols:[] },
+  archived:r.archived, createdAt:r.created_at, updatedAt:r.updated_at });
+const fromAssignment = r => ({ id:r.id, activityId:r.activity_id, userId:r.user_id, dueDate:r.due_date,
+  removed:r.removed, assignedAt:r.assigned_at, moduleId:r.module_id || null });
+const fromCourse = r => ({ id:r.id, title:r.title, description:r.description, icon:r.icon, chapters:r.chapters,
+  activityIds:r.activity_ids, prompts:r.prompts, archived:r.archived, createdAt:r.created_at, updatedAt:r.updated_at });
+const fromCourseAssignment = r => ({ id:r.id, moduleId:r.module_id, userId:r.user_id, removed:r.removed, assignedAt:r.assigned_at });
+
+async function fetchAll(query) {
+  const { data, error } = await query;
+  if (error) throw error;
+  return data;
+}
+
+// Fetch activities and assignments. RLS decides what comes back: people see only
+// what's assigned to them; the admin sees everything, including everyone's answers.
+async function loadShared() {
+  if (!sb || !user) return;
+  const [profile] = await fetchAll(sb.from('profiles').select('*').eq('id', user.id));
+  const isAdmin = Boolean(profile?.is_admin);
+  const shared = { isAdmin, people:[], responses:[], changes:[],
+    activities:(await fetchAll(sb.from('activities').select('*').order('created_at'))).map(fromActivity),
+    assignments:(await fetchAll(sb.from('assignments').select('*').order('assigned_at'))).map(fromAssignment),
+    // Missing until the latest supabase-setup.sql has been run; the rest of the app still works.
+    courses:(await fetchAll(sb.from('learning_modules').select('*').order('created_at')).catch(() => [])).map(fromCourse),
+    courseAssignments:(await fetchAll(sb.from('module_assignments').select('*').order('assigned_at')).catch(() => [])).map(fromCourseAssignment) };
+  if (isAdmin) {
+    shared.people = (await fetchAll(sb.from('profiles').select('*').order('email')))
+      .map(r => ({ id:r.id, email:r.email, isAdmin:r.is_admin }));
+    shared.responses = (await fetchAll(sb.from('history').select('*').eq('kind', 'responses')
+      .order('at', { ascending:false }))).map(r => ({ ...fromRow(r), userId:r.user_id }));
+    shared.changes = (await fetchAll(sb.from('changes').select('*').order('at', { ascending:false })))
+      .map(r => ({ id:String(r.id), at:r.at, table:r.table_name, itemId:r.row_id, data:r.data,
+        action:r.action === 'insert' ? 'created' : 'edited' }));
+  }
+  const changed = JSON.stringify(shared) !== JSON.stringify(db.shared);
+  db = { ...db, shared };
+  save();
+  const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+  if (changed && !typing) render();
+}
+
+// ---------- AI coach (online) ----------
+
+const fromCoachRow = r => ({ id:r.id, at:r.at, role:r.role, body:r.body, shared:r.shared });
+
+async function loadCoach() {
+  if (!sb || !user) return;
+  const rows = await fetchAll(sb.from('coach_messages').select('*').order('at', { ascending:true }).limit(1000));
+  const coach = rows.map(fromCoachRow);
+  const changed = coach.length !== db.coach.length;
+  db = { ...db, coach };
+  save();
+  const typing = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName);
+  if (changed && ui.page === 'coach' && !typing) { render(); scrollToEnd(); }
+}
+
+const scrollToEnd = () => window.scrollTo(0, document.body.scrollHeight);
+
+// A snapshot of an item to show the coach: its type and its describe() lines.
+const shareCard = s => `<div class="shared-card"><div class="eyebrow" style="margin-bottom:4px">Shared ${esc(s.label)}</div>
+  ${s.lines.map((l, i) => `<div class="${i ? '' : 'card-title'}">${esc(l)}</div>`).join('')}</div>`;
+const shareLink = (kind, id) => online ? link('Share with coach', 'shareWithCoach', `${kind}|${id}`) : '';
+
+// ---------- Learning modules (online) ----------
+// Called "courses" in the code so they don't clash with the built-in learning library.
+
+const allCourses = () => db.shared.courses || [];
+const courseById = id => allCourses().find(c => c.id === id);
+// Every activity in a module: those in its chapters (in chapter order) and those added to the module itself.
+const chapterActivityIds = ch => ch.activityIds || [];
+const courseActivityIds = c => [...new Set([...c.chapters.flatMap(chapterActivityIds), ...c.activityIds])];
+const courseAssignments = () => (db.shared.courseAssignments || []).filter(m => !m.removed);
+const myCourses = () => allCourses().filter(c => !c.archived &&
+  courseAssignments().some(m => m.moduleId === c.id && m.userId === db.userId));
+const todayISO = () => new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+const fmtDay = ymd => fmtDate(`${ymd}T12:00:00`);
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const activitiesCount = n => n === 1 ? '1 activity' : `${n} activities`;
+
+// Module prompts run for a length of time counted from the day each person is assigned
+// the module, e.g. "daily for 1 month" or "every week on Monday for 3 months".
+// (Prompts made before this change have fixed start and end dates instead.)
+function promptWhen(p) {
+  if (p.start) return `${fmtDay(p.start)} – ${fmtDay(p.end)}${p.days.length ? ` · ${p.days.map(d => d.slice(0, 3)).join(', ')}` : ' · every day'}`;
+  const how = p.repeat === 'weekly' ? `Every week on ${p.days.join(', ')}` : 'Daily';
+  const after = p.startAfter ? `, starting ${plural(p.startAfter, 'week')} after the module is assigned` : ', from when the module is assigned';
+  return `${how} for ${plural(p.length, p.unit.replace(/s$/, ''))}${after}`;
+}
+
+// The first and last day (YYYY-MM-DD) a prompt runs for someone assigned on assignedAt.
+function promptDates(p, assignedAt) {
+  if (p.start) return { first:p.start, last:p.end };
+  const start = new Date(assignedAt);
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() + 7 * (p.startAfter || 0));
+  const end = new Date(start);
+  if (p.unit === 'months') end.setMonth(end.getMonth() + p.length);
+  else end.setDate(end.getDate() + p.length * (p.unit === 'weeks' ? 7 : 1));
+  end.setDate(end.getDate() - 1);
+  return { first:start.toLocaleDateString('en-CA'), last:end.toLocaleDateString('en-CA') };
+}
+
+const myCourseAssignment = c => courseAssignments().find(m => m.moduleId === c.id && m.userId === db.userId);
+const runsOn = (p, day) => p.start ? (!p.days.length || p.days.includes(day)) : (p.repeat !== 'weekly' || p.days.includes(day));
+
+// Every journal prompt for today: those scheduled in my modules, then the weekly
+// prompts, or a gentle default when nothing is scheduled.
+function todaysPrompts() {
+  const today = todayISO(), day = DAYS[new Date().getDay()];
+  const list = [];
+  for (const c of myCourses()) {
+    const assignedAt = myCourseAssignment(c)?.assignedAt || new Date().toISOString();
+    for (const p of c.prompts) {
+      const { first, last } = promptDates(p, assignedAt);
+      if (first <= today && today <= last && runsOn(p, day)) list.push({ key:p.id, text:p.text, source:c.title });
+    }
+  }
+  for (const p of live(db.prompts)) if (p.days.includes(day)) list.push({ key:p.id, text:p.text, source:'' });
+  // The same question scheduled twice only needs answering once.
+  const unique = list.filter((p, i) => list.findIndex(q => q.text === p.text) === i);
+  return unique.length ? unique
+    : [{ key:'default', text:'What is taking up space in your mind today, and what do you need?', source:'' }];
+}
+
+// Links in chapters: "Label - https://..." or just a URL. Only http(s) links are kept.
+function parseLinks(textValue) {
+  return (textValue || '').split('\n').map(line => {
+    const url = line.match(/https?:\/\/\S+/)?.[0];
+    if (!url) return null;
+    const label = line.replace(url, '').replace(/[\s:|–-]+$/, '').replace(/^[\s:|–-]+/, '').trim();
+    return { label:label || url, url };
+  }).filter(Boolean);
+}
+const linksText = links => links.map(l => l.label === l.url ? l.url : `${l.label} - ${l.url}`).join('\n');
+const linkList = links => links.map(l => `<a class="card-row" href="${esc(l.url)}" target="_blank" rel="noopener noreferrer"
+  style="text-decoration:none"><span class="module-icon">${icon('external')}</span><div><div class="card-title">${esc(l.label)}</div>
+  <div class="sub">${esc(hostOf(l.url))}</div></div></a>`).join('');
+const hostOf = url => { try { return new URL(url).hostname; } catch { return url; } };
+
+const isAdmin = () => !online || db.shared.isAdmin;
+const capitalise = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+const displayName = () => db.preferredName || capitalise((db.name || '').split(/[._\d]/)[0]);
+// Without the online database, activities you build are simply assigned to yourself.
+// Activities made before templates existed are question lists.
+const withTemplate = a => ({ template:'questions', ...a, matrix:a.matrix?.rows ? a.matrix : { rows:[], cols:[] } });
+const allActivities = () => (online ? db.shared.activities : live(db.activities)).map(withTemplate);
+const activityById = id => allActivities().find(a => a.id === id);
+const assignments = () => online
+  ? db.shared.assignments.filter(a => !a.removed)
+  : live(db.activities).filter(a => !a.archived).map(a => ({ id:`self-${a.id}`, activityId:a.id, userId:db.userId, dueDate:'' }));
+const myAssignments = () => assignments().filter(a => a.userId === db.userId && activityById(a.activityId));
+const responseId = assignmentId => `resp-${assignmentId}`;
+// Every saved version of someone's answers to an assignment, newest first.
+const answerVersions = assignmentId => (online && db.shared.isAdmin ? db.shared.responses : db.history)
+  .filter(h => h.itemId === responseId(assignmentId));
+const activityVersions = id => online
+  ? db.shared.changes.filter(c => c.table === 'activities' && c.itemId === id)
+      .map(c => ({ ...c, data:fromActivity(c.data), action:c.data.archived ? 'archived' : c.action }))
+  : db.history.filter(h => h.itemId === id);
+
+async function signedIn(account) {
+  user = account;
+  // A copy left by a different account is replaced by this account's journal.
+  if (db.userId && db.userId !== account.id) db = emptyDb();
+  // Anything written on this phone before the database was set up gets uploaded too.
+  if (!db.userId) db = { ...db, pending:[...db.history] };
+  db = { ...db, userId:account.id, email:account.email, name:account.email.split('@')[0],
+    preferredName:account.user_metadata?.name || db.preferredName };
+  save();
+  if (ui.page === 'login') go('home');
+  await sync();
+}
+
+function syncState() {
+  if (!online) return { icon:'', text:'Saved on this device only.' };
+  if (!sb) return { icon:'☁︎', waiting:true, text:"Can't reach the database right now. Changes are kept on this phone and will upload when you're back online." };
+  if (db.pending.length) return { icon:'☁︎', waiting:true,
+    text:`${db.pending.length} change${db.pending.length > 1 ? 's' : ''} waiting to upload. They're safe on this phone and will upload when you're online.` };
+  return { icon:'☁︎', text:`All changes saved online${db.email ? ` to ${db.email}` : ''}.` };
+}
+
+function showSync() {
+  const el = document.getElementById('sync');
+  if (!el) return;
+  const st = syncState();
+  el.className = `sync${st.waiting ? ' waiting' : ''}`;
+  el.innerHTML = st.icon ? icon('cloud', 19) : '';
+  el.title = st.text;
+  const note = document.getElementById('sync-note');
+  if (note) note.textContent = st.text;
+}
+
+let toastTimer;
+function flash(message) {
+  const t = document.getElementById('toast');
+  t.textContent = message;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+function go(page) {
+  ui.page = page;
+  ui.editingId = null;
+  render();
+  window.scrollTo(0, 0);
+}
+
+const todayInfo = () => {
+  const now = new Date();
+  return {
+    today: now.toLocaleDateString('en-IE', { weekday:'long', day:'numeric', month:'long' }),
+    prompts: todaysPrompts()
+  };
+};
+
+// ---------- Building blocks ----------
+
+// Line icons (24×24, drawn with the current text colour).
+const ICONS = {
+  home:'<path d="M3.5 10.5 12 3.5l8.5 7"/><path d="M5.5 9v10.5a1 1 0 0 0 1 1H10v-6h4v6h3.5a1 1 0 0 0 1-1V9"/>',
+  learn:'<path d="M3 5.5h5.5A3.5 3.5 0 0 1 12 9v11a2.5 2.5 0 0 0-2.5-2.5H3z"/><path d="M21 5.5h-5.5A3.5 3.5 0 0 0 12 9v11a2.5 2.5 0 0 1 2.5-2.5H21z"/>',
+  journal:'<path d="M12 20h8.5"/><path d="M16.4 3.6a2 2 0 0 1 2.9 2.9L7.5 18.3 3.5 19.5l1.2-4z"/>',
+  activities:'<rect x="8.5" y="2.5" width="7" height="4" rx="1.2"/><path d="M15.5 4.5h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h2"/><path d="m9 13.5 2 2 4-4"/>',
+  goals:'<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".6" fill="currentColor"/>',
+  coach:'<path d="M20.5 11.5a8.3 8.3 0 0 1-12.2 7.4L3.5 20.5l1.6-4.5a8.3 8.3 0 1 1 15.4-4.5z"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01"/>',
+  history:'<path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/><path d="M12 7.5V12l3 2"/>',
+  settings:'<path d="M4 7h9.5"/><path d="M18 7h2"/><path d="M4 17h2"/><path d="M10.5 17H20"/><circle cx="15.8" cy="7" r="2.3"/><circle cx="8.2" cy="17" r="2.3"/>',
+  sprout:'<path d="M12 20.5v-8"/><path d="M12 12.5C12 8 9 5 4 5c0 5 3.2 7.5 8 7.5z"/><path d="M12 15c0-4.2 2.8-7 8-7 0 4.3-3 7-8 7z"/>',
+  check:'<path d="m5 12.5 4.5 4.5L19 7.5"/>',
+  todo:'<circle cx="12" cy="12" r="7.5"/>',
+  chevron:'<path d="m9.5 6 6 6-6 6"/>',
+  back:'<path d="m15 5.5-6.5 6.5 6.5 6.5"/>',
+  external:'<path d="M14 4.5h5.5V10"/><path d="M10.5 13.5 19.5 4.5"/><path d="M18.5 14v4.5a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18.5V7.5A1.5 1.5 0 0 1 6 6h4.5"/>',
+  cloud:'<path d="M7 18.5a4.5 4.5 0 1 1 .8-8.9 6 6 0 0 1 11.6 1.9 3.5 3.5 0 0 1-1.4 7z"/>',
+  build:'<path d="m12 3 8.5 4.5L12 12 3.5 7.5z"/><path d="m3.5 12 8.5 4.5 8.5-4.5"/><path d="m3.5 16.5 8.5 4.5 8.5-4.5"/>',
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>',
+};
+const icon = (name, size = 22) => `<svg class="ico" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+  stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`;
+const chevron = `<span class="arrow">${icon('chevron', 20)}</span>`;
+
+const attrs = (a, arg) => `data-a="${a}" data-arg="${esc(arg ?? '')}"`;
+const btn = (title, a, arg, cls = '') => `<button class="btn ${cls}" ${attrs(a, arg)}>${esc(title)}</button>`;
+const link = (title, a, arg, danger) => `<button class="link${danger ? ' danger' : ''}" ${attrs(a, arg)}>${esc(title)}</button>`;
+
+function field(label, key, placeholder, { multiline, type = 'text', noCaps } = {}) {
+  const common = `id="f-${key}" data-draft="${key}" placeholder="${esc(placeholder)}"${noCaps ? ' autocapitalize="none" autocorrect="off"' : ''}`;
+  return (label ? `<label for="f-${key}">${esc(label)}</label>` : '') + (multiline
+    ? `<textarea ${common}>${esc(drafts[key])}</textarea>`
+    : `<input type="${type}" ${common} value="${esc(drafts[key])}">`);
+}
+
+const header = (title, back) => `<header class="header">
+  ${back ? `<button class="back" ${attrs('go', back)} aria-label="Back">${icon('back', 26)}</button>` : `<span class="brand">${icon('sprout', 24)}</span>`}
+  <h1>${esc(title)}</h1><span id="sync" class="sync"></span></header>`;
+
+const chips = (days, isSelected, a, prefix = '') => `<div class="days">${days.map(d =>
+  `<button class="chip${isSelected(d) ? ' selected' : ''}" ${attrs(a, prefix + d)}>${d.slice(0, 3)}</button>`).join('')}</div>`;
+
+const NAV = [['home','home','Home'],['modules','learn','Learn'],['journal','journal','Journal'],['activities','activities','Activities'],
+  ['goals','goals','Goals'],['coach','coach','Coach'],['history','history','History'],['admin','settings','Admin']];
+const nav = () => `<nav>${NAV.map(([p, glyph, label]) => [p, glyph, p === 'admin' && !isAdmin() ? 'Settings' : label])
+  .map(([p, glyph, label]) =>
+  `<button class="${ui.page === p ? 'active' : ''}" ${attrs('go', p)}><span class="icon">${icon(glyph)}</span>${label}</button>`).join('')}</nav>`;
+
+const snapshot = (kind, data) => kind === 'responses' && isMatrix(data)
+  ? `<div class="card-title">${esc(data.activityTitle)}</div>${matrixTable(data.rows, data.cols, data.answers)}`
+  : describe(kind, data).filter(Boolean).map((line, i) => `<div class="${i ? 'sub' : 'card-title'}">${esc(line)}</div>`).join('');
+
+// "Created … · n changes" plus an expandable list of every saved version.
+function itemHistory(kind, id, versions = db.history.filter(h => h.itemId === id)) {
+  if (!versions.length) return '';
+  const first = versions[versions.length - 1];
+  const edits = versions.length - 1;
+  const open = ui.openHistory.has(id);
+  return `<div class="history-box"><div class="section-head">
+    <span class="small">Created ${fmtDate(first.at)}${edits ? ` · ${edits} change${edits > 1 ? 's' : ''}` : ''}</span>
+    ${edits ? link(open ? 'Hide history' : 'View history', 'toggleHistory', id) : ''}</div>
+    ${open ? versions.map((v, i) => `<div class="version">
+      <div class="eyebrow">${i === 0 ? 'Current · ' : ''}${v.action} · ${fmtDateTime(v.at)}</div>
+      ${snapshot(kind, v.data)}</div>`).join('') : ''}</div>`;
+}
+
+const textEditor = (id, saveAction) => field('', `edit-${id}`, '', { multiline:true }) +
+  btn('Save changes', saveAction, id) + btn('Cancel', 'editCancel', '', 'secondary');
+
+const editDelete = (kind, id) => `<div class="actions">${shareLink(kind, id)}${link('Edit', 'editStart', `${kind}|${id}`)}${link('Delete', 'remove', `${kind}|${id}`, true)}</div>`;
+
+// Fields are keyed by a prefix: "new" for the create form, "g-<id>" when editing a goal.
+const goalForm = (prefix, editing) =>
+  field('Goal title', `${prefix}-title`, 'e.g. Move my body twice a week') +
+  field('Description (optional)', `${prefix}-description`, 'Why does this matter to you?', { multiline:true }) +
+  field('Target date (optional)', `${prefix}-targetDate`, 'e.g. 31/12/2026') +
+  '<label>Weekly review day</label>' + chips(DAYS, d => drafts[`${prefix}-day`] === d, 'goalDay', `${prefix}|`) +
+  (editing
+    ? btn('Save changes', 'saveGoalEdit', editing) + btn('Cancel', 'editCancel', '', 'secondary')
+    : btn('Add goal +', 'addGoal'));
+
+// Fields keyed by "act-new" when creating an activity, "act-<id>" when editing one.
+const activityForm = (prefix, editing) =>
+  field('Activity title', `${prefix}-title`, 'e.g. My strengths audit') +
+  field('Instructions', `${prefix}-instructions`, 'What should people do, and why?', { multiline:true }) +
+  '<label>Template</label>' + `<div class="days">${[['questions', 'Questions'], ['matrix', 'Matrix']].map(([k, label]) =>
+    `<button class="chip${(drafts[`${prefix}-template`] || 'questions') === k ? ' selected' : ''}" ${attrs('actTemplate', `${prefix}|${k}`)}>${label}</button>`).join('')}</div>` +
+  (drafts[`${prefix}-template`] === 'matrix'
+    ? '<p class="small">People write an answer in each box where a row meets a column.</p>' +
+      field('Categories down the side (one per line)', `${prefix}-rows`, 'Work\nHome\nHealth', { multiline:true }) +
+      field('Categories across the top (one per line)', `${prefix}-cols`, 'What is going well\nWhat I want to change', { multiline:true })
+    : field('Questions (one per line)', `${prefix}-questions`, 'What are three things you do well?\nWhen do you feel most confident?', { multiline:true })) +
+  (editing
+    ? btn('Save changes', 'saveActivityEdit', editing) + btn('Cancel', 'editCancel', '', 'secondary')
+    : btn('Create activity +', 'addActivity'));
+
+const courseCard = c => `<button class="card-row" ${attrs('openCourse', c.id)}>
+  <span class="module-icon">${esc(c.icon)}</span>
+  <div><div class="card-title">${esc(c.title)}</div>${c.description ? `<div class="sub">${esc(c.description)}</div>` : ''}
+  <div class="small">${plural(c.chapters.length, 'chapter')} · ${activitiesCount(courseActivityIds(c).length)}</div></div>
+  ${chevron}</button>`;
+
+// Fields keyed by "ch-new" when adding a chapter, "ch-<id>" when editing one.
+const chapterForm = (prefix, editing) =>
+  field('Chapter title', `${prefix}-title`, 'e.g. What confidence really is') +
+  field('Text', `${prefix}-text`, 'Write the chapter here...', { multiline:true }) +
+  field('Links (one per line)', `${prefix}-links`, 'Short video - https://...\nhttps://...', { multiline:true, noCaps:true }) +
+  (editing
+    ? btn('Save chapter', 'saveChapter', editing) + btn('Cancel', 'editCancel', '', 'secondary')
+    : btn('Add chapter +', 'addChapter'));
+
+// Search results for adding activities to the module being edited, or to one of its
+// chapters (chapterId). Activities already in that place are left out.
+function activityResults(chapterId) {
+  const c = courseById(ui.courseId);
+  if (!c) return '';
+  const ch = chapterId && c.chapters.find(x => x.id === chapterId);
+  const already = ch ? chapterActivityIds(ch) : c.activityIds;
+  const q = (drafts[ch ? 'chSearch' : 'actSearch'] || '').trim().toLowerCase();
+  const found = allActivities().filter(a => !a.archived && !already.includes(a.id) &&
+    (!q || `${a.title} ${a.instructions}`.toLowerCase().includes(q)));
+  if (!found.length) return `<p class="small">${allActivities().length ? 'No matching activities.' : 'No activities built yet.'}</p>`;
+  return found.slice(0, 20).map(a => `<div class="prompt-row"><div class="sub">${esc(a.title)}</div>
+    ${ch ? link('Add', 'addChapterActivity', a.id) : link('Add', 'addCourseActivity', a.id)}</div>`).join('');
+}
+
+// My assigned activities for the given activity ids, with a tick once answered.
+function activityRows(ids) {
+  const mine = myAssignments();
+  return ids.map(id => {
+    const act = activityById(id), a = mine.find(x => x.activityId === id);
+    if (!act || !a) return '';
+    const done = findLive('responses', responseId(a.id));
+    return `<button class="list-row" ${attrs('openAssignment', a.id)}>
+      <span class="number${done ? ' done' : ''}">${done ? icon('check', 16) : icon('todo', 14)}</span>
+      <div class="sub">${esc(act.title)}${dueText(a)}</div>${chevron}</button>`;
+  }).join('');
+}
+
+const choice = (options, value, a) => `<div class="days">${options.map(([k, label]) =>
+  `<button class="chip${value === k ? ' selected' : ''}" ${attrs(a, k)}>${label}</button>`).join('')}</div>`;
+
+// The prompt being scheduled, from the form, or null if a number is missing.
+function draftPrompt() {
+  const length = parseInt(drafts['cp-length'], 10), startAfter = parseInt(drafts['cp-after'] || '0', 10);
+  if (!(length > 0) || !(startAfter >= 0)) return null;
+  return { repeat:drafts.cpRepeat, days:drafts.cpRepeat === 'weekly' ? WEEK.filter(d => drafts.cpDays.includes(d)) : [],
+    length, unit:drafts.cpUnit, startAfter };
+}
+function promptSummary() {
+  const p = draftPrompt();
+  if (!p) return 'Enter how long the prompt should run for.';
+  if (p.repeat === 'weekly' && !p.days.length) return 'Choose at least one day of the week.';
+  return `${promptWhen(p)}.`;
+}
+
+const dueText = a => a.dueDate ? ` · Due ${esc(a.dueDate)}` : '';
+const personName = id => id === db.userId ? 'You' : db.shared.people.find(p => p.id === id)?.email || 'Unknown';
+
+// ---------- Screens ----------
+
+const screens = {
+  login: () => `<main class="login">
+    <div class="logo">${icon('sprout', 38)}</div>
+    <p class="eyebrow">Your personal space</p>
+    <h1 class="login-title">Learning<br>Journal</h1>
+    <p class="body">A calm little corner to learn, reflect and grow, one small step at a time.</p>
+    <div class="panel">
+      ${field('Email address', 'email', 'you@example.com', { type:'email', noCaps:true })}
+      ${online ? `${field('Password', 'password', 'Your password', { type:'password', noCaps:true })}
+        ${btn(ui.busy ? 'Signing in…' : 'Sign in', 'signIn')}
+        ${btn('Create my account', 'signUp', '', 'secondary')}
+        <p class="small" style="text-align:center;margin-top:12px">Your journal is private and stored securely, so it's safe even if you lose your phone.</p>`
+      : `${btn('Open my journal', 'signIn')}
+        <p class="small" style="text-align:center;margin-top:12px">Everything you write is saved privately on this device.</p>`}
+    </div></main>`,
+
+  home: () => {
+    const { prompts } = todayInfo();
+    const active = live(db.goals).filter(g => g.status === 'Active');
+    const todo = myAssignments().filter(a => !findLive('responses', responseId(a.id)));
+    const hour = new Date().getHours();
+    const hello = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+    const modules = myCourses();
+    // The last seven days, and which of them have a journal entry.
+    const written = new Set(live(db.journal).map(e => new Date(e.createdAt).toLocaleDateString('en-CA')));
+    const week = [...Array(7)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - 6 + i); return d; });
+    const daysWritten = week.filter(d => written.has(d.toLocaleDateString('en-CA'))).length;
+    const tile = (page, glyph, title, subtitle) => `<button class="tile" ${attrs('go', page)}>
+      <span class="module-icon">${icon(glyph, 20)}</span><div><b>${title}</b><span class="sub" style="display:block">${subtitle}</span></div></button>`;
+    return header('Your space') + `<main>
+      <p class="eyebrow">${esc(new Date().toLocaleDateString('en-IE', { weekday:'long', day:'numeric', month:'long' }))}</p>
+      <h2 class="greeting">${hello}${displayName() ? `, ${esc(displayName())}` : ''}.</h2>
+      <p class="body">You don't have to do everything today. Just start somewhere.</p>
+      ${!db.preferredName ? `<div class="panel">
+        <div class="card-title">What should we call you?</div>
+        <div class="actions" style="align-items:center;gap:10px;margin-top:10px">
+          <div style="flex:1">${field('', 'preferredName', 'Your first name')}</div>
+          <button class="chip selected" style="margin-bottom:13px" ${attrs('saveName')}>Save</button></div></div>` : ''}
+      <div class="prompt-box hero">
+        <p class="eyebrow">${prompts.length > 1 ? `Today's prompts · ${prompts.length}` : "Today's prompt"}</p>
+        <div class="prompt">${esc(prompts[0].text)}</div>
+        ${prompts.length > 1 ? `<p class="small" style="margin:-8px 0 14px">${prompts.slice(1).map(p => esc(p.text)).join('<br>')}</p>` : ''}
+        <button class="btn" ${attrs('go', 'journal')}>${icon('journal', 18)} Write in your journal</button>
+      </div>
+      <div class="tiles">
+        ${tile('activities', 'activities', 'Activities', todo.length ? `${todo.length} to do` : 'All done')}
+        ${tile('modules', 'learn', 'Learn', modules.length ? plural(modules.length, 'module') : 'No modules yet')}
+        ${tile('coach', 'coach', 'Coach', online ? 'Talk it through' : 'Not set up')}
+      </div>
+      <h3 class="section-title">Your week</h3>
+      <div class="panel">
+        <div class="week">${week.map((d, i) => `<div class="${i === 6 ? 'today' : ''}">
+          <i class="${written.has(d.toLocaleDateString('en-CA')) ? 'on' : ''}"></i>${d.toLocaleDateString('en-IE', { weekday:'narrow' })}</div>`).join('')}</div>
+        <p class="small" style="margin-bottom:0">${daysWritten === 0 ? "A fresh week. Today's a lovely day to begin."
+          : daysWritten === 1 ? 'You wrote on 1 day this week. Every entry counts.'
+          : `You wrote on ${daysWritten} of the last 7 days. Lovely consistency.`}</p>
+      </div>
+      ${todo.length ? `<div class="section-head"><h3 class="section-title">Waiting for you</h3>${link('See all', 'go', 'activities')}</div>
+        ${todo.slice(0, 2).map(a => `<button class="card-row" ${attrs('openAssignment', a.id)}><span class="module-icon">${icon('activities')}</span>
+          <div><div class="card-title">${esc(activityById(a.activityId).title)}</div>
+          <div class="sub">${isMatrix(activityById(a.activityId)) ? 'Matrix' : 'Activity'}${dueText(a)}</div></div>${chevron}</button>`).join('')}` : ''}
+      <div class="section-head"><h3 class="section-title">Your goals</h3>${link(active.length ? 'See all' : 'Add a goal', 'go', 'goals')}</div>
+      ${active.length === 0 ? '<p class="small">Set a goal and choose a day for a weekly check-in.</p>' : active.slice(0, 3).map(g =>
+        `<div class="card-row"><span class="module-icon">${icon('goals')}</span><div>
+          <div class="card-title">${esc(g.title)}</div><div class="sub">Check-in on ${esc(g.reviewDay)}s</div></div>
+          ${link('Review', 'startReview', g.id)}</div>`).join('')}
+      ${modules.length ? `<h3 class="section-title">Your modules</h3>${modules.slice(0, 3).map(courseCard).join('')}` : ''}</main>`;
+  },
+
+  modules: () => header('Learning library') + `<main>
+    <h2 class="heading">Keep learning, at your pace.</h2>
+    <p class="body">Small moments of learning add up.</p>
+    ${online && isAdmin() ? `<button class="banner" ${attrs('go', 'learningBuilder')}><span class="module-icon">${icon('build')}</span><div>
+      <div class="card-title">Learning builder</div>
+      <div class="sub">${plural(allCourses().filter(c => !c.archived).length, 'module')} built</div>
+      <div class="link">Build and assign modules →</div></div></button>` : ''}
+    ${myCourses().length ? `<h3 class="section-title">Your modules</h3>${myCourses().map(courseCard).join('')}`
+      : `<div class="panel" style="text-align:center;padding:28px 20px">
+          <span class="module-icon" style="margin:0 auto 12px">${icon('learn')}</span>
+          <div class="card-title">No modules yet</div>
+          <p class="sub">${!online ? 'Modules need the online database to be connected.'
+            : isAdmin() ? 'Build your first module in the learning builder and assign it to yourself or others.'
+            : "When a module is assigned to you, it will appear here."}</p></div>`}</main>`,
+
+  course: () => {
+    const c = courseById(ui.courseId);
+    if (!c) return screens.modules();
+    const mine = myAssignments();
+    return header(c.title, 'modules') + `<main>
+      <p class="eyebrow">Module</p>
+      <h2 class="heading">${esc(c.icon)} ${esc(c.title)}</h2>
+      ${c.description ? `<p class="body" style="white-space:pre-wrap">${esc(c.description)}</p>` : ''}
+      <h3 class="section-title">Chapters</h3>
+      ${c.chapters.length === 0 ? '<p class="small">No chapters yet.</p>' : ''}
+      ${c.chapters.map((ch, i) => {
+        const n = chapterActivityIds(ch).length;
+        const done = chapterActivityIds(ch).filter(id => { const a = mine.find(x => x.activityId === id); return a && findLive('responses', responseId(a.id)); }).length;
+        return `<button class="list-row" ${attrs('openChapter', i)}>
+          <span class="number${n && done === n ? ' done' : ''}">${n && done === n ? icon('check', 16) : i + 1}</span>
+          <div class="sub">${esc(ch.title)}${n ? `<span class="small" style="display:block;margin:2px 0 0">${done} of ${activitiesCount(n)} done</span>` : ''}</div>${chevron}</button>`;
+      }).join('')}
+      ${c.activityIds.length ? `<h3 class="section-title">${c.chapters.some(ch => chapterActivityIds(ch).length) ? 'More activities' : 'Activities'}</h3>
+        ${activityRows(c.activityIds)}` : ''}
+      ${c.prompts.length ? `<h3 class="section-title">Journal prompts</h3>
+        <p class="small">These appear as today's prompt in your journal on the days below.</p>
+        ${c.prompts.map(p => {
+          const { first, last } = promptDates(p, myCourseAssignment(c)?.assignedAt || new Date().toISOString());
+          const how = p.start ? '' : p.repeat === 'weekly' ? ` · ${p.days.map(d => d.slice(0, 3)).join(', ')}` : ' · every day';
+          return `<div class="entry"><p class="eyebrow">${fmtDay(first)} – ${fmtDay(last)}${how}</p><div class="sub">${esc(p.text)}</div></div>`;
+        }).join('')}` : ''}
+    </main>`;
+  },
+
+  chapter: () => {
+    const c = courseById(ui.courseId);
+    const ch = c?.chapters[ui.chapterIndex];
+    if (!ch) return screens.course();
+    const last = ui.chapterIndex === c.chapters.length - 1;
+    return header(ch.title, 'course') + `<main>
+      <p class="eyebrow">${esc(c.title)} · Chapter ${ui.chapterIndex + 1} of ${c.chapters.length}</p>
+      <h2 class="heading">${esc(ch.title)}</h2>
+      ${ch.text ? `<p class="prompt" style="white-space:pre-wrap;margin-bottom:20px">${esc(ch.text)}</p>` : ''}
+      ${ch.links.length ? `<h3 class="section-title">Links</h3>${linkList(ch.links)}` : ''}
+      ${chapterActivityIds(ch).length ? `<h3 class="section-title">Activities</h3>${activityRows(chapterActivityIds(ch))}` : ''}
+      ${last ? btn('Back to module', 'go', 'course') : btn('Next chapter →', 'openChapter', ui.chapterIndex + 1)}
+    </main>`;
+  },
+
+  learningBuilder: () => {
+    const list = allCourses();
+    const active = list.filter(c => !c.archived), archived = list.filter(c => c.archived);
+    const people = c => courseAssignments().filter(m => m.moduleId === c.id).length;
+    return header('Learning builder', 'modules') + `<main>
+      <p class="eyebrow">Admin</p>
+      <h2 class="heading">Build a module.</h2>
+      <p class="body">A module has chapters to read, activities to complete and journal prompts for a set time. Assign it to the people who should take it.</p>
+      ${ui.creatingCourse ? `<div class="panel"><h3 class="section-title" style="margin-top:0">New module</h3>
+        ${field('Module title', 'cm-new-title', 'e.g. Building confidence')}
+        ${field('Description', 'cm-new-description', 'What will this module help with?', { multiline:true })}
+        ${btn('Create module', 'addCourse')}
+        ${btn('Cancel', 'creatingCourse', '', 'secondary')}</div>`
+      : btn('+ Create a module', 'creatingCourse', 'open')}
+      <h3 class="section-title">Your modules</h3>
+      ${active.length === 0 ? '<p class="small">Modules you create will appear here.</p>' : ''}
+      ${active.map(c => `<button class="card-row" ${attrs('openBuild', c.id)}><span class="module-icon">${esc(c.icon)}</span>
+        <div><div class="card-title">${esc(c.title)}</div>
+        <div class="small">${plural(c.chapters.length, 'chapter')} · ${activitiesCount(courseActivityIds(c).length)} · ${plural(c.prompts.length, 'prompt')} · assigned to ${people(c)}</div></div>
+        ${chevron}</button>`).join('')}
+      ${archived.length ? `<h3 class="section-title">Archived</h3>${archived.map(c => `<div class="entry">
+        <div class="actions"><span class="card-title" style="flex:1">${esc(c.title)}</span>${link('Restore', 'restoreCourse', c.id)}</div></div>`).join('')}` : ''}
+    </main>`;
+  },
+
+  buildModule: () => {
+    const c = courseById(ui.courseId);
+    if (!c) return screens.learningBuilder();
+    const given = courseAssignments().filter(m => m.moduleId === c.id);
+    const versions = db.shared.changes.filter(x => x.table === 'learning_modules' && x.itemId === c.id)
+      .map(x => ({ ...x, data:fromCourse(x.data) }));
+    return header('Edit module', 'learningBuilder') + `<main>
+      <p class="eyebrow">Module</p>
+      <h2 class="heading">${esc(c.icon)} ${esc(c.title)}</h2>
+
+      <div class="panel"><h3 class="section-title">Details</h3>
+        ${field('Title', `cm-${c.id}-title`, 'Module title')}
+        ${field('Description', `cm-${c.id}-description`, 'What will this module help with?', { multiline:true })}
+        ${field('Icon (an emoji)', `cm-${c.id}-icon`, '🌱')}
+        ${btn('Save details', 'saveCourseDetails')}</div>
+
+      <h3 class="section-title">Chapters</h3>
+      ${c.chapters.map((ch, i) => `<div class="entry">
+        ${ui.editingId === ch.id ? chapterForm(`ch-${ch.id}`, ch.id) : `
+          <div class="card-title">${i + 1}. ${esc(ch.title)}</div>
+          ${ch.text ? `<div class="sub">${esc(ch.text.length > 140 ? ch.text.slice(0, 140) + '…' : ch.text)}</div>` : ''}
+          ${ch.links.length ? `<div class="small">${plural(ch.links.length, 'link')}</div>` : ''}
+          ${chapterActivityIds(ch).map(id => `<div class="prompt-row"><span class="number" style="width:26px;height:26px">${icon('activities', 15)}</span>
+            <div class="sub" style="margin:0">${esc(activityById(id)?.title || 'Activity not found')}</div>
+            ${link('Remove', 'removeChapterActivity', `${ch.id}|${id}`, true)}</div>`).join('')}
+          ${ui.chapterSearch === ch.id ? `<div class="version" style="margin-top:12px">
+              <div class="card-title" style="margin-bottom:8px">Add activities to this chapter</div>
+              ${field('', 'chSearch', 'Search activities...', { noCaps:true })}
+              <div id="ch-results">${activityResults(ch.id)}</div>
+              ${link('Done', 'chapterSearch', '')}</div>` : ''}
+          <div class="actions">${ui.chapterSearch === ch.id ? '' : link('Add activity', 'chapterSearch', ch.id)}${i ? link('Move up', 'moveChapter', ch.id) : ''}${link('Edit', 'editChapter', ch.id)}${link('Remove', 'removeChapter', ch.id, true)}</div>`}
+      </div>`).join('')}
+      <div class="panel"><h3 class="section-title">Add a chapter</h3>${chapterForm('ch-new')}</div>
+
+      <h3 class="section-title">Other activities</h3>
+      <p class="small">Activities for the module as a whole, not tied to a chapter. To put an activity in a chapter, use Add activity on the chapter above.</p>
+      ${c.activityIds.length === 0 ? '<p class="small">None yet. Search below to add some.</p>' : ''}
+      ${c.activityIds.map(id => `<div class="entry"><div class="actions">
+        <span class="card-title" style="flex:1">${esc(activityById(id)?.title || 'Activity not found')}</span>
+        ${link('Remove', 'removeCourseActivity', id, true)}</div></div>`).join('')}
+      <div class="panel"><h3 class="section-title">Add activities</h3>
+        ${field('', 'actSearch', 'Search activities...', { noCaps:true })}
+        <div id="act-results">${activityResults()}</div>
+        ${link('Create a new activity →', 'go', 'manageActivities')}</div>
+
+      <h3 class="section-title">Journal prompts</h3>
+      ${c.prompts.length === 0 ? '<p class="small">No prompts scheduled.</p>' : ''}
+      ${c.prompts.map(pr => `<div class="entry"><p class="eyebrow">${esc(promptWhen(pr))}</p>
+        <div class="actions"><div class="sub" style="flex:1">${esc(pr.text)}</div>${link('Remove', 'removeCoursePrompt', pr.id, true)}</div></div>`).join('')}
+      <div class="panel"><h3 class="section-title">Schedule a prompt</h3>
+        <p class="small">The schedule starts for each person on the day they're assigned the module.</p>
+        ${field('Prompt', 'cp-text', 'e.g. What did you notice about your confidence today?', { multiline:true })}
+        <label>How often</label>
+        ${choice([['daily', 'Daily'], ['weekly', 'Every week']], drafts.cpRepeat, 'cpRepeat')}
+        ${drafts.cpRepeat === 'weekly' ? `<label>On</label>${chips(WEEK, d => drafts.cpDays.includes(d), 'cpDay')}` : ''}
+        ${field('For how long', 'cp-length', '1', { type:'number' })}
+        ${choice([['days', 'Days'], ['weeks', 'Weeks'], ['months', 'Months']], drafts.cpUnit, 'cpUnit')}
+        ${field('Start after (weeks, 0 = straight away)', 'cp-after', '0', { type:'number' })}
+        <p class="small" id="cp-summary">${esc(promptSummary())}</p>
+        ${btn('Schedule prompt +', 'addCoursePrompt')}</div>
+
+      <h3 class="section-title">People</h3>
+      <p class="small">Assigning the module also assigns its activities. Its prompts appear in their journal on the scheduled days.</p>
+      ${btn('Assign to everyone', 'assignCourseAll')}
+      ${db.shared.people.map(p => {
+        const m = given.find(x => x.userId === p.id);
+        const theirs = db.shared.assignments.filter(a => !a.removed && a.userId === p.id && courseActivityIds(c).includes(a.activityId));
+        const done = theirs.filter(a => answerVersions(a.id).length).length;
+        return `<div class="entry"><div class="actions">
+          <div style="flex:1"><div class="card-title">${esc(p.email)}${p.id === db.userId ? ' (you)' : ''}</div>
+          <div class="sub">${m ? `Assigned · ${done} of ${activitiesCount(courseActivityIds(c).length)} done` : 'Not assigned'}</div></div>
+          ${m ? link('Unassign', 'unassignCourse', m.id, true) : link('Assign', 'assignCourse', p.id)}</div></div>`;
+      }).join('')}
+
+      <div class="entry" style="margin-top:18px">${itemHistory('courses', c.id, versions)}</div>
+      ${btn('Archive module', 'archiveCourse', c.id, 'secondary danger')}
+    </main>`;
+  },
+
+  journal: () => {
+    const { today, prompts } = todayInfo();
+    const entries = live(db.journal);
+    const answeredToday = new Set(entries.filter(e => new Date(e.createdAt).toLocaleDateString('en-CA') === todayISO()).map(e => e.prompt));
+    return header('Daily journal') + `<main>
+      <p class="eyebrow">${esc(today)}</p>
+      <h2 class="heading">Make a little space.</h2>
+      ${prompts.length > 1 ? `<p class="body">You have ${prompts.length} prompts today. Answer one, some or all of them.</p>` : ''}
+      ${prompts.map(p => `<div class="prompt-box">
+        <p class="eyebrow">${p.source ? esc(p.source) : "Today's prompt"}</p>
+        <div class="prompt" style="margin-bottom:14px">${esc(p.text)}</div>
+        ${field('', `journal-${p.key}`, 'Write whatever is on your mind...', { multiline:true })}
+        <div class="actions" style="align-items:center">
+          ${answeredToday.has(p.text) ? `<span class="small" style="flex:1;display:flex;align-items:center;gap:6px;margin:0">${icon('check', 15)} You wrote about this today</span>` : ''}
+          <button class="btn" style="width:auto;padding:12px 22px;margin:0" ${attrs('saveJournal', p.key)}>Save entry</button></div>
+      </div>`).join('')}
+      <h3 class="section-title">Previous entries</h3>
+      ${entries.length === 0 ? '<p class="small">Your entries will appear here.</p>' : ''}
+      ${entries.map(e => `<div class="entry"><p class="eyebrow">${fmtDate(e.createdAt)}</p>
+        <div class="card-title">${esc(e.prompt)}</div>
+        ${ui.editingId === e.id ? textEditor(e.id, 'saveJournalEdit')
+          : `<div class="sub">${esc(e.text)}</div>${editDelete('journal', e.id)}`}
+        ${itemHistory('journal', e.id)}</div>`).join('')}</main>`;
+  },
+
+  goals: () => {
+    const goals = live(db.goals);
+    const reviews = live(db.reviews);
+    return header('Goals & check-ins') + `<main>
+      <h2 class="heading">Small steps, meaningful change.</h2>
+      <p class="body">Set a goal and choose a day for a weekly check-in.</p>
+      <div class="panel"><h3 class="section-title">Create a goal</h3>${goalForm('new')}</div>
+      <h3 class="section-title">Your goals</h3>
+      ${goals.length === 0 ? '<p class="small">Your goals will appear here once you add one.</p>' : ''}
+      ${goals.map(g => `<div class="goal-card">
+        ${ui.editingId === g.id ? goalForm(`g-${g.id}`, g.id) : `
+          <div class="section-head"><div class="card-title">${esc(g.title)}</div><div class="status">${esc(g.status)}</div></div>
+          ${g.description ? `<div class="sub">${esc(g.description)}</div>` : ''}
+          ${g.targetDate ? `<p class="small">Target: ${esc(g.targetDate)}</p>` : ''}
+          <p class="small">Weekly review: ${esc(g.reviewDay)}</p>
+          ${btn('Complete weekly review', 'startReview', g.id)}
+          ${btn(g.status === 'Active' ? 'Pause goal' : 'Reactivate goal', 'togglePause', g.id, 'secondary')}
+          <div class="actions"><span class="small">${reviews.filter(r => r.goalId === g.id).length} review(s) saved</span>
+            ${shareLink('goals', g.id)}${link('Edit', 'editStart', `goals|${g.id}`)}${link('Delete', 'remove', `goals|${g.id}`, true)}</div>`}
+        ${itemHistory('goals', g.id)}</div>`).join('')}
+      <h3 class="section-title">Review history</h3>
+      ${reviews.length === 0 ? '<p class="small">Completed reviews will appear here.</p>' : ''}
+      ${reviews.map(r => `<div class="entry"><p class="eyebrow">${fmtDate(r.createdAt)}</p>
+        <div class="card-title">${esc(r.goalTitle)}</div>
+        ${r.answers.map((a, i) => a.trim() ? `<div class="sub">${REVIEW_LABELS[i]}: ${esc(a)}</div>` : '').join('')}
+        <div class="actions">${shareLink('reviews', r.id)}${link('Edit', 'startReview', `${r.goalId}|${r.id}`)}${link('Delete', 'remove', `reviews|${r.id}`, true)}</div>
+        ${itemHistory('reviews', r.id)}</div>`).join('')}</main>`;
+  },
+
+  review: () => {
+    const goal = db.goals.find(g => g.id === ui.goalId);
+    if (!goal) return screens.goals();
+    return header('Weekly review', 'goals') + `<main>
+      <p class="eyebrow">${ui.reviewId ? 'Editing review' : 'Weekly check-in'} · ${esc(goal.reviewDay)}</p>
+      <h2 class="heading">${esc(goal.title)}</h2>
+      <p class="body">Take a moment to notice what happened this week, without judging yourself.</p>
+      ${REVIEW_QUESTIONS.map((q, i) => field(`${i + 1}. ${q}`, `review-${i}`, 'Write your reflection...', { multiline:true })).join('')}
+      ${btn(ui.reviewId ? 'Save changes' : 'Save weekly review', 'saveReview')}
+      <p class="small">Saved privately on this device. Earlier versions are kept in History.</p></main>`;
+  },
+
+  activities: () => {
+    const mine = myAssignments();
+    const done = a => findLive('responses', responseId(a.id));
+    const card = a => {
+      const act = activityById(a.activityId);
+      const r = done(a);
+      return `<button class="card-row" ${attrs('openAssignment', a.id)}><span class="module-icon${r ? ' done' : ''}">${icon(r ? 'check' : 'activities')}</span>
+        <div><div class="card-title">${esc(act.title)}</div>
+        <div class="sub">${r ? `Completed ${fmtDate(r.createdAt)}${r.updatedAt !== r.createdAt ? ' · edited' : ''}` : (isMatrix(act) ? `Matrix · ${act.matrix.rows.length} × ${act.matrix.cols.length}` : `${act.questions.length} question${act.questions.length === 1 ? '' : 's'}`)}${dueText(a)}${a.moduleId && courseById(a.moduleId) ? ` · ${esc(courseById(a.moduleId).title)}` : ''}</div></div>
+        ${chevron}</button>`;
+    };
+    const todo = mine.filter(a => !done(a)), finished = mine.filter(done);
+    return header('Activities') + `<main>
+      <p class="eyebrow">Assigned to you</p>
+      <h2 class="heading">Things to work on.</h2>
+      <p class="body">Take each one at your own pace. You can come back and change your answers any time.</p>
+      ${isAdmin() ? `<button class="banner" ${attrs('go', 'manageActivities')}><span class="module-icon">${icon('build')}</span><div>
+        <div class="card-title">Build & assign activities</div>
+        <div class="sub">${activitiesCount(allActivities().filter(a => !a.archived).length)} built${online ? ` · ${assignments().length} assigned` : ''}</div>
+        <div class="link">Open activity builder →</div></div></button>` : ''}
+      <h3 class="section-title">To do</h3>
+      ${todo.length ? todo.map(card).join('') : `<p class="small">${mine.length ? 'All done. Well done!' : 'Nothing assigned to you yet.'}</p>`}
+      ${finished.length ? `<h3 class="section-title">Completed</h3>${finished.map(card).join('')}` : ''}</main>`;
+  },
+
+  doActivity: () => {
+    const a = myAssignments().find(x => x.id === ui.assignmentId);
+    if (!a) return screens.activities();
+    const act = activityById(a.activityId);
+    const r = findLive('responses', responseId(a.id));
+    return header(act.title, 'activities') + `<main>
+      <p class="eyebrow">Activity${dueText(a)}</p>
+      <h2 class="heading">${esc(act.title)}</h2>
+      ${act.instructions ? `<p class="body" style="white-space:pre-wrap">${esc(act.instructions)}</p>` : ''}
+      ${isMatrix(act)
+        ? `${act.matrix.cols.length > 2 ? '<p class="small">Swipe the grid sideways to see every column.</p>' : ''}
+          <div class="matrix-wrap"><table class="matrix fill">
+          <tr><th></th>${act.matrix.cols.map(col => `<th>${esc(col)}</th>`).join('')}</tr>
+          ${act.matrix.rows.map((row, r) => `<tr><th>${esc(row)}</th>${act.matrix.cols.map((col, c) => {
+            const key = `ans-${a.id}-${r}-${c}`;
+            return `<td><textarea id="f-${key}" data-draft="${key}" aria-label="${esc(`${row}: ${col}`)}">${esc(drafts[key])}</textarea></td>`;
+          }).join('')}</tr>`).join('')}
+          </table></div>`
+        : act.questions.map((q, i) => field(`${i + 1}. ${q}`, `ans-${a.id}-${i}`, 'Write your answer...', { multiline:true })).join('')}
+      ${btn(r ? 'Save changes' : 'Save my answers', 'saveAnswers', a.id)}
+      <p class="small">${online ? 'Your admin can read your answers to this activity. ' : ''}Every version you save is kept.</p>
+      ${r ? `<div class="entry"><div class="actions">${shareLink('responses', r.id)}</div>${itemHistory('responses', r.id)}</div>` : ''}</main>`;
+  },
+
+  manageActivities: () => {
+    const list = allActivities();
+    const active = list.filter(a => !a.archived), archived = list.filter(a => a.archived);
+    const stats = act => {
+      const given = assignments().filter(a => a.activityId === act.id);
+      const finished = given.filter(a => answerVersions(a.id).length);
+      return online ? `Assigned to ${given.length} · ${finished.length} completed` : '';
+    };
+    return header('Activity builder', 'activities') + `<main>
+      <p class="eyebrow">Admin</p>
+      <h2 class="heading">Build activities.</h2>
+      <p class="body">${online ? 'Create an activity, then assign it to the people who should do it.'
+        : 'Activities you build appear in your own Activities list. Connect the online database to assign them to other people.'}</p>
+      <div class="panel"><h3 class="section-title">Create an activity</h3>${activityForm('act-new')}</div>
+      <h3 class="section-title">Your activities</h3>
+      ${active.length === 0 ? '<p class="small">Activities you create will appear here.</p>' : ''}
+      ${active.map(act => `<div class="goal-card">
+        ${ui.editingId === act.id ? activityForm(`act-${act.id}`, act.id) : `
+          <div class="card-title">${esc(act.title)}</div>
+          ${act.instructions ? `<div class="sub">${esc(act.instructions)}</div>` : ''}
+          ${isMatrix(act) ? matrixTable(act.matrix.rows, act.matrix.cols, [])
+            : act.questions.map((q, i) => `<div class="sub">${i + 1}. ${esc(q)}</div>`).join('')}
+          ${online ? `<p class="small">${stats(act)}</p>${btn('Assign & see answers', 'openAssign', act.id)}` : ''}
+          <div class="actions">${link('Edit', 'editActivity', act.id)}${link('Archive', 'archiveActivity', act.id, true)}</div>`}
+        ${itemHistory('activities', act.id, activityVersions(act.id))}</div>`).join('')}
+      ${archived.length ? `<h3 class="section-title">Archived</h3>${archived.map(act => `<div class="entry">
+        <div class="actions"><span class="card-title" style="flex:1">${esc(act.title)}</span>${link('Restore', 'restoreActivity', act.id)}</div></div>`).join('')}` : ''}
+    </main>`;
+  },
+
+  assign: () => {
+    const act = activityById(ui.activityId);
+    if (!act) return screens.manageActivities();
+    const given = db.shared.assignments.filter(a => a.activityId === act.id);
+    return header('Assign activity', 'manageActivities') + `<main>
+      <p class="eyebrow">Assign</p>
+      <h2 class="heading">${esc(act.title)}</h2>
+      ${field('Due date (optional)', `due-${act.id}`, 'e.g. Friday 6 November')}
+      ${btn('Assign to everyone', 'assignAll', act.id)}
+      <h3 class="section-title">People</h3>
+      ${db.shared.people.length === 0 ? '<p class="small">Nobody has signed up yet. Share the app link so people can create an account.</p>' : ''}
+      ${db.shared.people.map(p => {
+        const a = given.find(x => x.userId === p.id && !x.removed);
+        const answered = a && answerVersions(a.id).length;
+        return `<div class="entry"><div class="actions">
+          <div style="flex:1"><div class="card-title">${esc(p.email)}${p.id === db.userId ? ' (you)' : ''}</div>
+          <div class="sub">${a ? (answered ? `Completed${dueText(a)}` : `Not started yet${dueText(a)}`) : 'Not assigned'}</div></div>
+          ${a ? `${answered ? link('Answers', 'viewAnswers', a.id) : ''}${link('Unassign', 'unassign', a.id, true)}`
+            : link('Assign', 'assignOne', p.id)}</div></div>`;
+      }).join('')}</main>`;
+  },
+
+  answers: () => {
+    const a = db.shared.assignments.find(x => x.id === ui.assignmentId);
+    const versions = a ? answerVersions(a.id) : [];
+    if (!versions.length) return screens.assign();
+    return header('Answers', 'assign') + `<main>
+      <p class="eyebrow">${esc(personName(a.userId))} · ${fmtDateTime(versions[0].at)}</p>
+      ${snapshot('responses', versions[0].data)}
+      <div class="entry" style="margin-top:16px">${itemHistory('responses', responseId(a.id), versions)}</div></main>`;
+  },
+
+  coach: () => {
+    if (!online) return header('Coach') + `<main>
+      <h2 class="heading">Your coach</h2>
+      <p class="body">The AI coach gives you feedback on your reflections, goals and activities. It needs the online database, which isn't connected yet.</p></main>`;
+    const when = m => `<span class="when">${fmtDateTime(m.at)}</span>`;
+    return header('Coach') + `<main>
+      <p class="eyebrow">AI coach</p>
+      <h2 class="heading">Talk it through.</h2>
+      <p class="body">Share a reflection, goal or activity for feedback, or just say what's on your mind. Only you can see this conversation.</p>
+      ${db.coach.length === 0 ? `<div class="bubble coach">Hi${db.name ? ` ${esc(db.name)}` : ''}! I'm your coach. Tap "Share with coach" on any journal entry, reflection, goal, weekly review or activity and I'll give you feedback. Or just tell me what you're working on.</div>` : ''}
+      ${db.coach.map(m => `<div class="bubble ${m.role === 'user' ? 'me' : 'coach'}">${m.shared ? shareCard(m.shared) : ''}${esc(m.body)}${when(m)}</div>`).join('')}
+      ${ui.coachBusy ? '<p class="typing">Coach is writing…</p>' : ''}
+      <div class="panel" style="margin-top:14px">
+        ${ui.sharing ? `<div class="actions" style="align-items:flex-start"><div style="flex:1">${shareCard(ui.sharing)}</div>${link('Remove', 'unshare', '', true)}</div>` : ''}
+        ${field('', 'coachMsg', ui.sharing ? 'Add a note or question (optional)' : 'Write a message...', { multiline:true })}
+        ${btn(ui.coachBusy ? 'Sending…' : 'Send', 'sendToCoach')}
+      </div></main>`;
+  },
+
+  history: () => {
+    const shown = db.history.filter(h => ui.historyFilter === 'all' || h.kind === ui.historyFilter);
+    return header('History') + `<main>
+      <p class="eyebrow">Every change, kept</p>
+      <h2 class="heading">Your story so far.</h2>
+      <p class="body">Each time you add, edit, pause or delete something, a copy is saved here.</p>
+      <div class="days">${['all', ...Object.keys(KIND)].map(k =>
+        `<button class="chip${ui.historyFilter === k ? ' selected' : ''}" ${attrs('historyFilter', k)}>${k === 'all' ? 'All' : KIND[k]}</button>`).join('')}</div>
+      ${shown.length === 0 ? '<p class="small">Nothing here yet.</p>' : ''}
+      ${shown.map(h => `<div class="entry"><p class="eyebrow">${fmtDateTime(h.at)}</p>
+        <div class="status">${KIND[h.kind]} · ${h.action}</div>${snapshot(h.kind, h.data)}</div>`).join('')}</main>`;
+  },
+
+  admin: () => {
+    const prompts = live(db.prompts);
+    const journal = live(db.journal);
+    if (!isAdmin()) return header('Settings') + `<main>
+      <h2 class="heading">Settings</h2>${accountPanels()}</main>`;
+    return header('Admin studio') + `<main>
+      <p class="eyebrow">Content management</p><h2 class="heading">Build your library</h2>
+      <button class="banner" ${attrs('go', 'manageActivities')}><span class="module-icon">${icon('activities')}</span><div>
+        <div class="card-title">Activities</div><div class="sub">Build activities and assign them to people.</div>
+        <div class="link">Open activity builder →</div></div></button>
+      ${online ? `<button class="banner" ${attrs('go', 'learningBuilder')}><span class="module-icon">${icon('build')}</span><div>
+        <div class="card-title">Learning builder</div><div class="sub">Build modules with chapters, activities and scheduled prompts.</div>
+        <div class="link">Open learning builder →</div></div></button>` : ''}
+      <div class="panel"><h3 class="section-title">Schedule a journal prompt</h3>
+        ${field('Prompt text', 'promptText', 'Write a reflection question...', { multiline:true })}
+        <label>Show this prompt on</label>
+        ${chips(WEEK, d => drafts.promptDays.includes(d), 'promptDay')}
+        ${btn('Add scheduled prompt +', 'addPrompt')}</div>
+      <h3 class="section-title">Weekly prompt schedule</h3>
+      ${DAYS.map(d => {
+        const today = prompts.filter(p => p.days.includes(d));
+        return `<div class="entry"><div class="card-title">${d}</div>
+          ${today.length === 0 ? '<p class="small">No prompt scheduled</p>' : today.map(p =>
+            `<div class="prompt-row"><div class="sub">${esc(p.text)}</div>${link('Remove', 'remove', `prompts|${p.id}`, true)}</div>`).join('')}</div>`;
+      }).join('')}
+      <h3 class="section-title">Overview</h3>
+      <p class="small">${journal.length} journal entr${journal.length === 1 ? 'y' : 'ies'} · ${live(db.goals).length} goal(s) ·
+        ${live(db.reviews).length} weekly review(s) · ${db.history.length} saved change(s)</p>
+      ${accountPanels()}</main>`;
+  }
+};
+
+// Online saving, backup and privacy: shown to everyone.
+function accountPanels() {
+  if (drafts.preferredName === undefined) drafts.preferredName = db.preferredName || '';
+  return `<div class="panel"><h3 class="section-title" style="margin-top:0">Your name</h3>
+    ${field('What should the app call you?', 'preferredName', 'Your first name')}
+    ${btn('Save name', 'saveName', '', 'secondary')}</div>
+  ${online ? `<div class="panel"><h3 class="section-title">Online saving</h3>
+        <div class="sub" id="sync-note">${esc(syncState().text)}</div>
+        ${btn('Sync now', 'syncNow')}
+        ${btn('Sign out', 'signOut', '', 'secondary')}</div>` : ''}
+      <div class="panel"><h3 class="section-title">Backup</h3>
+        <div class="sub">${online ? 'An extra copy you keep yourself.' : 'Your journal lives on this device only.'} Export a backup now and then (to Files, Notes or email).</div>
+        ${btn('Export backup', 'exportBackup')}
+        ${field('Restore from a backup', 'restore', 'Paste the contents of a backup file here', { multiline:true, noCaps:true })}
+        ${btn('Restore backup', 'restoreBackup', '', 'secondary')}</div>
+      <div class="privacy"><div class="card-title">🔒 Private by design</div>
+        <div class="sub">${online
+          ? 'Only your account can read your journal. Answers to assigned activities are also shared with your admin. Saved history can never be changed or removed, even by mistake.'
+          : 'Nothing is sent to a server. Your entries are stored only on this phone.'}</div></div>`;
+}
+
+function render() {
+  const screen = screens[ui.page] || screens.home;
+  document.getElementById('app').innerHTML = screen() + (ui.page === 'login' ? '' : nav());
+  showSync();
+}
+
+// ---------- Actions ----------
+
+const text = key => (drafts[key] || '').trim();
+const findLive = (kind, id) => live(db[kind]).find(x => x.id === id);
+
+const actions = {
+  go,
+
+  async signIn() {
+    const email = text('email');
+    if (!email) return flash('Enter your email to get started.');
+    if (!online) {
+      db = { ...db, email, name:email.split('@')[0] || 'Friend' };
+      save();
+      return go('home');
+    }
+    if (!sb) return flash("Can't reach the database. Check your internet connection.");
+    if (!drafts.password) return flash('Enter your password.');
+    ui.busy = true; render();
+    const { data, error } = await sb.auth.signInWithPassword({ email, password:drafts.password });
+    ui.busy = false;
+    if (error) {
+      render();
+      if (error.code === 'invalid_credentials') return flash("Email or password not recognised. New here? Tap Create my account.");
+      if (error.code === 'email_not_confirmed') return flash('Please tap the link in the confirmation email first, then sign in.');
+      return flash(error.message);
+    }
+    drafts.password = '';
+    await signedIn(data.user);
+  },
+
+  async signUp() {
+    const email = text('email');
+    if (!sb) return flash("Can't reach the database. Check your internet connection.");
+    if (!email || !drafts.password) return flash('Enter an email and a password first.');
+    if (drafts.password.length < 8) return flash('Use a password of at least 8 characters.');
+    const { data, error } = await sb.auth.signUp({ email, password:drafts.password });
+    if (error) return flash(error.code === 'user_already_exists'
+      ? 'You already have an account with this email. Tap Sign in instead.' : error.message);
+    if (data.session) { drafts.password = ''; return signedIn(data.user); }
+    flash('Check your email and tap the confirmation link, then sign in here.');
+  },
+
+  async signOut() {
+    await upload();
+    const waiting = db.pending.length;
+    if (!confirm(waiting
+      ? `${waiting} change(s) haven't uploaded yet and will be lost if you sign out now. Sign out anyway?`
+      : 'Sign out?\n\nYour journal stays safe online. Sign in again to see it.')) return;
+    await sb?.auth.signOut().catch(() => {});
+    user = null;
+    db = emptyDb();
+    save();
+    go('login');
+  },
+
+  async saveName() {
+    const name = text('preferredName');
+    if (!name) return flash('Type the name you would like to be called.');
+    db = { ...db, preferredName:name };
+    save();
+    // Stored on the account too, so every device you sign in on greets you the same way.
+    if (sb && user) sb.auth.updateUser({ data:{ name } }).catch(() => {});
+    render();
+    flash(`Lovely to meet you, ${name}.`);
+  },
+
+  async syncNow() {
+    if (!user) return flash('Sign in first.');
+    await sync();
+    flash(db.pending.length ? "Couldn't reach the database. Will keep trying." : 'Everything is saved online.');
+  },
+
+  saveJournal(key) {
+    const prompt = todaysPrompts().find(p => p.key === key);
+    if (!prompt) return render();
+    if (!text(`journal-${key}`)) return flash('Write a little something first.');
+    record('journal', { id:newId(), prompt:prompt.text, text:text(`journal-${key}`) }, 'created');
+    drafts[`journal-${key}`] = '';
+    render();
+    flash('Entry saved.');
+  },
+
+  editStart(arg) {
+    const [kind, id] = arg.split('|');
+    const item = findLive(kind, id);
+    if (kind === 'goals') {
+      for (const k of ['title', 'description', 'targetDate']) drafts[`g-${id}-${k}`] = item[k];
+      drafts[`g-${id}-day`] = item.reviewDay;
+    } else {
+      drafts[`edit-${id}`] = item.text;
+    }
+    ui.editingId = id;
+    render();
+  },
+
+  editCancel() { ui.editingId = null; render(); },
+
+  saveJournalEdit(id) {
+    if (!text(`edit-${id}`)) return flash('Write a little something first.');
+    record('journal', { ...findLive('journal', id), text:text(`edit-${id}`) }, 'edited');
+    ui.editingId = null;
+    render();
+    flash('Entry updated.');
+  },
+
+  remove(arg) {
+    const [kind, id] = arg.split('|');
+    if (!confirm(`Delete ${KIND[kind].toLowerCase()}?\n\nIt will be hidden, but a copy stays in your History.`)) return;
+    record(kind, { ...findLive(kind, id), deleted:true }, 'deleted');
+    render();
+    flash('Deleted. A copy is kept in History.');
+  },
+
+  toggleHistory(id) {
+    ui.openHistory.has(id) ? ui.openHistory.delete(id) : ui.openHistory.add(id);
+    render();
+  },
+
+  goalDay(arg) {
+    const [prefix, day] = arg.split('|');
+    drafts[`${prefix}-day`] = day;
+    render();
+  },
+
+  addGoal() {
+    if (!text('new-title')) return flash('Please enter a goal title.');
+    const day = drafts['new-day'];
+    record('goals', { id:newId(), title:text('new-title'), description:text('new-description'),
+      targetDate:text('new-targetDate'), reviewDay:day, status:'Active' }, 'created');
+    for (const k of ['title', 'description', 'targetDate']) drafts[`new-${k}`] = '';
+    render();
+    flash(`Goal added. Weekly review on ${day}.`);
+  },
+
+  saveGoalEdit(id) {
+    const p = `g-${id}`;
+    if (!text(`${p}-title`)) return flash('Please enter a goal title.');
+    record('goals', { ...findLive('goals', id), title:text(`${p}-title`), description:text(`${p}-description`),
+      targetDate:text(`${p}-targetDate`), reviewDay:drafts[`${p}-day`] }, 'edited');
+    ui.editingId = null;
+    render();
+    flash('Goal updated.');
+  },
+
+  togglePause(id) {
+    const g = findLive('goals', id);
+    const pausing = g.status === 'Active';
+    record('goals', { ...g, status:pausing ? 'Paused' : 'Active' }, pausing ? 'paused' : 'reactivated');
+    render();
+  },
+
+  startReview(arg) {
+    const [goalId, reviewId] = arg.split('|');
+    const review = reviewId ? findLive('reviews', reviewId) : null;
+    ui.goalId = goalId;
+    ui.reviewId = review?.id || null;
+    REVIEW_QUESTIONS.forEach((_, i) => { drafts[`review-${i}`] = review ? review.answers[i] : ''; });
+    go('review');
+  },
+
+  saveReview() {
+    const answers = REVIEW_QUESTIONS.map((_, i) => text(`review-${i}`));
+    if (!answers.some(Boolean)) return flash('Add at least one answer first.');
+    const existing = ui.reviewId && findLive('reviews', ui.reviewId);
+    const goal = db.goals.find(g => g.id === ui.goalId);
+    if (existing) record('reviews', { ...existing, answers }, 'edited');
+    else record('reviews', { id:newId(), goalId:goal.id, goalTitle:goal.title, answers }, 'created');
+    ui.reviewId = null;
+    go('goals');
+    flash(existing ? 'Review updated.' : 'Review saved.');
+  },
+
+  historyFilter(k) { ui.historyFilter = k; render(); },
+
+  promptDay(d) {
+    drafts.promptDays = drafts.promptDays.includes(d) ? drafts.promptDays.filter(x => x !== d) : [...drafts.promptDays, d];
+    render();
+  },
+
+  addPrompt() {
+    if (!text('promptText')) return flash('Enter the prompt text.');
+    if (!drafts.promptDays.length) return flash('Select at least one day.');
+    record('prompts', { id:newId(), text:text('promptText'), days:drafts.promptDays }, 'created');
+    drafts.promptText = '';
+    drafts.promptDays = ['Monday'];
+    render();
+    flash('Prompt added to the weekly schedule.');
+  },
+
+  async exportBackup() {
+    const fileName = `learning-journal-${new Date().toISOString().slice(0, 10)}.json`;
+    const file = new File([JSON.stringify(db)], fileName, { type:'application/json' });
+    try {
+      if (navigator.canShare?.({ files:[file] })) return await navigator.share({ files:[file], title:fileName });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(file);
+      a.download = fileName;
+      a.click();
+    } catch (e) {
+      if (e?.name !== 'AbortError') flash("Couldn't export the backup.");
+    }
+  },
+
+  openAssignment(id) {
+    const a = myAssignments().find(x => x.id === id);
+    const r = findLive('responses', responseId(id));
+    const act = activityById(a.activityId);
+    if (isMatrix(act)) act.matrix.rows.forEach((_, row) => act.matrix.cols.forEach((_, c) => {
+      // Answers follow the category names, so they stay put if the admin reorders or adds categories.
+      const oldRow = r && isMatrix(r) ? r.rows.indexOf(act.matrix.rows[row]) : -1;
+      const oldCol = r && isMatrix(r) ? r.cols.indexOf(act.matrix.cols[c]) : -1;
+      drafts[`ans-${id}-${row}-${c}`] = oldRow >= 0 && oldCol >= 0 ? r.answers[oldRow]?.[oldCol] || '' : '';
+    }));
+    else act.questions.forEach((_, i) => { drafts[`ans-${id}-${i}`] = r?.answers[i] || ''; });
+    ui.assignmentId = id;
+    go('doActivity');
+  },
+
+  saveAnswers(id) {
+    const a = myAssignments().find(x => x.id === id);
+    const act = activityById(a.activityId);
+    const matrix = isMatrix(act);
+    const answers = matrix
+      ? act.matrix.rows.map((_, r) => act.matrix.cols.map((_, c) => text(`ans-${id}-${r}-${c}`)))
+      : act.questions.map((_, i) => text(`ans-${id}-${i}`));
+    if (!answers.flat().some(Boolean)) return flash('Write at least one answer first.');
+    const existing = findLive('responses', responseId(id));
+    record('responses', { ...existing, id:responseId(id), assignmentId:id, activityId:act.id, activityTitle:act.title,
+      template:matrix ? 'matrix' : 'questions', questions:matrix ? [] : act.questions,
+      rows:matrix ? act.matrix.rows : [], cols:matrix ? act.matrix.cols : [], answers }, existing ? 'edited' : 'created');
+    go('activities');
+    flash(existing ? 'Answers updated.' : 'Activity completed. Well done!');
+  },
+
+  shareWithCoach(arg) {
+    const [kind, id] = arg.split('|');
+    const item = findLive(kind, id);
+    ui.sharing = { kind, itemId:id, label:KIND[kind].toLowerCase(), lines:describe(kind, item).filter(Boolean) };
+    go('coach');
+    scrollToEnd();
+  },
+
+  unshare() { ui.sharing = null; render(); },
+
+  async sendToCoach() {
+    if (ui.coachBusy) return;
+    const body = text('coachMsg');
+    if (!body && !ui.sharing) return flash('Write a message first.');
+    if (!user) return flash('You need to be signed in and online to talk to the coach.');
+    const message = { id:newId(), at:new Date().toISOString(), role:'user', body, shared:ui.sharing };
+    const { error } = await sb.from('coach_messages').insert(message);
+    if (error) return flash(navigator.onLine ? `Couldn't send: ${error.message}` : 'You need to be online to talk to the coach.');
+    db = { ...db, coach:[...db.coach, message] };
+    save();
+    drafts.coachMsg = '';
+    ui.sharing = null;
+    ui.coachBusy = true;
+    render(); scrollToEnd();
+    const { data, error:replyError } = await sb.functions.invoke('coach', { body:{} });
+    ui.coachBusy = false;
+    if (replyError) {
+      // The function explains what went wrong (e.g. the daily limit) in its JSON body.
+      const detail = await replyError.context?.json?.().catch(() => null);
+      flash(detail?.error || "The coach couldn't reply right now. Try again in a minute.");
+    } else {
+      db = { ...db, coach:[...db.coach, fromCoachRow(data.message)] };
+      save();
+    }
+    render(); scrollToEnd();
+  },
+
+  // ----- Learning modules -----
+
+  openCourse(id) { ui.courseId = id; go('course'); },
+
+  openChapter(i) { ui.chapterIndex = Number(i); go('chapter'); },
+
+  openBuild(id) {
+    const c = courseById(id);
+    drafts[`cm-${id}-title`] = c.title;
+    drafts[`cm-${id}-description`] = c.description;
+    drafts[`cm-${id}-icon`] = c.icon;
+    drafts.actSearch = '';
+    ui.chapterSearch = null;
+    ui.courseId = id;
+    go('buildModule');
+  },
+
+  creatingCourse(open) {
+    ui.creatingCourse = Boolean(open);
+    render();
+    if (open) document.getElementById('f-cm-new-title')?.focus();
+  },
+
+  async addCourse() {
+    const title = text('cm-new-title');
+    if (!title) return flash('Give the module a title.');
+    const id = newId();
+    const ok = await shared(sb.from('learning_modules').insert({ id, title, description:text('cm-new-description'),
+      icon:'🌱', chapters:[], activity_ids:[], prompts:[] }));
+    if (!ok) return;
+    drafts['cm-new-title'] = drafts['cm-new-description'] = '';
+    ui.creatingCourse = false;
+    actions.openBuild(id);
+    flash('Module created. Now add chapters, activities and prompts.');
+  },
+
+  async saveCourseDetails() {
+    const id = ui.courseId;
+    const title = text(`cm-${id}-title`);
+    if (!title) return flash('Give the module a title.');
+    if (await saveCourse({ ...courseById(id), title, description:text(`cm-${id}-description`),
+      icon:text(`cm-${id}-icon`) || '🌱' })) flash('Module saved.');
+  },
+
+  async addChapter() {
+    const title = text('ch-new-title');
+    if (!title) return flash('Give the chapter a title.');
+    const c = courseById(ui.courseId);
+    const chapter = { id:newId(), title, text:text('ch-new-text'), links:parseLinks(drafts['ch-new-links']), activityIds:[] };
+    if (await saveCourse({ ...c, chapters:[...c.chapters, chapter] })) {
+      for (const k of ['title', 'text', 'links']) drafts[`ch-new-${k}`] = '';
+      render();
+      flash('Chapter added.');
+    }
+  },
+
+  editChapter(id) {
+    const ch = courseById(ui.courseId).chapters.find(x => x.id === id);
+    drafts[`ch-${id}-title`] = ch.title;
+    drafts[`ch-${id}-text`] = ch.text;
+    drafts[`ch-${id}-links`] = linksText(ch.links);
+    ui.editingId = id;
+    render();
+  },
+
+  async saveChapter(id) {
+    const title = text(`ch-${id}-title`);
+    if (!title) return flash('Give the chapter a title.');
+    const c = courseById(ui.courseId);
+    const chapters = c.chapters.map(ch => ch.id === id
+      ? { ...ch, title, text:text(`ch-${id}-text`), links:parseLinks(drafts[`ch-${id}-links`]) } : ch);
+    if (await saveCourse({ ...c, chapters })) { ui.editingId = null; render(); flash('Chapter saved.'); }
+  },
+
+  async moveChapter(id) {
+    const c = courseById(ui.courseId);
+    const i = c.chapters.findIndex(ch => ch.id === id);
+    const chapters = [...c.chapters];
+    [chapters[i - 1], chapters[i]] = [chapters[i], chapters[i - 1]];
+    await saveCourse({ ...c, chapters });
+  },
+
+  async removeChapter(id) {
+    if (!confirm('Remove this chapter?\n\nEarlier versions of the module, including this chapter, stay in its history.')) return;
+    const c = courseById(ui.courseId);
+    if (await saveCourse({ ...c, chapters:c.chapters.filter(ch => ch.id !== id) })) flash('Chapter removed.');
+  },
+
+  chapterSearch(id) {
+    ui.chapterSearch = id || null;
+    drafts.chSearch = '';
+    render();
+  },
+
+  async addChapterActivity(id) {
+    const c = courseById(ui.courseId);
+    const chapters = c.chapters.map(ch => ch.id === ui.chapterSearch ? { ...ch, activityIds:[...chapterActivityIds(ch), id] } : ch);
+    if (await saveCourse({ ...c, chapters })) flash('Activity added to the chapter.');
+  },
+
+  async removeChapterActivity(arg) {
+    const [chapterId, id] = arg.split('|');
+    if (!confirm('Remove this activity from the chapter?\n\nPeople keep any answers they already gave.')) return;
+    const c = courseById(ui.courseId);
+    const chapters = c.chapters.map(ch => ch.id === chapterId ? { ...ch, activityIds:chapterActivityIds(ch).filter(x => x !== id) } : ch);
+    if (await saveCourse({ ...c, chapters })) flash('Activity removed from the chapter.');
+  },
+
+  async addCourseActivity(id) {
+    const c = courseById(ui.courseId);
+    if (await saveCourse({ ...c, activityIds:[...c.activityIds, id] })) flash('Activity added to the module.');
+  },
+
+  async removeCourseActivity(id) {
+    if (!confirm('Remove this activity from the module?\n\nPeople keep any answers they already gave.')) return;
+    const c = courseById(ui.courseId);
+    if (await saveCourse({ ...c, activityIds:c.activityIds.filter(x => x !== id) })) flash('Activity removed from the module.');
+  },
+
+  cpDay(d) {
+    drafts.cpDays = drafts.cpDays.includes(d) ? drafts.cpDays.filter(x => x !== d) : [...drafts.cpDays, d];
+    render();
+  },
+
+  cpRepeat(v) { drafts.cpRepeat = v; render(); },
+
+  cpUnit(v) { drafts.cpUnit = v; render(); },
+
+  async addCoursePrompt() {
+    const promptText = text('cp-text'), schedule = draftPrompt();
+    if (!promptText) return flash('Write the prompt first.');
+    if (!schedule) return flash('Enter how long the prompt should run for (a whole number).');
+    if (schedule.repeat === 'weekly' && !schedule.days.length) return flash('Choose at least one day of the week.');
+    const c = courseById(ui.courseId);
+    const prompt = { id:newId(), text:promptText, ...schedule };
+    if (await saveCourse({ ...c, prompts:[...c.prompts, prompt] })) {
+      drafts['cp-text'] = '';
+      drafts['cp-length'] = '1';
+      drafts['cp-after'] = '0';
+      drafts.cpDays = [];
+      render();
+      flash('Prompt scheduled.');
+    }
+  },
+
+  async removeCoursePrompt(id) {
+    const c = courseById(ui.courseId);
+    if (await saveCourse({ ...c, prompts:c.prompts.filter(p => p.id !== id) })) flash('Prompt removed.');
+  },
+
+  async assignCourse(userId) { await assignCourseTo([userId]); },
+
+  async assignCourseAll() {
+    const given = new Set(courseAssignments().filter(m => m.moduleId === ui.courseId).map(m => m.userId));
+    const people = db.shared.people.filter(p => !given.has(p.id)).map(p => p.id);
+    if (!people.length) return flash('Everyone already has this module.');
+    await assignCourseTo(people);
+  },
+
+  async unassignCourse(id) {
+    if (!confirm("Unassign this module?\n\nIts activities are removed from their list too. Any answers they gave are kept.")) return;
+    if (await shared(sb.from('module_assignments').update({ removed:true, updated_at:new Date().toISOString() }).eq('id', id))) {
+      await syncCourseActivities(courseById(ui.courseId));
+      flash('Module unassigned.');
+    }
+  },
+
+  async archiveCourse(id) {
+    if (!confirm("Archive this module?\n\nIt disappears from everyone's Learn tab, but nothing is deleted and you can restore it. Activities already assigned stay assigned.")) return;
+    if (await saveCourse({ ...courseById(id), archived:true })) { go('learningBuilder'); flash('Module archived.'); }
+  },
+
+  async restoreCourse(id) {
+    if (await saveCourse({ ...courseById(id), archived:false })) flash('Module restored.');
+  },
+
+  // ----- Admin: building and assigning activities -----
+
+  async addActivity() {
+    const fields = activityFields('act-new');
+    if (!fields) return;
+    if (await saveActivity({ id:newId(), ...fields, archived:false }, 'created')) {
+      for (const k of ['title', 'instructions', 'questions', 'rows', 'cols']) drafts[`act-new-${k}`] = '';
+      render();
+      flash(online ? 'Activity created. Now assign it to people.' : 'Activity created. It is in your Activities list.');
+    }
+  },
+
+  editActivity(id) {
+    const act = activityById(id);
+    drafts[`act-${id}-title`] = act.title;
+    drafts[`act-${id}-instructions`] = act.instructions;
+    drafts[`act-${id}-questions`] = act.questions.join('\n');
+    drafts[`act-${id}-template`] = act.template;
+    drafts[`act-${id}-rows`] = act.matrix.rows.join('\n');
+    drafts[`act-${id}-cols`] = act.matrix.cols.join('\n');
+    ui.editingId = id;
+    render();
+  },
+
+  async saveActivityEdit(id) {
+    const fields = activityFields(`act-${id}`);
+    if (!fields) return;
+    if (await saveActivity({ ...activityById(id), ...fields }, 'edited')) {
+      ui.editingId = null;
+      render();
+      flash('Activity updated.');
+    }
+  },
+
+  async archiveActivity(id) {
+    if (!confirm('Archive this activity?\n\nIt disappears from everyone\'s list, but nothing is deleted and you can restore it.')) return;
+    if (await saveActivity({ ...activityById(id), archived:true }, 'archived')) { render(); flash('Activity archived.'); }
+  },
+
+  async restoreActivity(id) {
+    if (await saveActivity({ ...activityById(id), archived:false }, 'restored')) { render(); flash('Activity restored.'); }
+  },
+
+  actTemplate(arg) {
+    const [prefix, template] = arg.split('|');
+    drafts[`${prefix}-template`] = template;
+    render();
+  },
+
+  openAssign(id) { ui.activityId = id; go('assign'); },
+
+  assignOne(userId) { assignTo([userId]); },
+
+  assignAll(activityId) {
+    const given = new Set(db.shared.assignments.filter(a => a.activityId === activityId && !a.removed).map(a => a.userId));
+    const people = db.shared.people.filter(p => !given.has(p.id)).map(p => p.id);
+    if (!people.length) return flash('Everyone already has this activity.');
+    assignTo(people);
+  },
+
+  async unassign(id) {
+    if (!confirm('Unassign this activity?\n\nIt disappears from their list. Any answers they gave are kept.')) return;
+    if (await shared(sb.from('assignments').update({ removed:true, updated_at:new Date().toISOString() }).eq('id', id))) flash('Unassigned.');
+  },
+
+  viewAnswers(id) { ui.assignmentId = id; go('answers'); },
+
+  restoreBackup() {
+    let data;
+    try { data = JSON.parse(text('restore')); } catch { return flash("That doesn't look like a backup."); }
+    if (!data || !Array.isArray(data.history)) return flash("That doesn't look like a backup.");
+    if (!confirm('Restore backup?\n\nEverything in the backup is added back to your journal. Nothing is removed.')) return;
+    const known = new Set(db.history.map(h => h.id));
+    const added = data.history.filter(h => !known.has(h.id));
+    if (online) db = { ...db, pending:[...db.pending, ...added] };
+    db = rebuild([...db.history, ...added]);
+    save();
+    upload();
+    drafts.restore = '';
+    render();
+    flash(`Backup restored (${added.length} change${added.length === 1 ? '' : 's'} added).`);
+  }
+};
+
+function activityFields(prefix) {
+  const title = text(`${prefix}-title`);
+  if (!title) { flash('Give the activity a title.'); return null; }
+  const instructions = text(`${prefix}-instructions`);
+  if (drafts[`${prefix}-template`] === 'matrix') {
+    const rows = lines(drafts[`${prefix}-rows`]), cols = lines(drafts[`${prefix}-cols`]);
+    if (!rows.length || !cols.length) { flash('Add at least one category down the side and one across the top.'); return null; }
+    return { title, instructions, template:'matrix', matrix:{ rows, cols }, questions:[] };
+  }
+  const questions = lines(drafts[`${prefix}-questions`]);
+  return { title, instructions, template:'questions', matrix:{ rows:[], cols:[] }, questions:questions.length ? questions : ['Your response'] };
+}
+
+// Run a change to the shared tables, then refresh them. Needs a connection.
+async function shared(query) {
+  if (!user) { flash('You need to be signed in and online to do this.'); return false; }
+  const { error } = await query;
+  if (error) {
+    flash(!navigator.onLine ? 'You need to be online to do this.'
+      : error.code === 'PGRST204' || error.code === '42703' ? 'The database needs updating: run the latest supabase-setup.sql in Supabase, then try again.'
+      : `Couldn't save: ${error.message}`);
+    return false;
+  }
+  await loadShared().catch(() => {});
+  render();
+  return true;
+}
+
+// Save an activity: shared table online, the personal history log otherwise.
+async function saveActivity(act, action) {
+  if (!online) { record('activities', act, action); return true; }
+  // Template columns are only sent when a matrix is involved, so question activities keep
+  // working even before the latest supabase-setup.sql has been run.
+  const templated = isMatrix(act) || isMatrix(activityById(act.id));
+  const row = { title:act.title, instructions:act.instructions, questions:act.questions, archived:act.archived,
+    ...(templated ? { template:act.template, matrix:act.matrix } : {}),
+    updated_at:new Date().toISOString() };
+  return shared(action === 'created'
+    ? sb.from('activities').insert({ id:act.id, ...row })
+    : sb.from('activities').update(row).eq('id', act.id));
+}
+
+// Save a module's details, chapters, activities and prompts, then keep everyone's
+// activity assignments in step with its activity list.
+async function saveCourse(c) {
+  const ok = await shared(sb.from('learning_modules').update({ title:c.title, description:c.description, icon:c.icon,
+    chapters:c.chapters, activity_ids:c.activityIds, prompts:c.prompts, archived:c.archived,
+    updated_at:new Date().toISOString() }).eq('id', c.id));
+  if (ok) await syncCourseActivities(courseById(c.id));
+  return ok;
+}
+
+// Everyone assigned to the module gets each of its activities (unless they already have
+// it). Activities that came from the module but are no longer in it, or whose person
+// was unassigned, are removed. Answers are never touched.
+async function syncCourseActivities(c) {
+  if (!c) return;
+  const people = courseAssignments().filter(m => m.moduleId === c.id).map(m => m.userId);
+  const all = db.shared.assignments, now = new Date().toISOString();
+  const fresh = [], revive = [];
+  const ids = courseActivityIds(c);
+  for (const userId of people) for (const activityId of ids) {
+    const theirs = all.filter(a => a.activityId === activityId && a.userId === userId);
+    if (theirs.some(a => !a.removed)) continue;
+    const old = theirs.find(a => a.moduleId === c.id);
+    if (old) revive.push(old.id);
+    else fresh.push({ id:newId(), activity_id:activityId, user_id:userId, module_id:c.id, due_date:'', updated_at:now });
+  }
+  const drop = all.filter(a => a.moduleId === c.id && !a.removed &&
+    (!people.includes(a.userId) || !ids.includes(a.activityId))).map(a => a.id);
+  if (fresh.length) await sb.from('assignments').insert(fresh);
+  if (revive.length) await sb.from('assignments').update({ removed:false, updated_at:now }).in('id', revive);
+  if (drop.length) await sb.from('assignments').update({ removed:true, updated_at:now }).in('id', drop);
+  if (fresh.length || revive.length || drop.length) { await loadShared().catch(() => {}); render(); }
+}
+
+async function assignCourseTo(userIds) {
+  const c = courseById(ui.courseId), now = new Date().toISOString();
+  const old = (db.shared.courseAssignments || []).filter(m => m.moduleId === c.id && m.removed && userIds.includes(m.userId));
+  const fresh = userIds.filter(id => !old.some(m => m.userId === id));
+  let ok = true;
+  // Re-assigning someone restarts the module's prompt schedule from today.
+  if (old.length) ok = await shared(sb.from('module_assignments').update({ removed:false, assigned_at:now, updated_at:now }).in('id', old.map(m => m.id)));
+  if (ok && fresh.length) ok = await shared(sb.from('module_assignments').insert(fresh.map(user_id =>
+    ({ id:newId(), module_id:c.id, user_id, updated_at:now }))));
+  if (!ok) return;
+  await syncCourseActivities(courseById(c.id));
+  flash(`Module assigned to ${userIds.length} ${userIds.length === 1 ? 'person' : 'people'}.`);
+}
+
+async function assignTo(userIds) {
+  const activityId = ui.activityId;
+  const dueDate = text(`due-${activityId}`);
+  const now = new Date().toISOString();
+  // Someone who was unassigned earlier gets their old assignment back, keeping their answers linked.
+  const old = db.shared.assignments.filter(a => a.activityId === activityId && a.removed && userIds.includes(a.userId));
+  const fresh = userIds.filter(id => !old.some(a => a.userId === id));
+  let ok = true;
+  for (const a of old) ok = ok && await shared(sb.from('assignments').update({ removed:false, due_date:dueDate, updated_at:now }).eq('id', a.id));
+  if (fresh.length) ok = ok && await shared(sb.from('assignments').insert(fresh.map(user_id =>
+    ({ id:newId(), activity_id:activityId, user_id, due_date:dueDate, updated_at:now }))));
+  if (ok) flash(`Assigned to ${userIds.length} ${userIds.length === 1 ? 'person' : 'people'}.`);
+}
+
+document.addEventListener('input', e => {
+  const key = e.target.dataset?.draft;
+  if (key) drafts[key] = e.target.value;
+  // Update search results as you type, without redrawing (which would close the keyboard).
+  if (key === 'actSearch') document.getElementById('act-results').innerHTML = activityResults();
+  if (key === 'chSearch') document.getElementById('ch-results').innerHTML = activityResults(ui.chapterSearch);
+  if (key === 'cp-length' || key === 'cp-after') document.getElementById('cp-summary').textContent = promptSummary();
+});
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-a]');
+  if (!el) return;
+  e.preventDefault();
+  actions[el.dataset.a]?.(el.dataset.arg);
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && ['f-email', 'f-password'].includes(e.target.id)) actions.signIn();
+});
+
+render();
+
+if (sb) {
+  sb.auth.getSession().then(({ data }) => {
+    if (data.session) signedIn(data.session.user);
+    else if (ui.page !== 'login') go('login');
+  });
+  sb.auth.onAuthStateChange(event => {
+    if (event === 'SIGNED_OUT' && ui.page !== 'login') { user = null; go('login'); }
+  });
+  // Pick up changes from other devices when the app is reopened, and retry uploads.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && user) sync(); });
+  window.addEventListener('online', () => { if (user) sync(); });
+}
+</script>
+</body>
+</html>
