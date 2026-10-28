@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Estudio Kern — Admin</title>
+<style>
+  :root{
+    --navy:#1B2A4A;
+    --gold:#C9A227;
+    --bg:#F0F3F8;
+    --card:#FFFFFF;
+    --text:#1B2A4A;
+    --muted:#6B7A99;
+    --green:#2E8B57;
+    --border:#DCE2EE;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:32px 16px 60px;
+  }
+  header{
+    width:100%;
+    max-width:640px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:24px;
+  }
+  header .brand{
+    font-size:20px;
+    font-weight:700;
+    color:var(--navy);
+    letter-spacing:0.2px;
+  }
+  header .brand span{color:var(--gold);}
+
+  .card{
+    width:100%;
+    max-width:640px;
+    background:var(--card);
+    border-radius:16px;
+    padding:24px 28px;
+    box-shadow:0 1px 3px rgba(27,42,74,0.08), 0 1px 2px rgba(27,42,74,0.06);
+    border:1px solid rgba(27,42,74,0.06);
+    margin-bottom:20px;
+  }
+  .card h3{
+    margin:0 0 4px;
+    font-size:15px;
+    font-weight:600;
+    color:var(--navy);
+  }
+  .card .subtitulo{
+    font-size:13px;
+    color:var(--muted);
+    margin:0 0 18px;
+  }
+
+  .fila-clave{
+    display:flex;
+    gap:10px;
+  }
+  input[type="password"], input[type="text"]{
+    flex:1;
+    font-size:15px;
+    padding:10px 12px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    color:var(--navy);
+    background:#FBFCFE;
+  }
+  input:focus{
+    outline:none;
+    border-color:var(--navy);
+  }
+  button{
+    padding:10px 18px;
+    border:none;
+    border-radius:8px;
+    background:var(--navy);
+    color:#fff;
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  button:disabled{opacity:0.6;cursor:default;}
+  button.secundario{
+    background:#fff;
+    color:var(--navy);
+    border:1px solid var(--border);
+  }
+
+  .mensaje{
+    margin-top:10px;
+    font-size:13px;
+    color:#B3261E;
+    min-height:16px;
+  }
+
+  #buscador{display:none;}
+
+  .resultados{margin-top:8px;}
+  .resultado{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:12px 0;
+    border-bottom:1px solid var(--border);
+  }
+  .resultado:last-child{border-bottom:none;}
+  .resultado .nombre{
+    font-size:14px;
+    font-weight:600;
+    color:var(--navy);
+  }
+  .resultado .cuit{
+    font-size:12px;
+    color:var(--muted);
+  }
+  .resultado .acciones{
+    display:flex;
+    gap:8px;
+    flex-shrink:0;
+  }
+  .vacio{
+    text-align:center;
+    color:var(--muted);
+    font-size:14px;
+    padding:20px 0;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Estudio <span>Kern</span></div>
+</header>
+
+<div class="card" id="cardClave">
+  <h3>Panel de administración</h3>
+  <p class="subtitulo">Buscá un cliente por nombre y te armo su link para la vista de posición de IVA.</p>
+  <div class="fila-clave">
+    <input type="password" id="clave" placeholder="Clave de acceso" autocomplete="off">
+    <button id="btnEntrar">Entrar</button>
+  </div>
+  <div class="mensaje" id="mensajeClave"></div>
+</div>
+
+<div class="card" id="buscador">
+  <h3>Buscar cliente</h3>
+  <p class="subtitulo">Escribí el nombre (o parte del nombre) del cliente.</p>
+  <input type="text" id="busqueda" placeholder="Ej: Omnia Solution" autocomplete="off">
+  <div class="resultados" id="resultados"></div>
+</div>
+
+<script>
+// Clave que pediste para entrar al panel. Tiene que coincidir con
+// CLAVE_ADMIN_IVA en EndpointCliente.gs.
+const CLAVE_ADMIN = "Estudio.2026";
+
+// El Tablero publica, cada vez que corre publicarJsonClientes(), un único
+// archivo con todos los clientes RI y sus links. Lo leemos directo del
+// propio sitio (mismo origen), así que no hay login de Google ni CORS de
+// por medio — a diferencia de antes, que llamábamos a Apps Script.
+const ARCHIVO_INDICE = "./data/_admin_9e5aa887a25acb59e1744953078dc90d.json";
+
+let todosLosClientes = [];
+
+document.getElementById("btnEntrar").addEventListener("click", function () {
+  entrar();
+});
+document.getElementById("clave").addEventListener("keydown", function (e) {
+  if (e.key === "Enter") entrar();
+});
+
+async function entrar() {
+  const clave = document.getElementById("clave").value.trim();
+  const msg = document.getElementById("mensajeClave");
+  const btn = document.getElementById("btnEntrar");
+  if (!clave) return;
+
+  if (clave !== CLAVE_ADMIN) {
+    msg.textContent = "Clave incorrecta.";
+    return;
+  }
+
+  btn.disabled = true;
+  msg.textContent = "";
+
+  try {
+    const resp = await fetch(ARCHIVO_INDICE, { cache: "no-store" });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const data = await resp.json();
+
+    todosLosClientes = data.resultados || [];
+    document.getElementById("cardClave").style.display = "none";
+    document.getElementById("buscador").style.display = "block";
+    document.getElementById("busqueda").focus();
+    renderResultados(todosLosClientes);
+  } catch (e) {
+    msg.textContent = "No se pudo cargar la lista. Probá de nuevo en un momento.";
+    btn.disabled = false;
+  }
+}
+
+document.getElementById("busqueda").addEventListener("input", function () {
+  const q = this.value.toLowerCase().trim();
+  const filtrados = !q
+    ? todosLosClientes
+    : todosLosClientes.filter(function (c) {
+        return c.razonSocial.toLowerCase().indexOf(q) !== -1;
+      });
+  renderResultados(filtrados);
+});
+
+function renderResultados(lista) {
+  const cont = document.getElementById("resultados");
+  cont.innerHTML = "";
+
+  if (!lista.length) {
+    cont.innerHTML = '<div class="vacio">No se encontraron clientes.</div>';
+    return;
+  }
+
+  lista.forEach(function (c) {
+    const fila = document.createElement("div");
+    fila.className = "resultado";
+    fila.innerHTML = `
+      <div>
+        <div class="nombre">${escapeHtml(c.razonSocial)}</div>
+        <div class="cuit">CUIT ${escapeHtml(c.cuit)}</div>
+      </div>
+      <div class="acciones">
+        <button class="secundario" data-link="${escapeHtml(c.link)}">Copiar link</button>
+        <a href="${escapeHtml(c.link)}" target="_blank"><button>Abrir</button></a>
+      </div>
+    `;
+    cont.appendChild(fila);
+  });
+
+  cont.querySelectorAll("button.secundario").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      const link = this.getAttribute("data-link");
+      navigator.clipboard.writeText(link).then(function () {
+        const original = btn.textContent;
+        btn.textContent = "¡Copiado!";
+        setTimeout(function () { btn.textContent = original; }, 1500);
+      });
+    });
+  });
+}
+
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str == null ? "" : String(str);
+  return div.innerHTML;
+}
+</script>
+
+</body>
+</html>
