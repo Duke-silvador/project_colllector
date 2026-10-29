@@ -112,12 +112,12 @@
 
   header.classList.add('zombcash-shared-header');
   header.innerHTML =
-    '<a class="zsh-brand notranslate" translate="no" href="' + brandHref + '" aria-label="ZombieCash home">' +
+    '<a class="zsh-brand notranslate" translate="no" href="' + brandHref + '" aria-label="ZOMBIECASH HOME">' +
       '<span class="zsh-mark" aria-hidden="true">☣</span>' +
       '<span class="zsh-brand-copy">ZOMBIE<span class="zsh-green">CASH</span><small>THE UNDEAD INTERNET</small></span>' +
     '</a>' +
-    '<button class="zsh-menu-toggle" type="button" aria-label="Open navigation" aria-controls="zsh-navigation" aria-expanded="false"><span aria-hidden="true">☰</span><span class="zsh-menu-label">MENU</span></button>' +
-    '<nav id="zsh-navigation" class="zsh-nav" aria-label="Main navigation">' +
+    '<button class="zsh-menu-toggle" type="button" aria-label="OPEN NAVIGATION" aria-controls="zsh-navigation" aria-expanded="false"><span aria-hidden="true">☰</span><span class="zsh-menu-label">MENU</span></button>' +
+    '<nav id="zsh-navigation" class="zsh-nav" aria-label="MAIN NAVIGATION">' +
       labels.map(([label, href, id]) => {
         const destination = target(href);
         const active = (id === 'manual' && file === 'survivor-field-manual.html') ||
@@ -135,7 +135,7 @@
     '<div class="zsh-actions">' +
       (!isHome ? '<a class="zsh-home home-return-button" href="' + target('/') + '"><span aria-hidden="true">←</span> BACK TO HOME</a>' : '') +
       '<div class="zsh-language-slot"></div>' +
-      (loginButton ? '<span class="zsh-preserved-login-slot"></span>' : '<a class="zsh-login-button top-cta" href="/survivor-hub.html" data-zsh-login>LOGIN WITH TELEGRAM</a>') +
+      (loginButton ? '<span class="zsh-preserved-login-slot"></span>' : '<a class="zsh-login-button top-cta" href="/survivor-hub.html" data-zsh-login>JOIN THE SURVIVORS</a>') +
     '</div>';
 
   const actions = header.querySelector('.zsh-actions');
@@ -282,9 +282,9 @@
     header.zombcash-shared-header .zsh-actions .survivor-entry-button,
     header.zombcash-shared-header .zsh-actions .top-cta,
     header.zombcash-shared-header .zsh-actions .zsh-login-button{cursor:pointer;text-decoration:none!important}
-    /* Keep language control first, Back to Home before registration, registration at far right. */
-    header.zombcash-shared-header .zsh-actions .zsh-language-slot{order:1!important}
-    header.zombcash-shared-header .zsh-actions>.zsh-home{order:2!important}
+    /* Back to Home first, language selector second, registration CTA at far right. */
+    header.zombcash-shared-header .zsh-actions>.zsh-home{order:1!important}
+    header.zombcash-shared-header .zsh-actions .zsh-language-slot{order:2!important}
     header.zombcash-shared-header .zsh-actions .zsh-login-button{order:3!important}
     header.zombcash-shared-header .zsh-actions>.zsh-home:hover,
     header.zombcash-shared-header .zsh-actions .language-trigger:hover,
@@ -496,9 +496,9 @@
     header.zombcash-shared-header .zsh-nav>a[aria-current="page"]{
       box-shadow:inset 0 -2px 0 #9bff45!important;
     }
-    /* Consistent action order on every page: language, Back to Home, registration at far right. */
-    header.zombcash-shared-header .zsh-actions .zsh-language-slot{order:1!important}
-    header.zombcash-shared-header .zsh-actions>.zsh-home{order:2!important}
+    /* Consistent action order on every page: Back to Home, language, registration at far right. */
+    header.zombcash-shared-header .zsh-actions>.zsh-home{order:1!important}
+    header.zombcash-shared-header .zsh-actions .zsh-language-slot{order:2!important}
     header.zombcash-shared-header .zsh-actions .zsh-login-button{order:3!important}
     body.zsh-inner-page>.wrap,
     body.zsh-inner-page>.container,
@@ -1088,9 +1088,9 @@
         min-width:0!important;
       }
       header.zombcash-shared-header .zsh-language-slot {
-        order:1!important;display:flex!important;align-items:center!important;flex:0 0 auto!important;
+        order:2!important;display:flex!important;align-items:center!important;flex:0 0 auto!important;
       }
-      header.zombcash-shared-header .zsh-actions>.zsh-home { order:2!important; }
+      header.zombcash-shared-header .zsh-actions>.zsh-home { order:1!important; }
       header.zombcash-shared-header .zsh-actions .zsh-login-button { order:3!important; }
       header.zombcash-shared-header .language-switcher {
         position:relative!important;flex:0 0 auto!important;max-width:none!important;
@@ -1156,7 +1156,7 @@
     });
     const back = header.querySelector('.zsh-actions > .zsh-home');
     if (back) back.innerHTML = '<span aria-hidden="true">←</span> ' + (translated ? translated[10] : 'BACK TO HOME');
-    /* The global header now uses LOGIN WITH TELEGRAM, not a registration CTA. */
+    /* Keep the global CTA as JOIN THE SURVIVORS; the Survivor Hub's actual login control remains LOGIN WITH TELEGRAM. */
     const menuLabel = header.querySelector('.zsh-menu-label');
     if (menuLabel) menuLabel.textContent = translated ? translated[13] : 'MENU';
     const brandSmall = header.querySelector('.zsh-brand-copy small');
@@ -1171,7 +1171,11 @@
     const loginControl = header.querySelector('.zsh-login-button');
     if (loginControl) {
       const loginLabels = {de:'MIT TELEGRAM ANMELDEN',fr:'SE CONNECTER AVEC TELEGRAM',it:'ACCEDI CON TELEGRAM',ja:'TELEGRAMでログイン','zh-CN':'使用 TELEGRAM 登录',ru:'ВОЙТИ ЧЕРЕЗ TELEGRAM',tr:'TELEGRAM İLE GİRİŞ',hi:'TELEGRAM से लॉग इन करें'};
-      loginControl.textContent = language === 'en' ? 'LOGIN WITH TELEGRAM' : (loginLabels[language] || 'LOGIN WITH TELEGRAM');
+      if (file === 'survivor-hub.html') {
+        loginControl.textContent = language === 'en' ? 'LOGIN WITH TELEGRAM' : (loginLabels[language] || 'LOGIN WITH TELEGRAM');
+      } else {
+        loginControl.textContent = language === 'en' ? 'JOIN THE SURVIVORS' : (translated ? translated[11] : 'JOIN THE SURVIVORS');
+      }
     }
   }
   const readLanguage = () => {
@@ -1346,27 +1350,151 @@
 })();
 
 
-// Shared responsive A-ADS placement for pages without a page-specific ad unit.
-// Reuses the site's existing adaptive unit; never duplicates a slot already on the page.
+// A-ADS is permitted once on each localized homepage (and nowhere else).
+// Use the large 300x600 format in the hero's right-hand visual slot on every language.
 (() => {
   'use strict';
-  const addSharedAd = () => {
-    if (!document.body || document.querySelector('iframe[data-aa], .aads-ad-section, .arcade-ad-unit, [data-zombcash-ad-slot]')) return;
-    const slot = document.createElement('section');
-    slot.className = 'aads-ad-section zsh-shared-ad';
-    slot.setAttribute('aria-label', 'Advertisement');
-    slot.setAttribute('data-zombcash-ad-slot', 'shared-adaptive');
-    slot.innerHTML = '<div class="zsh-shared-ad-inner"><div class="zsh-shared-ad-label">SPONSORED TRANSMISSION</div><div class="zsh-shared-ad-frame" id="zsh-ad-frame"><iframe data-aa="2460185" src="//acceptable.a-ads.com/2460185/?size=Adaptive" title="Sponsored advertisement" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" style="display:block;box-sizing:border-box;border:0;padding:0;width:100%;max-width:100%;height:auto;margin:0 auto;overflow:hidden"></iframe></div></div>';
-    const style = document.createElement('style');
-    style.id = 'zsh-shared-ad-style';
-    style.textContent = '.zsh-shared-ad{box-sizing:border-box;width:100%;max-width:100%;margin:28px auto 18px;padding:18px clamp(12px,4vw,48px);background:#080b11;border-top:1px solid #9bff4524;border-bottom:1px solid #9bff4524;overflow:hidden}.zsh-shared-ad-inner{box-sizing:border-box;width:100%;max-width:1120px;min-width:0;margin:0 auto;text-align:center}.zsh-shared-ad-label{margin:0 0 10px;color:#71816e;font:600 9px/1.5 Orbitron,Arial,sans-serif;letter-spacing:.14em}.zsh-shared-ad-frame{box-sizing:border-box;width:100%;max-width:100%;min-width:0;margin:0 auto;overflow:hidden}.zsh-shared-ad iframe{display:block;box-sizing:border-box;width:100%;max-width:100%;height:auto;margin:0 auto;padding:0;border:0;background:transparent;overflow:hidden}@media(max-width:600px){.zsh-shared-ad{margin:20px auto 12px;padding:14px 10px}.zsh-shared-ad-label{font-size:8px}}';
-    document.head.appendChild(style);
-    const existingFooter = document.getElementById('zsh-about-footer') || document.querySelector('body > footer, body footer');
-    if (existingFooter && existingFooter.parentNode) existingFooter.parentNode.insertBefore(slot, existingFooter);
-    else document.body.appendChild(slot);
+  const path = location.pathname;
+  const isHomepage = path === '/' || path === '/index.html' ||
+    /^\/(?:de|fr|it|ja|zh-CN|ru|tr|hi)\/?$/.test(path);
+  const adSelector = 'iframe[data-aa], .aads-ad-section, .zsh-shared-ad, .outbreak-ad-unit, .arcade-ad-unit, [data-zombcash-ad-slot]';
+  const adSrc = 'https://acceptable.a-ads.com/2460185/?size=300x600';
+  const ensureFixedAdSize = (root) => {
+    if (!root) return;
+    root.querySelectorAll('iframe[data-aa="2460185"]').forEach(frame => {
+      if (frame.getAttribute('src') !== adSrc) frame.setAttribute('src', adSrc);
+      frame.setAttribute('width', '300');
+      frame.setAttribute('height', '600');
+      frame.style.setProperty('width', '300px', 'important');
+      frame.style.setProperty('height', '600px', 'important');
+      frame.style.setProperty('max-width', '100%', 'important');
+      frame.style.setProperty('display', 'block', 'important');
+    });
   };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addSharedAd, {once:true});
-  else addSharedAd();
+  const removeAads = () => {
+    const nodes = Array.from(document.querySelectorAll(adSelector));
+    if (isHomepage) {
+      const keep = document.querySelector('iframe[data-aa="2460185"]');
+      nodes.forEach(node => {
+        if (keep && (node === keep || node.contains(keep) || keep.contains(node))) return;
+        if (node.matches('iframe[data-aa]')) {
+          const wrapper = node.closest('.aads-ad-section, .zsh-shared-ad, .outbreak-ad-unit, .arcade-ad-unit, [data-zombcash-ad-slot]');
+          if (wrapper) wrapper.remove();
+          else node.remove();
+        } else if (!keep || !node.contains(keep)) {
+          node.remove();
+        }
+      });
+      if (keep) ensureFixedAdSize(document);
+      return;
+    }
+    nodes.forEach(node => {
+      if (node.matches('iframe[data-aa]')) {
+        const wrapper = node.closest('.aads-ad-section, .zsh-shared-ad, .outbreak-ad-unit, .arcade-ad-unit, [data-zombcash-ad-slot]');
+        if (wrapper) wrapper.remove();
+        else node.remove();
+      } else {
+        node.remove();
+      }
+    });
+  };
+  const addHomeAdStyles = () => {
+    if (document.getElementById('zsh-home-ad-position-style')) return;
+    const style = document.createElement('style');
+    style.id = 'zsh-home-ad-position-style';
+    style.textContent = `
+      body.zc-homepage-ad-enabled .zc-hero-art-panel {
+        position:relative!important;display:flex!important;align-items:center!important;justify-content:center!important;
+        box-sizing:border-box!important;width:100%!important;height:620px!important;min-height:620px!important;
+        max-height:none!important;aspect-ratio:auto!important;overflow:hidden!important;
+      }
+      body.zc-homepage-ad-enabled .zc-home-floating-ad {
+        position:relative!important;inset:auto!important;display:flex!important;align-items:center!important;justify-content:center!important;
+        box-sizing:border-box!important;flex:0 0 300px!important;width:300px!important;height:600px!important;
+        min-width:0!important;max-width:calc(100% - 20px)!important;margin:0 auto!important;padding:0!important;
+        border:0!important;background:#fff!important;overflow:hidden!important;z-index:4!important;text-align:left!important;
+      }
+      body.zc-homepage-ad-enabled .zc-home-floating-ad .aads-ad-inner {
+        box-sizing:border-box!important;flex:0 0 300px!important;width:300px!important;height:600px!important;max-width:100%!important;
+        margin:0!important;padding:0!important;overflow:hidden!important;text-align:left!important;
+      }
+      body.zc-homepage-ad-enabled .zc-home-floating-ad .aads-ad-inner>div:first-child {display:none!important}
+      body.zc-homepage-ad-enabled .zc-home-floating-ad #frame,
+      body.zc-homepage-ad-enabled .zc-home-floating-ad [id^="frame-"] {
+        box-sizing:border-box!important;width:300px!important;height:600px!important;max-width:100%!important;
+        margin:0!important;padding:0!important;overflow:hidden!important;
+      }
+      body.zc-homepage-ad-enabled .zc-home-floating-ad iframe[data-aa="2460185"] {
+        display:block!important;box-sizing:border-box!important;width:300px!important;height:600px!important;max-width:100%!important;
+        margin:0!important;padding:0!important;border:0!important;
+      }
+      body.zc-homepage-ad-enabled main#home .hero,
+      body.zc-homepage-ad-enabled main .hero {position:relative!important;padding-bottom:30px!important;overflow:visible!important}
+      @media(max-width:900px) {
+        body.zc-homepage-ad-enabled .zc-hero-art-panel {
+          height:620px!important;min-height:620px!important;max-height:none!important;aspect-ratio:auto!important;
+        }
+        body.zc-homepage-ad-enabled .zc-home-floating-ad {
+          flex-basis:300px!important;width:300px!important;height:600px!important;max-width:calc(100% - 20px)!important;
+          margin:0 auto!important;
+        }
+        body.zc-homepage-ad-enabled main#home .hero,
+        body.zc-homepage-ad-enabled main .hero {padding-bottom:24px!important;overflow:visible!important}
+      }
+      @media(max-width:340px) {
+        body.zc-homepage-ad-enabled .zc-home-floating-ad,
+        body.zc-homepage-ad-enabled .zc-home-floating-ad .aads-ad-inner,
+        body.zc-homepage-ad-enabled .zc-home-floating-ad iframe[data-aa="2460185"] {
+          width:100%!important;max-width:100%!important;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  };
+  const placeHomeAd = () => {
+    if (!isHomepage || !document.body) return;
+    const hero = document.querySelector('main#home .hero, main .hero, body > .hero');
+    if (!hero) return;
+    const section = document.querySelector('.aads-ad-section, .zsh-shared-ad, [data-zombcash-ad-slot]');
+    if (!section) return;
+    const artPanel = hero.querySelector('.zc-hero-art-panel');
+    const target = artPanel || hero;
+    document.body.classList.add('zc-homepage-ad-enabled');
+    section.classList.add('zc-home-floating-ad');
+    section.setAttribute('aria-label', 'Advertisement');
+    if (section.parentElement !== target) target.appendChild(section);
+    ensureFixedAdSize(section);
+    addHomeAdStyles();
+  };
+  const addSharedAd = () => {
+    if (!isHomepage || !document.body || document.querySelector('iframe[data-aa="2460185"], .aads-ad-section, .zsh-shared-ad, [data-zombcash-ad-slot]')) return;
+    const slot = document.createElement('section');
+    slot.className = 'aads-ad-section zsh-shared-ad zc-home-floating-ad';
+    slot.setAttribute('aria-label', 'Advertisement');
+    slot.setAttribute('data-zombcash-ad-slot', 'shared-fixed-300x600');
+    slot.innerHTML = '<div class="aads-ad-inner"><iframe data-aa="2460185" src="' + adSrc + '" title="Sponsored advertisement" width="300" height="600" loading="eager" referrerpolicy="strict-origin-when-cross-origin" style="display:block;box-sizing:border-box;border:0;padding:0;width:300px;height:600px;max-width:100%;margin:0;overflow:hidden"></iframe></div>';
+    const hero = document.querySelector('main#home .hero, main .hero, body > .hero');
+    const target = hero && (hero.querySelector('.zc-hero-art-panel') || hero);
+    if (target) {
+      target.appendChild(slot);
+      document.body.classList.add('zc-homepage-ad-enabled');
+      addHomeAdStyles();
+    } else {
+      const existingFooter = document.getElementById('zsh-about-footer') || document.querySelector('body > footer, body footer');
+      if (existingFooter && existingFooter.parentNode) existingFooter.parentNode.insertBefore(slot, existingFooter);
+      else document.body.appendChild(slot);
+    }
+  };
+  removeAads();
+  const adRemovalObserver = new MutationObserver(() => {
+    removeAads();
+    if (isHomepage) placeHomeAd();
+  });
+  const startAdRemovalObserver = () => {
+    if (document.body) adRemovalObserver.observe(document.body, {childList:true, subtree:true});
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { placeHomeAd(); addSharedAd(); startAdRemovalObserver(); }, {once:true});
+  else { placeHomeAd(); addSharedAd(); startAdRemovalObserver(); }
 })();
 
 
@@ -1439,4 +1567,45 @@
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addFootprint, {once:true});
   else addFootprint();
+
+  // GA4 action tracking: measure meaningful navigation and acquisition clicks.
+  // These events are sent to GA4; mark selected events as key events in GA4 Admin.
+  if (new URLSearchParams(location.search).get('arcadeSnake') !== '1' && !window.__zombcashConversionTrackingLoaded) {
+    window.__zombcashConversionTrackingLoaded = true;
+    document.addEventListener('click', function(event) {
+      const target = event.target && event.target.closest ? event.target.closest('a,button,[role="button"]') : null;
+      if (!target || typeof window.gtag !== 'function') return;
+      const href = target.getAttribute('href') || target.dataset.href || '';
+      let url = null;
+      try { if (href) url = new URL(href, location.href); } catch (_) {}
+      const text = (target.innerText || target.getAttribute('aria-label') || target.getAttribute('title') || '').trim().replace(/\s+/g, ' ').slice(0, 120);
+      const domain = url ? url.hostname.toLowerCase() : '';
+      const path = url ? url.pathname.toLowerCase() : '';
+      const params = {
+        link_url: url ? url.href.slice(0, 500) : '',
+        link_text: text,
+        link_domain: domain,
+        page_path: location.pathname
+      };
+      const isTelegram = /(^|\.)t\.me$|(^|\.)telegram\.me$/.test(domain) || /telegram/i.test(text);
+      const isX = /(^|\.)x\.com$|(^|\.)twitter\.com$/.test(domain) || /\b(x community|follow on x|twitter)\b/i.test(text);
+      const isTokenMarket = /pump\.fun$|dexscreener\.com$|jup\.ag$/.test(domain) || /buy zombcash|view token|open on dex/i.test(text);
+      const isLogin = /zsh-login-button|telegram-login/i.test(String(target.className || '') + ' ' + text) || /login with telegram|register|join the survivors/i.test(text);
+      if (isLogin) {
+        window.gtag('event', 'telegram_login_click', Object.assign({cta_type:'login'}, params));
+      } else if (isTelegram) {
+        window.gtag('event', 'telegram_community_click', params);
+      } else if (isX) {
+        window.gtag('event', 'x_community_click', params);
+      } else if (isTokenMarket) {
+        window.gtag('event', 'token_market_click', params);
+      } else if (/zombie-maker\.html/.test(path) || /zombie maker/i.test(text)) {
+        window.gtag('event', 'zombie_maker_open', params);
+      } else if (/arcade\.html|survivor-hub\.html|survivor-challenge/i.test(path) || /\b(play|launch|start game)\b/i.test(text)) {
+        window.gtag('event', 'game_open', params);
+      } else if (url && url.origin !== location.origin) {
+        window.gtag('event', 'outbound_click', params);
+      }
+    }, {capture:true, passive:true});
+  }
 })();
