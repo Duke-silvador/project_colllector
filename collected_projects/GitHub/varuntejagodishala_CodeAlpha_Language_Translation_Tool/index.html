@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PolyGlot Studio - Universal Language Translator</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Ambient background glow effect -->
+  <div class="bg-glow"></div>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="brand-section">
+      <div class="brand-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="2" y1="12" x2="22" y2="12"></line>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1>PolyGlot Studio</h1>
+        <p>Real-time Universal Language Translation</p>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <!-- Active Provider Badge -->
+      <button class="provider-pill" id="providerBadgeBtn" title="Click to configure translation provider">
+        <span class="status-dot"></span>
+        <span id="currentProviderLabel">Google Translate (Free)</span>
+      </button>
+
+      <!-- History Toggle Button -->
+      <button class="btn-icon" id="historyToggleBtn" title="Toggle Translation History">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <polyline points="12 6 12 12 16 14"></polyline>
+        </svg>
+      </button>
+
+      <!-- Settings Button -->
+      <button class="btn-icon" id="settingsBtn" title="API & App Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+      </button>
+
+      <!-- Dark / Light Theme Toggle -->
+      <button class="btn-icon" id="themeToggleBtn" title="Toggle Dark/Light Mode">
+        <svg id="themeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-content">
+    
+    <!-- Translator Interactive Grid -->
+    <div class="translator-grid">
+      
+      <!-- Source Text Card -->
+      <div class="translation-card">
+        <div class="card-topbar">
+          <div class="language-selector-row">
+            <div class="select-wrapper">
+              <span class="select-flag" id="sourceFlag">🌐</span>
+              <select class="lang-select" id="sourceLangSelect" aria-label="Source Language">
+                <option value="auto">Detect Language</option>
+                <!-- Populated via JS -->
+              </select>
+              <span class="select-chevron">▼</span>
+            </div>
+          </div>
+          <!-- Quick Language Shortcuts for Source -->
+          <div class="quick-pills" id="sourceQuickPills">
+            <button class="quick-pill active" data-lang="auto">Auto Detect</button>
+            <button class="quick-pill" data-lang="en">English</button>
+            <button class="quick-pill" data-lang="es">Spanish</button>
+            <button class="quick-pill" data-lang="fr">French</button>
+            <button class="quick-pill" data-lang="de">German</button>
+            <button class="quick-pill" data-lang="zh-CN">Chinese</button>
+          </div>
+        </div>
+
+        <div class="card-body">
+          <textarea 
+            class="text-input-area" 
+            id="sourceTextInput" 
+            placeholder="Type or paste text to translate... (e.g., 'Hello, how are you today?')"
+            rows="7"
+            spellcheck="false"
+          ></textarea>
+          
+          <button class="clear-input-btn" id="clearInputBtn" title="Clear text">✕</button>
+          
+          <div class="detected-badge" id="detectedLangBadge" style="display: none;">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M20 6L9 17l-5-5"></path>
+            </svg>
+            <span id="detectedLangText">Detected: Spanish</span>
+          </div>
+        </div>
+
+        <div class="card-bottombar">
+          <div class="action-group-left">
+            <!-- Text to Speech for Source -->
+            <button class="action-btn" id="ttsSourceBtn" title="Listen to text (Text-to-Speech)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              </svg>
+              <span>Listen</span>
+            </button>
+
+            <!-- Voice Input / Speech to Text -->
+            <button class="action-btn" id="micBtn" title="Voice Input (Speech-to-Text)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+                <line x1="8" y1="23" x2="16" y2="23"></line>
+              </svg>
+              <span id="micBtnText">Dictate</span>
+            </button>
+
+            <!-- Copy Source -->
+            <button class="action-btn" id="copySourceBtn" title="Copy input text">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+            </button>
+
+            <!-- Paste from Clipboard -->
+            <button class="action-btn" id="pasteBtn" title="Paste from clipboard">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+                <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+              </svg>
+            </button>
+          </div>
+
+          <div class="action-group-right">
+            <span class="char-counter" id="charCounter">0 / 5,000</span>
+            <button class="btn-translate" id="translateBtn">
+              <span id="translateBtnSpinner" class="spinner" style="display: none;"></span>
+              <span id="translateBtnLabel">Translate</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Swap Column -->
+      <div class="swap-col">
+        <button class="swap-btn" id="swapLangBtn" title="Swap languages and texts (Ctrl+Shift+S)">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="17 1 21 5 17 9"></polyline>
+            <path d="M3 5h18"></path>
+            <polyline points="7 23 3 19 7 15"></polyline>
+            <path d="M21 19H3"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Target Text Card -->
+      <div class="translation-card">
+        <div class="card-topbar">
+          <div class="language-selector-row">
+            <div class="select-wrapper">
+              <span class="select-flag" id="targetFlag">🇪🇸</span>
+              <select class="lang-select" id="targetLangSelect" aria-label="Target Language">
+                <!-- Populated via JS -->
+              </select>
+              <span class="select-chevron">▼</span>
+            </div>
+          </div>
+          <!-- Quick Language Shortcuts for Target -->
+          <div class="quick-pills" id="targetQuickPills">
+            <button class="quick-pill active" data-lang="es">Spanish</button>
+            <button class="quick-pill" data-lang="en">English</button>
+            <button class="quick-pill" data-lang="fr">French</button>
+            <button class="quick-pill" data-lang="de">German</button>
+            <button class="quick-pill" data-lang="hi">Hindi</button>
+            <button class="quick-pill" data-lang="ja">Japanese</button>
+          </div>
+        </div>
+
+        <div class="card-body">
+          <div class="skeleton-loading" id="skeletonLoading">
+            <div class="skeleton-line" style="width: 85%;"></div>
+            <div class="skeleton-line" style="width: 95%;"></div>
+            <div class="skeleton-line" style="width: 70%;"></div>
+            <div class="skeleton-line" style="width: 40%;"></div>
+          </div>
+
+          <div class="output-display-area empty-state" id="targetOutputArea">
+            Translation will appear here in real-time...
+          </div>
+        </div>
+
+        <div class="card-bottombar">
+          <div class="action-group-left">
+            <!-- Text to Speech for Target -->
+            <button class="action-btn" id="ttsTargetBtn" title="Listen to translation (Text-to-Speech)">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              </svg>
+              <span>Listen</span>
+            </button>
+
+            <!-- Copy Target Translation -->
+            <button class="action-btn" id="copyTargetBtn" title="Copy translated text to clipboard">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+              </svg>
+              <span>Copy</span>
+            </button>
+
+            <!-- Download as Text File -->
+            <button class="action-btn" id="downloadBtn" title="Download translation as text file">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </button>
+          </div>
+
+          <div class="action-group-right">
+            <span class="char-counter" id="outputWordCount">0 words</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Features & Settings Quick Toolbar -->
+    <div class="features-toolbar">
+      <div class="toolbar-controls">
+        <label class="toggle-switch-label">
+          <input type="checkbox" id="autoTranslateToggle" class="switch-input" checked>
+          <span>Auto-translate as you type</span>
+        </label>
+        
+        <label class="toggle-switch-label">
+          <input type="checkbox" id="spellcheckToggle" class="switch-input">
+          <span>Browser Spellcheck</span>
+        </label>
+      </div>
+
+      <div style="font-size: 0.82rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.5rem;">
+        <span>Tip: Press <strong>Ctrl + Enter</strong> to translate instantly</span>
+      </div>
+    </div>
+
+    <!-- Translation History Panel -->
+    <section class="history-section" id="historySection">
+      <div class="history-header">
+        <h2>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          Recent Translations
+        </h2>
+        <div style="display: flex; gap: 0.5rem;">
+          <button class="btn-secondary" id="clearHistoryBtn" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Clear All</button>
+          <button class="btn-secondary" id="closeHistoryBtn" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">Close</button>
+        </div>
+      </div>
+      <div class="history-list" id="historyList">
+        <!-- Rendered dynamically -->
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Settings Modal -->
+  <div class="modal-backdrop" id="settingsModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Translation Engine & API Settings</h3>
+        <button class="modal-close-btn" id="closeSettingsBtn">✕</button>
+      </div>
+      <div class="modal-body">
+        
+        <div class="form-group">
+          <label class="form-label" for="providerSelect">Translation Provider</label>
+          <select class="form-control" id="providerSelect">
+            <option value="google-free">Google Translate (Free & Instant - No Key Needed)</option>
+            <option value="mymemory-free">MyMemory Translation API (Free Public)</option>
+            <option value="google-official">Google Cloud Translation API (Official Key)</option>
+            <option value="azure">Microsoft Azure Translator API (Official Key)</option>
+            <option value="libre">LibreTranslate (Custom / Self-hosted)</option>
+          </select>
+          <span class="form-note">By default, Google Translate Free & MyMemory are enabled with automatic fallback.</span>
+        </div>
+
+        <!-- Google Cloud API Key Section -->
+        <div class="form-group" id="googleKeyGroup" style="display: none;">
+          <label class="form-label" for="googleApiKey">Google Cloud API Key</label>
+          <input type="password" class="form-control" id="googleApiKey" placeholder="AIzaSy...">
+          <span class="form-note">Obtain from Google Cloud Console > APIs & Services > Credentials.</span>
+        </div>
+
+        <!-- Azure Section -->
+        <div class="form-group" id="azureKeyGroup" style="display: none;">
+          <label class="form-label" for="azureApiKey">Azure Translator Subscription Key</label>
+          <input type="password" class="form-control" id="azureApiKey" placeholder="Your 32-character Azure Key">
+          
+          <label class="form-label" for="azureRegion" style="margin-top: 0.5rem;">Azure Region</label>
+          <input type="text" class="form-control" id="azureRegion" placeholder="e.g., global, eastus, centralindia">
+          <span class="form-note">Obtain from Azure Cognitive Services Translator Resource.</span>
+        </div>
+
+        <!-- LibreTranslate Section -->
+        <div class="form-group" id="libreGroup" style="display: none;">
+          <label class="form-label" for="libreUrl">LibreTranslate Instance URL</label>
+          <input type="text" class="form-control" id="libreUrl" placeholder="https://libretranslate.com">
+          
+          <label class="form-label" for="libreKey" style="margin-top: 0.5rem;">LibreTranslate API Key (Optional)</label>
+          <input type="password" class="form-control" id="libreKey" placeholder="Optional API Key">
+        </div>
+
+        <!-- TTS Speed & Pitch Adjustments -->
+        <div class="form-group">
+          <label class="form-label" for="speechRateSlider">Text-to-Speech Speed (<span id="speechRateLabel">1.0x</span>)</label>
+          <input type="range" id="speechRateSlider" min="0.5" max="1.5" step="0.1" value="1.0" class="form-control" style="padding: 0;">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="autoDebounceSlider">Auto-translate Typing Delay (<span id="debounceLabel">600ms</span>)</label>
+          <input type="range" id="autoDebounceSlider" min="300" max="1500" step="100" value="600" class="form-control" style="padding: 0;">
+          <span class="form-note">Milliseconds to wait after typing stops before translating automatically.</span>
+        </div>
+
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="resetSettingsBtn">Reset Defaults</button>
+        <button class="btn-primary" id="saveSettingsBtn">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Scripts -->
+  <script src="languages.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

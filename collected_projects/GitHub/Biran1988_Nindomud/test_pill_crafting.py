@@ -1,0 +1,149 @@
+"""Bukijutsu pill crafting, persisted potency, display and medical effects."""
+import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
+
+import commands
+import consumables
+import content
+import item_types
+import models
+import olc
+import pill_crafting
+from session import Session, State
+
+
+class PillCraftingTests(unittest.TestCase):
+    def setUp(self):
+        self.output = []
+        self.session = Session(self.output.append, lambda: None)
+        self.session.state = State.PLAYING
+        self.player = models.Player("Pillmaker", "Pillmaker", primary_class="bukijutsu", level=50)
+        self.player.stamina = 500
+        self.session.player = self.player
+        self.session.start_timed_action = lambda label, delay, resolve: resolve()
+        self.session.is_busy = lambda: False
+
+    def test_bukijutsu_gate_and_selected_level(self):
+        content._register_shared_items()
+        self.assertEqual(olc.OBJECT_TEMPLATES[9809]["short_desc"], "Medicinal Herbs")
+        self.player.inventory.append("Medicinal Herbs")
+        self.player.primary_class = "ninjutsu"
+        self.player.level = 100
+        commands.cmd_craft(self.session, ["pill", "medicine", "50"])
+        self.assertEqual(self.player.inventory, ["Medicinal Herbs"])
+        self.player.primary_class = "bukijutsu"
+        self.player.level = 50
+        commands.cmd_craft(self.session, ["pill", "medicine", "51"])
+        self.assertEqual(self.player.inventory, ["Medicinal Herbs"])
+        commands.cmd_craft(self.session, ["pill", "medicine", "25"])
+        pill = self.player.inventory[0]
+        self.assertEqual(pill_crafting.display_name(pill), "Medicinal Pill")
+        self.assertEqual(pill_crafting.pill_data(pill)["level"], 25)
+        self.assertEqual(item_types.classify_item(pill), "medical")
+        self.assertNotIn("pill_level", "".join(self.output))
+        self.assertNotIn("Level 25", "".join(self.output))
+
+        restored = models.Player.from_dict(self.player.to_dict())
+        self.assertEqual(restored.inventory, self.player.inventory)
+        self.session.player = restored
+        restored.learned_skills.append("Examine")
+        commands.cmd_examine(self.session, ["medicinal", "pill"])
+        self.assertIn("Pill Level:", "".join(self.output))
+        self.assertIn("25", "".join(self.output))
+
+    def test_healing_and_antidote(self):
+        self.player.maximum_health = 500
+        self.player.maximum_chakra = 500
+        self.player.maximum_stamina = 500
+        self.player.health = self.player.chakra = self.player.stamina = 100
+        self.player.inventory.extend([pill_crafting.encode_pill("Medicinal", 25),
+                                      pill_crafting.encode_pill("Antidote", 30)])
+        self.player.active_status_effects = {"bleeding": {}, "silenced": {}, "poisoned": {}}
+        with patch.object(consumables.time, "time", return_value=1000):
+            consumables.consume(self.session, "use", "medicinal")
+        self.assertEqual(set(self.player.active_status_effects), {"bleeding", "silenced", "poisoned"})
+        self.assertEqual(self.player.medical_healing[0]["amount"], 250)
+        self.assertEqual(consumables.tick_medical_healing(self.player, now=1030),
+                         {"health": 250, "chakra": 250, "stamina": 250})
+        with patch.object(consumables.time, "time", return_value=2000):
+            consumables.consume(self.session, "use", "antidote")
+        self.assertNotIn("poisoned", self.player.active_status_effects)
+        self.assertEqual(set(self.player.active_status_effects), {"bleeding", "silenced"})
+        self.assertEqual(self.player.medical_healing, [])
+
+    def test_antidote_is_saved_if_not_poisoned(self):
+        pill = pill_crafting.encode_pill("Antidote", 25)
+        self.player.inventory.append(pill)
+        self.player.learned_skills.append("Examine")
+        commands.cmd_examine(self.session, ["antidote"])
+        description = "".join(self.output)
+        self.assertIn("Cures:", description)
+        self.assertIn("poisoned", description)
+        self.assertNotIn("Healing:", description)
+        consumables.consume(self.session, "use", "antidote")
+        self.assertEqual(self.player.inventory, [pill])
+        self.assertEqual(self.player.medical_healing, [])
+
+    def test_indexed_use_selects_individual_pill_level(self):
+        first = pill_crafting.encode_pill("Medicinal", 25)
+        second = pill_crafting.encode_pill("Medicinal", 50)
+        self.player.inventory.extend([first, second])
+        with patch.object(consumables.time, "time", return_value=1000):
+            consumables.consume(self.session, "use", "2.pill")
+        self.assertEqual(self.player.inventory, [first])
+        self.assertEqual(self.player.medical_healing[0]["amount"], 400)
+
+
+    def test_eat_uses_same_timed_medicine_logic_as_use(self):
+        self.player.maximum_health = 500
+        self.player.maximum_chakra = 500
+        self.player.maximum_stamina = 500
+        self.player.health = self.player.chakra = self.player.stamina = 25
+        eaten = pill_crafting.encode_pill("Medicinal", 25)
+        used = pill_crafting.encode_pill("Medicinal", 35)
+        self.player.inventory.extend([eaten, used])
+        with patch.object(consumables.time, "time", return_value=1000):
+            commands.cmd_eat(self.session, ["medicinal", "pill"])
+        self.assertEqual(self.player.inventory, [used])
+        self.assertEqual(len(self.player.medical_healing), 1)
+        self.assertEqual(self.player.medical_healing[0]["amount"], 250)
+        # Eating medicine does not instantly heal or consume the second pill.
+        self.assertEqual((self.player.health, self.player.chakra, self.player.stamina),
+                         (25, 25, 25))
+        with patch.object(consumables.time, "time", return_value=1000):
+            commands.cmd_use(self.session, ["medicinal", "pill"])
+        self.assertEqual(self.player.inventory, [])
+        self.assertEqual(len(self.player.medical_healing), 2)
+        self.assertEqual([dose["amount"] for dose in self.player.medical_healing], [250, 310])
+
+    def test_eat_antidote_does_not_consume_without_poison(self):
+        pill = pill_crafting.encode_pill("Antidote", 30)
+        self.player.inventory.append(pill)
+        commands.cmd_eat(self.session, ["antidote"])
+        self.assertEqual(self.player.inventory, [pill])
+        self.assertEqual(self.player.medical_healing, [])
+        self.player.active_status_effects["poisoned"] = {"duration": 3}
+        commands.cmd_eat(self.session, ["antidote"])
+        self.assertEqual(self.player.inventory, [])
+        self.assertNotIn("poisoned", self.player.active_status_effects)
+        self.assertEqual(self.player.medical_healing, [])
+
+    def test_indexed_eat_pill_and_legacy_medicine(self):
+        first = pill_crafting.encode_pill("Medicinal", 20)
+        second = pill_crafting.encode_pill("Medicinal", 50)
+        self.player.inventory.extend([first, second, "A Soldier Pill", "A Rice Ball"])
+        with patch.object(consumables.time, "time", return_value=1000):
+            commands.cmd_eat(self.session, ["2.pill"])
+            commands.cmd_eat(self.session, ["soldier", "pill"])
+        self.assertEqual(self.player.inventory, [first, "A Rice Ball"])
+        self.assertEqual([dose["amount"] for dose in self.player.medical_healing], [400, 40])
+        # Food remains eat-only: use must not spend the rice ball.
+        commands.cmd_use(self.session, ["rice", "ball"])
+        self.assertEqual(self.player.inventory, [first, "A Rice Ball"])
+        commands.cmd_eat(self.session, ["rice", "ball"])
+        self.assertEqual(self.player.inventory, [first])
+
+
+if __name__ == "__main__":
+    unittest.main()

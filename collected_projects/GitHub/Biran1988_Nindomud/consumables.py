@@ -1,0 +1,260 @@
+"""
+Consumable items: food, drinks, and medical supplies.
+
+Food and drink restore their resource immediately. Medical items restore
+configured resources over time and may cure certain status effects.
+This is NOT a hunger/thirst survival meter, which
+Section 48 explicitly reserves for later. Each item is data-driven here
+so adding new consumables later is just a new dict entry; nothing in
+commands.py needs to change.
+"""
+
+import time
+from typing import Optional, Tuple
+
+CONSUMABLES = {
+    "a rice ball": {
+        "category": "food", "restore": "stamina", "amount": 25,
+        "message": "You eat {item} and feel refreshed.",
+    },
+    "a bowl of ramen": {
+        "category": "food", "restore": "stamina", "amount": 40,
+        "message": "You slurp down {item}. Delicious!",
+    },
+    "a canteen of water": {
+        "category": "drink", "restore": "chakra", "amount": 20,
+        "message": "You drink from {item}, feeling your chakra settle.",
+    },
+    "a cup of green tea": {
+        "category": "drink", "restore": "chakra", "amount": 15,
+        "message": "You sip {item} slowly, calming your mind.",
+    },
+    "a healing salve": {
+        "category": "medical", "restore": "health", "amount": 35,
+        "heal_duration": 30,
+        "cures": ["bleeding"],
+        "message": "You apply {item}. Your wounds begin to close.",
+    },
+    "a soldier pill": {
+        "category": "medical", "restore": "chakra", "amount": 40,
+        "heal_duration": 30,
+        "cures": ["silenced"],
+        "message": "You swallow {item}. A surge of chakra floods through you.",
+    },
+    # Cooking's own dishes (cooking.py) -- registered under their BASE
+    # name (no quality suffix); find_consumable() matches bidirectionally
+    # so a suffixed full item name like "A Cooked Sardine (Good)" still
+    # correctly classifies as food and eats correctly.
+    "a cooked minnow": {
+        "category": "food", "restore": "stamina", "amount": 20,
+        "message": "You eat {item}. Simple, but filling.",
+    },
+    "a cooked sardine": {
+        "category": "food", "restore": "stamina", "amount": 25,
+        "message": "You eat {item}. Not bad at all.",
+    },
+    "a cooked trout": {
+        "category": "food", "restore": "stamina", "amount": 35,
+        "message": "You eat {item}. Nicely done.",
+    },
+    "a cooked bass": {
+        "category": "food", "restore": "stamina", "amount": 40,
+        "message": "You eat {item}. A satisfying meal.",
+    },
+    "a cooked salmon": {
+        "category": "food", "restore": "stamina", "amount": 55,
+        "message": "You eat {item}. Rich and hearty.",
+    },
+    "a cooked swordfish": {
+        "category": "food", "restore": "stamina", "amount": 60,
+        "message": "You eat {item}. A fine catch, well prepared.",
+    },
+    "a cooked golden koi": {
+        "category": "food", "restore": "stamina", "amount": 80,
+        "message": "You eat {item}. A meal fit for a feast.",
+    },
+    "a leviathan fillet": {
+        "category": "food", "restore": "stamina", "amount": 100,
+        "message": "You eat {item}. You feel utterly restored.",
+    },
+}
+
+# Which command verb is expected for each category -- eating a healing
+# salve or drinking a rice ball should be refused with a hint at the
+# right verb, not silently accepted.
+VERB_CATEGORY = {"eat": "food", "drink": "drink", "use": "medical"}
+
+
+def find_consumable(item_name: str) -> Tuple[Optional[str], Optional[dict]]:
+    from pill_crafting import pill_data
+    crafted_pill = pill_data(item_name.strip())
+    if crafted_pill:
+        return item_name, crafted_pill
+    query = item_name.strip().lower()
+    for name, data in CONSUMABLES.items():
+        if query in name or name in query:
+            return name, data
+    return None, None
+
+
+def _medical_prototype(item_name: str) -> Optional[dict]:
+    import olc
+    query = item_name.lower()
+    for proto in olc.OBJECT_TEMPLATES.values():
+        if proto.get("short_desc", "").lower() == query:
+            return proto
+    return None
+
+
+def tick_medical_healing(player, now: Optional[float] = None) -> dict:
+    """Pay each dose in proportion to elapsed time, including time offline."""
+    now = time.time() if now is None else now
+    gained = {}
+    remaining = []
+    for effect in player.medical_healing:
+        duration = max(1, effect["duration"])
+        elapsed = max(0, min(duration, now - effect["started_at"]))
+        target = int(effect["amount"] * elapsed / duration)
+        delta = max(0, target - effect["applied"])
+        effect["applied"] = target
+        for resource in effect["resources"]:
+            if resource not in {"health", "chakra", "stamina"}:
+                continue
+            current = getattr(player, resource)
+            healed = min(delta, max(0, getattr(player, f"maximum_{resource}") - current))
+            setattr(player, resource, current + healed)
+            if healed:
+                gained[resource] = gained.get(resource, 0) + healed
+        if elapsed < duration:
+            remaining.append(effect)
+    player.medical_healing = remaining
+    return gained
+
+
+
+def medical_healing_report(player, restored: dict, now: Optional[float] = None) -> list:
+    """Combine tiny medicine ticks into an end-of-treatment healing summary.
+
+    Match upkeep's six-minute reporting window for unusually long effects,
+    but report shorter treatments as soon as the last dose finishes. The
+    counters are display-only and intentionally aren't part of saved healing.
+    """
+    import upkeep_reports
+
+    now = time.monotonic() if now is None else now
+    if restored:
+        totals = getattr(player, "_medical_report_totals", None)
+        if totals is None:
+            totals = {}
+            player._medical_report_totals = totals
+            player._medical_report_since = now
+        for resource, amount in restored.items():
+            if amount > 0:
+                totals[resource] = totals.get(resource, 0) + amount
+
+    totals = getattr(player, "_medical_report_totals", None)
+    if not totals:
+        return []
+    if (player.medical_healing and
+            now - player._medical_report_since < upkeep_reports.SUMMARY_INTERVAL_SECONDS):
+        return []
+
+    player.__dict__.pop("_medical_report_totals", None)
+    player.__dict__.pop("_medical_report_since", None)
+    labels = {"health": "Health", "chakra": "Chakra", "stamina": "Stamina"}
+    details = ", ".join(f"{totals[key]} {labels[key]}" for key in
+                        ("health", "chakra", "stamina") if totals.get(key))
+    return [f"&GMedicine restored {details} in total.&x"] if details else []
+
+
+def consume(session, verb: str, query: str) -> None:
+    player = session.player
+    if not query:
+        session.send(f"{verb.capitalize()} what?")
+        return
+
+    # Word-level match (not a plain contiguous substring): a query
+    # that skips a middle word, like a crafted item's stat-bonus
+    # suffix, should still match -- see commands._item_matches for the
+    # full reasoning; inlined here rather than imported to avoid a
+    # circular import (commands.py imports consumables.py).
+    import inventory
+    index, item_query = inventory.parse_indexed_query(query)
+    query_words = item_query.lower().split()
+    matches = [item for item in player.inventory if all(w in item.lower() for w in query_words)]
+    match = matches[index - 1] if index <= len(matches) else None
+    if not match:
+        session.send(f"You aren't carrying anything like '{query}'.")
+        return
+
+    _name, data = find_consumable(match)
+    proto = _medical_prototype(match)
+    if proto and proto.get("item_type") == "medical":
+        if data:
+            data = {**data, "category": "medical"}
+        else:
+            data = {"category": "medical", "message": "You use {item}. Its effects begin to take hold."}
+    if not data:
+        session.send(f"You can't {verb} {match}.")
+        return
+
+    # Medicine may be consumed through either 'eat' or 'use'. Both
+    # verbs must reach the SAME medical path so healing remains timed,
+    # antidotes keep their poison requirement, and one item is used.
+    # Food remains eat-only; drinks remain drink-only.
+    expected_category = ("medical" if verb == "eat" and data["category"] == "medical"
+                         else VERB_CATEGORY[verb])
+    if data["category"] != expected_category:
+        right_verb = next(v for v, cat in VERB_CATEGORY.items() if cat == data["category"])
+        session.send(f"You can't {verb} that. Try '{right_verb}' instead.")
+        return
+
+    if expected_category == "medical":
+        cure_only = bool(data.get("cures")) and not data.get("resources") and not data.get("restore") and not (proto and proto.get("heal_amount"))
+        if cure_only and not any(effect in player.active_status_effects for effect in data["cures"]):
+            session.send("You are not poisoned; save the antidote for when you need it.")
+            return
+        amount = proto.get("heal_amount", 0) if proto else 0
+        if cure_only:
+            resources, duration = [], 0
+        elif amount:
+            resources = list(proto.get("heal_flags", []))
+            duration = proto.get("heal_duration", 30)
+        elif data and (data.get("restore") or data.get("resources")):
+            resources = list(data.get("resources") or [data["restore"]])
+            amount = data["amount"]
+            duration = data.get("heal_duration", 30)
+        else:
+            session.send("This medical item has no healing configured. Set heal, healtime, and healflags first.")
+            return
+        resources = [r for r in resources if r in {"health", "chakra", "stamina"}]
+        if not cure_only and (not resources or amount <= 0 or duration <= 0):
+            session.send("This medical item needs a heal amount, healtime, and at least one healflag.")
+            return
+        if not cure_only:
+            player.medical_healing.append({
+                "resources": resources, "amount": amount, "duration": duration,
+                "started_at": time.time(), "applied": 0,
+            })
+    else:
+        resource = data["restore"]
+        amount = data["amount"]
+        current = getattr(player, resource)
+        maximum = getattr(player, f"maximum_{resource}")
+        actual_gain = min(maximum, current + amount) - current
+        setattr(player, resource, current + actual_gain)
+
+    player.inventory.remove(match)
+    session.send(data["message"].format(item=match))
+    if expected_category == "medical":
+        if amount > 0:
+            session.send(f"Healing begins: {amount} {', '.join(resources)} over {duration} seconds.")
+    elif actual_gain > 0:
+        session.send(f"You recover {actual_gain} {resource}.")
+    else:
+        session.send(f"You were already at full {resource}.")
+
+    for effect_name in data.get("cures", []):
+        if effect_name in player.active_status_effects:
+            del player.active_status_effects[effect_name]
+            session.send(f"You are no longer {effect_name}.")
