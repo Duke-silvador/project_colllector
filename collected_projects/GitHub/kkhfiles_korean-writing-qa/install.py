@@ -1,0 +1,303 @@
+#!/usr/bin/env python
+"""정본을 Claude Code 환경(`~/.claude/`)에 설치한다.
+
+    python install.py              # 검사기와 스킬 설치 · 훅은 안내만
+    python install.py --hooks      # settings.json 에 훅까지 등록
+    python install.py --codex      # Codex 에도 스킬과 훅을 건다(--hooks 와 함께 써도 됨)
+    python install.py --check      # 설치본이 정본과 같은지만 확인 (아무것도 안 씀)
+    python install.py --dry-run    # 무엇을 쓸지만 보여 줌
+
+**설치 없이 쓰는 길** — 검사기 하나만 쓸 것이면 설치가 필요 없다.
+
+    python assets/doc-style-check.py <파일…|디렉터리>
+
+의존성 없는 파일 하나이고, Python 3.11 이상이면 그대로 돈다.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import shutil
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+# Windows 기본 인코딩(CP949)으로 나가면 한글이 깨진다. 검사기와 같은 처리를 한다.
+sys.stdout.reconfigure(encoding='utf-8')
+
+import repo_paths  # noqa: E402
+
+HOOK_FILES = ["doc-style-gate.py", "block-backslash-in-shell.py",
+              "korean-gate-daily-check.py", "public-push-gate.py"]
+
+#: 훅을 어느 사건에 걸 것인가. matcher 는 Claude Code 의 도구 이름 패턴이다.
+HOOK_WIRING = [
+    ("PreToolUse", "Bash|PowerShell", "block-backslash-in-shell.py"),
+    ("PreToolUse", "Artifact|Bash|PowerShell", "doc-style-gate.py"),
+    # 공개 저장소로 나가기 직전에만 선다 — 개인 저장소는 그냥 보낸다
+    #   (2026-09-16 사용자 결정: 푸시는 기본 · 공개 저장소만 게이트)
+    ("PreToolUse", "Bash|PowerShell", "public-push-gate.py"),
+    ("PostToolUse", "Edit|Write|MultiEdit", "doc-style-gate.py"),
+    # 쓰기 직전 — 처음 고치는 문서의 가운뎃점 줄을 기존 줄로 적는다(막지 않음 · 2026-10-13)
+    ("PreToolUse", "Edit|Write|MultiEdit", "doc-style-gate.py"),
+    ("SessionStart", "", "korean-gate-daily-check.py"),
+]
+
+#: Codex 쪽 훅 — Codex 는 셸 명령을 `Bash`, 파일 쓰기를 `apply_patch` 로 넘긴다(Codex 문서 「hooks」).
+#: 게이트가 Codex payload 를 직접 읽으므로 어댑터 없이 같은 훅 파일을 건다(2026-10-01).
+#: 겹 역슬래시 차단은 Claude Bash 도구의 함정이라 Codex 에는 안 건다.
+CODEX_WIRING = [
+    ("PreToolUse", "Bash", "doc-style-gate.py", 50),
+    ("PreToolUse", "Bash", "public-push-gate.py", 40),
+    ("PostToolUse", "apply_patch|Edit|Write", "doc-style-gate.py", 50),
+    ("PreToolUse", "apply_patch|Edit|Write", "doc-style-gate.py", 50),
+]
+CODEX_HOME = Path(os.environ.get("CODEX_HOME") or (Path.home() / ".codex"))
+#: Codex 가 사용자 스킬을 읽는 곳(`~/.codex/skills` 는 호환용 옛 위치)
+AGENTS_SKILLS = Path(os.environ.get("KOREAN_QA_AGENTS_SKILLS") or (Path.home() / ".agents" / "skills"))
+#: 이 표시가 있는 스킬 폴더만 이 설치기가 고친다 — 남이 만든 같은 이름 폴더는 안 건드린다.
+OWNED_MARK = ".installed-by-korean-writing-qa"
+#: 이 파일이 있으면 그 PC 의 Codex 설정은 설정 거울 투영(`sync-codex.ps1`)이 관리한다.
+#: ⛔ 둘이 같은 `hooks.json`·스킬 폴더를 쓰면 서로 덮는다 — 파일마다 관리 주체는 하나다.
+PROJECTION_MANIFEST = CODEX_HOME / "claude-sync-manifest.json"
+
+
+def digest(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def pairs() -> list[tuple[Path, Path]]:
+    """정본과 설치 위치의 짝을 모두 낸다."""
+    out = [(repo_paths.CHECKER, repo_paths.installed("assets", "doc-style-check.py"))]
+    # ⛔ 자체 시험도 함께 옮긴다. 전역 규칙이 `~/.claude/assets/doc-style-check-test.py`
+    #    를 쓰라고 적어 두었는데 **그 파일이 저장소 밖에 혼자 있었다** — 이력에 한 번도
+    #    없었고 여기 목록에도 없어 아무도 관리하지 않았다. 그 사이 시료가 낡아
+    #    시험이 깨진 채 여드레 동안 아무도 몰랐다(2026-09-15 발견).
+    selftest = repo_paths.CHECKER.parent / "doc-style-check-test.py"
+    if selftest.exists():
+        out.append((selftest, repo_paths.installed("assets", selftest.name)))
+    # ⛔ 설치된 게이트가 `~/.claude/assets/check_record.py` 를 찾는다. 안 옮기면
+    #    저장소를 연 세션에서만 통과 기록이 남고, 다른 프로젝트에서는 조용히 빠진다.
+    recorder = repo_paths.REPO / "scripts" / "check_record.py"
+    if recorder.exists():
+        out.append((recorder, repo_paths.installed("assets", recorder.name)))
+    # ⛔ 설치된 게이트가 push 직전에 `~/.claude/assets/layer2_coverage.py` 로 「새 줄을
+    #    판정기가 다 봤나」를 가른다. 판정기와 같은 모듈이어야 판정한 줄이 판정한 줄로 읽힌다.
+    coverage = repo_paths.REPO / "scripts" / "layer2_coverage.py"
+    if coverage.exists():
+        out.append((coverage, repo_paths.installed("assets", coverage.name)))
+    # ⛔ 정상 판정 목록도 같이 옮긴다. 이것이 빠지면 **저장소본과 설치본이 규칙 판을
+    #    다르게 계산해** 게이트가 적은 기록을 저장소의 도구가 버린다(2026-09-16 실측).
+    known = repo_paths.REPO / "data" / "catalog" / "known-words.jsonl"
+    if known.exists():
+        out.append((known, repo_paths.installed("assets", known.name)))
+    # ⛔ 푸시 게이트가 `~/.claude/assets/check_publish_safety.py` 를 찾는다.
+    #    안 옮기면 설치한 PC 에서 게이트가 「검사기를 못 찾았다」로 막기만 한다.
+    safety = repo_paths.REPO / "scripts" / "check_publish_safety.py"
+    if safety.exists():
+        out.append((safety, repo_paths.installed("assets", safety.name)))
+    # ⛔ 신원 목록도 옮긴다 — 설치본 검사기는 자기 위치 기준 `data/catalog/` 를 보는데
+    #    그 자리가 비어 있어 훅이 이름·회사를 안 봤다(2026-09-16 실측). 목록은 저장소
+    #    밖에만 둔다 — 이 파일은 gitignore 대상이고 `~/.claude/data/` 는 백업 sync 가
+    #    복사하지 않는 곳이다(`assets/` 에 두면 백업 저장소로 딸려 간다).
+    denylist = repo_paths.REPO / "data" / "catalog" / "local-identity-denylist.txt"
+    if denylist.exists():
+        out.append((denylist, repo_paths.installed("data", "catalog", denylist.name)))
+    # ⛔ 제품 이름 목록도 같은 자리로 — 검사기가 `~/.claude/data/catalog/` 를 본다.
+    #    본보기(`*.example.txt`)는 저장소에 있고 실제 목록은 gitignore 대상이다.
+    brands = repo_paths.REPO / "data" / "catalog" / "local-brand-names.txt"
+    if brands.exists():
+        out.append((brands, repo_paths.installed("data", "catalog", brands.name)))
+    # ⛔ 개인 낱말 목록과 개인 항목 스위치도 같은 자리로 — README 는 저장소 `data/catalog/` 에
+    #    두라고 안내하는데 여기서 안 옮겨, 다른 프로젝트에서 도는 설치본 검사기는 개인 목록을
+    #    못 봤다(2026-10-29 재현 · 저장소 검사기 주의 1, 설치본 0).
+    # 2층 판정기도 개인 판정 기준을 같은 자리에서 먼저 찾는다(`probe_layer2_kinds.local_rules`).
+    for name in ("local-personal-words.tsv", "local-personal-rules.txt", "local-layer2-rules.md"):
+        personal = repo_paths.REPO / "data" / "catalog" / name
+        if personal.exists():
+            out.append((personal, repo_paths.installed("data", "catalog", name)))
+    for name in HOOK_FILES:
+        out.append((repo_paths.hook(name), repo_paths.installed("hooks", name)))
+    # `skills/` 아래를 통째로 옮긴다 — 스킬을 새로 만들 때 이 함수를 안 고쳐도 된다.
+    for src in sorted(repo_paths.SKILLS.rglob("*")):
+        if src.is_file() and "__pycache__" not in src.parts:
+            rel = src.relative_to(repo_paths.SKILLS)
+            out.append((src, repo_paths.installed("skills", *rel.parts)))
+    # `agents/` 도 통째로 옮긴다 — 서브에이전트 정의는 **사용자 수준**(`~/.claude/agents/`)
+    #   에 있어야 어느 프로젝트에서 문서를 내든 같은 판정이 걸린다.
+    #   ⛔ 저장소 안 `.claude/agents/` 에 두지 않는다 — 그러면 이 저장소를 연 세션에서만
+    #      돌고, 정본과 설치본이 갈린다(스킬에서 이미 겪은 실패).
+    for src in sorted(repo_paths.AGENTS.rglob("*")):
+        if src.is_file() and "__pycache__" not in src.parts:
+            rel = src.relative_to(repo_paths.AGENTS)
+            out.append((src, repo_paths.installed("agents", *rel.parts)))
+    return out
+
+
+def report(rows: list[tuple[str, Path]]) -> None:
+    for state, target in rows:
+        print(f"  {state}  {target}")
+
+
+def do_check() -> int:
+    same, differ, missing = [], [], []
+    for src, dst in pairs():
+        if not dst.exists():
+            missing.append(dst)
+        elif digest(src) == digest(dst):
+            same.append(dst)
+        else:
+            differ.append(dst)
+    print(f"같음 {len(same)} · 다름 {len(differ)} · 없음 {len(missing)}")
+    report([("다름", p) for p in differ] + [("없음", p) for p in missing])
+    if differ or missing:
+        print("\n`python install.py` 로 정본을 덮어쓴다.")
+        return 1
+    print("설치본이 정본과 같다.")
+    return 0
+
+
+def do_install(dry_run: bool) -> int:
+    written = 0
+    for src, dst in pairs():
+        if dst.exists() and digest(src) == digest(dst):
+            continue
+        print(f"  {'쓸 것' if dry_run else '씀'}  {dst}")
+        if not dry_run:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+        written += 1
+    print(f"{'쓸 파일' if dry_run else '쓴 파일'} {written}개 · 이미 같아서 건너뛴 것 {len(pairs()) - written}개")
+    return 0
+
+
+def wire_hooks(dry_run: bool) -> int:
+    """settings.json 에 훅을 등록한다 — 이미 있으면 건드리지 않는다."""
+    settings = repo_paths.installed("settings.json")
+    if not settings.is_file():
+        print(f"설정 파일이 없다: {settings}")
+        print("Claude Code 를 한 번 실행한 뒤 다시 시도한다.")
+        return 1
+
+    data = json.loads(settings.read_text(encoding="utf-8"))
+    hooks = data.setdefault("hooks", {})
+    added = []
+
+    for event, matcher, name in HOOK_WIRING:
+        command = f'python "$HOME/.claude/hooks/{name}"'
+        groups = hooks.setdefault(event, [])
+        group = next((g for g in groups if g.get("matcher", "") == matcher), None)
+        if group is None:
+            group = {"matcher": matcher, "hooks": []}
+            groups.append(group)
+        if any(h.get("command") == command for h in group.get("hooks", [])):
+            continue
+        group.setdefault("hooks", []).append({"type": "command", "command": command})
+        added.append(f"{event} · {matcher or '(전체)'} · {name}")
+
+    if not added:
+        # ⛔ 개수를 글로 적지 않는다 — 훅을 더할 때마다 낡는다(README 가 그렇게 낡았다).
+        print(f"훅 {len(HOOK_WIRING)}개가 이미 등록돼 있다.")
+        return 0
+
+    print("등록할 훅:")
+    for line in added:
+        print(f"  {line}")
+    if dry_run:
+        return 0
+
+    backup = settings.with_suffix(".json.bak")
+    shutil.copy2(settings, backup)
+    settings.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"설정을 고쳤다 · 되돌릴 백업 {backup}")
+    return 0
+
+
+def codex_hook_command(name: str) -> str:
+    """Codex 훅 명령 — 설치된 훅 파일을 절대 경로로 부른다(`$HOME` 을 펼친다는 보장이 없다)."""
+    return f'python "{repo_paths.installed("hooks", name).as_posix()}"'
+
+
+def install_codex(dry_run: bool) -> int:
+    """Codex 에도 같은 스킬과 훅을 건다 — 검사기·훅 파일은 위에서 `~/.claude/` 에 이미 깔았다."""
+    if PROJECTION_MANIFEST.is_file():
+        print(f"Codex 설정은 이 PC 의 설정 거울 투영이 관리한다({PROJECTION_MANIFEST}) — 건너뜀")
+        return 0
+    if not CODEX_HOME.is_dir():
+        print(f"Codex 설치 흔적이 없다: {CODEX_HOME} — Codex 를 한 번 실행한 뒤 다시 시도한다.")
+        return 1
+
+    for src in sorted(p for p in repo_paths.SKILLS.iterdir() if p.is_dir()):
+        dst = AGENTS_SKILLS / src.name
+        if dst.exists() and not (dst / OWNED_MARK).exists():
+            print(f"  건너뜀  {dst} — 다른 설치기가 만든 같은 이름의 스킬")
+            continue
+        print(f"  {'쓸 것' if dry_run else '씀'}  {dst}")
+        if not dry_run:
+            if dst.exists():
+                shutil.rmtree(dst)
+            shutil.copytree(src, dst, ignore=shutil.ignore_patterns("__pycache__"))
+            (dst / OWNED_MARK).write_text("korean-writing-qa install.py --codex\n", encoding="utf-8")
+
+    path = CODEX_HOME / "hooks.json"
+    data = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    hooks = data.setdefault("hooks", {})
+    ours = {codex_hook_command(name) for _, _, name, _ in CODEX_WIRING}
+    # 이 설치기가 건 것을 먼저 걷어낸다 — 다시 돌려도 겹치지 않고, 남이 건 것은 그대로 둔다
+    for event, groups in list(hooks.items()):
+        for group in groups:
+            group["hooks"] = [h for h in group.get("hooks", []) if h.get("command") not in ours]
+        hooks[event] = [g for g in groups if g.get("hooks")]
+    for event, matcher, name, timeout in CODEX_WIRING:
+        groups = hooks.setdefault(event, [])
+        group = next((g for g in groups if g.get("matcher") == matcher), None)
+        if group is None:
+            group = {"matcher": matcher, "hooks": []}
+            groups.append(group)
+        group["hooks"].append({"type": "command", "command": codex_hook_command(name),
+                               "timeout": timeout})
+        print(f"  훅  {event} · {matcher} · {name}")
+    if dry_run:
+        return 0
+    if path.is_file():
+        shutil.copy2(path, path.with_suffix(".json.bak"))
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"Codex 훅을 등록했다 · {path}")
+    print("⚠️ Codex 를 다시 열면 새 훅을 승인할지 묻는다 — 승인해야 동작한다"
+          "(훅 정의가 바뀔 때마다 다시 묻는다).")
+    return 0
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="정본을 ~/.claude 에 설치한다")
+    ap.add_argument("--check", action="store_true", help="설치본이 정본과 같은지만 확인")
+    ap.add_argument("--hooks", action="store_true", help="settings.json 에 훅까지 등록")
+    ap.add_argument("--codex", action="store_true",
+                    help="Codex 에도 스킬(~/.agents/skills)과 훅(~/.codex/hooks.json)을 건다")
+    ap.add_argument("--dry-run", action="store_true", help="쓰지 않고 무엇을 쓸지만 보여 줌")
+    args = ap.parse_args()
+
+    print(f"정본  {repo_paths.REPO}")
+    print(f"설치처 {repo_paths.INSTALLED}\n")
+
+    if args.check:
+        return do_check()
+
+    rc = do_install(args.dry_run)
+    if args.hooks:
+        print()
+        rc |= wire_hooks(args.dry_run)
+    else:
+        print("\n훅은 등록하지 않았다 — 발행 직전 검사와 겹 역슬래시 차단을 걸려면 `--hooks`.")
+    if args.codex:
+        print()
+        rc |= install_codex(args.dry_run)
+    return rc
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
