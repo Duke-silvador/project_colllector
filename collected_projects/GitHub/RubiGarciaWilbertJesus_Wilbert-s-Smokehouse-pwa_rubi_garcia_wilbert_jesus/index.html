@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wilbert's Smokehouse — BBQ & Ahumados</title>
+  <!-- La descripción es el texto que Google muestra bajo el título en los
+       resultados de búsqueda (Lighthouse la revisa en la categoría SEO) -->
+  <meta name="description" content="Wilbert's Smokehouse: auténtico ahumado estilo Texas, catálogo de productos, carrito de compras y ubicación de la sucursal, disponible incluso sin conexión.">
+
+  <!-- Estas 3 líneas son las que convierten este sitio en una PWA instalable -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1C1917">
+  <link rel="icon" href="icons/icon-512.png" type="image/png">
+
+  <!-- Tipografía moderna Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="css/estilos.css">
+
+  <!-- Leaflet: librería de mapas gratuita (sin API key) que usamos solo para
+       dibujar la ruta hasta la sucursal (ver js/geolocalizacion.js) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+</head>
+<body>
+
+  <!-- ============ APP SHELL ============
+       El "app shell" es el esqueleto que SIEMPRE se ve igual (header, nav,
+       contenedores vacíos). El Service Worker lo cachea completo para que
+       cargue instantáneo incluso sin internet; solo los DATOS de adentro
+       cambian (los llena JavaScript, ver csr.js). -->
+
+  <header class="appbar">
+    <div class="brand">
+      <img class="brand-logo" src="icons/icon-512.png" alt="Logo de Wilbert's Smokehouse" width="80" height="80">
+      <div>
+        <h1>Wilbert's Smokehouse</h1>
+        <small class="brand-subtitle">BBQ & Ahumados estilo Texas</small>
+      </div>
+    </div>
+    <nav class="header-nav" aria-label="Navegación principal"><a href="#menu">Menú</a><a href="#pedido">Mi pedido</a><a href="#sucursal">Visítanos</a></nav>
+    <!-- este <span> lo actualiza app.js para mostrar conectado/sin conexión -->
+    <span id="estado-conexion" class="pill">conectado</span>
+  </header>
+
+  <main>
+    <!-- Banner de Presentación / Producto Estrella -->
+    <div class="hero-banner">
+      <div class="hero-content">
+      <span class="tag-estrella">FUEGO LENTO. SABOR EN GRANDE.</span>
+      <h2>Buen humo.<br>Buena carne.<br><em>Buen momento.</em></h2>
+      <p>Pecho de res ahumado a baja temperatura durante 12 horas con leña de mezquite, con corteza de especias y el anillo de humo rosado característico.</p>
+      <a class="btn-primary hero-cta" href="#menu">Explorar el menú <span aria-hidden="true">↗</span></a>
+      <div class="hero-details"><span>12 horas de ahumado</span><span>Leña de mezquite</span><span>Estilo Texas</span></div>
+      </div>
+      <div class="hero-stamp" aria-label="Producto estrella: brisket ahumado"><span>EL FAVORITO DE LA CASA</span><strong>Brisket</strong><span>AHUMADO · 250 G</span><b>$230</b></div>
+    </div>
+    <div class="smoke-strip"><span>HECHO CON PACIENCIA</span><span aria-hidden="true">✦</span><span>SERVIDO CON CARÁCTER</span><span aria-hidden="true">✦</span><span>HERMOSILLO, SONORA</span></div>
+
+    <!-- ---- Sección 1: Catálogo (CSR) ---- -->
+    <section id="menu" class="menu-section">
+      <div class="section-header">
+        <div><span class="eyebrow">DIRECTO DEL AHUMADOR</span><h2>Elige tu próximo antojo</h2></div><span class="menu-note">15 sabores para compartir</span>
+      </div>
+      <p class="section-desc">Ahumados, platos y guarniciones. Arma tu combinación favorita.</p>
+      <div class="menu-filters" role="group" aria-label="Filtrar productos por categoría"><button type="button" class="filter active" data-categoria="Todos" aria-pressed="true">Todo el menú</button><button type="button" class="filter" data-categoria="Ahumados" aria-pressed="false">Ahumados</button><button type="button" class="filter" data-categoria="Sándwiches y platos" aria-pressed="false">Sándwiches y platos</button><button type="button" class="filter" data-categoria="Guarniciones" aria-pressed="false">Guarniciones</button></div>
+      <!-- Este div empieza VACÍO a propósito: si ves el código fuente (Ctrl+U)
+           no verás ningún producto aquí. JavaScript (csr.js) lo llena DESPUÉS
+           de que la página ya cargó: por eso es "Renderizado en el Cliente" (CSR). -->
+      <!-- Mientras llegan los datos, 4 tarjetas "esqueleto" (una por producto de
+           catalogo.json) apartan el espacio: así el Carrito no "brinca" hacia
+           abajo cuando csr.js dibuja los productos (Lighthouse lo mide como CLS). -->
+      <div id="catalogo" class="grid" aria-busy="true" aria-label="Cargando catálogo">
+        <div class="producto producto--cargando" aria-hidden="true">
+          <div class="producto__foto"></div>
+          <strong>&nbsp;</strong> <span class="precio">&nbsp;</span> <p>&nbsp;</p>
+          <button type="button" disabled>Agregar al carrito</button>
+        </div>
+        <div class="producto producto--cargando" aria-hidden="true">
+          <div class="producto__foto"></div>
+          <strong>&nbsp;</strong> <span class="precio">&nbsp;</span> <p>&nbsp;</p>
+          <button type="button" disabled>Agregar al carrito</button>
+        </div>
+        <div class="producto producto--cargando" aria-hidden="true">
+          <div class="producto__foto"></div>
+          <strong>&nbsp;</strong> <span class="precio">&nbsp;</span> <p>&nbsp;</p>
+          <button type="button" disabled>Agregar al carrito</button>
+        </div>
+        <div class="producto producto--cargando" aria-hidden="true">
+          <div class="producto__foto"></div>
+          <strong>&nbsp;</strong> <span class="precio">&nbsp;</span> <p>&nbsp;</p>
+          <button type="button" disabled>Agregar al carrito</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---- Sección 2: Carrito ---- -->
+    <section id="pedido" class="order-section">
+      <div class="section-header">
+        <div><span class="eyebrow">QUE EMPIECE EL FESTÍN</span><h2>Tu pedido</h2></div>
+      </div>
+      <p class="empty-cart" id="carrito-vacio">Tu mesa está esperando. Agrega algo rico del menú.</p><ul id="carrito-lista"></ul>
+      <div class="carrito-resumen">
+        <div class="total-row">
+          <span>Total a pagar:</span>
+          <strong class="monto-total">$<span id="carrito-total">0</span></strong>
+        </div>
+        <button id="btn-sincronizar" type="button" class="btn-primary btn-block">Sincronizar pedido</button>
+        <p id="carrito-mensaje" class="mensaje"></p>
+      </div>
+    </section>
+
+    <!-- ---- Sección 3: Notificaciones ---- -->
+    <div class="info-grid"><section class="promo-section">
+      <div class="section-header">
+        <h2>🔔 Promociones & Lotes Especiales</h2>
+      </div>
+      <p class="section-desc">El BBQ real se prepara por lotes limitados. Recibe avisos cuando salga horneada fresca o tengamos promociones.</p>
+      <button id="btn-notificar" type="button" class="btn-secondary">Activar notificaciones</button>
+      <p id="notificaciones-mensaje" class="mensaje"></p>
+    </section>
+
+    <!-- ---- Sección 4: Ubicación (característica del dispositivo) ---- -->
+    <section id="sucursal">
+      <div class="section-header">
+        <h2>📍 Distancia a la sucursal</h2>
+      </div>
+      <p class="sucursal-info">Sucursal principal: <strong>Wilbert's Smokehouse - Hermosillo, Sonora</strong> (Atención presencial y pedidos para eventos).</p>
+      <button id="btn-ubicacion" type="button" class="btn-secondary">Usar mi ubicación</button>
+      <p id="ubicacion-mensaje" class="mensaje"></p>
+      <!-- Empieza oculto: geolocalizacion.js le quita "hidden" y lo llena de mapa
+           en cuanto tiene tu ubicación y la ruta hasta la sucursal -->
+      <div id="mapa-ruta" class="mapa" hidden></div>
+    </section>
+    </div>
+  </main>
+
+  <footer>
+    <img class="footer-logo" src="icons/icon-512.png" alt="Wilbert's Smokehouse, BBQ y ahumados" width="140" height="140" loading="lazy">
+    <p><strong>Wilbert's Smokehouse</strong> · Fuego lento, sabor en grande.</p>
+    <p class="footer-sub">Hermosillo, Sonora · Carnes 'low & slow' con leña de mezquite</p>
+    <div class="footer-contacto">
+      <p><strong>Blvd. Principal #123, Hermosillo, Son.</strong></p>
+      <p><strong>Red social @wilberts_smokehouse</strong></p>
+      <p><strong>Vie a Dom • 1:00 PM a 9:00 PM</strong></p>
+    </div>
+  </footer>
+
+  <!-- Cargamos los scripts al final del <body>: así el HTML ya existe
+       cuando el JavaScript intenta buscar los elementos con document.getElementById -->
+  <script src="js/carrito.js"></script>
+  <script src="js/csr.js"></script>
+  <script src="js/notificaciones.js"></script>
+  <!-- Leaflet debe cargar ANTES de geolocalizacion.js: ese script usa el
+       objeto global "L" que esta librería crea -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="js/geolocalizacion.js"></script>
+  <script src="js/app.js"></script>
+  <!-- Registro del Service Worker. Va aquí, dentro del HTML y en una sola línea
+       (navigator.serviceWorker.register("sw.js")), porque así lo detecta PWABuilder:
+       lee el index.html buscando ese texto, y si no lo halla abre la página y pregunta
+       de inmediato si ya hay un Service Worker; por eso no esperamos al evento "load". -->
+  <script>
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("sw.js")
+        .then((registro) => console.log("Service Worker registrado con éxito:", registro.scope))
+        .catch((error) => console.error("No se pudo registrar el Service Worker:", error));
+    }
+  </script>
+</body>
+</html>
