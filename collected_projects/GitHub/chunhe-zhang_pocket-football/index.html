@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Pocket Football</title>
+  <script type="module">
+    // package.json is the single source of the version shown on the cover.
+    fetch('./package.json', { cache: 'no-cache' }).then(r => r.ok ? r.json() : null).then(pkg => {
+      if (typeof pkg?.version === 'string' && /^\d+\.\d+\.\d+$/.test(pkg.version)) {
+        const el = document.getElementById('cover-version'); if (el) el.textContent = `Version ${pkg.version}`;
+      }
+    }).catch(() => {});
+  </script>
+  <meta name="description" content="足球网页游戏：四门混战、2v2、6v6 比赛，每个角色有自己的必杀射门。" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700;800&display=swap" />
+  <link rel="stylesheet" href="./style.css" />
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.js" } }
+  </script>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="loading" class="overlay show">
+    <div class="load-card">
+      <div class="brand">POCKET<span>FOOTBALL</span></div>
+      <div class="bar"><i id="load-bar"></i></div>
+      <div class="hint" id="load-text">正在载入球员模型…</div>
+    </div>
+  </div>
+
+  <div id="hud" class="hidden">
+    <div id="scoreboard">
+      <div class="chips" id="chips"></div>
+      <div class="clock" id="clock">剩 4 人</div>
+    </div>
+    <div id="tools">
+      <button id="btn-cam" title="切换视角 (C)">视角</button>
+      <button id="btn-mute" title="静音 (M)">声音</button>
+      <button id="btn-pause" title="暂停 (P / Esc)">暂停</button>
+    </div>
+    <div id="banner"><div class="big" id="banner-big"></div><div class="small" id="banner-small"></div></div>
+    <div id="tags"></div>
+    <div id="keyhint"></div>
+    <div id="netinfo"></div>
+    <canvas id="minimap" class="hidden" width="240" height="132"></canvas>
+  </div>
+
+  <div id="touch" class="hidden">
+    <div id="stick"><div id="knob"></div></div>
+    <div id="btns">
+      <button id="btn-pass" class="hidden">换人</button>
+      <button id="btn-tackle">抢断</button>
+      <button id="btn-sprint">冲刺</button>
+      <button id="btn-lob">挑传</button>
+      <button id="btn-chip-shot">挑射</button>
+      <button id="btn-kick">射门</button>
+    </div>
+  </div>
+
+  <div id="menu" class="overlay">
+    <div class="menu-card">
+      <div class="brand">POCKET<span>FOOTBALL</span></div>
+      <div class="cover-version" id="cover-version">Version 1.0.0</div>
+      <p class="tag">四门混战 · 2v2 组队 · 6v6 正式比赛 · 每个角色都有自己的必杀射门</p>
+      <div class="seg tabs" data-key="net">
+        <button data-v="local" class="on">本地游戏</button>
+        <button data-v="online">联机对战</button>
+      </div>
+
+      <div id="panel-local">
+        <div class="row">
+          <label>人数</label>
+          <div class="seg" data-key="humans">
+            <button data-v="1" class="on">1 人</button>
+            <button data-v="2">2 人</button>
+            <button data-v="3">3 人</button>
+            <button data-v="4">4 人</button>
+          </div>
+        </div>
+        <p class="note" id="humans-note">其余位置由电脑补上。</p>
+        <div class="row char-row">
+          <label>角色</label>
+          <div class="seg who-seg hidden" data-key="who">
+            <button data-v="0" class="on">P1</button><button data-v="1">P2</button><button data-v="2">P3</button><button data-v="3">P4</button>
+          </div>
+        </div>
+        <div class="char-pick"></div>
+        <p class="note char-note"></p>
+        <div class="row map-row">
+          <label>地图</label>
+          <div class="seg" data-key="map">
+            <button data-v="classic" class="on">经典圆场</button>
+            <button data-v="track">方块乐园</button>
+            <button data-v="pitch5">6v6 标准场</button>
+          </div>
+        </div>
+        <p class="note map-note">小巧的圆形球场，一眼看全场。</p>
+        <div class="row">
+          <label>模式</label>
+          <div class="seg" data-key="mode">
+            <button data-v="ffa">四门混战</button>
+            <button data-v="team">2v2 组队</button>
+            <button data-v="match5" class="on">6v6 比赛</button>
+            <button data-v="practice">练习场</button>
+          </div>
+        </div>
+        <div class="row practice-row hidden">
+          <label>练习</label>
+          <div class="seg" data-key="practice">
+            <button data-v="gk" class="on">只有门将</button>
+            <button data-v="empty">无守门员</button>
+            <button data-v="mate">＋队友</button>
+            <button data-v="opp">＋对手</button>
+            <button data-v="both">都加</button>
+          </div>
+        </div>
+        <div class="row pairing-row hidden">
+          <label>分组</label>
+          <div class="seg" data-key="pairing">
+            <button data-v="humans" class="on">真人一队</button>
+            <button data-v="vs">真人对抗</button>
+          </div>
+        </div>
+        <p class="note mode-note">每人守一个球门，谁都可以打。</p>
+        <div class="row">
+          <label>难度</label>
+          <div class="seg" data-key="level">
+            <button data-v="easy">简单</button>
+            <button data-v="normal">普通</button>
+            <button data-v="hard" class="on">困难</button>
+            <button data-v="gf">女友模式</button>
+          </div>
+        </div>
+        <p class="note level-note">女友模式：电脑很菜，拿到球就传给真人玩家，让你射门。</p>
+        <button id="btn-start" class="primary">开 球</button>
+      </div>
+
+      <div id="panel-online" class="hidden">
+        <div class="row">
+          <label for="in-name">昵称</label>
+          <input id="in-name" maxlength="10" placeholder="你的名字" autocomplete="off" />
+        </div>
+        <button id="btn-create" class="primary">创建房间</button>
+        <div class="row join">
+          <label for="in-code">房间号</label>
+          <input id="in-code" maxlength="4" placeholder="例如 K7QX" autocomplete="off" />
+          <button id="btn-join">加入</button>
+        </div>
+        <p class="note" id="net-status">最多 4 人，人不够时由电脑补位。</p>
+      </div>
+      <div class="controls" id="controls-help"></div>
+    </div>
+  </div>
+
+  <div id="lobby" class="overlay">
+    <div class="menu-card">
+      <div class="title">房间 <span id="lobby-code" class="code"></span></div>
+      <p class="note" id="lobby-hint">把房间号发给朋友，在“联机对战”里输入即可加入。</p>
+      <ol id="lobby-slots"></ol>
+      <div class="row char-row"><label>角色</label></div>
+      <div class="char-pick"></div>
+      <p class="note char-note"></p>
+      <div id="lobby-host">
+        <div class="row map-row">
+          <label>地图</label>
+          <div class="seg" data-key="map">
+            <button data-v="classic" class="on">经典圆场</button>
+            <button data-v="track">方块乐园</button>
+            <button data-v="pitch5">6v6 标准场</button>
+          </div>
+        </div>
+        <p class="note map-note">小巧的圆形球场，一眼看全场。</p>
+        <div class="row">
+          <label>模式</label>
+          <div class="seg" data-key="mode">
+            <button data-v="ffa">四门混战</button>
+            <button data-v="team">2v2 组队</button>
+            <button data-v="match5" class="on">6v6 比赛</button>
+          </div>
+        </div>
+        <div class="row pairing-row hidden">
+          <label>分组</label>
+          <div class="seg" data-key="pairing">
+            <button data-v="humans" class="on">真人一队</button>
+            <button data-v="vs">真人对抗</button>
+          </div>
+        </div>
+        <p class="note mode-note">每人守一个球门，谁都可以打。</p>
+        <div class="row">
+          <label>难度</label>
+          <div class="seg" data-key="level">
+            <button data-v="easy">简单</button>
+            <button data-v="normal">普通</button>
+            <button data-v="hard" class="on">困难</button>
+            <button data-v="gf">女友模式</button>
+          </div>
+        </div>
+        <p class="note level-note">女友模式：电脑很菜，拿到球就传给真人玩家，让你射门。</p>
+        <button id="btn-lobby-start" class="primary">开始比赛</button>
+      </div>
+      <p class="note hidden" id="lobby-wait">等待房主开始比赛…</p>
+      <button id="btn-lobby-leave">离开房间</button>
+    </div>
+  </div>
+
+  <div id="pause" class="overlay">
+    <div class="menu-card small">
+      <div class="title">暂停</div>
+      <button id="btn-resume" class="primary">继续</button>
+      <button id="btn-quit">返回菜单</button>
+    </div>
+  </div>
+
+  <div id="end" class="overlay">
+    <div class="menu-card">
+      <div class="title" id="end-title">全场结束</div>
+      <p class="note" id="end-sub"></p>
+      <table id="end-stats"></table>
+      <button id="btn-again" class="primary">再来一局</button>
+      <button id="btn-menu">返回菜单</button>
+    </div>
+  </div>
+
+  <noscript>需要启用 JavaScript 才能运行这个游戏。</noscript>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

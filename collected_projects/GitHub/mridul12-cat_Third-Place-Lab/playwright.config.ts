@@ -1,0 +1,2 @@
+import { defineConfig,devices } from '@playwright/test';
+export default defineConfig({testDir:'tests/e2e',use:{channel:'chromium',baseURL:'http://127.0.0.1:3000',trace:'retain-on-failure'},projects:[{name:'desktop',use:{...devices['Desktop Chrome']}},{name:'mobile',use:{...devices['iPhone 13'],defaultBrowserType:'chromium'}}],webServer:{command:'npm run start -- --hostname 127.0.0.1 --port 3000',url:'http://127.0.0.1:3000',reuseExistingServer:false,timeout:120000,env:{QLOO_MODE:'mock',APP_ORIGIN:'http://127.0.0.1:3000',VERCEL:'1',NEXT_TELEMETRY_DISABLED:'1'}}});

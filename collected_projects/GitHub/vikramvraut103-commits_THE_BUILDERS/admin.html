@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>THE BUILDERS | Admin Dashboard</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: Arial, sans-serif;
+      background: #101713;
+      color: #f2f7f3;
+    }
+    h1 { color: #a3f36b; }
+    .subtitle { color: #b7c5bb; }
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 24px;
+      border: 1px solid #34483a;
+      border-radius: 12px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 650px;
+      background: #18231c;
+    }
+    th, td {
+      padding: 14px;
+      border-bottom: 1px solid #34483a;
+      text-align: left;
+    }
+    th { background: #243629; color: #a3f36b; }
+    .notice {
+      padding: 14px;
+      margin-top: 20px;
+      border-radius: 8px;
+      background: #243629;
+      color: #d7e8da;
+    }
+  </style>
+</head>
+<body>
+  <h1>THE BUILDERS</h1>
+  <h2>Customer Enquiry Dashboard</h2>
+  <p class="subtitle">Admin area — customer enquiries</p>
+
+  <div class="notice" id="message">
+    Dashboard layout created. Database connection will be added next.
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Phone</th>
+          <th>Email</th>
+          <th>Message</th>
+          <th>Date</th>
+        </tr>
+      </thead>
+      <tbody id="enquiryRows">
+        <tr>
+          <td colspan="6">Database connection pending</td>
+        </tr>
+      </tbody>
+    </table>
+  </div><script>
+  async function loadEnquiries() {
+    const message = document.getElementById("message");
+    const rows = document.getElementById("enquiryRows");
+
+    try {
+      const response = await fetch("/api/admin/enquiries", {
+        credentials: "same-origin"
+      });
+
+      if (response.status === 401) {
+        window.location.href = "/admin/login";
+        return;
+      }
+
+    const text = await response.text();
+
+if (!text.trim()) {
+  throw new Error(`Server returned an empty response (HTTP ${response.status}). Check Flask terminal.`);
+}
+
+let result;
+
+try {
+  result = JSON.parse(text);
+} catch {
+  throw new Error(`Server returned invalid JSON (HTTP ${response.status}). Check Flask terminal.`);
+}
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || "Could not load enquiries.");
+      }
+
+      rows.replaceChildren();
+
+      if (result.enquiries.length === 0) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = 6;
+        td.textContent = "No enquiries found yet.";
+        tr.appendChild(td);
+        rows.appendChild(tr);
+      } else {
+        result.enquiries.forEach((item) => {
+          const tr = document.createElement("tr");
+
+          [
+            item.id,
+            item.name,
+            item.phone,
+            item.email,
+            item.message,
+            item.created_at
+          ].forEach((value) => {
+            const td = document.createElement("td");
+            td.textContent = value ?? "";
+            tr.appendChild(td);
+          });
+
+          rows.appendChild(tr);
+        });
+      }
+
+      message.textContent =
+        `Loaded ${result.enquiries.length} customer enquiries.`;
+    } catch (error) {
+      message.textContent = "Could not load enquiries. Please try again.";
+      console.error(error);
+    }
+  }
+
+  loadEnquiries();
+</script>
+</body>
+</html>
