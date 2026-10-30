@@ -1,0 +1,48 @@
+import { defineConfig } from 'vite';
+import { assetTableAddresses, readAssetTables } from './scripts/app-build/assetTables.mjs';
+import { readGridSeams } from './scripts/app-build/gridSeams.mjs';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
+import { shardfileValidationRevision } from './scripts/shardfile-validation-revision.mjs';
+import { join } from 'node:path';
+import { rapierAlias } from './vite/rapier';
+import { assertHeavyLease } from './scripts/heavy-lane-lease.mjs';
+import { buildValidationReceipts } from './scripts/app-build/validationReceipts.mjs';
+import { BUILD_ID_EXPRESSION, VALIDATOR_EXPRESSION, VERDICTS_EXPRESSION } from './scripts/app-build/buildIdentity.mjs';
+import { controlChunkGroups, controlChunkFileName } from './scripts/app-build/controlChunks';
+
+/** The world map atlas's define, as scripts/app-build/worldMapAtlas.ts baked it before the bundle. */
+function worldMapDefine(): unknown {
+  let rows: string;
+  try { rows = readFileSync('out/.app/world-map.json', 'utf8'); }
+  catch { throw new Error('Missing out/.app/world-map.json: build the app through scripts/build-app.mjs, which bakes the world map first'); }
+  return (JSON.parse(rows) as { define: unknown }).define;
+}
+
+export default defineConfig(({ mode, command }) => {
+  if (command === 'build') assertHeavyLease('build');
+  const native = mode === 'native';
+  const validationRevision = shardfileValidationRevision();
+  buildValidationReceipts(validationRevision); // Fail before bundling on any stale or missing product.
+  return {
+    server: { port: 5173, host: true },
+    // js-payload D2 (Jake): on-phone stacks show Rolldown's mangled names; hidden source maps resolve them on desktop
+    // native: no source maps at all — they would ship inside the app and in every OTA bundle
+    build: native
+      // native.html: the web page with the web-only boot swapped for src/native.ts (scripts/native-page.mjs); build-app names it
+      // index.html in dist-native/ (capacitor.config.ts `webDir`)
+      ? { target: 'es2022', chunkSizeWarningLimit: 4000, sourcemap: false, outDir: 'dist-native', rolldownOptions: { input: { index: join(process.cwd(), 'native.html') } } }
+      // one stylesheet: src/entry.ts splits three.js from the game's graph, and code-split CSS would add a request
+      : {
+        target: 'es2022', chunkSizeWarningLimit: 4000, sourcemap: 'hidden' as const, cssCodeSplit: false, manifest: true,
+        // G221: standalone CLI calibration, never a game-entry or Developer switch.
+        rolldownOptions: {
+          input: { main: join(process.cwd(), 'index.html'), calibration: join(process.cwd(), 'calibration/index.html') },
+          preserveEntrySignatures: false,
+          output: { strictExecutionOrder: true, chunkFileNames: controlChunkFileName, codeSplitting: { groups: controlChunkGroups(process.cwd()) } },
+        },
+      },
+    assetsInclude: ['**/*.hdr', '**/*.gltf', '**/*.bin'],
+    resolve: { alias: rapierAlias }, // Rapier's wasm-importing module → plain bindings (vite/rapier.ts)
+    define: { __TITLE_ASSET_URLS__: readFileSync('scripts/title-assets.generated.json', 'utf8'), __GRID_SEAM_ASSET__: JSON.stringify(readGridSeams(process.cwd()).address), __BOOT_TABLE_ASSETS__: JSON.stringify(assetTableAddresses(readAssetTables(process.cwd()))), __GRID_MAP_ATLAS__: JSON.stringify(worldMapDefine()), __SHARDFILE_VALIDATOR__: VALIDATOR_EXPRESSION, __SHARDFILE_VERDICTS__: VERDICTS_EXPRESSION, __DEVSERVER__: mode === 'devserver', __BUILD_ID__: BUILD_ID_EXPRESSION, __SAVE_NAMESPACES__: JSON.stringify(readdirSync('src/shards').filter((slug) => existsSync(join('src/shards', slug, 'manifest.ts'))).sort()) },
+  };
+});

@@ -1,0 +1,212 @@
+{
+  "name": "eris",
+  "version": "0.5.1",
+  "description": "Eris \u2014 AI-first desktop IDE for macOS and Windows",
+  "main": "./out/main/index.js",
+  "author": "Eris",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "prebuild": "npm run test:agents",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "dist:mac": "npm run build && electron-builder --mac --dir -c.mac.identity=null",
+    "dist:dmg": "npm run build && electron-builder --mac dmg -c.mac.identity=null",
+    "dist:win": "npm run build && electron-builder --win nsis --x64",
+    "dist:release": "npm run build && electron-builder --mac dmg zip --win nsis --x64",
+    "dist:release:mac": "npm run build && electron-builder --mac dmg zip",
+    "dist:release:win": "npm run build && electron-builder --win nsis --x64",
+    "start:app": "npm run dist:mac && (osascript -e 'tell application \"Eris\" to quit' 2>/dev/null || true) && sleep 1 && (pkill -x Eris 2>/dev/null || true) && sleep 1 && open \"$(ls -d dist/mac*/Eris.app | head -1)\"",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "version:patch": "npm version patch --no-git-tag-version",
+    "version:minor": "npm version minor --no-git-tag-version",
+    "version:major": "npm version major --no-git-tag-version",
+    "release": "node scripts/release.mjs",
+    "release:dry": "node scripts/release.mjs --dry-run",
+    "release:github": "node scripts/release.mjs --no-bump",
+    "release:local": "node scripts/release.mjs --local-build",
+    "test": "vitest run",
+    "test:agents": "node scripts/run-qualification.mjs agents",
+    "test:smoke:chat": "vitest run tests/chat-agent-smoke.test.ts tests/agent-question-corpus.test.ts --reporter=verbose --testTimeout=30000",
+    "test:watch": "vitest",
+    "check:capabilities": "vite build --config checks/vite.config.ts && electron scripts/check-capabilities.cjs",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run typecheck && npm run lint && npm test",
+    "audit:security": "npm audit --audit-level=low && npm audit --prefix cloud-agent --audit-level=low",
+    "check:client": "npm run typecheck && vitest run tests/chat-database.test.ts tests/document-store.test.ts tests/code-index-patch.test.ts tests/workspace-watcher.test.ts tests/chat-stream.test.ts tests/chat-stream-diagnostics.test.ts tests/recommendation-runtime.test.ts && npm run build && node scripts/check-client-workers.mjs && vite build --config checks/vite.config.ts && electron scripts/check-client-renderer.cjs",
+    "cloud-agent:build": "npm run build --prefix cloud-agent",
+    "cloud-agent:docker": "docker build -t eris-cloud-agent:latest ./cloud-agent",
+    "cloud-agent:compose": "docker compose -f cloud-agent/docker-compose.yml up -d --build",
+    "build:dev-app": "electron-vite build --config electron.dev.config.ts",
+    "dist:dev-app:mac": "npm run build:dev-app && electron-builder --config eris-dev-builder.json --mac --dir",
+    "dist:dev-app:win": "npm run build:dev-app && electron-builder --config eris-dev-builder.json --win nsis --x64",
+    "start:dev-app": "npm run dist:dev-app:mac && open dist-dev/mac-arm64/Eris-Dev.app",
+    "test:dev-app": "node scripts/run-qualification.mjs dev-app",
+    "prebuild:dev-app": "npm run test:dev-app",
+    "check:recovery": "node scripts/run-native-recovery.cjs",
+    "check:quality": "node --test checks/quality/harness.test.mjs",
+    "prepare:owned-command": "node scripts/build-owned-command.cjs",
+    "pretest": "npm run prepare:owned-command",
+    "pretest:agents": "npm run prepare:owned-command",
+    "pretest:dev-app": "npm run prepare:owned-command",
+    "check:performance": "vite build --config checks/vite.config.ts && vite build --config checks/vite.performance-node.config.ts && electron scripts/check-performance.cjs --gate",
+    "check:accessibility": "vite build --config checks/vite.config.ts && electron scripts/check-accessibility.cjs"
+  },
+  "dependencies": {
+    "@parcel/watcher": "^2.6.0",
+    "electron-updater": "^6.8.9",
+    "node-llama-cpp": "^3.22.1",
+    "node-pty": "^1.1.0",
+    "typescript-language-server": "^5.3.0",
+    "vscode-jsonrpc": "^9.0.3",
+    "web-tree-sitter": "^0.20.8",
+    "zod": "^4.6.7",
+    "typescript": "^5.7.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.17.0",
+    "electron-vite": "^3.1.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.13.0",
+    "monaco-editor": "^0.52.2",
+    "prettier": "^3.9.10",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-monaco-editor": "^0.56.2",
+    "tree-sitter-wasms": "^0.1.13",
+    "typescript-eslint": "^8.71.1",
+    "vite": "^6.4.5",
+    "vitest": "^4.1.12"
+  },
+  "build": {
+    "appId": "app.eris.ide",
+    "productName": "Eris",
+    "directories": {
+      "output": "dist",
+      "buildResources": "resources/icons"
+    },
+    "icon": "resources/icons/icon.png",
+    "files": [
+      "out/**/*",
+      "resources/**/*",
+      "node_modules/node-llama-cpp/**/*",
+      "node_modules/node-pty/**/*",
+      "node_modules/typescript/**/*",
+      "node_modules/typescript-language-server/**/*",
+      "node_modules/vscode-jsonrpc/**/*",
+      "node_modules/web-tree-sitter/**/*",
+      "!node_modules/node-llama-cpp/llama/llama.cpp/**",
+      "!node_modules/node-llama-cpp/llama/xpack/**",
+      "!node_modules/node-llama-cpp/llama/gitRelease.bundle",
+      "!**/*.{md,map,ts.map}",
+      "!resources/eris-feedback-token*"
+    ],
+    "asarUnpack": [
+      "node_modules/node-llama-cpp/**/*",
+      "node_modules/node-pty/**/*",
+      "node_modules/@parcel/watcher*/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/app-update.yml",
+        "to": "app-update.yml"
+      },
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": [
+          "**/*",
+          "!eris-feedback-token*"
+        ]
+      },
+      {
+        "from": "node_modules/web-tree-sitter/tree-sitter.wasm",
+        "to": "resources/grammars/tree-sitter.wasm"
+      },
+      {
+        "from": "node_modules/tree-sitter-wasms/out/tree-sitter-typescript.wasm",
+        "to": "resources/grammars/tree-sitter-typescript.wasm"
+      },
+      {
+        "from": "node_modules/tree-sitter-wasms/out/tree-sitter-tsx.wasm",
+        "to": "resources/grammars/tree-sitter-tsx.wasm"
+      },
+      {
+        "from": "node_modules/tree-sitter-wasms/out/tree-sitter-javascript.wasm",
+        "to": "resources/grammars/tree-sitter-javascript.wasm"
+      },
+      {
+        "from": "node_modules/tree-sitter-wasms/out/tree-sitter-python.wasm",
+        "to": "resources/grammars/tree-sitter-python.wasm"
+      },
+      {
+        "from": "node_modules/tree-sitter-wasms/out/tree-sitter-go.wasm",
+        "to": "resources/grammars/tree-sitter-go.wasm"
+      },
+      {
+        "from": "node_modules/tree-sitter-wasms/out/tree-sitter-rust.wasm",
+        "to": "resources/grammars/tree-sitter-rust.wasm"
+      }
+    ],
+    "mac": {
+      "icon": "resources/icons/icon.icns",
+      "category": "public.app-category.developer-tools",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "target": [
+        "dir"
+      ],
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}",
+      "entitlements": "resources/entitlements.mac.plist",
+      "entitlementsInherit": "resources/entitlements.mac.plist",
+      "extendInfo": {
+        "NSSupportsAutomaticGraphicsSwitching": false,
+        "NSHighResolutionCapable": true
+      }
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
+    },
+    "win": {
+      "icon": "resources/icons/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "${productName}-${version}-win-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-${version}-win-${arch}-setup.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "EricServices-Repo",
+        "repo": "Eris",
+        "releaseType": "release"
+      }
+    ],
+    "afterPack": "scripts/check-packaged-secrets.cjs"
+  },
+  "overrides": {
+    "simple-git": "^4.0.2"
+  }
+}

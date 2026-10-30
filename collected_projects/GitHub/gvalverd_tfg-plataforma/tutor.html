@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Panel del tutor · TFG y TFM</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap">
+<link rel="stylesheet" href="styles.css?v=10">
+<style>body { margin: 0; } [hidden] { display: none !important; }</style>
+</head>
+<body>
+<header class="band">
+  <div class="wrap">
+    <div>
+      <div class="eyebrow" id="band-eyebrow">Plataforma de TFG y TFM</div>
+      <h1 id="band-title">Panel del tutor</h1>
+      <p id="band-text">Cuestionario inicial, línea recomendada para cada alumno y documentos de propuesta.</p>
+    </div>
+    <div class="band-actions" id="band-actions" hidden>
+      <select class="conv-pick" id="conv-pick" aria-label="Convocatoria activa"></select>
+      <button class="btn" id="btn-new" type="button">Nuevo alumno <svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4"/></svg></button>
+      <button class="btn ghost" id="btn-import" type="button">Importar Excel de Forms</button>
+      <button class="btn ghost" id="btn-pwd" type="button">Cambiar contraseña</button>
+      <button class="btn ghost" id="btn-logout" type="button">Salir</button>
+      <input type="file" id="file-import" class="hidden-file" accept=".xlsx,.xls,.csv" tabindex="-1" aria-hidden="true">
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Secciones del panel" hidden>
+    <button type="button" role="tab" data-tab="convocatorias" aria-selected="false">Convocatorias</button>
+    <button type="button" role="tab" data-tab="alumnos" aria-selected="true" data-need-conv>Alumnos</button>
+    <button type="button" role="tab" data-tab="preguntas" aria-selected="false" data-need-conv>Preguntas</button>
+    <button type="button" role="tab" data-tab="lineas" aria-selected="false" data-need-conv>Líneas</button>
+    <button type="button" role="tab" data-tab="ajustes" aria-selected="false" data-need-conv>Ajustes y cotutores</button>
+    <button type="button" role="tab" data-tab="admin" aria-selected="false" id="tab-admin" hidden>Profesores</button>
+  </nav>
+
+  <!-- Acceso -->
+  <section class="login" id="login" hidden>
+    <h2 style="font-size:24px">Acceso del tutor</h2>
+    <p style="margin:0;color:var(--muted)">Los alumnos no necesitan cuenta: rellenan el cuestionario desde el enlace de su convocatoria.</p>
+    <form id="login-form" style="display:flex;flex-direction:column;gap:12px">
+      <div class="q"><label for="l-email">Correo</label><input id="l-email" type="email" autocomplete="username" required></div>
+      <div class="q"><label for="l-pass">Contraseña</label><input id="l-pass" type="password" autocomplete="current-password" required></div>
+      <button class="btn" type="submit" id="l-btn">Entrar <svg class="chev" viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4"/></svg></button>
+      <div class="msg" id="l-msg" aria-live="polite"></div>
+      <button class="linkbtn" type="button" id="btn-forgot">¿Has olvidado la contraseña?</button>
+      <button class="linkbtn" type="button" id="go-register">¿Eres profesor y no tienes cuenta? Regístrate</button>
+    </form>
+  </section>
+
+  <section class="login" id="register" hidden>
+    <h2 style="font-size:24px">Cuenta de tutor</h2>
+    <p style="margin:0;color:var(--muted)">Usa tu correo de la universidad. Te confirmaremos el correo y, cuando el administrador apruebe la cuenta, podrás crear convocatorias.</p>
+    <form id="reg-form" style="display:flex;flex-direction:column;gap:12px">
+      <div class="q"><label for="r-name">Nombre y apellidos</label><input id="r-name" type="text" autocomplete="name" required></div>
+      <div class="q"><label for="r-uni">Universidad o escuela</label><input id="r-uni" type="text" autocomplete="organization" required></div>
+      <div class="q"><label for="r-email">Correo</label><input id="r-email" type="email" autocomplete="email" required></div>
+      <div class="q"><label for="r-p1">Contraseña (mínimo 10 caracteres)</label><input id="r-p1" type="password" autocomplete="new-password" minlength="10" required></div>
+      <div class="q"><label for="r-p2">Repite la contraseña</label><input id="r-p2" type="password" autocomplete="new-password" minlength="10" required></div>
+      <button class="btn" type="submit" id="r-btn">Crear cuenta</button>
+      <div class="msg" id="r-msg" aria-live="polite"></div>
+      <button class="linkbtn" type="button" id="go-login">Ya tengo cuenta</button>
+    </form>
+  </section>
+
+  <section class="login" id="pending" hidden>
+    <h2 style="font-size:24px" id="pend-title">Cuenta pendiente de aprobación</h2>
+    <p style="margin:0;color:var(--muted)" id="pend-text">El administrador ha recibido tu solicitud. Te llegará un correo en cuanto la apruebe.</p>
+    <div class="toolbar"><button class="btn ghost" type="button" id="pend-retry">Comprobar de nuevo</button><button class="btn ghost" type="button" data-logout>Salir</button></div>
+  </section>
+
+  <section class="login" id="pwd" hidden>
+    <h2 style="font-size:24px" id="pwd-title">Nueva contraseña</h2>
+    <p style="margin:0;color:var(--muted)">Usa al menos 10 caracteres.</p>
+    <form id="pwd-form" style="display:flex;flex-direction:column;gap:12px">
+      <div class="q"><label for="p-1">Nueva contraseña</label><input id="p-1" type="password" autocomplete="new-password" minlength="10" required></div>
+      <div class="q"><label for="p-2">Repite la contraseña</label><input id="p-2" type="password" autocomplete="new-password" minlength="10" required></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" type="submit" id="p-btn">Guardar contraseña</button><button class="btn ghost" type="button" id="p-cancel">Cancelar</button></div>
+      <div class="msg" id="p-msg" aria-live="polite"></div>
+    </form>
+  </section>
+
+  <!-- Vistas del panel -->
+  <section class="page" id="v-convocatorias" hidden></section>
+
+  <div class="main" id="v-alumnos" hidden>
+    <aside class="side" aria-label="Alumnos">
+      <h2>Alumnos <span id="n-alumnos" style="font-variant-numeric:tabular-nums"></span></h2>
+      <input class="search" id="search" type="search" placeholder="Buscar por nombre" aria-label="Buscar alumno por nombre">
+      <div class="list" id="list"></div>
+      <div class="toolbar">
+        <button class="btn ghost small" id="btn-refresh" type="button">Actualizar</button>
+        <button class="btn ghost small" id="btn-csv" type="button">Exportar todos (.csv)</button>
+        <button class="btn danger small" id="btn-empty" type="button" hidden>Eliminar fichas vacías</button>
+      </div>
+      <label class="switch"><input type="checkbox" id="sw-open"> Cuestionario abierto</label>
+      <div class="q"><label for="student-url" style="font-size:13px;color:var(--muted)">Enlace para los alumnos</label>
+        <div class="linkrow"><input id="student-url" type="text" readonly style="background:var(--surface);color:var(--fg)"><button class="btn small" type="button" id="btn-copy-url">Copiar</button></div></div>
+      <div class="store-state" id="store-state"></div>
+    </aside>
+    <section class="form-col" id="form-col" aria-label="Cuestionario"></section>
+    <aside class="reco" id="reco" aria-label="Recomendación"></aside>
+  </div>
+
+  <section class="editor" id="v-preguntas" hidden></section>
+  <section class="page" id="v-lineas" hidden></section>
+  <section class="page" id="v-ajustes" hidden></section>
+  <section class="page" id="v-admin" hidden></section>
+</div>
+
+<script src="config.js?v=10"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="plantillas.js?v=10"></script>
+<script src="shared.js?v=10"></script>
+<script src="tutela.js?v=10"></script>
+<script src="tutor-core.js?v=10"></script>
+<script src="tutor-alumnos.js?v=10"></script>
+<script src="tutor-propuesta.js?v=10"></script>
+<script src="tutor-editor.js?v=10"></script>
+<script src="tutor-lineas.js?v=10"></script>
+<script src="tutor-ajustes.js?v=10"></script>
+<script>boot();</script>
+</body>
+</html>
