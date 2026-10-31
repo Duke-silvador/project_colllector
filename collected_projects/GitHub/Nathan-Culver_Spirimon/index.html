@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#102320"><meta name="description" content="Spirimon — an endless world. A bond beneath the skin. Explore, seal, and train spirits in a locally saved fantasy RPG.">
+<title>Spirimon — The wild is calling</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23102320'/%3E%3Cpath d='M32 7 53 20v24L32 57 11 44V20Zm0 12-11 7v12l11 7 11-7V26Z' fill='none' stroke='%23d8b879' stroke-width='4'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="./style.css?v=20261031-dual-energy-1">
+</head>
+<body>
+<aside class="rail" aria-label="Main navigation">
+<button class="brand-mark" data-action="view" data-value="explore" aria-label="Spirimon exploration">S<span>◇</span></button>
+<div class="rail-divider"></div>
+<button class="nav-button active" data-action="view" data-value="explore" title="Explore (1)"><span>⌖</span><small>Explore</small></button>
+<button class="nav-button" data-action="view" data-value="spirits" title="Tattoo collection (2)"><span>♧</span><small>Spirits</small></button>
+<button class="nav-button" data-action="view" data-value="atlas" title="World atlas (3)"><span>▧</span><small>Atlas</small></button>
+<button class="nav-button" data-action="view" data-value="journal" title="Journal (4)"><span>☷</span><small>Journal</small></button>
+<div class="rail-bottom"><button class="nav-button" data-action="settings" title="Settings and local AI"><span>⚙</span><small>Settings</small></button><span class="version">Build 37 · Coin</span></div>
+</aside>
+<div class="app-shell">
+<header class="topbar"><a class="wordmark" href="#" data-action="view" data-value="explore">SPIRIMON<span>THE SEALER'S FRONTIER</span></a><div class="topbar-right"><span id="save-status" class="save-status"><i></i> Saved on this device</span><button class="icon-button" data-action="export" title="Export save backup" aria-label="Export save backup">⇩</button><button class="player-avatar" data-action="profile" aria-label="Sealer profile">N</button></div></header>
+<main id="main"></main>
+<footer><span>AN ENDLESS WORLD. A BOND BENEATH THE SKIN.</span><span id="footer-seed"></span></footer>
+</div>
+<div id="modal-root"></div><div id="toast" role="status" aria-live="polite"></div>
+<script>
+(function(){
+ const main=document.getElementById('main');
+ const error=(message)=>{main.innerHTML='<section style="margin:24px;padding:20px;background:#fff5dc;color:#553c32;border:3px solid #946b54"><h2>Spirimon could not start</h2><p>'+String(message).replace(/[&<>]/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[x]))+'</p><button onclick="location.reload()" style="padding:12px">Retry loading</button></section>';};
+ window.addEventListener('error',e=>{if(!main.querySelector('#world'))error(e.message||'A game resource failed to load.');});
+ window.addEventListener('unhandledrejection',e=>{if(!main.querySelector('#world'))error(e.reason?.message||e.reason||'A game module failed.');});
+ window.setTimeout(()=>{if(!main.querySelector('#world')&&!main.querySelector('.modal-overlay')&&!main.textContent.trim())error('The game did not initialize. Check your connection, then retry.');},10000);
+ (async()=>{
+  const url=new URL('./app.mjs?v=20261031-dual-energy-1',location.href);
+  try{
+    const response=await fetch(url,{cache:'no-store'});
+    if(!response.ok)throw new Error('Game module returned HTTP '+response.status+' at '+url.pathname+'. GitHub Pages may be serving an outdated deployment.');
+    const type=response.headers.get('content-type')||'';
+    if(!/javascript|ecmascript|text\/plain|octet-stream/i.test(type))throw new Error('Game module has unexpected content type '+type+'. Check GitHub Pages publishing settings.');
+    const modules=['app.mjs','engine.mjs','sprites.mjs','moves.mjs','towns.mjs','world.mjs','roster.mjs','transformation.mjs','audio.mjs','offerings.mjs','ai-providers.mjs','terrain.mjs','adventure-systems.mjs','move-animations.mjs'];const failures=await Promise.all(modules.map(async file=>{try{const res=await fetch(new URL('./'+file,location.href),{cache:'no-store'});if(!res.ok)return file+' (HTTP '+res.status+')';const type=res.headers.get('content-type')||'';if(/text\/html/i.test(type))return file+' (HTML instead of JavaScript)';return null;}catch(e){return file+' ('+(e?.message||e)+')';}}));const missing=failures.filter(Boolean);if(missing.length)throw new Error('Missing or blocked game dependencies: '+missing.join('; '));await import(url.href);
+  }catch(e){
+    let detail=e?.message||String(e);
+    if(/Failed to fetch dynamically imported module/i.test(detail))detail+=' — A JavaScript dependency may be missing or blocked. Check that GitHub Pages deployed the latest main branch.';
+    error('Unable to load game code: '+detail);
+  }
+})();
+})();
+</script>
+</body>
+</html>
