@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1e40af">
+  <title>Cathy 数据导出</title>
+  <style>
+    :root {
+      --primary: #1e40af;
+      --primary-dark: #1e3a8a;
+      --bg: #f1f5f9;
+      --white: #ffffff;
+      --text: #1e293b;
+      --gray: #64748b;
+      --border: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text); }
+    .app { max-width: 760px; margin: 0 auto; min-height: 100vh; }
+    .header { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; padding: 14px 16px; display: flex; align-items: center; gap: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+    .header h1 { font-size: 1.1rem; margin: 0; font-weight: 600; }
+    .header .sub { font-size: 0.75rem; opacity: 0.85; margin-top: 2px; }
+    .header a { color: white; text-decoration: none; font-size: 1.2rem; margin-left: auto; }
+    .content { padding: 16px; }
+    .card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; margin-top: 10px; }
+    .stat { background: var(--bg); border-radius: 8px; padding: 10px; text-align: center; }
+    .stat .num { font-size: 1.2rem; font-weight: 700; color: var(--primary); }
+    .stat .label { font-size: 0.75rem; color: var(--gray); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; padding: 10px 16px; border-radius: 24px; border: none; background: var(--primary); color: white; font-size: 0.95rem; margin: 6px 6px 0 0; cursor: pointer; text-decoration: none; }
+    .btn.secondary { background: var(--white); color: var(--primary); border: 1px solid var(--border); }
+    .btn:disabled { background: var(--gray); cursor: not-allowed; }
+    .output { width: 100%; min-height: 240px; margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; font-size: 0.9rem; line-height: 1.5; resize: vertical; }
+    .empty { color: var(--gray); text-align: center; padding: 40px 16px; }
+    .note { font-size: 0.8rem; color: var(--gray); margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="header">
+      <div>
+        <h1>Cathy 数据导出</h1>
+        <div class="sub">一键汇总训练 / 比赛 / 成长数据</div>
+      </div>
+      <a href="fencing_tournament_helper.html">✕</a>
+    </div>
+
+    <div class="content">
+      <div class="card" id="stats-card" style="display:none;">
+        <b>数据概览</b>
+        <div class="stat-grid" id="stat-grid"></div>
+        <div class="note" id="last-updated"></div>
+      </div>
+
+      <div class="card">
+        <button class="btn" id="generate-btn">📊 读取最新数据</button>
+        <button class="btn secondary" id="copy-btn" disabled>📋 复制</button>
+        <button class="btn secondary" id="download-btn" disabled>⬇️ 下载 .txt</button>
+        <button class="btn secondary" id="email-btn" disabled>✉️ 发送邮件</button>
+        <textarea class="output" id="output" readonly placeholder="点击「读取最新数据」生成 Cathy 数据报告..."></textarea>
+      </div>
+
+      <div class="card note">
+        数据来源：fencing_tournament_helper.html 里输入的「击剑数据」。<br>
+        用途：复制或下载后，可粘贴到任意 AI（ChatGPT、Claude、Gemini 等）进行深度分析。
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const CATHY_TRAINING_SCHEMA = [
+      { key: 'competition', label: '比赛成绩' },
+      { key: 'physical', label: '体能训练' },
+      { key: 'stretching', label: '拉伸恢复' },
+      { key: 'medical', label: '检查报告' },
+      { key: 'technical', label: '技术训练' },
+      { key: 'mental', label: '心理状态' },
+      { key: 'nutrition', label: '饮食睡眠' },
+      { key: 'equipment', label: '装备维护' }
+    ];
+
+    let currentText = '';
+
+    function getCathyData() {
+      try {
+        return JSON.parse(localStorage.getItem('cathy_training_data') || '{}');
+      } catch (e) { return {}; }
+    }
+
+    function formatData(records) {
+      const now = new Date().toLocaleString('zh-CN', { timeZone: 'America/Vancouver' });
+      let out = `Cathy He（何云熙）击剑数据报告\n`;
+      out += `导出时间：${now}（Vancouver 时间）\n`;
+      out += `=` .repeat(40) + '\n\n';
+
+      CATHY_TRAINING_SCHEMA.forEach(cat => {
+        const rows = records[cat.key] || [];
+        out += `## ${cat.label}（${rows.length} 条记录）\n\n`;
+        if (!rows.length) {
+          out += '暂无记录\n\n';
+          return;
+        }
+        // 按日期倒序
+        const sorted = [...rows].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+        sorted.forEach((row, idx) => {
+          out += `${idx + 1}. `;
+          const parts = [];
+          for (const [k, v] of Object.entries(row)) {
+            parts.push(`${k}: ${v}`);
+          }
+          out += parts.join(' | ') + '\n';
+        });
+        out += '\n';
+      });
+
+      out += `## 数据总结\n\n`;
+      const total = CATHY_TRAINING_SCHEMA.reduce((s, c) => s + (records[c.key] || []).length, 0);
+      out += `总记录数：${total}\n`;
+      CATHY_TRAINING_SCHEMA.forEach(c => {
+        out += `- ${c.label}：${(records[c.key] || []).length}\n`;
+      });
+      out += '\n以上数据可直接粘贴给其它 AI 软件分析。';
+      return out;
+    }
+
+    function renderStats(records) {
+      const card = document.getElementById('stats-card');
+      const grid = document.getElementById('stat-grid');
+      const total = CATHY_TRAINING_SCHEMA.reduce((s, c) => s + (records[c.key] || []).length, 0);
+      if (total === 0) { card.style.display = 'none'; return; }
+      grid.innerHTML = '';
+      CATHY_TRAINING_SCHEMA.forEach(cat => {
+        const count = (records[cat.key] || []).length;
+        if (count === 0) return;
+        const div = document.createElement('div');
+        div.className = 'stat';
+        div.innerHTML = `<div class="num">${count}</div><div class="label">${cat.label}</div>`;
+        grid.appendChild(div);
+      });
+      document.getElementById('last-updated').textContent = `共 ${total} 条记录`;
+      card.style.display = 'block';
+    }
+
+    document.getElementById('generate-btn').addEventListener('click', () => {
+      const records = getCathyData();
+      renderStats(records);
+      currentText = formatData(records);
+      document.getElementById('output').value = currentText;
+      ['copy-btn', 'download-btn', 'email-btn'].forEach(id => document.getElementById(id).disabled = !currentText);
+    });
+
+    document.getElementById('copy-btn').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(currentText);
+        alert('已复制到剪贴板');
+      } catch (e) {
+        document.getElementById('output').select();
+        alert('请手动复制');
+      }
+    });
+
+    document.getElementById('download-btn').addEventListener('click', () => {
+      const blob = new Blob([currentText], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `Cathy_数据_${new Date().toISOString().slice(0,10)}.txt`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    document.getElementById('email-btn').addEventListener('click', () => {
+      const subject = encodeURIComponent('Cathy He 击剑数据导出');
+      const bodyMax = 1500;
+      const bodyText = currentText.length > bodyMax ? currentText.slice(0, bodyMax) + '\n\n[数据过长，请使用「下载 .txt」后作为附件发送]' : currentText;
+      const body = encodeURIComponent(bodyText);
+      window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    });
+
+    // 自动读取一次
+    const initial = getCathyData();
+    const total = CATHY_TRAINING_SCHEMA.reduce((s, c) => s + (initial[c.key] || []).length, 0);
+    if (total > 0) {
+      document.getElementById('generate-btn').click();
+    } else {
+      document.getElementById('output').value = '暂无 Cathy 数据。请先在 fencing_tournament_helper.html 的「击剑数据」里输入记录。';
+    }
+  </script>
+</body>
+</html>

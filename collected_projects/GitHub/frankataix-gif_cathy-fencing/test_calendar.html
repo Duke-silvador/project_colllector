@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日程日历回测工具</title>
+<style>
+  :root {
+    --primary: #2563eb;
+    --primary-light: #eff6ff;
+    --gray: #64748b;
+    --border: #e5e7eb;
+    --bg-competition: #ef4444;
+    --bg-camp: #3b82f6;
+    --bg-training: #22c55e;
+    --bg-physical: #f59e0b;
+    --bg-stretch: #94a3b8;
+    --bg-other: #64748b;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; margin: 0; padding: 16px; background: #f8fafc; color: #1e293b; }
+  h1 { font-size: 1.2rem; margin: 0 0 12px; }
+  .panel { background: white; border-radius: 12px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  label { font-size: 0.85rem; color: var(--gray); }
+  input, select, button { font-size: 0.9rem; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box; }
+  button { background: var(--primary); color: white; border: none; cursor: pointer; }
+  button.secondary { background: #e2e8f0; color: #334155; }
+  button.danger { background: #ef4444; color: white; }
+  .schedule-calendar { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-template-rows: auto repeat(6, minmax(90px, auto)); gap: 0; border-top: 1px solid var(--border); border-left: 1px solid var(--border); background: white; width: 100%; box-sizing: border-box; }
+  .schedule-cal-header { text-align: center; font-size: 0.75rem; color: var(--gray); padding: 6px 0; background: #f8fafc; box-shadow: inset -1px 0 0 0 var(--border), inset 0 -1px 0 0 var(--border); }
+  .schedule-cal-day { min-height: 90px; padding: 6px 0; font-size: 0.8rem; cursor: pointer; background: white; display: flex; flex-direction: column; gap: 4px; position: relative; box-shadow: inset -1px 0 0 0 var(--border), inset 0 -1px 0 0 var(--border); }
+  .schedule-cal-day.empty { background: transparent; cursor: default; }
+  .schedule-cal-day .num { position: relative; z-index: 3; display: inline-block; padding: 0 6px; font-weight: 600; margin-bottom: 4px; }
+  .schedule-bar { height: 16px; border-radius: 0; display: block; line-height: 16px; color: white; font-size: 0.6rem; white-space: nowrap; overflow: hidden; padding: 0; box-sizing: border-box; width: 100%; margin: 1px 0; position: relative; pointer-events: none; }
+  .schedule-bar > span { display: inline-block; height: 16px; line-height: 16px; padding: 0 6px; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .schedule-bar-extra { background: #94a3b8; color: white; display: flex; align-items: center; justify-content: center; font-size: 0.65rem; height: 14px; border-radius: 0; width: 100%; box-sizing: border-box; }
+  .schedule-bar.start { border-radius: 0; }
+  .schedule-bar.mid { border-radius: 0; }
+  .schedule-bar.end { border-radius: 0; }
+  .schedule-bar.single { border-radius: 0; }
+  .bg-competition { background: var(--bg-competition); }
+  .bg-camp { background: var(--bg-camp); }
+  .bg-training { background: var(--bg-training); }
+  .bg-physical { background: var(--bg-physical); }
+  .bg-stretch { background: var(--bg-stretch); }
+  .bg-other { background: var(--bg-other); }
+  .log { background: #f1f5f9; border-radius: 8px; padding: 12px; font-size: 0.8rem; color: #334155; white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
+  .event-list { font-size: 0.85rem; }
+  .event-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .tag { display: inline-block; padding: 2px 6px; border-radius: 4px; color: white; font-size: 0.7rem; margin-right: 6px; }
+</style>
+</head>
+<body>
+<h1>日程日历回测工具</h1>
+
+<div class="panel">
+  <div class="row">
+    <button onclick="prevMonth()">上一月</button>
+    <strong id="month-label" style="min-width:100px;text-align:center;"></strong>
+    <button onclick="nextMonth()">下一月</button>
+    <button class="secondary" onclick="resetEvents()">重置</button>
+    <button class="secondary" onclick="runAllScenarios()">运行全部场景</button>
+  </div>
+  <div class="row">
+    <label>标题: <input type="text" id="t-title" value="测试赛事" style="width:120px;"></label>
+    <label>开始: <input type="date" id="t-start"></label>
+    <label>结束: <input type="date" id="t-end"></label>
+    <label>类型: <select id="t-type"><option value="competition">比赛</option><option value="camp">训练营</option><option value="training">训练</option><option value="physical">体能</option><option value="stretch">拉伸</option></select></label>
+    <button onclick="addManual()">添加</button>
+  </div>
+  <div class="row">
+    <button class="secondary" onclick="scenarioMultiDay()">多日赛事</button>
+    <button class="secondary" onclick="scenarioOverlap()">密集堆叠</button>
+    <button class="secondary" onclick="scenarioLongTitle()">长标题</button>
+    <button class="secondary" onclick="scenarioCrossMonth()">跨月/跨年</button>
+    <button class="secondary" onclick="scenarioMany()">大量事件</button>
+    <button class="secondary" onclick="scenarioSingleDay()">单日事件</button>
+  </div>
+</div>
+
+<div id="schedule-calendar" class="schedule-calendar"></div>
+
+<div class="panel">
+  <h3>事件列表</h3>
+  <div id="event-list" class="event-list"></div>
+</div>
+
+<div class="panel">
+  <h3>回测日志</h3>
+  <div id="log" class="log"></div>
+</div>
+
+<script>
+const SCHEDULE_EVENT_TYPES = {
+  competition: { label: '比赛', colorClass: 'bg-competition' },
+  camp: { label: '训练营', colorClass: 'bg-camp' },
+  training: { label: '训练', colorClass: 'bg-training' },
+  physical: { label: '体能', colorClass: 'bg-physical' },
+  stretch: { label: '拉伸', colorClass: 'bg-stretch' },
+  other: { label: '其它', colorClass: 'bg-other' }
+};
+
+let scheduleEvents = [];
+let scheduleCurrentMonth = new Date();
+
+function log(msg) {
+  const el = document.getElementById('log');
+  el.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function daysInMonth(y, m) { return new Date(y, m + 1, 0).getDate(); }
+function firstWeekday(y, m) { return new Date(y, m, 1).getDay(); }
+function fmt(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
+
+function newId() { return 'e_' + Date.now() + '_' + Math.random().toString(36).slice(2,8); }
+
+function addEvent(title, start, end, type) {
+  scheduleEvents.push({ id: newId(), title, date: start, end, type });
+  scheduleEvents.sort((a, b) => new Date(a.date) - new Date(b.date));
+  render();
+}
+
+function deleteEvent(id) {
+  scheduleEvents = scheduleEvents.filter(e => e.id !== id);
+  render();
+}
+
+function addManual() {
+  const title = document.getElementById('t-title').value || '未命名';
+  const start = document.getElementById('t-start').value;
+  const end = document.getElementById('t-end').value || start;
+  const type = document.getElementById('t-type').value;
+  if (!start) { log('错误：开始日期为空'); return; }
+  addEvent(title, start, end, type);
+  log(`手动添加：${title} (${start} ~ ${end})`);
+}
+
+function resetEvents() {
+  scheduleEvents = [];
+  log('已重置事件列表');
+  render();
+}
+
+function renderCalendar() {
+  const y = scheduleCurrentMonth.getFullYear();
+  const m = scheduleCurrentMonth.getMonth();
+  document.getElementById('month-label').textContent = `${y}年 ${m+1}月`;
+  const calendar = document.getElementById('schedule-calendar');
+  const days = daysInMonth(y, m);
+  const start = firstWeekday(y, m);
+  const rowsNeeded = Math.ceil((start + days) / 7);
+  calendar.style.gridTemplateRows = `auto repeat(${rowsNeeded}, minmax(90px, auto))`;
+  let html = '';
+  ['日','一','二','三','四','五','六'].forEach(d => { html += `<div class="schedule-cal-header">${d}</div>`; });
+
+  const monthStart = new Date(y, m, 1);
+  const monthEnd = new Date(y, m, days);
+
+  let monthEvents = scheduleEvents.map(e => ({ ...e, _end: e.end || e.date })).filter(e => {
+    const evStart = new Date(e.date + 'T00:00:00');
+    const endDate = e._end ? new Date(e._end + 'T00:00:00') : evStart;
+    return evStart <= monthEnd && endDate >= monthStart;
+  });
+
+  // 为每个事件分配一个固定的垂直轨道，保证跨天时在同一条水平线上
+  const trackEnd = [];
+  monthEvents = monthEvents.slice().sort((a, b) => a.date.localeCompare(b.date) || a._end.localeCompare(b._end)).map(e => {
+    const idx = trackEnd.findIndex(end => end < e.date);
+    if (idx === -1) { trackEnd.push(e._end); return { ...e, track: trackEnd.length - 1 }; }
+    trackEnd[idx] = e._end;
+    return { ...e, track: idx };
+  });
+
+  for (let d = 1; d <= days; d++) {
+    const iso = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isoDate = new Date(iso + 'T00:00:00');
+    const dayEvents = monthEvents.filter(e => {
+      const startDate = new Date(e.date + 'T00:00:00');
+      const endDate = e._end ? new Date(e._end + 'T00:00:00') : startDate;
+      return isoDate >= startDate && isoDate <= endDate;
+    }).sort((a, b) => a.track - b.track);
+    const visibleEvents = dayEvents.slice(0, 10);
+    let bars = visibleEvents.map(e => {
+      const startDate = new Date(e.date + 'T00:00:00');
+      const endDate = e._end ? new Date(e._end + 'T00:00:00') : startDate;
+      const daysBefore = Math.round((isoDate - startDate) / 86400000);
+      const isStart = daysBefore === 0;
+      const isEnd = e._end === iso;
+      const single = !e._end || e._end === e.date || (isStart && isEnd);
+      let pos;
+      if (single) pos = 'single';
+      else if (isStart) pos = 'start';
+      else if (isEnd) pos = 'end';
+      else pos = 'mid';
+      const color = (SCHEDULE_EVENT_TYPES[e.type] || SCHEDULE_EVENT_TYPES.stretch).colorClass;
+      const durationDays = Math.round((endDate - startDate) / 86400000) + 1;
+      const shift = daysBefore * 100;
+      return `<div class="schedule-bar schedule-bar-${pos} ${color}" style="position:absolute; top:${e.track * 20 + 24}px; left:0; width:100%;"><span style="width:${durationDays * 100}%; margin-left:-${shift}%;">${e.title}</span></div>`;
+    }).join('');
+    let maxTrack = visibleEvents.reduce((m, e) => Math.max(m, e.track), -1);
+    if (dayEvents.length > 10) {
+      const plusTop = (maxTrack + 1) * 20 + 24;
+      bars += `<div class="schedule-bar schedule-bar-extra" style="position:absolute; top:${plusTop}px; left:0; width:100%;">+${dayEvents.length - 10}</div>`;
+      maxTrack = Math.max(maxTrack, maxTrack + 1);
+    }
+    const minHeight = Math.max(90, (maxTrack + 2) * 20 + 24);
+    html += `<div class="schedule-cal-day" data-date="${iso}" style="min-height:${minHeight}px;"><div class="num">${d}</div>${bars}</div>`;
+  }
+  const totalCells = rowsNeeded * 7;
+  const filled = start + days;
+  for (let i = filled; i < totalCells; i++) html += '<div class="schedule-cal-day empty"></div>';
+  calendar.innerHTML = html;
+}
+
+function renderEventList() {
+  const list = document.getElementById('event-list');
+  if (!scheduleEvents.length) { list.innerHTML = '<div style="color:var(--gray);">暂无事件</div>'; return; }
+  list.innerHTML = scheduleEvents.map(e => {
+    const c = (SCHEDULE_EVENT_TYPES[e.type] || SCHEDULE_EVENT_TYPES.stretch).colorClass;
+    return `<div class="event-item"><div><span class="tag ${c}">${SCHEDULE_EVENT_TYPES[e.type].label}</span>${e.title} <span style="color:var(--gray);">(${e.date}${e.end && e.end !== e.date ? ' ~ ' + e.end : ''})</span></div><button class="danger" style="padding:2px 8px;font-size:0.75rem;" onclick="deleteEvent('${e.id}')">删除</button></div>`;
+  }).join('');
+}
+
+function runChecks() {
+  const y = scheduleCurrentMonth.getFullYear();
+  const m = scheduleCurrentMonth.getMonth();
+  const days = daysInMonth(y, m);
+  const monthStart = new Date(y, m, 1);
+  const monthEnd = new Date(y, m, days);
+  let issues = [];
+  scheduleEvents.forEach(e => {
+    const s = new Date(e.date + 'T00:00:00');
+    const end = e.end ? new Date(e.end + 'T00:00:00') : s;
+    if (end < s) issues.push(`结束早于开始：${e.title}`);
+    if (s <= monthEnd && end >= monthStart) {
+      const dur = Math.round((end - s) / 86400000) + 1;
+      if (dur > 31) issues.push(`超长事件（${dur}天）：${e.title}`);
+    }
+  });
+  for (let d = 1; d <= days; d++) {
+    const iso = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isoDate = new Date(iso + 'T00:00:00');
+    const cnt = scheduleEvents.filter(e => {
+      const s = new Date(e.date + 'T00:00:00');
+      const end = e.end ? new Date(e.end + 'T00:00:00') : s;
+      return isoDate >= s && isoDate <= end;
+    }).length;
+    if (cnt > 10) issues.push(`${iso} 有 ${cnt} 条事件，已折叠为 +${cnt-10}`);
+  }
+  if (issues.length) issues.forEach(i => log('检查：' + i));
+  else log('检查通过：当前视图无异常');
+}
+
+function render() { renderCalendar(); renderEventList(); }
+
+function prevMonth() { scheduleCurrentMonth.setMonth(scheduleCurrentMonth.getMonth() - 1); render(); }
+function nextMonth() { scheduleCurrentMonth.setMonth(scheduleCurrentMonth.getMonth() + 1); render(); }
+
+function scenarioMultiDay() {
+  const y = scheduleCurrentMonth.getFullYear();
+  const m = String(scheduleCurrentMonth.getMonth() + 1).padStart(2, '0');
+  addEvent('2nd BBFC Duel in the Desert SYC & RCC', `${y}-${m}-25`, `${y}-${m}-27`, 'competition');
+  log('场景：多日赛事 25-27');
+  runChecks();
+}
+
+function scenarioOverlap() {
+  const y = scheduleCurrentMonth.getFullYear();
+  const m = String(scheduleCurrentMonth.getMonth() + 1).padStart(2, '0');
+  for (let i = 0; i < 12; i++) {
+    const d = 10 + (i % 5);
+    addEvent(`堆叠事件 ${i+1}`, `${y}-${m}-${String(d).padStart(2,'0')}`, `${y}-${m}-${String(d+1).padStart(2,'0')}`, ['competition','camp','training','physical','stretch'][i % 5]);
+  }
+  log('场景：密集堆叠 12 条');
+  runChecks();
+}
+
+function scenarioLongTitle() {
+  const y = scheduleCurrentMonth.getFullYear();
+  const m = String(scheduleCurrentMonth.getMonth() + 1).padStart(2, '0');
+  addEvent('这是一段非常长的赛事标题，用于测试省略号和跨格子连续显示是否正确处理超长文本', `${y}-${m}-05`, `${y}-${m}-08`, 'competition');
+  log('场景：长标题 05-08');
+  runChecks();
+}
+
+function scenarioCrossMonth() {
+  const y = scheduleCurrentMonth.getFullYear();
+  const m = scheduleCurrentMonth.getMonth() + 1;
+  const d = daysInMonth(y, m - 1);
+  const start = `${y}-${String(m).padStart(2,'0')}-${String(d - 2).padStart(2,'0')}`;
+  const endObj = new Date(y, m - 1, d + 3);
+  const end = fmt(endObj);
+  addEvent('跨月赛事', start, end, 'camp');
+  log('场景：跨月/跨年 ' + start + ' ~ ' + end);
+  runChecks();
+}
+
+function scenarioMany() {
+  const y = scheduleCurrentMonth.getFullYear();
+  const m = String(scheduleCurrentMonth.getMonth() + 1).padStart(2, '0');
+  for (let i = 1; i <= daysInMonth(y, scheduleCurrentMonth.getMonth()); i++) {
+    if (i % 3 === 0) addEvent(`每日事件 ${i}`, `${y}-${m}-${String(i).padStart(2,'0')}`, `${y}-${m}-${String(i).padStart(2,'0')}`, 'training');
+    if (i % 5 === 0) addEvent(`五日集训`, `${y}-${m}-${String(i).padStart(2,'0')}`, `${y}-${m}-${String(Math.min(i+4, daysInMonth(y, scheduleCurrentMonth.getMonth()))).padStart(2,'0')}`, 'physical');
+  }
+  log('场景：大量事件');
+  runChecks();
+}
+
+function scenarioSingleDay() {
+  const y = scheduleCurrentMonth.getFullYear();
+  const m = String(scheduleCurrentMonth.getMonth() + 1).padStart(2, '0');
+  addEvent('单日比赛', `${y}-${m}-15`, `${y}-${m}-15`, 'competition');
+  log('场景：单日事件 15');
+  runChecks();
+}
+
+function runAllScenarios() {
+  resetEvents();
+  scenarioMultiDay();
+  scenarioOverlap();
+  scenarioLongTitle();
+  scenarioCrossMonth();
+  scenarioMany();
+  scenarioSingleDay();
+  log('全部场景已运行，请观察日历和压力日志。');
+}
+
+// 默认填满当前月的事件输入框
+document.getElementById('t-start').value = fmt(new Date());
+document.getElementById('t-end').value = fmt(new Date());
+render();
+</script>
+</body>
+</html>

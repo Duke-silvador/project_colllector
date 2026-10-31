@@ -1,0 +1,1728 @@
+// nekowhale-meme —— 大肥鱼表情库（宿主半）
+//
+// 定位：DSH 表情库插件，基于 dsh-nekowhale-stickers
+// （https://github.com/Loping151/dsh-nekowhale-stickers）二创，新增「导入表情包」功能。
+// 「下载初始表情包」直接连公开站点 kiriyuki.com（清单 /api/manifest、图 /media/gif），
+// 走的是自己的 HTTP 客户端，不需要 dsh-nekowhale-stickers 在场或提供任何服务。
+//
+// 半边划分：
+//   宿主半（本文件）：数据层、识别、HTTP 路由、模型工具、斗图触发
+//   客户端半（client.js）：队列页 + 设置页（三 Tab / 批量 / 编辑 / 提醒条）
+//
+// 注意：本文件不 `export default`（DSH loader 会优先它并丢掉 inject / Config）。
+import Schema from '@deepseek-ai/schemastery'
+import { execFile } from 'node:child_process'
+import { createReadStream, existsSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { copyFile, mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { createRequire } from 'node:module'
+import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path'
+import { EMOTIONS, STATE_LIBRARY, STATE_PENDING, STATE_TAGGED, Store, defaultDataDir, groupDirName, loadConfig, saveConfig } from './lib/store.js'
+import { Tagger, listModelCatalog, mediaTypeOf, resolveTagModel } from './lib/tagger.js'
+import { matchEmotion } from './lib/keywords.js'
+
+/**
+ * 工具定义规范化：把简写的 `parameters` 属性表**编译成对象根 schema**（type:"object"）。
+ *
+ * 为什么不用官方的 `defineTool`：插件以 `link:` 装法运行时**解析不到**那个包
+ * （`@deepseek-ai/dsh-tools` 不在插件自己的 node_modules 里；宿主只给静态 ESM
+ * import 挂解析 hook，`createRequire` 的 CJS 解析拿不到）。取不到就只能退回恒等
+ * 函数，属性表原样进了请求体 → `tool.parameters` 没有 type，严格渠道**把整轮请求
+ * 拒掉**（不是单个工具失败，是插件一加载对话全废）：
+ *   Invalid schema for function 'meme_import': schema must be a JSON Schema
+ *     of 'type: "object"', got 'type: null'
+ * 宽松渠道（qodercn 等）不校验 tool schema，所以这毛病潜伏到换 deepseek-flash 才炸。
+ *
+ * 所以这里自己做同一件事，不依赖能不能解析到宿主包——宿主与离线测试跑的是
+ * 同一套代码，形状永远对。本插件参数全为可选，故不产出 required；
+ * 代价是没有官方那层入参校验，但 execute 里本来就把参数按字符串/数字洗过一遍。
+ */
+function DT(spec) {
+  return { ...spec, parameters: { type: 'object', properties: spec.parameters ?? {} } }
+}
+
+export const name = 'nekowhale-meme'
+export const inject = []
+
+/** 唯一的路由前缀；客户端半按这个前缀取图与调接口。 */
+const ROUTE = '/nekowhale-meme'
+
+/** 「未分组」虚拟组的保留 id：不是真实分组，仅用于筛选 group 为空/失效的条目。 */
+const GROUP_UNGROUPED = '__ungrouped__'
+
+// ---------------------------------------------------------------- 初始表情包：直连 kiriyuki.com
+// 站点是公开的（无需 key/登录/装别的插件）：
+//   /api/manifest                清单：包/文件/hash/尺寸（无标签）
+//   /media/gif/<pack>/<file>.gif  图本体
+//   /meme/kit/nekowhale.json      作者的人工标注表：emotion/tags/use/desc（只覆盖大肥鱼 322 张）
+// 站点是**模板化**的：同 stem（如 10N01_猫猫搓手）在不同包里是同一动作换角色重渲染，
+// 所以 emotion/tags/use 能按 stem 跨包套用（实测全站 96.9% 命中）；desc 里含角色名，
+// 别的角色不能照搬，只有原配包才保留。
+const NEKO_SITE = 'https://kiriyuki.com'
+const NEKO_PACK_MAIN = '大肥鱼'
+const NEKO_KIT_PATH = '/meme/kit/nekowhale.json'
+/**
+ * desc 含角色名，只有原配的「大肥鱼」能原样保留。
+ * （原来还有「大肥鱼和GPT娘」，但双人包已整体不支持下载，这里顺带留名只为兼容旧索引。）
+ */
+const NEKO_DESC_PACKS = new Set([NEKO_PACK_MAIN, '大肥鱼和GPT娘'])
+const IMPORT_TIMEOUT_MS = 30_000
+const IMPORT_CONCURRENCY = 4
+
+/** 下载进度（客户端轮询 /import-progress）。 */
+const importProgress = {
+  active: false,
+  done: 0,
+  total: 0,
+  added: 0,
+  skipped: 0,
+  failed: 0,
+  tagged: 0,          // 有多少张套上了人工标注
+  untagged: 0,        // 有多少张没标注（如兔兔系列）
+  phase: 'idle',      // idle | manifest | kit | download | done | error
+  error: '',
+  startedAt: 0,
+  finishedAt: 0,
+}
+
+/** 带重试的单次下载。 */
+async function fetchWithRetry(url, { tries = 3, timeoutMs = IMPORT_TIMEOUT_MS } = {}) {
+  let last
+  for (let i = 0; i < tries; i += 1) {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      return Buffer.from(await res.arrayBuffer())
+    } catch (e) {
+      last = e
+      if (i + 1 < tries) await new Promise((r) => setTimeout(r, 500 * (i + 1)))
+    }
+  }
+  throw last ?? new Error('下载失败')
+}
+
+/**
+ * 拉作者的标注表，按 stem 建索引：stem → { emotion, tags, use, desc, dir }。
+ * 拿不到就返回空表（下载照常，只是没有标签）——不能让标注表拖垮整个导入。
+ */
+let kitCache = null
+async function fetchKit(warn) {
+  if (kitCache) return kitCache
+  try {
+    const buf = await fetchWithRetry(`${NEKO_SITE}${NEKO_KIT_PATH}`, { tries: 2, timeoutMs: 45_000 })
+    const kit = JSON.parse(buf.toString('utf8'))
+    const byStem = new Map()
+    for (const s of Array.isArray(kit?.stickers) ? kit.stickers : []) {
+      // id 形如 `<pack>/<stem>`
+      const slash = String(s.id ?? '').indexOf('/')
+      const stem = slash >= 0 ? String(s.id).slice(slash + 1) : String(s.stem ?? '')
+      if (!stem) continue
+      // 同一 stem 可能出现多次（大肥鱼 + 双人包），优先保留单人包那份
+      const packOf = slash >= 0 ? String(s.id).slice(0, slash) : ''
+      if (byStem.has(stem) && packOf !== NEKO_PACK_MAIN) continue
+      byStem.set(stem, {
+        emotion: typeof s.emotion === 'string' ? s.emotion : '',
+        tags: Array.isArray(s.tags) ? s.tags.slice(0, 8) : [],
+        use: typeof s.use === 'string' ? s.use : '',
+        desc: typeof s.desc === 'string' ? s.desc : '',
+        dir: typeof s.dir === 'string' ? s.dir : '',
+      })
+    }
+    kitCache = { byStem, version: kit?.version ?? '', attribution: kit?.attribution?.text ?? '' }
+    return kitCache
+  } catch (e) {
+    warn?.(`标注表拉取失败，本次下载不带标签：${e?.message ?? e}`)
+    kitCache = { byStem: new Map(), version: '', attribution: '' }
+    return kitCache
+  }
+}
+
+/**
+ * 判断一个包是不是「双人包」。
+ * 三重依据（任一成立即算）：① manifest 的 packs[].template 含「双人」；
+ * ② 包名含「双人」「和」；③ 条目里 TT 编码（双人互动）占比 > 50%。
+ * 双人包一律不出现在包选择器里，也不接受下载——本项目不做双人方向（dir）字段，
+ * 少了方向信息，双人图发出去可能是反的。
+ */
+function isDuoPack(packName, itemsOfPack, templateOf) {
+  if (String(templateOf ?? '').includes('双人')) return true
+  if (/双人|和/u.test(String(packName ?? ''))) return true
+  if (itemsOfPack.length === 0) return false
+  const tt = itemsOfPack.filter((x) => /^\d*TT/u.test(String(x.stem ?? ''))).length
+  return tt > itemsOfPack.length * 0.5
+}
+
+/**
+ * 调系统目录选择框。返回选中的绝对路径；取消返回 null；
+ * 环境不支持（非 Windows 且无 zenity/kdialog、PowerShell 缺失等）抛 { fallback: true }，
+ * 客户端收到后改用自绘的 /browse-dirs 浏览器。
+ */
+async function pickDirNative(startPath) {
+  // 1) 宿主就是 Electron 时，主进程里可直接用原生 dialog
+  try {
+    const { createRequire } = await import('node:module')
+    const electron = createRequire(import.meta.url)('electron')
+    if (electron?.dialog?.showOpenDialog) {
+      const ret = await electron.dialog.showOpenDialog({
+        title: '选择数据目录',
+        properties: ['openDirectory', 'createDirectory'],
+        defaultPath: startPath,
+      })
+      if (ret.canceled) return null
+      const p = ret.filePaths?.[0]
+      return p ? resolve(p) : null
+    }
+  } catch { /* 插件跑在渲染侧/非 Electron：落到系统命令 */ }
+
+  if (process.platform === 'win32') {
+    // 2) Windows：PowerShell 的 FolderBrowserDialog（系统原生选择框）
+    const tag = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`
+    const ps1 = join(tmpdir(), `nkm-pickdir-${tag}.ps1`)
+    const out = join(tmpdir(), `nkm-pickdir-${tag}.out`)
+    const script = [
+      '[Console]::OutputEncoding=[Text.Encoding]::UTF8',
+      'Add-Type -AssemblyName System.Windows.Forms',
+      '$d = New-Object System.Windows.Forms.FolderBrowserDialog',
+      '$d.Description = "选择数据目录（可新建文件夹）"',
+      '$d.ShowNewFolderButton = $true',
+      `$d.SelectedPath = '${String(startPath ?? '').replace(/'/gu, "''")}'`,
+      '$r = $d.ShowDialog()',
+      // 结果读 SelectedPath（WinForms 经典属性，PS 5.1 有）；
+      // 千万别用 FolderName——那是 .NET 8/PS7 才加的，PS 5.1 读出来是空字符串，
+      // 会被 JS 当成"用户取消"，表现为"点了确定但没回填"。
+      `if ($r -eq [System.Windows.Forms.DialogResult]::OK) { [IO.File]::WriteAllText('${out.replace(/'/gu, "''")}', $d.SelectedPath, [Text.Encoding]::UTF8) } else { [IO.File]::WriteAllText('${out.replace(/'/gu, "''")}', '__CANCELLED__', [Text.Encoding]::UTF8) }`,
+    ].join('\n')
+    await writeFile(ps1, '\ufeff' + script, 'utf8')
+    try {
+      await new Promise((res2, rej) => {
+        execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', ps1],
+          { windowsHide: true, timeout: 5 * 60_000 }, (err) => (err ? rej(err) : res2()))
+      })
+      const got = readFileSyncSafe(out)
+      if (got === '__CANCELLED__' || got === '') return null
+      return got ? resolve(got) : null
+    } catch (e) {
+      throw Object.assign(new Error(`PowerShell 选择框不可用：${e?.message ?? e}`), { fallback: true })
+    } finally {
+      rmSyncSafe(ps1); rmSyncSafe(out)
+    }
+  }
+
+  // 3) Linux 桌面：zenity / kdialog
+  for (const [cmd, args] of [
+    ['zenity', ['--file-selection', '--directory', `--filename=${startPath ?? '/'}/`]],
+    ['kdialog', ['--getexistingdirectory', startPath ?? '/']],
+  ]) {
+    try {
+      const p = await new Promise((res2, rej) => {
+        execFile(cmd, args, { timeout: 5 * 60_000 }, (err, stdout) => (err ? rej(err) : res2(String(stdout).trim())))
+      })
+      if (!p) return null
+      return resolve(p)
+    } catch { /* 换下一个 */ }
+  }
+  throw Object.assign(new Error('本环境没有可用的系统目录选择框'), { fallback: true })
+}
+
+function readFileSyncSafe(p) {
+  // PowerShell [IO.File]::WriteAllText(…, UTF8) 会带 BOM（\uFEFF），
+  // JS 的 trim() 去不掉它——带着 BOM 的路径不是合法盘符路径，会被判非绝对路径丢掉。
+  try { return readFileSync(p, 'utf8').replace(/^[\uFEFF\u200B]+/u, '').trim() } catch { return null }
+}
+function rmSyncSafe(p) {
+  try { rmSync(p, { force: true }) } catch { /* 忽略 */ }
+}
+
+/**
+ * 清理 inbox/ 里本插件自己生成的中转文件（`<毫秒时间戳>-<随机数>-<原名>`）。
+ * 不碰用户手动放进来的图（那些文件名不符合该模式）。
+ * @returns 删除数量
+ */
+async function cleanupInbox(inboxDir) {
+  if (!existsSync(inboxDir)) return 0
+  let n = 0
+  try {
+    for (const name of await readdir(inboxDir)) {
+      // 只匹配本插件生成的形态：纯数字-纯数字-其余
+      if (!/^\d{10,16}-\d{1,6}-/u.test(name)) continue
+      try { await rm(join(inboxDir, name), { force: true }); n += 1 } catch { /* 单个失败不影响其他 */ }
+    }
+  } catch { /* 目录读不了就算了 */ }
+  return n
+}
+
+/**
+ * 把旧数据目录的内容整体搬到新目录（剪切迁移）。
+ *
+ * 顺序与安全性要点：
+ *  - 目标目录里**已有同名文件时不覆盖**（跳过并记入 conflicts），避免误吞用户放在新目录里的东西。
+ *  - 单个条目搬完立即删源（真·剪切），中途失败则保留源，最坏情况是"部分搬移"，
+ *    此时返回 moved/failed 让调用方知道状态——不至于一半图消失。
+ *  - `index.json` 里的 `file` 是相对路径，目录整体搬走后不用重写索引。
+ *  - inbox/ 不搬（里面只是中转垃圾）。
+ *
+ * @returns {{ moved: string[], skipped: string[], failed: {name,reason}[] }}
+ */
+async function migrateDataDir(fromDir, toDir) {
+  const out = { moved: [], skipped: [], failed: [] }
+  if (resolve(fromDir) === resolve(toDir)) return out
+  if (!existsSync(fromDir)) return out
+  await mkdir(toDir, { recursive: true })
+
+  // 顶层要搬的东西（config.json 稍后单独写，避免搬完又被覆盖）
+  const entries = ['index.json', 'index.json.bak', 'health.json', 'pending', 'library', 'inbox']
+  for (const name of entries) {
+    const src = join(fromDir, name)
+    if (!existsSync(src)) continue
+    const dst = join(toDir, name)
+    try {
+      const info = await stat(src)
+      if (!info.isDirectory()) {
+        // 文件：目标已存在就跳过（不覆盖新目录里可能已有的数据）
+        if (existsSync(dst)) { out.skipped.push(name); continue }
+        await rename(src, dst)
+        out.moved.push(name)
+        continue
+      }
+      // 目录：逐项搬，保留子结构
+      await mkdir(dst, { recursive: true })
+      const result = await migrateDirTree(src, dst)
+      out.moved.push(...result.moved)
+      out.skipped.push(...result.skipped)
+      out.failed.push(...result.failed)
+      // 目录搬空后删掉空壳
+      try {
+        const left = await readdir(src)
+        if (left.length === 0) await rm(src, { recursive: true, force: true })
+      } catch { /* 留个空目录无害 */ }
+    } catch (e) {
+      out.failed.push({ name, reason: String(e?.message ?? e) })
+    }
+  }
+  return out
+}
+
+/** 递归把 src 树里的文件搬到 dst，已存在的跳过不覆盖。 */
+async function migrateDirTree(src, dst) {
+  const out = { moved: [], skipped: [], failed: [] }
+  let ents
+  try { ents = await readdir(src, { withFileTypes: true }) } catch (e) {
+    out.failed.push({ name: src, reason: String(e?.message ?? e) })
+    return out
+  }
+  for (const ent of ents) {
+    const s = join(src, ent.name)
+    const d = join(dst, ent.name)
+    if (ent.isDirectory()) {
+      await mkdir(d, { recursive: true })
+      const sub = await migrateDirTree(s, d)
+      out.moved.push(...sub.moved); out.skipped.push(...sub.skipped); out.failed.push(...sub.failed)
+      try { const left = await readdir(s); if (left.length === 0) await rm(s, { recursive: true, force: true }) } catch { /* 忽略 */ }
+      continue
+    }
+    try {
+      if (existsSync(d)) { out.skipped.push(ent.name); continue }
+      await rename(s, d)
+      out.moved.push(ent.name)
+    } catch (e) {
+      // 跨盘 rename 会失败（EXDEV），退回复制 + 删除
+      try {
+        await copyFile(s, d)
+        await rm(s, { force: true })
+        out.moved.push(ent.name)
+      } catch (e2) {
+        out.failed.push({ name: ent.name, reason: String(e2?.message ?? e2) })
+      }
+    }
+  }
+  return out
+}
+
+/** 拉包清单（带缓存）：包名 / 张数 / 总字节 / 已下载几张。双人包会被剔除。 */
+let packListCache = null
+async function fetchPackList(store) {
+  if (!packListCache) {
+    const buf = await fetchWithRetry(`${NEKO_SITE}/api/manifest`, { tries: 3, timeoutMs: 60_000 })
+    const manifest = JSON.parse(buf.toString('utf8'))
+    const itemsAll = Array.isArray(manifest?.items) ? manifest.items : []
+    const templateBy = new Map()
+    for (const p of Array.isArray(manifest?.packs) ? manifest.packs : []) {
+      templateBy.set(p.key, p.template ?? '')
+    }
+    const byPack = new Map()
+    for (const it of itemsAll) {
+      if (!it?.pack) continue
+      const cur = byPack.get(it.pack) ?? { name: it.pack, count: 0, bytes: 0, hashes: [], items: [] }
+      cur.count += 1
+      cur.bytes += Number(it.bytes) || 0
+      if (it.hash) cur.hashes.push(String(it.hash).slice(0, 12))
+      cur.items.push(it)
+      byPack.set(it.pack, cur)
+    }
+    // 剔除双人包
+    packListCache = [...byPack.values()]
+      .filter((p) => !isDuoPack(p.name, p.items, templateBy.get(p.name)))
+      .map(({ items: _items, ...rest }) => rest)
+  }
+  // 每次实时算「已下载几张」（不缓存这层，因为可能边下边看）
+  const haveHash = new Set()
+  for (const it of store.index.items) {
+    if (it.state === STATE_LIBRARY && it.sha1) haveHash.add(String(it.sha1).slice(0, 12))
+  }
+  return packListCache.map((p) => ({
+    name: p.name,
+    count: p.count,
+    bytes: p.bytes,
+    have: p.hashes.filter((h) => haveHash.has(h)).length,
+  }))
+}
+
+/**
+ * 从站点导入指定包。**每个角色包一个只读组**（方案 A）：
+ * 组名=包名，组内只放该包的图，筛选与 AI 授权都清晰。
+ * 已存在（按 hash）的跳过；文件按原名保存（只读组保留原名，不参与重命名规则）。
+ */
+async function importFromSite(packs, { log, warn, store }) {
+  if (importProgress.active) return { ok: false, error: '正在导入中，请等待完成' }
+  Object.assign(importProgress, {
+    active: true, done: 0, total: 0, added: 0, skipped: 0, failed: 0,
+    tagged: 0, untagged: 0,
+    phase: 'manifest', error: '', startedAt: Date.now(), finishedAt: 0,
+    packCount: 0, packDone: 0,
+  })
+  try {
+    // 1) 拉清单
+    let manifest
+    try {
+      const buf = await fetchWithRetry(`${NEKO_SITE}/api/manifest`, { tries: 3, timeoutMs: 60_000 })
+      manifest = JSON.parse(buf.toString('utf8'))
+    } catch (e) {
+      importProgress.phase = 'error'
+      importProgress.error = `拉取清单失败：${e?.message ?? e}`
+      return { ok: false, error: importProgress.error }
+    }
+    const allItems = Array.isArray(manifest?.items) ? manifest.items : []
+    const templateBy = new Map()
+    for (const p of Array.isArray(manifest?.packs) ? manifest.packs : []) {
+      templateBy.set(p.key, p.template ?? '')
+    }
+    // 双人包不在支持范围内：直接拒绝（不只是从选择器里藏掉）
+    const duoAsked = packs.filter((pk) => {
+      const its = allItems.filter((x) => x.pack === pk)
+      return isDuoPack(pk, its, templateBy.get(pk))
+    })
+    if (duoAsked.length > 0) {
+      importProgress.phase = 'error'
+      importProgress.error = `不支持双人包：${duoAsked.join('、')}（本项目不处理双人方向）`
+      return { ok: false, error: importProgress.error }
+    }
+    const items = allItems.filter((it) => it?.pack && it?.file && packs.includes(it.pack))
+    if (items.length === 0) {
+      importProgress.phase = 'error'
+      importProgress.error = `清单里没有包 ${packs.join('、')} 的表情`
+      return { ok: false, error: importProgress.error }
+    }
+    const gifBase = manifest.gif_base || '/media/gif'
+
+    // 2) 拉作者的标注表（拿不到也继续，只是没有标签）
+    importProgress.phase = 'kit'
+    const kit = await fetchKit(warn)
+
+    // 3) 实到的包（按清单里的顺序，可能某包为空）
+    const realPacks = [...new Set(items.map((it) => it.pack))]
+    importProgress.packCount = realPacks.length
+    importProgress.packDone = 0
+
+    // 4) 每个包建一个只读组 + 目录
+    const packState = new Map()
+    for (const pk of realPacks) {
+      const g = store.ensurePackGroup(pk)
+      const dir = join(store.libraryDir, groupDirName(g))
+      await mkdir(dir, { recursive: true })
+      const packItems = items.filter((it) => it.pack === pk)
+      packState.set(pk, { group: g, dir, items: packItems, cursor: 0, left: packItems.length })
+    }
+
+    // 5) 已有哪些（按 hash 前 12 位，避免重复下载同一张图）
+    const haveHash = new Set()
+    for (const it of store.index.items) {
+      if (it.state !== STATE_LIBRARY) continue
+      if (it.sha1) haveHash.add(String(it.sha1).slice(0, 12))
+    }
+
+    /**
+     * 按 stem 套作者的标注：
+     * - emotion / tags / use：纯语义，任何角色都适用
+     * - desc：含角色名，只有原配的两个包能原样保留，别的包留空
+     */
+    const annotate = (manifestItem) => {
+      const hit = kit.byStem.get(String(manifestItem.stem ?? ''))
+      if (!hit) return { emotion: '', tags: [], use: '', desc: '', tagged: false }
+      return {
+        emotion: hit.emotion,
+        tags: hit.tags,
+        use: hit.use,
+        desc: NEKO_DESC_PACKS.has(manifestItem.pack) ? hit.desc : '',
+        tagged: true,
+      }
+    }
+
+    importProgress.phase = 'download'
+    importProgress.total = items.length
+    const failed = []
+    let cursor = 0
+
+    const worker = async () => {
+      while (true) {
+        const idx = cursor++
+        if (idx >= items.length) return
+        const it = items[idx]
+        const ps = packState.get(it.pack)
+        if (!ps) { importProgress.done += 1; continue }
+        const hash12 = String(it.hash ?? '').slice(0, 12)
+        const id = `nk-${hash12 || String(it.stem).slice(0, 12)}`
+        // 已经导入过（同一张图）就跳过
+        if (hash12 && haveHash.has(hash12)) {
+          importProgress.skipped += 1
+          importProgress.done += 1
+          ps.left -= 1
+          if (ps.left <= 0) importProgress.packDone += 1
+          continue
+        }
+        if (store.item(id)) {
+          importProgress.skipped += 1
+          importProgress.done += 1
+          ps.left -= 1
+          if (ps.left <= 0) importProgress.packDone += 1
+          continue
+        }
+        const safeFile = basename(String(it.file))
+        const target = join(ps.dir, safeFile)
+        try {
+          if (!existsSync(target)) {
+            const url = `${NEKO_SITE}${gifBase}/${encodeURIComponent(it.pack)}/${encodeURIComponent(safeFile)}${it.hash ? `?h=${encodeURIComponent(it.hash)}` : ''}`
+            const buf = await fetchWithRetry(url)
+            if (buf.length === 0) throw new Error('下载到空文件')
+            await writeFile(target, buf)
+          }
+          const rel = store.relPath(target)
+          const meta = annotate(it)
+          store.index.items.push({
+            id,
+            state: STATE_LIBRARY,
+            group: ps.group.id,
+            file: rel,
+            displayName: String(it.name || it.stem || safeFile),
+            originalName: safeFile,
+            emotion: meta.emotion,
+            tags: meta.tags,
+            use: meta.use,
+            desc: meta.desc,
+            addedAt: new Date().toISOString().slice(0, 19) + 'Z',
+            source: 'kiriyuki',
+            pack: it.pack,
+            sha1: hash12,
+            bytes: Number(it.bytes) || 0,
+            enabled: true,
+            annotated: meta.tagged,      // 有没有套上作者标注，供以后筛选
+          })
+          if (hash12) haveHash.add(hash12)
+          importProgress.added += 1
+          if (meta.tagged) importProgress.tagged += 1
+          else importProgress.untagged += 1
+        } catch (e) {
+          importProgress.failed += 1
+          if (failed.length < 20) failed.push({ id: it.id, file: safeFile, reason: e?.message ?? String(e) })
+        }
+        ps.left -= 1
+        if (ps.left <= 0) importProgress.packDone += 1
+        importProgress.done += 1
+        // 每 20 张落一次盘，避免中途崩了全丢
+        if (importProgress.added > 0 && importProgress.added % 20 === 0) {
+          try { store.save() } catch { /* 落盘失败下次再试 */ }
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: IMPORT_CONCURRENCY }, () => worker()))
+
+    store.save()
+    importProgress.phase = 'done'
+    importProgress.finishedAt = Date.now()
+    log(`初始表情包导入完成：新增 ${importProgress.added}（带标签 ${importProgress.tagged}），跳过 ${importProgress.skipped}，失败 ${importProgress.failed}`)
+    return {
+      ok: true,
+      added: importProgress.added,
+      skipped: importProgress.skipped,
+      failed,
+      total: items.length,
+      packs: realPacks,
+      tagged: importProgress.tagged,
+      untagged: importProgress.untagged,
+      kitVersion: kit.version,
+      attribution: kit.attribution,
+      groups: [...packState.values()].map((p) => ({ id: p.group.id, name: p.group.name, count: p.items.length })),
+    }
+  } catch (e) {
+    importProgress.phase = 'error'
+    importProgress.error = String(e?.message ?? e)
+    warn(`导入出错：${e?.message ?? e}`)
+    return { ok: false, error: importProgress.error }
+  } finally {
+    importProgress.active = false
+  }
+}
+
+export const Config = Schema.object({
+  dataDir: Schema.string().description('数据目录。留空则用 $DSH_HOME/nekowhale-meme（设置页里也能改，支持任意盘）'),
+  autoSendOnTurnEnd: Schema.boolean().default(true).description('总开关：允许斗图在回合结束时发图（具体策略在设置页）'),
+}).description('大肥鱼表情库')
+
+// ------------------------------------------------------------------ 小工具
+const MIME = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+}
+
+function json(res, status, obj) {
+  res.statusCode = status
+  res.setHeader('content-type', 'application/json; charset=utf-8')
+  res.setHeader('cache-control', 'no-store')
+  res.end(JSON.stringify(obj))
+}
+
+async function readJsonBody(req, limit = 16 * 1024 * 1024) {
+  if (req.method !== 'POST') throw Object.assign(new Error('只接受 POST'), { code: 'METHOD' })
+  const chunks = []
+  let size = 0
+  for await (const chunk of req) {
+    size += chunk.length
+    if (size > limit) throw Object.assign(new Error('请求体太大'), { code: 'TOO_LARGE' })
+    chunks.push(chunk)
+  }
+  if (chunks.length === 0) return {}
+  const text = Buffer.concat(chunks).toString('utf8')
+  if (!text.trim()) return {}
+  try {
+    return JSON.parse(text)
+  } catch {
+    throw Object.assign(new Error('请求体不是合法 JSON'), { code: 'BAD_JSON' })
+  }
+}
+
+/** 从用户消息的 content 块里抽文本。 */
+function textOfContent(content) {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .map((b) => (b && b.type === 'text' && typeof b.text === 'string' ? b.text : ''))
+    .join('')
+}
+
+export function apply(ctx, config) {
+  const log = (m) => { try { ctx.logger?.('nekowhale-meme')?.info?.(m) } catch { /* 没 logger 就算了 */ } }
+  const warn = (m) => { try { ctx.logger?.('nekowhale-meme')?.warn?.(m) } catch { /* 同上 */ } }
+
+  // ---------------------------------------------------------------- 数据层
+  const baseDataDir = (() => {
+    const fromConfig = typeof config?.dataDir === 'string' ? config.dataDir.trim() : ''
+    if (fromConfig && isAbsolute(fromConfig)) return fromConfig
+    return defaultDataDir()
+  })()
+
+  const defaults = {
+    dataDir: baseDataDir,
+    tagModel: null,
+  }
+
+  let store
+  let tagger
+  let cfg
+
+  function boot(dataDir) {
+    store = new Store(dataDir, { log }).init()
+    cfg = loadConfig(store, defaults)
+    const llm = () => ctx.get('llm')
+    tagger = new Tagger({ ctx, store, llm, log })
+    tagger.onChange = () => {
+      // 进度变化时不需要主动推送：客户端轮询 state 就够（避免再引入 SSE）。
+    }
+    return store
+  }
+
+  const initialDir = (() => {
+    // config.json 可能把 dataDir 改到别的盘。换目录时旧目录会留下指向新目录的
+    // 指针（见 /config 的 dirChanged 分支），所以这里要**沿链跟随**：
+    // 锚点 → 目标 → 目标的下一个目标…（最多 5 跳防环），直到最新一份配置。
+    let cur = baseDataDir
+    for (let hop = 0; hop < 5; hop += 1) {
+      try {
+        const probe = new Store(cur, { log })
+        const loaded = loadConfig(probe, { ...defaults, dataDir: cur })
+        const next = loaded.dataDir && isAbsolute(loaded.dataDir) ? resolve(loaded.dataDir) : null
+        if (!next || next === resolve(cur) || !existsSync(next)) break
+        cur = next
+      } catch { break }
+    }
+    return cur
+  })()
+
+  boot(initialDir)
+  log(`数据目录：${store.dataDir}`)
+  // 启动时顺手清一次历史遗留的中转文件（旧版本没清理，会越积越多）
+  void cleanupInbox(join(store.dataDir, 'inbox')).then((n) => {
+    if (n > 0) log(`已清理 ${n} 个残留的上传中转文件`)
+  }).catch(() => {})
+
+  function reload(dataDir) {
+    boot(dataDir)
+    log(`数据目录已切换：${store.dataDir}`)
+  }
+
+  // ---------------------------------------------------------------- 状态组装
+  function stateFor(query) {
+    const tab = query.get('tab') ?? 'pending'
+    const group = query.get('group') ?? ''
+    const counts = {
+      pending: store.itemsByState(STATE_PENDING).length,
+      tagged: store.itemsByState(STATE_TAGGED).length,
+      library: store.itemsByState(STATE_LIBRARY).length,
+    }
+    const groupCounts = store.groupCounts()
+    const groups = store.groups().map((g) => ({
+      id: g.id,
+      name: g.name,
+      readonly: g.readonly === true,
+      count: groupCounts[g.id] ?? 0,
+    }))
+    // 「未分组」是虚拟组：group 字段为空、或指向一个已不存在分组的条目。
+    // 单独统计并排在最前，图多时能快速捞回散落的图。
+    const validGroupIds = new Set(store.groups().map((g) => g.id))
+    const ungroupedCount = store.itemsByState(STATE_LIBRARY)
+      .filter((it) => !it.group || !validGroupIds.has(it.group)).length
+    const groupsWithUngrouped = [
+      { id: GROUP_UNGROUPED, name: '未分组', readonly: false, count: ungroupedCount, virtual: true },
+      ...groups,
+    ]
+    let items
+    if (tab === 'pending') {
+      items = store.itemsByState(STATE_PENDING)
+    } else if (tab === 'tagged') {
+      items = store.itemsByState(STATE_TAGGED)
+    } else {
+      items = store.itemsByState(STATE_LIBRARY).filter((it) => {
+        if (!group) return true
+        if (group === GROUP_UNGROUPED) return !it.group || !validGroupIds.has(it.group)
+        return it.group === group
+      })
+    }
+    items = items.map((it) => publicItem(it))
+    const health = store.readHealth()
+    return {
+      ok: true,
+      tab,
+      group,
+      counts,
+      groups: groupsWithUngrouped,
+      items,
+      emotions: EMOTIONS,
+      autoSend: cfg.autoSend,
+      dataDir: store.dataDir,
+      tagModel: cfg.tagModel,
+      tagging: tagger.state,
+      missing: { count: health.missing.length, items: health.missing.slice(-50), lastScanAt: health.lastScanAt },
+      nekowhale: { available: true },
+    }
+  }
+
+  function publicItem(it) {
+    const full = store.absPath(it.file)
+    let size = 0
+    let exists = false
+    try {
+      const s = statSync(full)
+      size = s.size
+      exists = s.size > 0
+    } catch { exists = false }
+    return {
+      id: it.id,
+      state: it.state,
+      group: it.group,
+      groupName: store.group(it.group)?.name ?? it.group,
+      displayName: it.displayName,
+      originalName: it.originalName,
+      emotion: it.emotion ?? '',
+      tags: it.tags ?? [],
+      use: it.use ?? '',
+      desc: it.desc ?? '',
+      addedAt: it.addedAt,
+      source: it.source,
+      enabled: it.enabled !== false,
+      failReason: it.failReason ?? '',
+      bytes: size || it.bytes || 0,
+      exists,
+      ext: extname(full).toLowerCase(),
+      url: `${ROUTE}/image/${encodeURIComponent(it.id)}`,
+      readonly: store.group(it.group)?.readonly === true,
+    }
+  }
+
+  // ---------------------------------------------------------------- 会话状态 / 斗图提示注入所需的槽
+  const sessions = new Map()
+  /** 调试用：记录最近若干条 session/event 的骨架，便于定位"事件没到"还是"守卫挡住"。 */
+  const eventTrace = []
+
+  function sessionSlot(sid) {
+    let s = sessions.get(sid)
+    if (!s) {
+      s = { lastUserText: '', turn: 0, sentTurns: [], lastImage: null }
+      sessions.set(sid, s)
+    }
+    return s
+  }
+
+  /**
+   * 从一条用户消息里取「最近一张图片附件」，登记到本会话 slot。
+   *
+   * 只记**序号最后一个** image 块（同一条消息里发了多张时，最后一张才是"最近"）。
+   * 附件是内容寻址的（`attachments/v1/objects/<sha256>`，无扩展名），
+   * 这里只存 ref 不读字节——真正导入时才通过 attachments 服务转成路径。
+   */
+  function rememberImage(slot, content) {
+    if (!Array.isArray(content)) return
+    let found = null
+    for (const block of content) {
+      if (typeof block !== 'object' || block === null) continue
+      if (block.type === 'image' && block.attachment && typeof block.attachment === 'object') found = block.attachment
+    }
+    if (found) slot.lastImage = found
+  }
+
+  /**
+   * 把附件 ref 变成「可以直接 copyFile 的本地路径 + 建议显示名」。
+   * 先试 attachments 服务的 imageHostPath()（宿主给的官方入口），
+   * 服务不可用或拿不到时退回按 sha256 拼 objects 路径。
+   * @returns { src, name } 或 undefined
+   */
+  function attachmentToPath(ref) {
+    if (!ref) return undefined
+    const store = ctx.get('attachments')
+    if (store?.imageHostPath) {
+      try {
+        const p = store.imageHostPath(ref)
+        if (typeof p === 'string' && p && existsSync(p)) return { src: p, name: ref.name }
+      } catch { /* 退回手工拼路径 */ }
+    }
+    const id = String(ref.attachmentId ?? '')
+    const m = /^sha256:([0-9a-f]{64})$/u.exec(id)
+    if (!m) return undefined
+    const home = process.env.DSH_HOME || join(process.env.USERPROFILE ?? '', '.dsh')
+    const p = join(home, 'attachments', 'v1', 'objects', m[1].slice(0, 2), m[1])
+    return existsSync(p) ? { src: p, name: ref.name } : undefined
+  }
+
+  /** 每个会话的「最近 10 轮内已发几张」。 */
+  function recentSendCount(slot) {
+    const now = slot.turn
+    slot.sentTurns = slot.sentTurns.filter((t) => now - t < 10)
+    return slot.sentTurns.length
+  }
+
+  ctx.effect(() => ctx.on('session/event', (session, event) => {
+    const type = event?.type
+    if (!type) return
+    const sid = String(session?.header?.id ?? session?.id ?? 'unknown')
+    const slot = sessionSlot(sid)
+    // 调试留痕（只记骨架，不记正文）：定位"事件没到" vs "守卫挡住"
+    if (type === 'user/message' || type === 'turn/end' || type === 'turn/start') {
+      eventTrace.push({
+        at: new Date().toISOString().slice(11, 19),
+        type,
+        surfaceOp: event?.surfaceOp ?? null,
+        sourceKind: event?.data?.source?.kind ?? null,
+        reason: typeof event?.data?.reason === 'string' ? event.data.reason : (event?.data?.reason?.kind ?? null),
+        textLen: type === 'user/message' ? String(textOfContent(event?.data?.content) ?? '').length : null,
+      })
+      if (eventTrace.length > 40) eventTrace.shift()
+    }
+    if (type === 'turn/start') {
+      slot.turn = Number.isSafeInteger(event?.data?.turn) ? event.data.turn : slot.turn + 1
+      return
+    }
+    if (type === 'user/message') {
+      if (event?.surfaceOp !== 'append') return
+      if (event?.data?.source?.kind !== 'user') return
+      slot.lastUserText = textOfContent(event?.data?.content)
+      rememberImage(slot, event?.data?.content)
+      return
+    }
+    if (type !== 'turn/end') return
+    const reason = typeof event?.data?.reason === 'string' ? event.data.reason : event?.data?.reason?.kind
+    if (reason !== 'completed') return
+    // 自动发图已移除：回合结束后改不了已发出的回复，改为 agent/pre-step 注入提示（见文件末尾）
+  }))
+
+  /**
+   * 工具输出里给**模型/聊天界面**看的图片必须拼成绝对 URL：
+   * GUI 的 Markdown 预览不解析相对路径（实测显示「图片无法预览」）。
+   * 浏览器半（client.js 在宿主页面内 fetch）不受影响，仍用相对 URL。
+   * 端口惰性读自已注入的 webSrv（根 ctx.get 拿不到未声明的服务），
+   * 取不到就退回相对路径（总比整条消息报错好）。
+   */
+  let webSrv
+  function imgUrl(id) {
+    const rel = `${ROUTE}/image/${encodeURIComponent(id)}`
+    const port = webSrv?.port
+    return port === undefined ? rel : `http://127.0.0.1:${port}${rel}`
+  }
+
+  // ---------------------------------------------------------------- 工具（模型侧）
+  ctx.inject(['tools'], (tctx) => {
+    registerTools(tctx, DT)
+  })
+
+  /** 四个工具的实际注册。DT = 上方那个把属性表编译成对象根 schema 的包装。 */
+  function registerTools(tctx, DT) {
+    tctx.effect(() => tctx.tools.register(DT({
+      name: 'meme_import',
+      description: '把一张图收进表情库的「待识别」队列（只进队列，不触发识别）。来源可以是本地路径、URL，或留空取本会话最近一张附件。',
+      parameters: {
+        path: { type: 'string', description: '本地图片绝对路径（可选）' },
+        url: { type: 'string', description: '图片 URL（可选）' },
+        group: { type: 'string', description: '入库目标分组 id（可选，默认 fav）' },
+      },
+      output: { schema: { type: 'object', additionalProperties: true, properties: { ok: { type: 'boolean' }, text: { type: 'string' } } }, render: (_a, v) => [{ type: 'text', text: v?.text ?? '' }] },
+      async execute(args, exec) {
+        const p = typeof args?.path === 'string' ? args.path.trim() : ''
+        const u = typeof args?.url === 'string' ? args.url.trim() : ''
+        let src = p
+        let fromChat = false
+        if (!p && !u) {
+          // 没给来源 → 取本会话最近一张聊天附件（描述里承诺过这个行为）
+          const sid = String(exec?.agent?.session?.header?.id ?? exec?.agent?.session?.id ?? '')
+          const ref = sid ? sessionSlot(sid).lastImage : undefined
+          const got = attachmentToPath(ref)
+          if (!got) {
+            return { ok: false, text: '没找到可用的聊天附件：请给 path / url，或先在对话里发一张图再直接调用（不带图片消息时无法猜测要哪张）。' }
+          }
+          src = got.src
+          fromChat = true
+        }
+        if (u) {
+          try {
+            const res = await fetch(u, { signal: AbortSignal.timeout(20000) })
+            if (!res.ok) return { ok: false, text: `下载失败：HTTP ${res.status}` }
+            const buf = Buffer.from(await res.arrayBuffer())
+            const name = (u.split('?')[0].split('/').pop() || 'download').slice(-60)
+            const dir = join(store.dataDir, 'inbox')
+            await mkdir(dir, { recursive: true })
+            src = join(dir, name.includes('.') ? name : `${name}.png`)
+            await writeFile(src, buf)
+          } catch (e) {
+            return { ok: false, text: `下载出错：${e?.message ?? e}` }
+          }
+        }
+        const chatName = fromChat ? String(sessionSlot(String(exec?.agent?.session?.header?.id ?? exec?.agent?.session?.id ?? '')).lastImage?.name ?? '') : ''
+        const r = await store.addToPending(src, {
+          group: args?.group,
+          source: u ? 'url' : (fromChat ? 'chat' : 'path'),
+          ...(fromChat && chatName ? { originalName: chatName, displayName: basename(chatName, extname(chatName)) } : {}),
+        })
+        if (r?.skipped) return { ok: false, text: r.skipped }
+        return { ok: true, text: `已进待识别队列：${r.originalName}（id ${r.id}）。到队列页点「识别勾选」打标签。` }
+      },
+    })), 'nekowhale-meme: meme_import')
+
+    /**
+     * 这里**故意不注册 `meme_tag`**。
+     *
+     * 用户明确要求：「设定只能进入待识别区，必须有用户在设置界面进行确认操作才去让模型识别图片打标签」。
+     * 识别是会花 token 的动作，模型侧不该有"自己挑一批图开始识别"的能力——
+     * 触发入口只保留插件页队列页的「识别勾选」按钮（走 HTTP `/tag`，由用户当面点击）。
+     * 所以模型侧的工具名册是 4 个：import / search / send / list。
+     */
+
+    tctx.effect(() => tctx.tools.register(DT({
+      name: 'meme_search',
+      description: '在已入库可用的图里检索（只搜 library 且未停用的条目）。返回每张的显示名、情绪、标签与图片地址。',
+      parameters: {
+        query: { type: 'string', description: '中文情境词，如 摸鱼 被夸 摆烂' },
+        emotion: { type: 'string', description: '只要这个情绪（25 个之一）' },
+        group: { type: 'string', description: '限定分组 id' },
+        limit: { type: 'integer', description: '返回条数，默认 5，最多 20' },
+      },
+      output: { schema: { type: 'object', additionalProperties: true, properties: { ok: { type: 'boolean' }, text: { type: 'string' } } }, render: (_a, v) => [{ type: 'text', text: v?.text ?? '' }] },
+      async execute(args) {
+        const q = String(args?.query ?? '').trim().toLowerCase()
+        const emotion = String(args?.emotion ?? '').trim()
+        const group = String(args?.group ?? '').trim()
+        const limit = Math.min(20, Math.max(1, Number(args?.limit) || 5))
+        const allowGroups = (cfg.autoSend?.groups?.length ?? 0) > 0 ? new Set(cfg.autoSend.groups) : undefined
+        const hits = store.itemsByState(STATE_LIBRARY)
+          .filter((it) => it.enabled !== false)
+          .filter((it) => (group ? it.group === group : allowGroups ? allowGroups.has(it.group) : true))
+          .filter((it) => (emotion ? it.emotion === emotion : true))
+          .filter((it) => {
+            if (!q) return true
+            const blob = `${it.displayName} ${it.originalName} ${it.emotion} ${(it.tags ?? []).join(' ')} ${it.use} ${it.desc}`.toLowerCase()
+            return q.split(/\s+/u).every((w) => blob.includes(w))
+          })
+          .slice(0, limit)
+        if (hits.length === 0) return { ok: false, text: '没有匹配的表情。换个情绪词，或到插件页确认「AI 可用组」是否勾选了这个组。' }
+        const lines = hits.map((it, i) => `${i + 1}. ${it.displayName}｜${it.emotion}｜${(it.tags ?? []).join(',')}｜${it.use || it.desc || ''}\n   ![${it.displayName}](${imgUrl(it.id)})`)
+        return { ok: true, text: `找到 ${hits.length} 张：\n${lines.join('\n')}\n把 ]( 那行原样放进回复就能显示。` }
+      },
+    })), 'nekowhale-meme: meme_search')
+
+    tctx.effect(() => tctx.tools.register(DT({
+      name: 'meme_send',
+      description: '发一张表情：给名字/情绪词/情境词任一种，挑一张返回 Markdown 图片行（含失效兜底：文件坏了就换下一张，最多 3 张）。',
+      parameters: {
+        name: { type: 'string', description: '显示名（可模糊）' },
+        emotion: { type: 'string', description: '情绪词，随机挑一张' },
+        query: { type: 'string', description: '情境词' },
+      },
+      output: { schema: { type: 'object', additionalProperties: true, properties: { ok: { type: 'boolean' }, text: { type: 'string' } } }, render: (_a, v) => [{ type: 'text', text: v?.text ?? '' }] },
+      async execute(args, exec) {
+        const name = String(args?.name ?? '').trim().toLowerCase()
+        const emotion = String(args?.emotion ?? '').trim()
+        const q = String(args?.query ?? '').trim().toLowerCase()
+        const allowGroups = (cfg.autoSend?.groups?.length ?? 0) > 0 ? new Set(cfg.autoSend.groups) : undefined
+        const pool = store.itemsByState(STATE_LIBRARY)
+          .filter((it) => it.enabled !== false)
+          .filter((it) => (allowGroups ? allowGroups.has(it.group) : true))
+          .filter((it) => (emotion ? it.emotion === emotion : true))
+          .filter((it) => (name ? it.displayName.toLowerCase().includes(name) : true))
+          .filter((it) => {
+            if (!q) return true
+            const blob = `${it.displayName} ${(it.tags ?? []).join(' ')} ${it.use} ${it.desc}`.toLowerCase()
+            return q.split(/\s+/u).every((w) => blob.includes(w))
+          })
+        if (pool.length === 0) return { ok: false, text: '没有匹配的表情，先用 meme_search 找一下。' }
+        const tried = []
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const rest = pool.filter((it) => !tried.includes(it.id))
+          if (rest.length === 0) break
+          const pick = rest[Math.floor(Math.random() * rest.length)]
+          tried.push(pick.id)
+          const p = store.absPath(pick.file)
+          let ok = false
+          try { ok = existsSync(p) && statSync(p).size > 0 } catch { ok = false }
+          if (ok) {
+            // 登记到本会话槽：limitPer10 靠这个计数，回合结束后也还认得出「最近 10 轮发过几张」
+            const sid = String(exec?.agent?.session?.header?.id ?? exec?.agent?.session?.id ?? '')
+            if (sid) sessionSlot(sid).sentTurns.push(sessionSlot(sid).turn)
+            const out = [
+              `![${pick.displayName}](${imgUrl(pick.id)})`,
+              `本地文件：${p}`,
+              'Web 会话：把第一行 Markdown 原样放进回复即可显示。',
+              'IM/QQ 会话（本会话有 dsh_im_return_file 工具）：把「本地文件」那个路径交给 dsh_im_return_file({ path })，由宿主上传原图。',
+            ]
+            return { ok: true, text: out.join('\n') }
+          }
+          store.addMissing({
+            id: pick.id, displayName: pick.displayName, originalName: pick.originalName,
+            group: store.group(pick.group)?.name ?? pick.group, at: new Date().toISOString().slice(0, 19) + 'Z',
+          })
+          store.removeItem(pick.id)
+        }
+        return { ok: false, text: '该条件下可用图片已耗尽（文件都失效了，已从索引移除）' }
+      },
+    })), 'nekowhale-meme: meme_send')
+
+    tctx.effect(() => tctx.tools.register(DT({
+      name: 'meme_browse',
+      description: '浏览库存：待识别 / 已标识待确认 / 已入库（可限分组），用于查看现状而不是检索。',
+      parameters: {
+        status: { type: 'string', enum: ['pending', 'tagged', 'library'], description: '看哪一栏，默认 library' },
+        group: { type: 'string', description: '限定分组 id' },
+        limit: { type: 'integer', description: '最多列几条，默认 30' },
+      },
+      output: { schema: { type: 'object', additionalProperties: true, properties: { ok: { type: 'boolean' }, text: { type: 'string' } } }, render: (_a, v) => [{ type: 'text', text: v?.text ?? '' }] },
+      async execute(args) {
+        const status = ['pending', 'tagged', 'library'].includes(String(args?.status)) ? String(args.status) : STATE_LIBRARY
+        const group = String(args?.group ?? '').trim()
+        const limit = Math.min(80, Math.max(1, Number(args?.limit) || 30))
+        const all = store.itemsByState(status).filter((it) => (group ? it.group === group : true))
+        if (all.length === 0) return { ok: true, text: '这一栏是空的。' }
+        const rows = all.slice(0, limit).map((it, i) => {
+          const g = store.group(it.group)?.name ?? it.group
+          return `${i + 1}. [${g}] ${it.displayName}${it.emotion ? `｜${it.emotion}` : ''}${it.failReason ? `｜失败：${it.failReason}` : ''}`
+        })
+        return { ok: true, text: `共 ${all.length} 条${all.length > limit ? `，列前 ${limit} 条` : ''}：\n${rows.join('\n')}` }
+      },
+    })), 'nekowhale-meme: meme_browse')
+  }
+
+  // ---------------------------------------------------------------- HTTP 路由
+  ctx.inject(['webServer'], (wctx) => {
+    webSrv = wctx.webServer
+    wctx.effect(() => wctx.webServer.register({
+      kind: 'prefix',
+      path: ROUTE,
+      handler: async (req, res) => {
+        const url = new URL(req.url ?? '/', 'http://x')
+        const rest = url.pathname.slice(ROUTE.length) || '/'
+        try {
+          // ---- 图片（含缩略图原图直出）
+          if (rest.startsWith('/image/')) {
+            if (req.method !== 'GET' && req.method !== 'HEAD') { res.statusCode = 405; res.end(); return }
+            const id = decodeURIComponent(rest.slice('/image/'.length))
+            const it = store.item(id)
+            if (!it) { res.statusCode = 404; res.end(); return }
+            const file = store.absPath(it.file)
+            let info
+            try { info = statSync(file) } catch { res.statusCode = 404; res.end(); return }
+            if (!info.isFile() || info.size <= 0) { res.statusCode = 404; res.end(); return }
+            res.setHeader('content-type', MIME[extname(file).toLowerCase()] ?? 'application/octet-stream')
+            res.setHeader('content-length', String(info.size))
+            res.setHeader('cache-control', 'private, max-age=86400')
+            if (req.method === 'HEAD') { res.end(); return }
+            createReadStream(file).on('error', () => res.destroy()).pipe(res)
+            return
+          }
+
+          // ---- 轮询状态
+          if (rest === '/state' && req.method === 'GET') {
+            json(res, 200, stateFor(url.searchParams))
+            return
+          }
+
+          // ---- 状态 + 全量自检（「打开插件时」调用）
+          if (rest === '/status' && req.method === 'GET') {
+            const scan = url.searchParams.get('scan') === '1'
+              ? store.scan()
+              : { removed: [], missingCount: store.readHealth().missing.length }
+            json(res, 200, { ok: true, scan, ...stateFor(url.searchParams) })
+            return
+          }
+
+          // ---- 失效清单：整份清空（点「知道了」）
+          if (rest === '/health/clear' && req.method === 'POST') {
+            const body = await readJsonBody(req)
+            if (body?.confirm !== true) { json(res, 400, { ok: false, error: '需要 confirm: true 才会整份清空（不支持单条清理）' }); return }
+            store.clearMissing()
+            json(res, 200, { ok: true })
+            return
+          }
+
+          // ---- 配置读写
+          if (rest === '/config' && req.method === 'GET') {
+            json(res, 200, { ok: true, config: cfg, dataDir: store.dataDir })
+            return
+          }
+
+          // ---- 调系统目录选择框（本机场景）
+          // 浏览器没有权限弹系统对话框，但宿主进程跑在这台机器上，可以代劳：
+          //   1) 首选 Electron 原生 dialog（宿主就是 Electron 时）
+          //   2) 回退 PowerShell FolderBrowserDialog（Windows 系统原生选择框）
+          //   3) 都不行 → ok:false + fallback:true，客户端改用自绘 /browse-dirs 浏览器
+          if (rest === '/pick-dir' && req.method === 'POST') {
+            const body = await readJsonBody(req).catch(() => ({}))
+            const start = typeof body?.startPath === 'string' && isAbsolute(body.startPath) ? resolve(body.startPath) : store.dataDir
+            try {
+              const picked = await pickDirNative(start)
+              if (picked === null) { json(res, 200, { ok: true, path: null }) } else { json(res, 200, { ok: true, path: picked }) }
+            } catch (e) {
+              if (e?.fallback === true) json(res, 200, { ok: false, fallback: true, error: String(e?.message ?? e) })
+              else json(res, 500, { ok: false, error: `打开系统选择框失败：${e?.message ?? e}` })
+            }
+            return
+          }
+          if (rest === '/config' && req.method === 'POST') {
+            const body = await readJsonBody(req)
+            const raw = body?.config ?? body ?? {}
+            const wantsDir = typeof raw.dataDir === 'string' && raw.dataDir.trim() && isAbsolute(raw.dataDir.trim())
+              ? resolve(raw.dataDir.trim()) : undefined
+            const dirChanged = wantsDir !== undefined && wantsDir !== store.dataDir
+            let migration = null
+            if (dirChanged) {
+              const oldStore = store
+              const oldCfg = cfg
+              const oldDir = oldStore.dataDir
+              // 先搬数据（剪切），再切目录：这样新目录里已经有完整数据，
+              // 切换后 store 立刻读到正确的索引，不会出现"切过去发现是空的"。
+              try {
+                migration = await migrateDataDir(oldDir, wantsDir)
+              } catch (e) {
+                json(res, 500, { ok: false, error: `迁移数据失败：${e?.message ?? e}` })
+                return
+              }
+              if (migration.failed.length > 0) {
+                // 有文件没搬成功：不继续切，免得数据半截
+                json(res, 500, {
+                  ok: false,
+                  error: `迁移未完成（${migration.failed.length} 个文件失败），已保留原目录：${migration.failed[0].reason}`,
+                  migration,
+                })
+                return
+              }
+              try {
+                reload(wantsDir)
+              } catch (e) {
+                json(res, 500, { ok: false, error: `切换数据目录失败：${e?.message ?? e}` })
+                return
+              }
+              // 旧目录已被搬空，留一份指针配置（只含 dataDir），方便人工辨认"搬家去了哪"。
+              try {
+                saveConfig(oldStore, { ...oldCfg, dataDir: wantsDir }, { ...defaults, dataDir: oldDir })
+              } catch { /* 指针写失败不影响主流程 */ }
+            }
+            const nextRaw = { ...cfg, ...raw, dataDir: wantsDir ?? store.dataDir }
+            cfg = saveConfig(store, nextRaw, defaults)
+            json(res, 200, { ok: true, config: cfg, dataDir: store.dataDir, migration })
+            return
+          }
+
+          // ---- 目录浏览（设置页的「选择…」按钮用）
+          // 浏览器无法枚举本地盘符，只能由宿主这边列；只回目录、不碰文件内容。
+          if (rest === '/browse-dirs' && req.method === 'GET') {
+            const want = url.searchParams.get('path') || ''
+            try {
+              let root
+              if (!want) {
+                // 没给路径：Windows 列盘符，其他系统从 / 开始
+                if (process.platform === 'win32') {
+                  const drives = []
+                  for (let code = 65; code <= 90; code += 1) {
+                    const letter = String.fromCharCode(code)
+                    const p = `${letter}:\\`
+                    try { if (existsSync(p)) drives.push({ name: `${letter}:`, path: p }) } catch { /* 跳过 */ }
+                  }
+                  json(res, 200, { ok: true, path: '', parent: '', dirs: drives })
+                  return
+                }
+                root = '/'
+              } else {
+                if (!isAbsolute(want)) { json(res, 400, { ok: false, error: '必须是绝对路径' }); return }
+                root = resolve(want)
+              }
+              if (!existsSync(root)) { json(res, 404, { ok: false, error: '目录不存在' }); return }
+              const entries = await readdir(root, { withFileTypes: true })
+              const dirs = []
+              for (const ent of entries) {
+                if (!ent.isDirectory()) continue
+                if (ent.name.startsWith('.')) continue
+                // 跳过明显不该进的系统/噪音目录
+                if (/^(Windows|Program Files \(x86\)|Recovery|System Volume Information|\$Recycle\.Bin|node_modules)$/iu.test(ent.name)) continue
+                dirs.push({ name: ent.name, path: join(root, ent.name) })
+              }
+              dirs.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+              const parent = process.platform === 'win32' && /^[A-Za-z]:\\?$/u.test(root) ? '' : dirname(root)
+              json(res, 200, { ok: true, path: root, parent, dirs })
+            } catch (e) {
+              json(res, 500, { ok: false, error: `读目录失败：${e?.message ?? e}` })
+            }
+            return
+          }
+
+          // ---- 可选模型清单（队列页下拉用）
+          if (rest === '/models' && req.method === 'GET') {
+            const catalog = await listModelCatalog(ctx.get('llm'))
+            const dflt = cfg.tagModel
+            let suggested = null
+            if (!dflt) {
+              const r = await resolveTagModel(ctx, ctx.get('llm'), undefined)
+              suggested = r ?? null
+            }
+            json(res, 200, { ok: true, models: catalog, configured: dflt, suggested })
+            return
+          }
+
+          // ---- 导入：本地上传（base64，避免 multipart 解析）
+          if (rest === '/import' && req.method === 'POST') {
+            const body = await readJsonBody(req)
+            const files = Array.isArray(body?.files) ? body.files : []
+            if (files.length === 0) { json(res, 400, { ok: false, error: '没有文件' }); return }
+            const inbox = join(store.dataDir, 'inbox')
+            await mkdir(inbox, { recursive: true })
+            const results = []
+            for (const f of files) {
+              const name = String(f?.name ?? 'upload').slice(-60)
+              if (typeof f?.dataBase64 !== 'string' || !f.dataBase64) { results.push({ name, skipped: '没有数据' }); continue }
+              const buf = Buffer.from(f.dataBase64, 'base64')
+              const tmp = join(inbox, `${Date.now()}-${Math.floor(Math.random() * 1000)}-${basename(name)}`)
+              try { await writeFile(tmp, buf) } catch (e) { results.push({ name, skipped: `写入失败：${e?.message ?? e}` }); continue }
+              try {
+                const r = await store.addToPending(tmp, { group: body?.group, source: 'upload', originalName: name, displayName: basename(name, extname(name)) })
+                if (r?.skipped) results.push({ name, skipped: r.skipped })
+                else results.push({ name, id: r.id })
+              } finally {
+                // 中转副本用完即删：addToPending 已经把内容复制进 pending/，
+                // 这里不删就会在 inbox/ 里越积越多（历史遗留缺陷）。
+                await rm(tmp, { force: true }).catch(() => {})
+              }
+            }
+            // 顺手清掉历史遗留的中转文件（只清本插件自己命名的那些，不碰用户手动放进来的）
+            await cleanupInbox(inbox).catch(() => {})
+            json(res, 200, { ok: true, results })
+            return
+          }
+
+          // ---- 导入：从文件夹批量收（资源管理器放进 inbox 目录也行）
+          if (rest === '/import-folder' && req.method === 'POST') {
+            const body = await readJsonBody(req)
+            const dir = String(body?.dir ?? '').trim()
+            if (!dir || !isAbsolute(dir)) { json(res, 400, { ok: false, error: '需要一个绝对路径' }); return }
+            if (!existsSync(dir)) { json(res, 400, { ok: false, error: '目录不存在' }); return }
+            const entries = await readdir(dir, { withFileTypes: true })
+            const results = []
+            for (const ent of entries) {
+              if (!ent.isFile()) continue
+              const r = await store.addToPending(join(dir, ent.name), { group: body?.group, source: 'folder', originalName: ent.name, displayName: basename(ent.name, extname(ent.name)) })
+              results.push({ name: ent.name, ...(r?.skipped ? { skipped: r.skipped } : { id: r.id }) })
+            }
+            json(res, 200, { ok: true, results })
+            return
+          }
+
+          // ---- 导入：直接从 kiriyuki.com 下载（自带 HTTP 客户端，不用另装插件）
+          if (rest === '/import-nekowhale' && req.method === 'POST') {
+            const body = await readJsonBody(req)
+            const packs = Array.isArray(body?.packs) && body.packs.length > 0
+              ? body.packs.map(String)
+              : [NEKO_PACK_MAIN]
+            const r = await importFromSite(packs, { log, warn, store })
+            json(res, r.ok ? 200 : 400, r)
+            return
+          }
+          // 包清单（设置页选择器用）：包名 / 张数 / 体积 / 已下载几张
+          if (rest === '/packs' && req.method === 'GET') {
+            try {
+              const list = await fetchPackList(store)
+              json(res, 200, { ok: true, packs: list, defaults: [NEKO_PACK_MAIN] })
+            } catch (e) {
+              json(res, 500, { ok: false, error: `拉取包清单失败：${e?.message ?? e}` })
+            }
+            return
+          }
+          // 下载进度（客户端轮询）
+          if (rest === '/import-progress' && req.method === 'GET') {
+            json(res, 200, { ok: true, progress: importProgress })
+            return
+          }
+
+          // ---- 识别 / 中止
+          if (rest === '/tag' && req.method === 'POST') {
+            if (tagger.running) { json(res, 409, { ok: false, error: '已经在识别中' }); return }
+            const body = await readJsonBody(req)
+            const model = body?.model && typeof body.model.provider === 'string' && typeof body.model.model === 'string'
+              ? { provider: body.model.provider.trim(), model: body.model.model.trim() }
+              : undefined
+            const ids = Array.isArray(body?.ids) ? body.ids.map(String) : []
+            if (model) {
+              // 用户手动选过的模型固定下来
+              cfg = saveConfig(store, { ...cfg, tagModel: model }, defaults)
+            }
+            const list = ids.length > 0 ? ids : store.itemsByState(STATE_PENDING).map((it) => it.id)
+            const r = await tagger.run(list, model ?? cfg.tagModel ?? undefined)
+            if (r?.error) { json(res, 400, { ok: false, error: r.error }); return }
+            json(res, 200, { ok: true, ...r, state: tagger.state })
+            return
+          }
+          if (rest === '/cancel' && req.method === 'POST') {
+            json(res, 200, { ok: tagger.cancel(), state: tagger.state })
+            return
+          }
+
+          // ---- 确认入库（可批量）
+          if (rest === '/confirm' && req.method === 'POST') {
+            const body = await readJsonBody(req)
+            const ids = Array.isArray(body?.ids) ? body.ids.map(String) : []
+            if (ids.length === 0) { json(res, 400, { ok: false, error: '没有选中条目' }); return }
+            const group = String(body?.group ?? '').trim() || undefined
+            const done = []
+            const errors = []
+            for (const id of ids) {
+              const r = await store.confirm(id, group)
+              if (r?.error) errors.push({ id, reason: r.error })
+              else done.push(id)
+            }
+            json(res, 200, { ok: errors.length === 0, done, errors })
+            return
+          }
+
+          // ---- 已标识·待确认 → 待识别（「重新识别」用）
+          if (rest === '/revert-to-pending' && req.method === 'POST') {
+            const body = await readJsonBody(req)
+            const ids = Array.isArray(body?.ids) ? body.ids.map(String) : []
+            const done = []
+            const errors = []
+            for (const id of ids) {
+              const r = store.backToPending(id)
+              if (r) done.push(id)
+              else errors.push({ id, reason: '只有「已标识·待确认」的图可以退回待识别' })
+            }
+            json(res, 200, { ok: errors.length === 0, done, errors })
+            return
+          }
+
+          // ---- 退回待确认（已入库 → 待确认，用于重新识别）
+          if (rest === '/revert' && req.method === 'POST') {
+            const body = await readJsonBody(req)
+            const ids = Array.isArray(body?.ids) ? body.ids.map(String) : []
+            const done = []
+            const errors = []
+            for (const id of ids) {
+              const it = store.item(id)
+              if (!it) { errors.push({ id, reason: '条目不存在' }); continue }
+              const g = store.group(it.group)
+              if (g?.readonly) { errors.push({ id, reason: '只读组的图不能移出' }); continue }
+              if (it.state !== STATE_LIBRARY) { errors.push({ id, reason: '只有已入库的图可以移出' }); continue }
+              // 文件搬回 pending 并改名（保留原 id 段）
+              const from = store.absPath(it.file)
+              const ext = extname(from).toLowerCase()
+              const seg = String(it.id).split('-').at(-1)
+              const stamp = String(it.id).split('-').at(-2) || ''
+              let name = `${stamp}-${seg}${ext}`
+              let salt = 0
+              while (existsSync(join(store.pendingDir, name))) {
+                salt += 1
+                name = `${stamp}-${salt}${seg.slice(0, 4)}${ext}`
+              }
+              const to = join(store.pendingDir, name)
+              try {
+                await rename(from, to)
+              } catch {
+                await copyFile(from, to)
+                await rm(from, { force: true })
+              }
+              it.file = store.relPath(to)
+              it.state = STATE_TAGGED
+              done.push(id)
+            }
+            store.save()
+            json(res, 200, { ok: errors.length === 0, done, errors })
+            return
+          }
+
+          // ---- 删除（二次确认在客户端做；这里只要求 confirm:true）
+          if (rest === '/delete' && req.method === 'POST') {
+            const body = await readJsonBody(req)
+            if (body?.confirm !== true) { json(res, 400, { ok: false, error: '删除需要 confirm: true' }); return }
+            const ids = Array.isArray(body?.ids) ? body.ids.map(String) : []
+            const done = []
+            for (const id of ids) {
+              const it = store.item(id)
+              if (!it) continue
+              const g = store.item(id) && store.group(it.group)
+              if (g?.readonly) continue
+              if (store.removeItem(id, { purge: body?.purgeFiles === true })) done.push(id)
+            }
+            json(res, 200, { ok: true, done })
+            return
+          }
+
+          // ---- 改元数据（显示名/情绪/标签/描述/启用）
+          if (rest === '/update' && req.method === 'POST') {
+            const body = await readJsonBody(req)
+            const id = String(body?.id ?? '')
+            const r = store.updateMeta(id, body?.patch ?? {})
+            if (r?.error) { json(res, 400, { ok: false, error: r.error }); return }
+            json(res, 200, { ok: true, item: publicItem(r.item) })
+            return
+          }
+
+          // ---- 分组：建 / 改名 / 删 / 移图
+          if (rest === '/group' && req.method === 'POST') {
+            const body = await readJsonBody(req)
+            const action = String(body?.action ?? '')
+            if (action === 'create') {
+              const r = store.createGroup(body?.name)
+              json(res, r.error ? 400 : 200, r.error ? { ok: false, error: r.error } : { ok: true, group: r.group })
+              return
+            }
+            if (action === 'rename') {
+              const r = store.renameGroup(String(body?.id ?? ''), body?.name)
+              json(res, r.error ? 400 : 200, r.error ? { ok: false, error: r.error } : { ok: true, group: r.group })
+              return
+            }
+            if (action === 'delete') {
+              const r = await store.deleteGroup(String(body?.id ?? ''), { purgeFiles: body?.purgeFiles !== false })
+              json(res, r.error ? 400 : 200, r.error ? { ok: false, error: r.error } : { ok: true, ...r })
+              return
+            }
+            if (action === 'removePack') {
+              // 只读的角色包组：允许整包移除（组 + 图 + 文件），之后重新导入会重新下载
+              const r = await store.deletePackGroup(String(body?.id ?? ''), { purgeFiles: body?.purgeFiles !== false })
+              json(res, r.error ? 400 : 200, r.error ? { ok: false, error: r.error } : { ok: true, ...r })
+              return
+            }
+            if (action === 'move') {
+              const ids = Array.isArray(body?.ids) ? body.ids.map(String) : []
+              const to = String(body?.to ?? '')
+              if (to === GROUP_UNGROUPED) {
+                // 「移出分组」：把 group 置空，条目落进虚拟的「未分组」。
+                const moved = []
+                const failed = []
+                for (const id of ids) {
+                  const it = store.item(id)
+                  if (!it || it.state !== STATE_LIBRARY) { failed.push({ id, reason: '条目不在库内' }); continue }
+                  const g = store.group(it.group)
+                  // 只读组（从站点下载的角色包）不允许移出——要明确回报原因，不能静默跳过
+                  if (g?.readonly) { failed.push({ id, reason: `「${g.name}」是只读组，不能移出` }); continue }
+                  it.group = ''
+                  moved.push(id)
+                }
+                store.save()
+                json(res, 200, { ok: failed.length === 0, moved, failed })
+                return
+              }
+              const r = await store.moveToGroup(ids, to)
+              json(res, r.error ? 400 : 200, r.error ? { ok: false, error: r.error } : { ok: true, ...r })
+              return
+            }
+            json(res, 400, { ok: false, error: `未知 action: ${action}` })
+            return
+          }
+
+          // ---- 斗图诊断（只读）：看事件有没有到、slot 里记了什么、配置长什么样
+          if (rest === '/diag' && req.method === 'GET') {
+            const slots = []
+            for (const [sid, s] of sessions) {
+              slots.push({
+                sid, turn: s.turn,
+                lastUserTextLen: String(s.lastUserText ?? '').length,
+                lastUserTextHead: String(s.lastUserText ?? '').slice(0, 30),
+                sentTurns: s.sentTurns,
+                kwEmotion: matchEmotion(s.lastUserText) ?? null,
+              })
+            }
+            json(res, 200, {
+              ok: true,
+              config: {
+                enabled: cfg?.autoSend?.enabled,
+                trigger: cfg?.autoSend?.trigger,
+                limitPer10: cfg?.autoSend?.limitPer10,
+                groups: cfg?.autoSend?.groups,
+              },
+              slots,
+              eventTrace,
+            })
+            return
+          }
+
+          json(res, 404, { ok: false, error: `未知路由：${rest}` })
+        } catch (e) {
+          const code = e?.code
+          json(res, code === 'TOO_LARGE' ? 413 : code === 'METHOD' || code === 'BAD_JSON' ? 400 : 500,
+            { ok: false, error: String(e?.message ?? e) })
+        }
+      },
+    }), 'nekowhale-meme: routes')
+  })
+
+  // 启动时准备目录（已由 boot → store.init() 保证结构就位）
+  try {
+    store.init()
+  } catch (e) {
+    warn(`初始化数据目录失败：${e?.message ?? e}`)
+  }
+
+  // ---------------------------------------------------------------- 对外只读服务
+  //
+  // 进程内共享：别的插件 `ctx.get('nekowhaleMeme')` 直接拿到同一个对象，不用自己读
+  // index.json 再抄一份弱化版的检索（dsh-meme 的 `dshMeme`、stickers 的 `stickers` 都是这个套路）。
+  // 只读、幂等、不发图：发图由调用方自己决定（Web 贴 Markdown 行 / IM 交 dsh_im_return_file）。
+  // 写操作（导入 / 打标 / 删除）**故意不提供**——识别必须由用户在插件页当面确认。
+  const serviceAllowGroups = () => ((cfg?.autoSend?.groups?.length ?? 0) > 0 ? new Set(cfg.autoSend.groups) : undefined)
+  function serviceMatch(it, { query = '', emotion = '', name = '', group = '' }) {
+    if (group && it.group !== group) return false
+    if (emotion && it.emotion !== emotion) return false
+    if (name && !String(it.displayName ?? '').toLowerCase().includes(String(name).toLowerCase())) return false
+    const q = String(query).trim().toLowerCase()
+    if (!q) return true
+    const blob = `${it.displayName} ${it.originalName} ${it.emotion} ${(it.tags ?? []).join(' ')} ${it.use} ${it.desc}`.toLowerCase()
+    return q.split(/\s+/u).every((w) => blob.includes(w))
+  }
+  /** AI 可用组 + 已启用，与模型侧工具看到的是同一批图。 */
+  function servicePool() {
+    const allow = serviceAllowGroups()
+    return store.itemsByState(STATE_LIBRARY)
+      .filter((it) => it.enabled !== false)
+      .filter((it) => (allow ? allow.has(it.group) : true))
+  }
+  const memeService = {
+    /** 只读快照：数据目录、各状态计数、分组与 AI 可用组。 */
+    state() {
+      try {
+        const allow = new Set(cfg?.autoSend?.groups ?? [])
+        const lib = store.itemsByState(STATE_LIBRARY)
+        const countOf = new Map()
+        for (const it of lib) countOf.set(it.group, (countOf.get(it.group) ?? 0) + 1)
+        return {
+          ok: true,
+          dataDir: store.dataDir,
+          counts: {
+            pending: store.itemsByState(STATE_PENDING).length,
+            tagged: store.itemsByState(STATE_TAGGED).length,
+            library: lib.length,
+          },
+          groups: store.groups().map((g) => ({ id: g.id, name: g.name, readonly: g.readonly === true, count: countOf.get(g.id) ?? 0, aiVisible: allow.size === 0 || allow.has(g.id) })),
+        }
+      } catch (e) { return { ok: false, reason: String(e?.message ?? e) } }
+    },
+    /** 检索候选（不改索引、不碰文件）。 */
+    search({ query = '', emotion = '', name = '', group = '', limit = 8 } = {}) {
+      try {
+        const n = Math.min(30, Math.max(1, Number(limit) || 8))
+        const hits = servicePool().filter((it) => serviceMatch(it, { query, emotion, name, group })).slice(0, n)
+        return {
+          ok: true,
+          memes: hits.map((it) => ({
+            id: it.id,
+            name: it.displayName,
+            emotion: it.emotion ?? null,
+            tags: [...(it.tags ?? [])],
+            use: it.use ?? '',
+            desc: it.desc ?? '',
+            group: it.group,
+            path: store.absPath(it.file),
+            url: imgUrl(it.id),
+          })),
+        }
+      } catch (e) { return { ok: false, memes: [], reason: String(e?.message ?? e) } }
+    },
+    /** 挑一张并返回磁盘绝对路径；文件失效的沿用 meme_send 那套兜底（最多换 3 张）。 */
+    pick({ query = '', emotion = '', name = '', group = '' } = {}) {
+      try {
+        if (!String(query).trim() && !String(emotion).trim() && !String(name).trim()) {
+          return { ok: false, reason: '没有给 query / emotion / name 任一个' }
+        }
+        const pool = servicePool().filter((it) => serviceMatch(it, { query, emotion, name, group }))
+        if (pool.length === 0) return { ok: false, reason: '没有匹配的表情' }
+        const tried = []
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const rest = pool.filter((it) => !tried.includes(it.id))
+          if (rest.length === 0) break
+          const hit = rest[Math.floor(Math.random() * rest.length)]
+          tried.push(hit.id)
+          const p = store.absPath(hit.file)
+          let alive = false
+          try { alive = existsSync(p) && statSync(p).size > 0 } catch { alive = false }
+          if (alive) {
+            return {
+              ok: true, id: hit.id, name: hit.displayName, emotion: hit.emotion ?? null,
+              tags: [...(hit.tags ?? [])], group: hit.group, path: p, url: imgUrl(hit.id),
+            }
+          }
+          store.addMissing({
+            id: hit.id, displayName: hit.displayName, originalName: hit.originalName,
+            group: store.group(hit.group)?.name ?? hit.group, at: new Date().toISOString().slice(0, 19) + 'Z',
+          })
+          store.removeItem(hit.id)
+        }
+        return { ok: false, reason: '该条件下可用图片已耗尽（文件都失效，已从索引移除）' }
+      } catch (e) { return { ok: false, reason: String(e?.message ?? e) } }
+    },
+    /** id → 磁盘绝对路径；没有这张返回空串。 */
+    pathOf(id) {
+      try {
+        const it = store.item(String(id))
+        return it ? store.absPath(it.file) : ''
+      } catch { return '' }
+    },
+    /** id → 可直接塞进 Markdown 的图片 URL（只有本机可达，IM 渠道不可用）。 */
+    urlOf(id) {
+      try { return store.item(String(id)) ? imgUrl(String(id)) : '' } catch { return '' }
+    },
+  }
+  if (typeof ctx.provide === 'function') {
+    try { ctx.provide('nekowhaleMeme', Object.freeze(memeService)) } catch { /* 老宿主 / 重复注册：调用方要能自行兜底 */ }
+  }
+
+  // ---------------------------------------------------------------- 斗图提示注入
+  //
+  // 为什么走这条路：回合结束后代码无法再改模型已经发出的回复，所以"自动追加一张图"在协议上做不到。
+  // 参考 dsh-meme 的做法——不靠自动追加，而是给模型立规矩。
+  // 这里用 `agent/pre-step` 每轮在上下文末尾塞一条提示，由模型自己决定要不要发。
+  //
+  // 成本：注入本身不调任何模型（情绪命中走关键词匹配）。关掉「斗图」开关（autoSend.enabled=false）完全不注入。
+  /** IM 渠道入站消息会被 dsh-im 包一层 <dsh_im_source>；用它判断当前会话是不是 IM/QQ。 */
+  function messagesHaveImSource(messages) {
+    const textOf = (m) => (Array.isArray(m?.content)
+      ? m.content.map((c) => (typeof c?.text === 'string' ? c.text : '')).join('')
+      : (typeof m?.content === 'string' ? m.content : ''))
+    let seen = 0
+    for (let i = messages.length - 1; i >= 0 && seen < 3; i -= 1) {
+      if (messages[i]?.role !== 'user') continue
+      seen += 1
+      if (textOf(messages[i]).includes('<dsh_im_source')) return true
+    }
+    return false
+  }
+
+  /**
+   * dsh-im 在进程内时才会注册 `dsh_im_return_file`，它同时 `provide('dshIm')` 了服务。
+   * 用它当「文件投递通道到底在不在」的判据——光看消息里的 <dsh_im_source> 不够，
+   * 没有这个工具的会话里让模型去调它，等于教模型调一个不存在的工具。
+   */
+  function hasImDelivery() {
+    try {
+      const svc = typeof ctx.get === 'function' ? ctx.get('dshIm') : undefined
+      return svc !== undefined && svc !== null
+    } catch { return false }
+  }
+
+  ctx.effect(() => ctx.on('agent/pre-step', async (payload, next) => {
+    const decision = await next()
+    try {
+      if (!cfg?.autoSend?.enabled) return decision
+      if (decision === undefined || decision.kind !== 'enter') return decision
+      if (!Array.isArray(decision.messages) || decision.messages.length === 0) return decision
+      const header = payload?.agent?.session?.header
+      if (header?.origin === 'subagent') return decision
+
+      const sid = String(header?.id ?? payload?.agent?.session?.id ?? '')
+      const slot = sid ? sessionSlot(sid) : undefined
+      const limit = Number(cfg.autoSend.limitPer10 ?? 2)
+      const used = slot ? recentSendCount(slot) : 0
+      const quota = Math.max(0, limit - used)
+      // 额度用完就不注入：既省 token，也免模型无视频率一直发
+      if (quota === 0) return decision
+      // IM/QQ：dsh-im 给入站消息包了 <dsh_im_source>。但如果它不在进程内（没 provide dshIm），
+      // 就没有 dsh_im_return_file 可调，提示等于白说 —— 直接不注入。
+      const imSession = messagesHaveImSource(decision.messages)
+      if (imSession && !hasImDelivery()) return decision
+      const imMode = imSession
+
+      // 关键词命中是纯字符串匹配，不调模型；只有 keywords 模式才把它当指令
+      const kw = cfg.autoSend.trigger === 'keywords' && slot ? matchEmotion(slot.lastUserText) : undefined
+      const groups = (cfg.autoSend.groups ?? []).filter(Boolean)
+      const lines = [
+        '【斗图】你可以贴表情图。规则：',
+        '- 只有在用户这条消息情绪明显（开心/搞怪/疲惫/生气/无语……）时才发，平淡的技术讨论不要发。',
+      ]
+      // IM 渠道：IM 服务器抓不到 127.0.0.1，只能把本地原文件交给宿主上传
+      if (imMode) {
+        lines.push('- 发法：调 meme_send（参数 emotion 或 query），它会给出「本地文件：」一行绝对路径。')
+        lines.push('- 本会话是 IM/QQ 渠道：不要贴 http://127.0.0.1 的 Markdown 图片行（IM 服务器抓不到你本机）。把那个绝对路径交给 dsh_im_return_file({ path })，由宿主上传原图——这条是真·文件投递，不是链接。')
+      } else {
+        lines.push('- 发法：调 meme_send（参数 emotion 或 query），它返回一行 Markdown 图片，把那一行原样放进你的回复正文。')
+      }
+      if (kw) lines.push(`- 用户这句话命中情绪「${kw}」，建议就发这个情绪。`)
+      if (cfg.autoSend.trigger === 'model') lines.push('- 该发哪个情绪由你自己判断。')
+      lines.push(`- 最近 10 轮已发 ${used} 张，本轮最多还能发 ${quota} 张。`)
+      lines.push(groups.length > 0 ? `- 可用分组：${groups.join(', ')}。` : '- 未限制分组。')
+      const hint = lines.join('\n')
+      return {
+        ...decision,
+        messages: [
+          ...decision.messages,
+          {
+            role: 'user',
+            content: [{ type: 'text', text: hint }],
+            source: { kind: 'plugin:nekowhale-meme', form: 'notice', summary: '斗图提示' },
+          },
+        ],
+      }
+    } catch (e) {
+      // 注入失败要 fail-open：绝不能因为插件影响正常对话
+      try { warn(`斗图提示注入失败（已放行原始消息）：${e?.message ?? e}`) } catch {}
+      return decision
+    }
+  }))
+}
