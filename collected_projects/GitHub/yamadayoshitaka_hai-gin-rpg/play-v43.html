@@ -1,0 +1,748 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>灰銀のレゾナンス | レヴナの町</title><style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#101823;font-family:system-ui,'Noto Sans JP',sans-serif;touch-action:none}canvas{display:block}.hud{position:absolute;z-index:5;color:#fff;pointer-events:none;text-shadow:0 2px 5px #000a}.brand{top:15px;left:14px;padding:11px 16px;background:linear-gradient(140deg,#14243de8,#132137b8);border:1px solid #c4a97985;border-radius:13px;box-shadow:0 5px 20px #0007}.brand b{display:block;color:#f6deab;letter-spacing:.08em;font-family:serif;font-size:clamp(16px,3.5vw,22px)}.brand small{display:block;letter-spacing:.15em;font-size:9px;margin-top:3px;color:#b8cbd6}.objective{top:15px;right:13px;border-radius:12px;border:1px solid #c7b38979;background:#17243adc;padding:12px 15px;text-align:right;font-size:12px}.objective strong{display:block;font-size:14px;color:#f0dab6}.location{position:absolute;top:86px;left:50%;transform:translateX(-50%);color:#fff7df;font-size:12px;letter-spacing:.15em;background:#122033bb;padding:8px 14px;border-radius:20px;white-space:nowrap;pointer-events:none}.bottom{position:absolute;bottom:24px;left:0;width:100%;display:flex;align-items:end;justify-content:space-between;padding:0 18px;z-index:9;pointer-events:none}.dpad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(3,57px);gap:4px}.ctrl{pointer-events:auto;border:1px solid #cfdbec7a;border-radius:15px;background:linear-gradient(#48678abb,#1b3359e6);color:white;font-weight:900;font-size:29px;box-shadow:0 4px 12px #0007;touch-action:none;user-select:none;-webkit-user-select:none}.ctrl:active,.ctrl.is-pressed{background:#8caad4d9;transform:scale(.97)}.up{grid-column:2;grid-row:1}.left{grid-column:1;grid-row:2}.dir-down{grid-column:2;grid-row:3}.right{grid-column:3;grid-row:2}.actions{display:flex;flex-direction:column;gap:9px}.action{width:144px;min-height:53px;font-size:14px;padding:9px}.action.primary{font-size:16px;min-height:66px}.dialog{position:absolute;bottom:165px;left:50%;transform:translateX(-50%);width:min(90vw,520px);padding:16px 19px;z-index:20;color:#f8f4e9;background:linear-gradient(130deg,#192740f2,#101927f5);border:1px solid #c5aa70;border-radius:13px;box-shadow:0 12px 32px #0009;display:none;line-height:1.65;font-size:14px}.dialog b{color:#f6d9a3}.dialog small{display:block;color:#9eafc0;margin-top:8px}.loading{position:absolute;inset:0;background:#0e1d2d;color:#e8d7af;display:grid;place-items:center;z-index:30;text-align:center;font-size:17px}.error{color:#ffcdc7;font-size:12px;padding:12px}.credits{position:absolute;bottom:5px;right:12px;color:#e6e7e988;font-size:9px;z-index:8;pointer-events:none}@media(max-width:390px){.dpad{grid-template-columns:repeat(3,57px);grid-template-rows:repeat(3,54px)}.action{width:123px}.brand{padding:9px}.objective{padding:9px}.bottom{padding:0 10px}}
+.bottom>#stick-base{order:2;flex-shrink:0}.bottom>.actions{order:1;align-items:flex-start}</style></head><body><div id="loading" class="loading">灰銀のレゾナンス<br><small style="font-size:12px;color:#bfc9ca">レヴナの町を構築中…</small></div><div class="hud brand"><b>灰銀のレゾナンス</b><small>RESONANCE · KAYKIT / KENNEY</small></div><div class="hud objective"><strong>レヴナの町</strong>住人15人・Gemini AI会話</div><div id="ai-status" style="position:absolute;top:115px;left:50%;transform:translateX(-50%);z-index:8;color:#fff;padding:6px 12px;border-radius:10px;background:#243449df;font-size:11px;white-space:nowrap;max-width:95vw;overflow:hidden;text-overflow:ellipsis">AI接続確認中…</div><div id="furniture-status" style="position:absolute;left:50%;transform:translateX(-50%);top:185px;z-index:12;background:#243449df;color:#fff;font-size:11px;padding:5px 9px;border-radius:8px;pointer-events:none">家具：従来の箱型（モデル停止中）</div><div class="location">✦ 水晶街道・レヴナ ／ 光の市場 ✦</div><div id="audio-controls" style="position:absolute;top:154px;left:50%;transform:translateX(-50%);z-index:12;display:flex;gap:7px;white-space:nowrap"><button id="bgm-toggle" style="background:#243449e8;color:#fff;border:1px solid #c4a979;border-radius:11px;padding:7px 10px;font-size:12px">♫ BGM：OFF</button><button id="bgm-volume" style="background:#243449e8;color:#fff;border:1px solid #c4a979;border-radius:11px;padding:7px 9px;font-size:12px">音量：大</button><button id="voice-toggle" style="background:#243449e8;color:#fff;border:1px solid #c4a979;border-radius:11px;padding:7px 10px;font-size:12px">🔊 声：ON</button><span style="color:#fff7df;background:#192740b9;border-radius:8px;padding:7px 4px;font-size:10px">操作v6</span></div><div class="bottom"><div id="stick-base" style="position:relative;width:166px;height:166px;border-radius:50%;border:2px solid #c9dafaad;background:#183251bb;pointer-events:auto;touch-action:none;user-select:none;box-shadow:inset 0 0 28px #070e22"><div id="stick-knob" style="position:absolute;left:50%;top:50%;width:70px;height:70px;transform:translate(-50%,-50%);border-radius:50%;border:2px solid #d7e9ff;background:linear-gradient(#6d9fc9,#29496f);box-shadow:0 3px 14px #000b;pointer-events:none"></div><div style="position:absolute;bottom:8px;left:0;width:100%;text-align:center;color:#e5f5ff;font-size:10px;pointer-events:none">外側まで倒すとダッシュ</div></div><div class="actions"><button class="ctrl action" id="quality">画質：高</button><button class="ctrl action" id="house-action" style="display:block;background:#675139;font-size:13px">🏠 家に入る</button><button class="ctrl action primary" id="talk">話す・調べる</button></div></div><div class="dialog" id="dialog"></div><div class="credits" id="input-status">方向：停止 · 15人 · 家具モデル読込対応</div>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { clone as cloneRig } from 'three/addons/utils/SkeletonUtils.js';
+const BASE=new URL('./',location.href);const asset=(p)=>new URL(p.replace(/^\/+/,''),BASE).href;
+const $=s=>document.querySelector(s);
+let startupDone=false,transitionBusy=false,audioCtx=null;
+const curtain=document.createElement('div');curtain.id='scene-curtain';
+Object.assign(curtain.style,{position:'fixed',inset:'0',background:'#080b16',opacity:'0',pointerEvents:'none',transition:'opacity .32s ease',zIndex:'29',display:'none'});
+document.body.appendChild(curtain);
+function finishStartup(){if(startupDone)return;startupDone=true;const loadEl=$('#loading');if(loadEl)loadEl.style.display='none';}
+function transitionChime(){
+ try{audioCtx=audioCtx||new(window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();
+ const t=audioCtx.currentTime;[392,523.25,659.25,783.99].forEach((freq,k)=>{const osc=audioCtx.createOscillator(),vol=audioCtx.createGain();osc.type='triangle';osc.frequency.setValueAtTime(freq,t+k*.085);vol.gain.setValueAtTime(.0001,t+k*.085);vol.gain.exponentialRampToValueAtTime(.11,t+k*.085+.022);vol.gain.exponentialRampToValueAtTime(.0001,t+k*.085+.3);osc.connect(vol).connect(audioCtx.destination);osc.start(t+k*.085);osc.stop(t+k*.085+.32);});}catch(e){}
+}
+function sceneTransition(action){
+ if(transitionBusy)return;
+ transitionBusy=true;
+ curtain.style.transition='opacity .26s ease';
+ curtain.style.display='block';
+ curtain.style.opacity='0';
+ curtain.style.pointerEvents='none';
+ requestAnimationFrame(()=>{curtain.style.opacity='1'});
+ transitionChime();
+ const reveal=()=>{
+  curtain.style.opacity='0';
+  setTimeout(()=>{curtain.style.display='none';curtain.style.opacity='0';transitionBusy=false},320);
+ };
+ // Independent failsafe so the scene cannot remain behind a black overlay.
+ setTimeout(()=>{if(transitionBusy)reveal()},1600);
+ setTimeout(()=>{try{action()}catch(e){console.error('Scene transition:',e)}finally{setTimeout(reveal,120)}},340);
+}
+let aiOnline=false;const aiStatus=$('#ai-status');
+
+// Audio v4: CC0 BGM by RandomMind, "Medieval: The Bard's Tale".
+// Music: CC0 "Medieval - The Bards Tale" (OpenGameArt); file imported by GitHub Actions.
+let bgmOn=false,voiceOn=true,musicVolume=.9;
+const music=new Audio();music.src=asset("assets/audio/town.mp3");music.loop=true;music.preload="none";music.volume=musicVolume;
+const bgmButton=$('#bgm-toggle'),voiceButton=$('#voice-toggle'),volumeButton=$('#bgm-volume');
+bgmButton.textContent='♫ 町BGM：OFF';
+volumeButton.textContent='音量：90%';
+bgmButton.onclick=async()=>{
+ if(bgmOn){music.pause();bgmOn=false;bgmButton.textContent='♫ 町BGM：OFF';return;}
+ try{await music.play();bgmOn=true;bgmButton.textContent='♫ 町BGM：ON';}
+ catch(e){bgmOn=false;bgmButton.textContent='♫ 音源準備中';console.warn('BGM load/play failed',e);}
+};
+music.addEventListener('error',()=>{bgmOn=false;bgmButton.textContent='♫ 音源未配置';});
+volumeButton.onclick=()=>{musicVolume=musicVolume===.9?1:musicVolume===1?.6:.9;music.volume=musicVolume;volumeButton.textContent='音量：'+Math.round(musicVolume*100)+'%';};
+const profileCache=new Map();
+function getNpcProfile(npc){
+ const id=Number(npc?.id)||0;
+ if(npc?.name==='商人ミラ')return {gender:'female',rate:.98,pitch:1.24};
+ if(npc?.name==='旅人レオン')return {gender:'male',rate:.98,pitch:.80};
+ // 同じNPCは毎回同一の声。過度に異なる速度を避ける。
+ return {gender:npc?.gender||'male',rate:.98,pitch:npc?.gender==='female'?1.24:.80};
+}
+function selectJapaneseVoice(gender){
+ const voices=speechSynthesis.getVoices().filter(v=>v.lang.toLowerCase().startsWith('ja'));
+ const female=/female|kyoko|nanami|haruka|ayumi|mizuki|sakura|yui|sayaka|女性|女声/i;
+ const male=/male|ichiro|takumi|otoya|男性|男声/i;
+ return voices.find(v=>(gender==='female'?female:male).test(v.name))||voices.find(v=>v.localService)||voices[0]||null;
+}
+let activeSpeech=null;
+function speakNpc(text,npc){
+ if(!voiceOn||!('speechSynthesis' in window))return;
+ speechSynthesis.cancel();
+ const p=getNpcProfile(npc),u=new SpeechSynthesisUtterance(String(text).slice(0,650));
+ u.lang='ja-JP';u.rate=p.rate;u.pitch=p.pitch;u.volume=1;
+ u.voice=selectJapaneseVoice(p.gender);
+ const oldVolume=musicVolume;
+ if(bgmOn)music.volume=oldVolume*.35;
+ const restore=()=>{if(bgmOn)music.volume=musicVolume;activeSpeech=null;};
+ u.onend=restore;u.onerror=restore;activeSpeech=u;
+ speechSynthesis.speak(u);
+}
+if('speechSynthesis' in window)speechSynthesis.onvoiceschanged=()=>{};
+voiceButton.onclick=()=>{
+ voiceOn=!voiceOn;
+ if(!voiceOn&&'speechSynthesis' in window)speechSynthesis.cancel();
+ if(bgmOn)music.volume=musicVolume;
+ voiceButton.textContent=voiceOn?'🔊 声：ON':'🔇 声：OFF';
+};
+
+let apiBase=(localStorage.getItem('hai-gin-api')||'https://curly-shape-9799.yamada-yoshitaka0818.workers.dev').replace(/\/$/,'');
+async function checkAI(){
+ if(!apiBase){aiOnline=false;aiStatus.textContent='AI未設定：ここをタップして接続先を設定';return;}
+ try{
+ let d=null;
+ for(const endpoint of ['/api/status','/']){
+  try{const r=await fetch(apiBase+endpoint,{cache:'no-store'});if(!r.ok)continue;const data=await r.json();if(data&&typeof data==='object'){d=data;break}}catch(e){}
+ }
+ if(!d)throw Error('Worker status unavailable');
+ aiOnline=d.connected===true||d.ai===true;
+ aiStatus.textContent=aiOnline?'Gemini AI接続済み（会話テスト未実施）':(d.message||'Gemini APIキー未設定');
+ }catch(e){aiOnline=false;aiStatus.textContent='AI接続不可：ここをタップして設定';}
+}
+aiStatus.style.pointerEvents='auto';aiStatus.style.cursor='pointer';
+aiStatus.onclick=()=>{const v=prompt('Cloudflare Workersの公開URLを入力（APIキーは入力しない）',apiBase);if(v===null)return;const u=v.trim().replace(/\/$/,'');if(u&&!/^https:\/\//.test(u)){alert('https://から始まるURLを入力してください');return}apiBase=u;localStorage.setItem('hai-gin-api',u);checkAI()};
+checkAI();const load=$('#loading'),dialog=$('#dialog');const mobile=/Android|iPhone|iPad/i.test(navigator.userAgent);let high=true;
+const scene=new THREE.Scene();scene.background=new THREE.Color('#a5c5dc');scene.fog=new THREE.FogExp2(0xa5c5dc,.0045);
+const camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,.12,250);camera.position.set(0,5,10);
+const renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});renderer.setPixelRatio(Math.min(devicePixelRatio,mobile?1.6:2));renderer.setSize(innerWidth,innerHeight);renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.02;document.body.prepend(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xcceaff,0x65584c,1.55));const sun=new THREE.DirectionalLight(0xffe9cf,2.55);sun.position.set(-25,41,24);sun.castShadow=true;sun.shadow.mapSize.set(mobile?1024:2048,mobile?1024:2048);sun.shadow.camera.left=-65;sun.shadow.camera.right=65;sun.shadow.camera.top=65;sun.shadow.camera.bottom=-65;sun.shadow.normalBias=.027;scene.add(sun);
+const MAT=(c,roughness=1,metalness=0)=>new THREE.MeshStandardMaterial({color:c,roughness,metalness});const stone=MAT('#a6a399'),darkStone=MAT('#696e70'),mortar=MAT('#898477'),wood=MAT('#705140'),woodDark=MAT('#47382e'),gold=MAT('#a48c5c',.55,.35),wall=MAT('#d4c4a4'),plaster=MAT('#bcb6a6'),glass=new THREE.MeshStandardMaterial({color:0x759eab,metalness:.25,roughness:.16,transparent:true,opacity:.83}),leaves=[MAT('#52784c'),MAT('#68865a'),MAT('#44634d')],roofMats=[MAT('#545f69'),MAT('#764b48'),MAT('#576765'),MAT('#79634f')];
+function box(w,h,d,mat,x=0,y=0,z=0,parent=scene){let m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.receiveShadow=true;m.castShadow=true;parent.add(m);return m}function cyl(rt,rb,h,mat,x,y,z,parent=scene,n=10){const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,n),mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m}function sphere(r,mat,x,y,z,parent=scene,w=12,h=9){const m=new THREE.Mesh(new THREE.SphereGeometry(r,w,h),mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m}function plane(w,d,mat,x,y,z){const m=new THREE.Mesh(new THREE.PlaneGeometry(w,d),mat);m.rotation.x=-Math.PI/2;m.position.set(x,y,z);m.receiveShadow=true;scene.add(m);return m}
+function texture(seed,kind){let c=document.createElement('canvas');c.width=c.height=256;const g=c.getContext('2d');let rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};g.fillStyle=kind==='grass'?'#70895f':kind==='path'?'#a9a39a':'#c0b5a2';g.fillRect(0,0,256,256);if(kind==='path'){for(let y=0;y<256;y+=22){let shift=(Math.floor(y/22)%2)*22;for(let x=-44+shift;x<270;x+=44){let v=Math.floor(rand()*36);g.fillStyle=`rgb(${150+v},${145+v},${132+v})`;g.fillRect(x+1,y+1,42,20);g.strokeStyle='#746f66';g.lineWidth=1;g.strokeRect(x+1,y+1,42,20);for(let j=0;j<6;j++){g.fillStyle='#69695a44';g.fillRect(x+rand()*42,y+rand()*20,1+rand()*5,1)}}}}else{for(let i=0;i<11000;i++){let q=Math.floor(rand()*65),v=kind==='grass'?`rgba(${23+q},${64+q},${22+q},.22)`:`rgba(${70+q},${62+q},${51+q},.19)`;g.fillStyle=v;g.fillRect(rand()*256,rand()*256,1+rand()*4,1+rand()*4)}}const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;return t}
+const grassTex=texture(65,'grass'),pathTex=texture(18,'path');const grassMat=new THREE.MeshStandardMaterial({map:grassTex,roughness:1}),pathMat=new THREE.MeshStandardMaterial({map:pathTex,roughness:.98});grassTex.repeat.set(18,18);pathTex.repeat.set(8,12);plane(220,220,grassMat,0,-.07,-18);plane(15.5,95,pathMat,0,.005,-27);const plazaTex=pathTex.clone();plazaTex.needsUpdate=true;plazaTex.repeat.set(5,5);const plazaMat=new THREE.MeshStandardMaterial({map:plazaTex,roughness:.98});plane(39,33,plazaMat,0,.018,-22);
+// Main lateral streets and alleys.
+for(const z of [-10,-31,-47]){const p=pathTex.clone();p.needsUpdate=true;p.repeat.set(10,2);plane(72,6.5,new THREE.MeshStandardMaterial({map:p}),0,.012,z)}
+const colliders=[];function obstacle(x,z,w,d){colliders.push({x,z,w,d})}function beam(a,b,r,mat,parent=scene){let p=new THREE.Vector3(...a),q=new THREE.Vector3(...b),dif=q.clone().sub(p);let o=new THREE.Mesh(new THREE.CylinderGeometry(r,r,dif.length(),7),mat);o.position.copy(p.add(q).multiplyScalar(.5));o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dif.normalize());o.castShadow=true;parent.add(o);return o}
+function windowPanel(parent,x,y,z){box(.92,1.25,.14,woodDark,x,y,z,parent);box(.69,1.02,.17,glass,x,y,z+.045,parent);box(.09,1.13,.2,wood,x,y,z+.13,parent);box(.82,.075,.2,wood,x,y,z+.14,parent);box(1.2,.14,.37,stone,x,y-.71,z+.17,parent)}
+function house(x,z,w=6,d=6,h=5,type=0,rot=0,kind="home"){const o=new THREE.Group();o.position.set(x,0,z);o.rotation.y=rot;scene.add(o);const fac=[wall,plaster,MAT('#c8b49a'),MAT('#b2ada1')][type%4],rm=roofMats[type%4];box(w,h,d,fac,0,h/2,0,o);box(w+.35,.42,d+.35,stone,0,.2,0,o);for(let level=0;level<2;level++)for(let k=-1;k<=1;k+=2){let ix=k*w*.26;windowPanel(o,ix,1.9+level*2.08,d/2+.09)}box(1.37,2.25,.23,woodDark,0,1.32,d/2+.13,o);box(1.07,1.94,.26,wood,0,1.22,d/2+.27,o);sphere(.08,gold,.37,1.29,d/2+.46,o);box(w+.8,.22,d+.55,woodDark,0,h+.07,0,o);
+// Sloped gable roofs with rows of overlapping tiles.
+let roofH=1.75;for(let side of [-1,1]){let angle=side*Math.atan2(roofH,w/2+.7);let slopeLen=Math.hypot(w/2+.7,roofH);let slab=box(slopeLen+.25,.23,d+.95,rm,side*(w/4+.28),h+roofH/2,0,o);slab.rotation.z=angle;for(let j=0;j<13;j++){let q=(j+.5)/13;let xx=side*(.2+q*(w/2+.5));let yy=h+roofH*(1-q)+.14;const ridge=box(.13,.08,d+.9,woodDark,xx,yy,0,o);ridge.rotation.z=angle}}box(.32,.25,d+1.2,woodDark,0,h+roofH+.04,0,o);
+for(let cx of [-w/2+.16,w/2-.16])for(let cz of [-d/2+.16,d/2-.16])box(.22,h,.22,wood,cx,h/2,cz,o);for(let fy of [1.07,3.45,h-.18])box(w+.13,.15,.18,wood,0,fy,d/2+.09,o);
+// Signboard, lamp and flower boxes make each facade lived-in.
+box(1.9,.53,.19,woodDark,w*.3,2.78,d/2+.24,o);box(1.7,.4,.20,gold,w*.3,2.78,d/2+.36,o);for(let px of [-w*.26,w*.26]){box(.95,.23,.47,wood,px,1.13,d/2+.49,o);for(let k=0;k<4;k++)sphere(.11,leaves[(k+type)%3],px+(k-1.5)*.2,1.32,d/2+.53,o)}if(kind!=='home'){
+ // Entrance facade detail differentiates the large interior from ordinary houses.
+ const accent=kind==='inn'?MAT('#7b3f32'):kind==='merchant'?MAT('#597b71'):MAT('#6a587c');
+ const label=kind==='inn'?'宿屋':kind==='merchant'?'交易商館':'領主の屋敷';
+ const banner=box(3.7,1.12,.25,woodDark,0,3.55,d/2+.45,o);
+ box(3.3,.82,.28,accent,0,3.55,d/2+.62,o);
+ // Gilded columns, double windows and a porch spanning the wide entrance.
+ for(const xx of [-2.2,2.2]){
+  box(.3,3,.4,stone,xx,1.5,d/2+.85,o);
+  box(2.1,2,.16,MAT('#8eb6c2'),xx*1.9,4.65,d/2+.19,o);
+ }
+ box(6,.3,2,rm,0,3.15,d/2+1,o);
+ for(const xx of [-w*.38,w*.38]){
+  box(1.2,.28,.55,accent,xx,2.1,d/2+.32,o);
+  for(let q=0;q<3;q++)sphere(.2,gold,xx+(q-1)*.28,2.32,d/2+.42,o);
+ }
+ // Strong silhouette differences: recognizable at the current distant camera.
+ if(kind==='inn'){
+  // Wide two-storey inn with prominent red gables and a central clock tower.
+  const red=MAT('#984d42');
+  box(w+1,.8,d+1,red,0,h+.65,0,o);
+  box(4.0,4.2,4.0,fac,0,h+2.6,0,o);
+  box(5.1,1.2,5.1,red,0,h+5,0,o);
+  for(const xx of [-w*.34,w*.34])box(2.4,1.4,.25,red,xx,h+.95,d/2+.25,o);
+ }else if(kind==='merchant'){
+  // Broad green-roofed trade hall, two distinct warehouses and oversized awning.
+  const teal=MAT('#427d72');
+  for(const xx of [-w*.3,w*.3]){
+   box(w*.32,2.4,d*.65,fac,xx,h+1.2,-d*.12,o);
+   box(w*.36,.7,d*.7,teal,xx,h+2.6,-d*.12,o);
+  }
+  box(w+1,1.1,3.2,teal,0,3.6,d/2+.75,o);
+  for(let j=-3;j<=3;j++)box(.24,2.2,.35,woodDark,j*1.65,2.5,d/2+1.5,o);
+ }else{
+  // Noble manor with two corner turrets and purple upper roof.
+  const purple=MAT('#655173');
+  for(const xx of [-w*.4,w*.4]){
+   box(3.4,5.1,3.4,fac,xx,h+2.55,0,o);
+   box(4.2,1.2,4.2,purple,xx,h+5.5,0,o);
+  }
+  box(w+1,.95,d+1,purple,0,h+.8,0,o);
+  for(const xx of [-w*.22,0,w*.22])box(1.7,2.4,.22,MAT('#a9cbd6'),xx,h*.68,d/2+.17,o);
+ }
+ // A clearly visible roof crest distinguishing inn, merchant hall and manor.
+ const crest=box(2.4,1.1,.35,accent,0,h+roofH+.7,0,o);
+ const sign=document.createElement('canvas');sign.width=512;sign.height=128;
+ const ctx=sign.getContext('2d');ctx.fillStyle='#f7dfae';ctx.font='bold 66px serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(label,256,64);
+ const texture=new THREE.CanvasTexture(sign);texture.colorSpace=THREE.SRGBColorSpace;
+ const plate=new THREE.Mesh(new THREE.PlaneGeometry(3.15,.75),new THREE.MeshBasicMaterial({map:texture,transparent:true,side:THREE.DoubleSide}));
+ plate.position.set(0,3.55,d/2+.8);o.add(plate);
+ }
+ obstacle(x,z,w+.4,d+.4);return o}
+// Houses are oriented toward the square/street; outer edges stay scenic, not empty.
+let structures=[[-12,-5,6,6,5,0,Math.PI/2],[12,-5,6,6,5,1,-Math.PI/2],[-18,-16,7,7,6,2,Math.PI/2],[18,-17,7,6,5.4,3,-Math.PI/2],[-13,-33,7,6,6,1,Math.PI/2],[13,-34,8,6,6.4,2,-Math.PI/2],[-10,-45,6,6,5.2,0,Math.PI/2],[11,-46,7,7,5.9,3,-Math.PI/2],[-25,-27,14,12,8.8,0,Math.PI/2],[25,-28,14,12,8.8,1,-Math.PI/2],[-17,6,7,7,5,2,Math.PI/2],[18,6,14,12,9.4,3,-Math.PI/2]];for(let i=0;i<structures.length;i++)house(...structures[i],i===8?"inn":i===9?"merchant":i===11?"manor":"home");
+// Indoor rooms are rendered in their OWN scene, never behind outdoor architecture.
+const indoorScene=new THREE.Scene();indoorScene.background=new THREE.Color('#272f3c');
+indoorScene.add(new THREE.HemisphereLight(0xfff5e0,0x7b8596,2.8));
+const indoorSun=new THREE.DirectionalLight(0xffe8ce,2.5);indoorSun.position.set(15,32,18);indoorScene.add(indoorSun);
+// Indoor spaces are separate rooms, far from the town.
+const houseEntries=structures.map((h,i)=>{
+ const [x,z,w,d,,,rot=0]=h;
+ const sx=Math.sin(rot),cz=Math.cos(rot);
+ return {id:i,x:x+sx*(d/2+1.4),z:z+cz*(d/2+1.4),outX:x+sx*(d/2+2.4),outZ:z+cz*(d/2+2.4)};
+});
+const rooms=structures.map((h,i)=>{
+ const grand=[8,9,11].includes(i),kind=i===8?'inn':i===9?'merchant':i===11?'manor':'home';
+ const x=120+i*85,z=0,g=new THREE.Group();g.position.set(x,0,z);indoorScene.add(g);
+ const w=grand?54:42,d=grand?48:39,hh=grand?9.5:6.5;
+ const furnitureBlocks=[];const plaster=MAT(i%2?'#d5c7af':'#e1d2b4'),oak=MAT('#76563f'),rug=MAT(kind==='manor'?'#783e53':'#94755b'),linen=MAT('#c8b8a6'),bronze=MAT('#a98b55');
+ box(w,.2,d,oak,0,-.05,0,g);
+ const rearWall=box(w,hh,.3,plaster,0,hh/2,-d/2,g);
+ const leftWall=box(.3,hh,d,plaster,-w/2,hh/2,0,g);
+ const rightWall=box(.3,hh,d,plaster,w/2,hh/2,0,g);
+ for(const wx of [-w*.27,w*.27]){
+  box(2.1,1.6,.13,MAT('#8eb8c9'),wx,2.8,-d/2+.20,g);
+  box(2.3,.13,.2,woodDark,wx,2,-d/2+.18,g);
+  box(.12,1.7,.22,woodDark,wx,2.8,-d/2+.10,g);
+ }
+ // Rugs and wooden floor planks.
+ box(w*.57,.045,3.2,rug,0,.025,1.2,g);
+ for(let p=-Math.floor(w/2)+1;p<w/2;p+=1.3)box(.035,.025,d-.5,woodDark,p,.06,0,g);
+ function table(xx,zz,ww=3,dd=2){furnitureBlocks.push({x:xx,z:zz,w:ww,d:dd});
+  box(ww,.23,dd,wood,xx,.95,zz,g);
+  for(const ox of [-ww*.4,ww*.4])for(const oz of [-dd*.35,dd*.35])box(.17,.88,.17,woodDark,xx+ox,.45,zz+oz,g);
+ }
+ function shelf(xx,zz){furnitureBlocks.push({x:xx,z:zz,w:2.7,d:1.1});
+  box(2.7,3.5,.65,woodDark,xx,1.75,zz,g);
+  for(const yy of [.75,1.6,2.5])for(let k=0;k<7;k++)
+   box(.24,.52,.46,MAT(['#97653d','#537282','#9d8764','#87616d'][k%4]),xx-1.05+k*.35,yy,zz+.43,g);
+ }
+ function bed(xx,zz){furnitureBlocks.push({x:xx,z:zz,w:3.25,d:2.4});
+  box(3.25,.42,2.4,woodDark,xx,.48,zz,g);
+  box(3.0,.26,2.1,linen,xx,.83,zz,g);
+  box(.8,.25,1.8,MAT('#ece1c9'),xx-1.0,1.02,zz,g);
+ }
+ if(kind==='inn'){
+  // Large inn with dining hall, bar and guest sleeping corner.
+  table(-2.8,0,4.2,2.2);table(2.8,0,4.2,2.2);
+  for(const xx of [-4,-1.6,1.6,4])for(const zz of [-1.8,1.8])box(.9,.55,.8,woodDark,xx,.35,zz,g);
+  box(5,.9,1.2,woodDark,0,.85,-5,g);
+  for(let k=0;k<8;k++)box(.42,.65,.45,bronze,-1.9+k*.55,1.65,-5.25,g);
+  bed(-5,4.5);bed(4.7,4.5);shelf(6,-5);
+ }else if(kind==='merchant'){
+  table(0,-2.1,5.4,2.3);
+  for(let k=0;k<5;k++){box(1.1,1.05,1,woodDark,-5.7+k*2.7,.53,4.7,g);box(.85,.15,.88,bronze,-5.7+k*2.7,1.14,4.7,g);}
+  for(let k=0;k<8;k++)sphere(.25,MAT(['#ad624c','#6b9568','#d0ba72'][k%3]),-2+k*.65,1.25,-2.1,g);
+  shelf(-6,-5);shelf(6,-5);box(2.5,1.3,1.1,woodDark,5.5,.7,0,g);
+ }else if(kind==='manor'){
+  table(0,-2.2,5,2.8);shelf(-6,-5);shelf(6,-5);
+  bed(-4.9,3.4);bed(4.8,3.4);
+  for(const xx of [-3.5,3.5])box(1,.5,1,bronze,xx,.5,-3.5,g);
+  sphere(.6,bronze,0,2.7,-5.9,g);
+ }else{
+  bed(-3.5,-3);table(1,-1.3,2.6,2.2);shelf(4,-4.6);
+  for(const xx of [-.5,2.2])box(.95,.53,.85,woodDark,xx,.3,1.6,g);
+ }
+ // Additional furnishing in the enlarged wings, leaving the center and entry walkable.
+ for(const xx of [-w*.31,w*.31]){
+  for(const zz of [-d*.32,d*.25]){
+   table(xx,zz,grand?5:3.5,grand?3.2:2.3);
+  }
+ }
+ for(const xx of [-w*.40,w*.40])shelf(xx,-d*.38);
+ for(const xx of [-w*.36,w*.36])bed(xx,d*.31);
+ // Distinct distant furnishing groups make the hall's scale visibly obvious.
+ for(const zz of [-d*.24,0,d*.15])for(const xx of [-w*.22,w*.22])table(xx,zz,3.8,2.4);
+ // Interior walls define bedrooms, back offices and a central hall.
+ // Leave 4-unit passages so the player can enter the side rooms.
+ const wallBlocks=[];
+ const partitionMeshes=[];
+ function divider(xx,zz,ww,dd){
+  partitionMeshes.push(box(ww,4.4,dd,plaster,xx,2.2,zz,g));
+  wallBlocks.push({x:xx,z:zz,w:ww,d:dd});
+ }
+ const partitionZ=-d*.13;
+ const side=w*.28;
+ // Three walls with two open doorways to the rear chambers.
+ divider(-w*.36,partitionZ,w*.25,.35);
+ divider(0,partitionZ,w*.18,.35);
+ divider(w*.36,partitionZ,w*.25,.35);
+ // Side walls split two sleeping rooms from the main hall.
+ divider(-side,-d*.34,.34,d*.27);
+ divider(side,-d*.34,.34,d*.27);
+ // Door frames clearly mark the passages.
+ for(const xx of [-w*.19,w*.19]){
+  partitionMeshes.push(box(3.8,.32,.5,woodDark,xx,4.35,partitionZ,g));
+  for(const offset of [-1.9,1.9])partitionMeshes.push(box(.22,4.3,.5,woodDark,xx+offset,2.15,partitionZ,g));
+ }
+ const people=[];
+ const light=new THREE.PointLight(0xffd1a0,grand?24:18,grand?34:26);light.position.set(0,hh-.6,0);g.add(light);
+ // High-contrast visual landmarks verify that this room is truly rendered.
+ const floorGrid=new THREE.GridHelper(Math.min(w,d)-3,12,0x294f66,0x516575);
+ floorGrid.position.y=.13;g.add(floorGrid);
+ const markerColors=[0xb4313f,0x267dba,0xe4aa29,0x43a86b];
+ for(let k=0;k<4;k++){
+  const xx=(k%2?1:-1)*w*.20,zz=(k<2?-1:1)*d*.22;
+  const column=new THREE.Mesh(new THREE.CylinderGeometry(1.1,1.1,4.5,12),new THREE.MeshBasicMaterial({color:markerColors[k]}));
+  column.position.set(xx,2.25,zz);g.add(column);
+ }
+ // v4.3 model-only room: discard every procedural box, cylinder, grid and primitive prop.
+ // Keep the base floor for navigation; real glTF furniture is attached asynchronously.
+ const baseFloor=g.children.find(o=>o.isMesh);
+ for(const child of [...g.children]){
+  if(child.isMesh&&child!==baseFloor)g.remove(child);
+  if(child.isGridHelper||child.type==='GridHelper'||child.isLineSegments)g.remove(child);
+ }
+ furnitureBlocks.length=0;wallBlocks.length=0;partitionMeshes.length=0;
+ // v4.3: timber-framed plaster walls, separate from model-only furniture.
+ const whitewash=MAT('#e0d4bc'),darkTimber=MAT('#65462f'),trimTimber=MAT('#896245');
+ function architecturalWall(x,z,wid,dep,solid=true){
+  const pieces=[
+   box(wid,7.55,dep,whitewash,x,4.825,z,g),
+   box(wid,1.45,dep+.06,darkTimber,x,.725,z,g),
+   box(wid,.16,dep+.12,trimTimber,x,1.48,z,g),
+   box(wid,.24,dep+.13,darkTimber,x,8.68,z,g)
+  ];
+  if(wid>dep)for(const ax of [x-wid/2+.12,x+wid/2-.12])pieces.push(box(.22,8.8,dep+.15,darkTimber,ax,4.4,z,g));
+  else for(const az of [z-dep/2+.12,z+dep/2-.12])pieces.push(box(wid+.15,8.8,.22,darkTimber,x,4.4,az,g));
+  partitionMeshes.push(...pieces);
+  if(solid)wallBlocks.push({x,z,w:wid,d:dep});
+ }
+ // Perimeter, with a four-unit-wide visible entrance.
+ architecturalWall(0,-d/2,w,.30,false);
+ architecturalWall(-w/2,0,.30,d,false);
+ architecturalWall(w/2,0,.30,d,false);
+ architecturalWall(-(w+4)/4,d/2,(w-4)/2,.30,false);
+ architecturalWall((w+4)/4,d/2,(w-4)/2,.30,false);
+ // Internal partitions and two real openings.
+ const pz=-d*.13;
+ architecturalWall(-w*.36,pz,w*.25,.35);
+ architecturalWall(0,pz,w*.18,.35);
+ architecturalWall(w*.36,pz,w*.25,.35);
+ architecturalWall(-w*.28,-d*.34,.35,d*.27);
+ architecturalWall(w*.28,-d*.34,.35,d*.27);
+ const structuralWalls=[rearWall,leftWall,rightWall];
+ return {x,z,g,w,d,kind,people,furnitureBlocks,wallBlocks,structuralWalls,partitionMeshes};
+});
+// KayKit Furniture Bits (CC0) — shared atlas and glTF data from the public source.
+const furnitureCdn='https://cdn.jsdelivr.net/gh/KayKit-Game-Assets/KayKit-Furniture-Bits-1.0@main/addons/kaykit_furniture_bits/Assets/gltf/';
+const furnitureTemplates=new Map();
+let furnitureLoading=false;
+async function setupFurnitureAssets(){
+ if(furnitureLoading)return;
+ furnitureLoading=true;
+ const keys=['bed_double_A','bed_single_A','table_low','chair_A_wood','shelf_A_big','cabinet_medium','lamp_standing','rug_rectangle_A','armchair'];
+ const loader=new GLTFLoader();
+ await Promise.all(keys.map(async key=>{
+  try{
+   const gltf=await loader.loadAsync(asset('assets/interior/'+key+'.gltf')).catch(()=>loader.loadAsync(furnitureCdn+key+'.gltf'));
+   furnitureTemplates.set(key,gltf.scene);
+  }catch(e){console.warn('Furniture unavailable:',key,e)}
+ }));
+ let placedCount=0;
+ for(const room of rooms){
+  const items=[
+   ['bed_double_A',-room.w*.37,-room.d*.32,3.0],
+   ['bed_single_A', room.w*.37,-room.d*.31,3.0],
+   ['table_low',0,room.d*.10,3.3],
+   ['chair_A_wood',-4,room.d*.10,3.3],
+   ['chair_A_wood',4,room.d*.10,3.3],
+   ['shelf_A_big',room.w*.40,-room.d*.39,3.2],
+   ['cabinet_medium',-room.w*.40,-room.d*.40,3.2],
+   ['lamp_standing',room.w*.30,room.d*.28,3.0],
+   ['rug_rectangle_A',0,room.d*.10,4.5],
+   ['armchair',-room.w*.30,room.d*.20,3.2],
+   ['table_low',0,room.d*.22,4.0],
+   ['chair_A_wood',-5,room.d*.22,4.0],
+   ['chair_A_wood',5,room.d*.22,4.0]
+  ];
+  for(const [key,x,z,height] of items){
+   const source=furnitureTemplates.get(key);if(!source)continue;
+   const obj=source.clone(true);
+   obj.updateMatrixWorld(true);
+   const b=new THREE.Box3().setFromObject(obj),size=b.getSize(new THREE.Vector3());
+   if(!Number.isFinite(size.y)||size.y<.001||!Number.isFinite(size.x)||!Number.isFinite(size.z))continue;
+   // Cap the final footprint: incorrect glTF dimensions can no longer fill the screen.
+   const maxWidth=key.includes('bed')?4.2:key.includes('rug')?5.4:key.includes('shelf')?3.2:3.5;
+   const maxDepth=key.includes('bed')?3.6:key.includes('rug')?4.5:3.4;
+   const targetHeight=key.includes('rug')?.08:height;
+   const scale=Math.min(targetHeight/size.y,maxWidth/Math.max(size.x,.001),maxDepth/Math.max(size.z,.001));
+   if(!Number.isFinite(scale)||scale<=0)continue;
+   obj.scale.setScalar(scale);
+   // Center geometry around its own bounding box, not the arbitrary glTF origin.
+   obj.position.set(x-(b.min.x+b.max.x)*.5*scale,-b.min.y*scale+.12,z-(b.min.z+b.max.z)*.5*scale);
+   obj.userData.indoorFurnitureModel=true;
+   obj.traverse(mesh=>{if(mesh.isMesh){mesh.castShadow=true;mesh.receiveShadow=true}});
+   room.g.add(obj);
+   if(!key.includes('rug')){
+    obj.updateMatrixWorld(true);
+    const bounds=new THREE.Box3().setFromObject(obj);
+    const center=bounds.getCenter(new THREE.Vector3()),dim=bounds.getSize(new THREE.Vector3());
+    if(dim.x>.08&&dim.z>.08&&dim.x<9&&dim.z<9)
+     room.furnitureBlocks.push({x:center.x-room.x,z:center.z-room.z,w:dim.x,d:dim.z});
+   }
+   placedCount++;
+  }
+ }
+ const status=$('#furniture-status');if(status){status.textContent='家具3D：'+furnitureTemplates.size+'/9種・配置'+placedCount+'点'+(placedCount?' ✓':' ⚠ 読込失敗・モデルのみ表示');status.style.background=placedCount?'#225d43ed':'#7d3030ed';}
+}
+// Restore local KayKit assets, keeping the original box furniture as fail-safe.
+setTimeout(()=>setupFurnitureAssets().catch(e=>{console.warn('Furniture fallback active',e);const v=$('#furniture-status');if(v)v.textContent='家具3Dの読込失敗：モデルの読込に失敗しました'}),1300);
+let indoorIndex=-1;
+// v3.4: explicit scene isolation. Avoid scene-wide visibility mutations.
+function setIndoorScene(id){
+ if(id>=0){
+   indoorScene.add(player);
+   for(let i=0;i<rooms.length;i++)rooms[i].g.visible=(i===id);
+   // Never depend on the outdoor fade/occlusion system for interior geometry.
+   const room=rooms[id];
+   room.g.traverse(o=>{if(o.isMesh){o.visible=true;o.frustumCulled=false;}});
+   for(const wall of room.structuralWalls)wall.visible=false;
+   // v4.3: remove partition meshes completely instead of relying on visibility.
+   // This prevents any old render traversal from making the barriers appear again.
+   // Keep architectural walls and matching collision areas.
+   const count={mesh:0,people:room.people.length};
+   room.g.traverse(o=>{if(o.isMesh)count.mesh++});
+   const status=document.querySelector('#furniture-status');
+   if(status){status.textContent='室内描画：'+count.mesh+'メッシュ / '+count.people+'人 · 3D家具 v4.3';status.style.background='#225d43ed';}
+ }else{
+   scene.add(player);
+   const status=document.querySelector('#furniture-status');
+   if(status){status.textContent='3D家具＋追従カメラ v4.3';status.style.background='#243449df';}
+ }
+}
+const gameVersion='室内3D家具と追従カメラ v4.3';document.querySelector('.brand small').textContent='RESONANCE · '+gameVersion;
+function populateRoom(room,id){
+ if(room.people.length)return;
+ const count=room.kind==='inn'?5:room.kind==='home'?3:4;
+ for(let j=0;j<count;j++){
+  // Keep people far from the entrance and give them visible, separated positions.
+  const lx=(j%2?1:-1)*(7+Math.floor(j/2)*4),lz=-10+(j%3)*9;
+  const source=npcs[(id*3+j)%npcs.length];
+  const resident=new THREE.Group();
+  resident.position.set(lx,0,lz);resident.rotation.y=(j%2?-.6:.6);
+  let cloned=false;
+  if(source)try{
+   const model=cloneRig(source.g);
+   model.position.set(-source.g.position.x,0,-source.g.position.z);
+   // The original NPC group carries world coordinates; cancelling them
+   // makes the cloned character appear at the correct indoor position.
+   resident.add(model);cloned=true;
+  }catch(err){console.warn('Resident clone',err)}
+  if(!cloned){
+   const cloth=MAT(['#4f7d84','#9c614e','#6e7c51','#8f789a'][j%4]);
+   const skin=MAT('#e4b892');
+   box(.75,1.25,.55,cloth,0,.9,0,resident);
+   sphere(.44,skin,0,1.85,0,resident);
+   box(.9,.18,.72,woodDark,0,2.18,0,resident);
+  }
+  room.g.add(resident);
+  room.people.push({g:resident,name:source?.name||'家の住人',line:source?.line||'いらっしゃい'});
+ }
+}
+
+function closestEntry(range=11){
+ let best=null,dist=range;
+ for(const h of houseEntries){const d=Math.hypot(player.position.x-h.x,player.position.z-h.z);if(d<dist){best=h;dist=d;}}
+ return best;
+}
+function changeHouse(){
+ if(transitionBusy)return;sceneTransition(()=>{
+ if(indoorIndex>=0){
+  const h=houseEntries[indoorIndex];indoorIndex=-1;setIndoorScene(-1);
+  player.position.set(h.outX,0,h.outZ);camPos.set(h.outX,7,h.outZ+12);
+ }else{
+  const h=closestEntry();if(!h){houseAction.textContent='🏠 家に近づいて';setTimeout(()=>updateHouseButton(),1500);return;}
+  indoorIndex=h.id;const room=rooms[h.id];populateRoom(room,h.id);setIndoorScene(h.id);
+  player.position.set(room.x,0,room.z+4);
+  camPos.set(room.x,12,room.z+13);
+  cameraYaw=0;cameraPitch=.50;
+ }
+ });
+}
+const houseAction=$('#house-action');houseAction.onclick=changeHouse;
+function updateHouseButton(){
+ houseAction.style.display='block';
+ houseAction.textContent=indoorIndex>=0?'🚪 出る｜室内専用 '+rooms[indoorIndex].w+'×'+rooms[indoorIndex].d+' '+rooms[indoorIndex].people.length+'人':closestEntry()?'🏠 家に入る':'🏠 家を探す';
+}
+
+function tree(x,z,s=1){let g=new THREE.Group();g.position.set(x,0,z);scene.add(g);cyl(.19*s,.3*s,2.55*s,wood,0,1.2*s,0,g,9);for(let j=0;j<4;j++)sphere((1.15-j*.14)*s,leaves[j%3],Math.sin(j*2)*.36*s,(2.45+j*.34)*s,Math.cos(j*2)*.26*s,g,11,9);obstacle(x,z,1.05*s,1.05*s)}for(const t of [[-7,3,1.1],[7,3,1.2],[-23,-7,1.4],[23,-8,1.3],[-25,-40,1.4],[25,-42,1.45],[-8,-55,1.2],[8,-56,1.3],[-28,13,1.7],[28,11,1.7]])tree(...t);
+function lantern(x,z){cyl(.12,.2,3.4,woodDark,x,1.7,z);box(.78,.12,.78,gold,x,3.46,z);box(.57,.7,.57,MAT('#f7d6a0',.35),x,3.84,z);box(.82,.15,.82,woodDark,x,4.27,z);const light=new THREE.PointLight(0xffc47c,5,7,2);light.position.set(x,3.85,z);scene.add(light)}for(const [x,z] of [[-7,-9],[7,-9],[-9,-28],[9,-28],[-7,-43],[7,-43]])lantern(x,z);
+function planter(x,z,r=.7){cyl(r,r+.1,.55,stone,x,.28,z);cyl(r-.12,r-.12,.12,MAT('#564638'),x,.6,z);for(let k=0;k<8;k++){const a=k*Math.PI/4;sphere(.24,leaves[k%3],x+Math.cos(a)*r*.63,.86,z+Math.sin(a)*r*.63);sphere(.07,k%2?MAT('#f2c1a7'):MAT('#ead6a3'),x+Math.cos(a)*r*.65,1.04,z+Math.sin(a)*r*.66)}obstacle(x,z,r*1.8,r*1.8)}for(let [x,z] of [[-7,-17],[7,-17],[-8,-36],[8,-36],[-15,-24],[15,-24]])planter(x,z,.67);
+// Central fountain with tiered stone bowls and animated translucent water.
+const fx=0,fz=-21;const basin=cyl(3.35,3.5,.9,stone,fx,.52,fz,scene,20);cyl(2.94,2.95,.15,darkStone,fx,1.04,fz,scene,20);const waterMat=new THREE.MeshStandardMaterial({color:0x66b5c0,transparent:true,opacity:.67,roughness:.22,metalness:.23});cyl(2.72,2.72,.08,waterMat,fx,1.13,fz,scene,20);cyl(.51,.67,2.3,stone,fx,2.12,fz,scene,14);cyl(1.6,1.35,.34,stone,fx,3.22,fz,scene,20);cyl(1.33,1.33,.06,waterMat,fx,3.44,fz,scene,20);sphere(.35,glass,fx,3.78,fz);obstacle(fx,fz,7.1,7.1);
+// Market stalls with fabric awnings, shelving, barrels, crates.
+function stall(x,z,colors=['#e5d1a4','#775b5c']){const g=new THREE.Group();g.position.set(x,0,z);scene.add(g);for(const xx of [-1.55,1.55])for(const zz of [-1.2,1.2])cyl(.09,.11,3,wood,xx,1.5,zz,g);box(3.5,.25,2.65,wood,0,1.2,0,g);for(let k=0;k<8;k++){const awn=box(.45,.12,2.9,MAT(colors[k%2]),-1.57+k*.45,3.09,0,g);awn.rotation.z=-.06}box(3.6,.1,3,woodDark,0,2.99,0,g);for(let k=0;k<9;k++){let px=(k%3-1)*.85,pz=Math.floor(k/3)*.72-.7;sphere(.19,k%2?MAT('#c68b51'):MAT('#7a8a4d'),px,1.49,pz,g)}obstacle(x,z,3.6,2.9)}stall(-8,-15);stall(9,-15,['#bdc6bb','#567b8b']);stall(-7,-39,['#bc9979','#e8d3af']);stall(8,-39,['#b9a1a0','#e5d7bb']);
+function crate(x,z){box(.75,.68,.74,wood,x,.36,z);for(let t of [-.23,.23]){box(.08,.72,.79,woodDark,x+t,.36,z);box(.79,.07,.8,woodDark,x,.33+t,z)}obstacle(x,z,.85,.85)}for(let [x,z] of [[-10.7,-13],[-11.5,-13], [11,-13],[11.6,-14],[-9,-38],[9.9,-37]])crate(x,z);
+// Scenic rolling hills and peaks replace the flat horizon.
+const hillmat=MAT('#627e72'),mountainMat=MAT('#738e93'),rockMat=MAT('#b3b1a4');
+function mountain(x,z,width,height,seed){let n=28,verts=[],indices=[];let rand=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296};for(let iy=0;iy<=9;iy++){let k=iy/9;for(let ix=0;ix<=n;ix++){let a=ix/n*Math.PI*2;let distortion=1+Math.sin(a*5+seed)*.13+Math.sin(a*11+seed*.01)*.055+(rand()-.5)*.06;let rr=width*Math.pow(1-k,.8)*distortion;verts.push(Math.cos(a)*rr+(rand()-.5)*.2,height*k+(rand()-.5)*.6,Math.sin(a)*rr+(rand()-.5)*.2)}}for(let y=0;y<9;y++)for(let x=0;x<n;x++){let i=y*(n+1)+x;indices.push(i,i+n+1,i+1,i+1,i+n+1,i+n+2)}let geom=new THREE.BufferGeometry();geom.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));geom.setIndex(indices);geom.computeVertexNormals();let m=new THREE.Mesh(geom,[hillmat,mountainMat,rockMat][seed%3]);m.position.set(x,-3,z);scene.add(m)}
+for(let i=0;i<35;i++){let a=i/35*Math.PI*2,rr=88+Math.sin(i*7.3)*12;mountain(Math.cos(a)*rr,Math.sin(a)*rr-23,13+(i%5)*5,14+(i%7)*3,i*43+21)}
+// Sky dome: a soft color gradient replaces the harsh single-color horizon.
+const skyCanvas=document.createElement('canvas');skyCanvas.width=4;skyCanvas.height=256;const skyCtx=skyCanvas.getContext('2d');const grad=skyCtx.createLinearGradient(0,0,0,256);grad.addColorStop(0,'#52799e');grad.addColorStop(.52,'#9cc9df');grad.addColorStop(1,'#dde0cf');skyCtx.fillStyle=grad;skyCtx.fillRect(0,0,4,256);const skyTex=new THREE.CanvasTexture(skyCanvas);skyTex.colorSpace=THREE.SRGBColorSpace;const sky=new THREE.Mesh(new THREE.SphereGeometry(175,32,16),new THREE.MeshBasicMaterial({map:skyTex,side:THREE.BackSide,depthWrite:false,fog:false}));sky.rotation.y=Math.PI/3;scene.add(sky);
+// Add material and shape variation on building surfaces, without downloading any external assets.
+function detailedTexture(seed,base){const c=document.createElement('canvas');c.width=c.height=256;let ctx=c.getContext('2d');let r=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296};ctx.fillStyle=base;ctx.fillRect(0,0,256,256);for(let i=0;i<5700;i++){let v=r()>.55?'255,244,219':'54,37,24';ctx.fillStyle=`rgba(${v},${.015+r()*.055})`;let x=r()*256,y=r()*256;ctx.fillRect(x,y,1+r()*12,1+r()*6)}for(let i=0;i<19;i++){ctx.strokeStyle=`rgba(75,62,46,${.025+r()*.05})`;ctx.beginPath();ctx.moveTo(r()*256,r()*256);ctx.lineTo(r()*256,r()*256);ctx.stroke()}let t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.colorSpace=THREE.SRGBColorSpace;return t}
+const stoneBump=detailedTexture(452,'#9f9a8e');const plasterBump=detailedTexture(139,'#ccc2ac');for(let m of [stone,darkStone,mortar]){m.bumpMap=stoneBump;m.bumpScale=.055;m.needsUpdate=true}for(let m of [wall,plaster]){m.bumpMap=plasterBump;m.bumpScale=.065;m.needsUpdate=true}
+// Street greenery, balconies, dormer windows, roof finials and additional architectural silhouettes.
+const trim=MAT('#6b5947'),copper=MAT('#61756c',.5,.45),flowerMats=[MAT('#d9958b'),MAT('#e8bc70'),MAT('#a9a1cf')];
+for(let ix=0;ix<structures.length;ix++){let a=structures[ix],px=a[0],pz=a[1],ww=a[2],dd=a[3],hh=a[4],rot=a[6];let b=new THREE.Group();b.position.set(px,0,pz);b.rotation.y=rot;scene.add(b);
+// Boxed balcony under the second-storey windows.
+for(let side of [-1,1]){let bx=side*ww*.26;box(1.8,.13,.9,wood,bx,3.15,dd/2+.55,b);for(let t of [-.7,0,.7]){box(.08,.77,.08,trim,bx+t,3.58,dd/2+1,b)}box(1.85,.11,.12,woodDark,bx,3.96,dd/2+1,b);for(let j=0;j<4;j++){let xx=bx+(j-1.5)*.38;sphere(.14,leaves[j%3],xx,3.33,dd/2+.85,b);sphere(.055,flowerMats[(ix+j)%3],xx,3.48,dd/2+.86,b)}}
+for(let k=0;k<3;k++){let xx=(k-1)*ww*.24;box(.42,.38,.27,woodDark,xx,hh+.3,dd/2+.16,b);box(.28,.28,.30,glass,xx,hh+.37,dd/2+.34,b)}
+for(let k=0;k<4;k++){box(.22,.05,.19,trim,-ww*.38+k*ww*.25,hh+1.06,0,b)}
+}
+// Pebbles and tufts are placed away from the main walking corridor.
+let scatterSeed=1877;const scatterRand=()=>{scatterSeed=(Math.imul(scatterSeed,1664525)+1013904223)>>>0;return scatterSeed/4294967296};const pebbleGeo=new THREE.IcosahedronGeometry(1,0);const pebbleMat=MAT('#8f9387');const pebbleCount=420;const pebbles=new THREE.InstancedMesh(pebbleGeo,pebbleMat,pebbleCount);let dummy=new THREE.Object3D();for(let i=0;i<pebbleCount;i++){let x=(scatterRand()-.5)*95,z=(scatterRand()-.5)*105-20;if(Math.abs(x)<21&&z>-53&&z<13)x+=(x<0?-1:1)*22;dummy.position.set(x,.035,z);let q=.06+scatterRand()*.18;dummy.scale.set(q,q*.32,q*1.4);dummy.rotation.y=scatterRand()*6.28;dummy.updateMatrix();pebbles.setMatrixAt(i,dummy.matrix)}pebbles.instanceMatrix.needsUpdate=true;scene.add(pebbles);
+// Instanced street inlays and brass studs for richer close-up ground detail.
+const inlayGeo=new THREE.BoxGeometry(.26,.025,.095),inlayMat=MAT('#83796c');
+const inlayMesh=new THREE.InstancedMesh(inlayGeo,inlayMat,540);const temp=new THREE.Object3D();let inlayN=0;
+for(let iz=0;iz<90&&inlayN<540;iz++)for(const xx of [-7.35,7.35])for(let side=0;side<3&&inlayN<540;side++){
+ const zz=12-iz*.77, x=xx+(side-1)*.28;if(!staticFree(x,zz,.13))continue;
+ temp.position.set(x,.035,zz);temp.rotation.set(0,((iz+side)%3)*.13,0);temp.scale.set(1,1,1);temp.updateMatrix();inlayMesh.setMatrixAt(inlayN++,temp.matrix)
+}inlayMesh.count=inlayN;inlayMesh.instanceMatrix.needsUpdate=true;inlayMesh.receiveShadow=true;scene.add(inlayMesh);
+// Actual skinned GLB geometry and keyframed skeletal animation, no primitive people.
+const player=new THREE.Group();player.position.set(0,0,6.8);player.rotation.y=0;scene.add(player);
+// Four reusable, genuinely modeled GLB sources. 100 residents are instances, not 100 unique sculpted assets.
+const npcInfo=[[-5,-13,'商人ミラ','いらっしゃい！ 水晶街道へようこそ。'],[5.6,-14,'旅人レオン','北の街道には古代遺跡があるらしいよ。'],[-5,-36,'町の住人','レヴナは旅人の集まる町だよ。']];
+const npcs=[];let seedPeople=214365;
+function rPeople(){seedPeople=(Math.imul(seedPeople,1664525)+1013904223)>>>0;return seedPeople/4294967296}
+for(let i=0;i<15;i++){
+ let x,z,name,line;
+ if(i<npcInfo.length){[x,z,name,line]=npcInfo[i]}
+ else{
+  name=['町人','行商人','旅人','職人','見習い','巡礼者','衛兵','学者'][i%8]+' '+String(i+1).padStart(2,'0');line=['市場には遠方から商人が集まるよ。','噴水は町の大切な目印なんだ。','今日は良い天気だね。','この先は北の街道に続いているよ。'][i%4];
+  // Scatter around the navigable town, testing building, fountain and stall colliders.
+  let found=false;
+  for(let k=0;k<250;k++){
+   x=(rPeople()-.5)*61;z=13-rPeople()*69;
+   if((Math.abs(x)<6.0||Math.abs(z+10)<2.3||Math.abs(z+31)<2.3||Math.abs(z+47)<2.3)&&free(x,z)&&Math.hypot(x,z-6.8)>4.2&&npcs.every(n=>Math.hypot(n.g.position.x-x,n.g.position.z-z)>1.45)){found=true;break}
+  }
+  if(!found){x=28+(i%3)*.9;z=-54+(i%50)*1.25}
+ }
+ const g=new THREE.Group();g.position.set(x,0,z);g.rotation.y=(rPeople()-.5)*Math.PI*2;scene.add(g);
+ npcs.push({g,name,line,gender:i===0?'female':i===1?'male':i%2===0?'female':'male',variant:i%30,animation:null,id:i,personality:['明るくおしゃべり','慎重で物静か','陽気で冗談好き','生真面目で職人気質','好奇心旺盛','親切で世話好き'][i%6],job:['商人','旅人','鍛冶師','料理人','薬師','騎士','吟遊詩人','農夫','学者','宿屋'][i%10],memory:[],homeX:x,homeZ:z,heading:rPeople()*Math.PI*2,wait:rPeople()*3,pace:.55+rPeople()*.7,visits:0});
+ // NPC collision handled dynamically, avoiding permanently blocked paths.
+}
+// Self-contained chibi characters: 2-head silhouettes, distinct hair/armor/capes/hats.
+// These use custom Three.js meshes, not a licensed third-party GLB character pack.
+const mixers=[];
+const skinColors=['#f2c49d','#e7b38f','#b98361','#e4a88c','#d5a17b'];
+const coatColors=['#456b8c','#a14d54','#5a8269','#8c689c','#a6784b','#535e91','#9a7d57','#446d70','#b06b62','#647d56'];
+function chibi(host,index){
+ const colors=[coatColors[index%coatColors.length],skinColors[index%skinColors.length]],coat=MAT(colors[0],.8),skin=MAT(colors[1],.85),hair=MAT(['#352923','#69412d','#d2a358','#242b39','#8c493a','#b6a18b'][index%6],.87),boots=MAT('#453a34'),trim=MAT(index%5===0?'#dfbd76':'#d3cbc0',.5,.2);
+ const root=new THREE.Group();host.add(root);const torso=cyl(.37,.49,.87,coat,0,.91,0,root,12);cyl(.41,.42,.13,trim,0,.61,0,root,12);
+ const leg=[];for(let side of [-1,1]){let pivot=new THREE.Group();pivot.position.set(side*.23,.49,0);root.add(pivot);cyl(.18,.20,.47,coat,0,-.20,0,pivot,10);let foot=sphere(.20,boots,0,-.44,.10,pivot,10,8);foot.scale.set(1, .72,1.5);leg.push(pivot)}
+ const arm=[];for(let side of [-1,1]){let pivot=new THREE.Group();pivot.position.set(side*.43,1.25,0);root.add(pivot);let sleeve=cyl(.15,.17,.46,coat,side*.04,-.23,0,pivot,10);sleeve.rotation.z=side*-.24;sphere(.14,skin,side*.1,-.51,.02,pivot,10,8);arm.push(pivot)}
+ // A chibi head is nearly half the height of the whole figure (overall ~2.45 units).
+ sphere(.59,skin,0,1.84,0,root,24,16).scale.set(1,1.02,.9);
+ sphere(.61,hair,0,2.15,-.095,root,22,12).scale.set(1,.57,.95);
+ for(let side of [-1,1]){sphere(.09,hair,side*.53,1.94,-.01,root,9,8);sphere(.072,MAT('#2d2932',.36),side*.235,1.87,.5,root,10,8);sphere(.023,MAT('#ffffff',.2),side*.253,1.89,.564,root,7,5)}
+ let fringe=[0,1,2,3][index%4];for(let k=0;k<4+fringe;k++){let a=(k/(4+fringe)-.5)*2;const bang=sphere(.16,hair,a*.51,2.14-Math.abs(a)*.05,.35,root,9,7);bang.scale.set(1,.95,1.1)}
+ // Separate high-detail equipment silhouette: hats, hair buns, capes, satchels, armor.
+ if(index%3===0){const cape=box(.86,.83,.09,MAT(index%2?'#405a75':'#80544f'),0,.92,-.44,root);cape.rotation.x=-.12}
+ if(index%4===0){let hat=cyl(.68,.70,.08,boots,0,2.39,0,root,16);cyl(.39,.50,.35,coat,0,2.57,0,root,16);cyl(.42,.43,.065,trim,0,2.44,0,root,16)}
+ if(index%4===1){const bag=box(.4,.44,.20,MAT('#806347'),.40,.87,-.34,root);bag.rotation.z=-.13}
+ if(index%5===0){box(.88,.30,.44,trim,0,1.2,0,root);sphere(.14,trim,-.44,1.22,0,root);sphere(.14,trim,.44,1.22,0,root)}
+ if(index%6===2){let staff=cyl(.045,.055,1.25,wood,.61,.87,.22,root,10);sphere(.13,glass,.61,1.51,.22,root,12,9)}
+ if(index%6===3){for(let side of [-1,1])sphere(.20,hair,side*.53,2.18,-.1,root,10,8)}
+ root.scale.setScalar(.9+(index%5)*.025);
+ let state={root,leg,arm,t:Math.random()*10,moving:false};host.userData.chibi=state;return state;
+}
+function setMotion(a,moving){if(a)a.moving=moving}
+const playerAnim=chibi(player,100);
+for(let i=0;i<npcs.length;i++)npcs[i].animation=chibi(npcs[i].g,i);
+function updateModels(dt){for(const n of [player,...npcs.map(n=>n.g)]){const a=n.userData.chibi;if(!a||!a.root.visible)continue;a.t+=dt*(a.moving?9:1.2);const step=a.moving?Math.sin(a.t)*.45:0;a.leg[0].rotation.x=step;a.leg[1].rotation.x=-step;a.arm[0].rotation.x=-step*.7;a.arm[1].rotation.x=step*.7;a.root.position.y=a.moving?Math.abs(Math.sin(a.t))*.045:Math.sin(a.t)*.012}}
+async function setupCharacters(){
+ // Load locally imported KayKit Adventurers glTF/GLB files.
+ if(location.protocol!=='file:')try{
+  const manifest=await fetch(asset('assets/models.json'),{cache:'no-store'});
+  if(manifest.ok){const files=await manifest.json();const urls=Array.isArray(files)?files:files.models;
+   if(Array.isArray(urls)&&urls.length){const loader=new GLTFLoader();let loaded=0;
+    const cache=new Map();
+    for(let i=0;i<Math.min(16,urls.length);i++){
+     const url=urls[i];if(typeof url!=='string'||!(url.startsWith('assets/')||url.startsWith('/assets/')))continue;
+     if(!cache.has(url))cache.set(url,loader.loadAsync(asset(url)).catch(err=>{console.warn('model failed',url,err);return null}));
+    }
+    const all=[player,...npcs.map(n=>n.g)];
+    for(let i=0;i<all.length;i++){
+     const url=urls[i%urls.length],g=await cache.get(url);if(!g)continue;
+     const obj=cloneRig(g.scene);obj.updateMatrixWorld(true);const bound=new THREE.Box3().setFromObject(obj),sz=bound.getSize(new THREE.Vector3());
+     if(sz.y<.001)continue; const factor=2.35/sz.y;obj.scale.setScalar(factor);obj.position.y=-bound.min.y*factor;
+     obj.traverse(m=>{if(m.isMesh){m.castShadow=true;m.receiveShadow=true}});
+     all[i].add(obj); if(all[i].userData.chibi)all[i].userData.chibi.root.visible=false;
+     if(g.animations?.length){const mixer=new THREE.AnimationMixer(obj);const walk=g.animations.find(a=>/walk/i.test(a.name)),idle=g.animations.find(a=>/idle/i.test(a.name));const base=idle||walk||g.animations[0];const idleAction=mixer.clipAction(base);idleAction.play();const walkAction=walk?mixer.clipAction(walk):null;if(walkAction && walk!==base){walkAction.play();walkAction.setEffectiveWeight(0)}mixers.push({mixer,group:all[i],idleAction,walkAction,activeWalk:false})}
+     loaded++;
+    }
+    aiStatus.title=`KayKitモデル読み込み: ${loaded}体`; if(loaded<16){document.querySelector('#input-status').textContent='モデル素材未配置：'+loaded+'/16体';} document.querySelector("#input-status").title=`KayKit 3Dモデル ${loaded}体を適用`;
+   }
+  }
+ }catch(e){console.warn('3D asset import:',e)}
+ finishStartup();
+}
+// Optional Kenney glTF scenery pieces (decorative; the existing buildings keep their colliders).
+async function setupTownAssets(){
+ if(location.protocol==='file:')return;
+ try{const r=await fetch(asset('assets/town.json'),{cache:'no-store'});if(!r.ok)return;const cfg=await r.json();if(!Array.isArray(cfg.models)||!cfg.models.length)return;
+ const loader=new GLTFLoader();let count=0;
+ const spots=[[-31,-22,0],[31,-22,Math.PI],[-30,-44,.5],[30,-44,-.5],[-29,1,.8],[29,1,-.8],[-20,-55,0],[20,-55,Math.PI]];
+ for(let i=0;i<Math.min(cfg.models.length,spots.length);i++)try{
+  const gltf=await loader.loadAsync(asset(cfg.models[i]));const obj=gltf.scene;obj.updateMatrixWorld(true);
+  const b=new THREE.Box3().setFromObject(obj),size=b.getSize(new THREE.Vector3());if(size.y<.001)continue;
+  let s=Math.min(1.6,5.0/size.y);obj.scale.setScalar(s);
+  const [x,z,rot]=spots[i];obj.position.set(x,-b.min.y*s,z);obj.rotation.y=rot;
+  obj.traverse(m=>{if(m.isMesh){m.castShadow=true;m.receiveShadow=true}});scene.add(obj);count++;
+ }catch(e){console.warn('Kenney asset error:',e)}
+ console.info('Kenney scene pieces:',count);
+ }catch(e){console.warn('Town model load:',e)}
+}
+setupTownAssets();
+// Analog joystick: continuous 360 degree motion, automatic running on full tilt.
+let speaking=false,currentNPC=null;
+let cameraYaw=0,cameraPitch=.56,swipePointer=null,swipeX=0,swipeY=0;
+const stick=$('#stick-base'),knob=$('#stick-knob');
+let stickPointer=null,stickX=0,stickY=0,stickMagnitude=0;
+function resetStick(){stickPointer=null;stickX=stickY=stickMagnitude=0;knob.style.left='50%';knob.style.top='50%';}
+function positionStick(e){
+ const box=stick.getBoundingClientRect(),cx=box.left+box.width/2,cy=box.top+box.height/2;
+ let x=(e.clientX-cx)/(box.width*.41),y=(e.clientY-cy)/(box.height*.41),mag=Math.hypot(x,y);
+ if(mag>1){x/=mag;y/=mag;mag=1;}
+ stickMagnitude=mag;stickX=x;stickY=y;
+ knob.style.left=(50+x*31)+'%';knob.style.top=(50+y*31)+'%';
+}
+stick.addEventListener('pointerdown',e=>{e.preventDefault();if(stickPointer!==null)return;stickPointer=e.pointerId;try{stick.setPointerCapture(e.pointerId)}catch{}positionStick(e);});
+stick.addEventListener('pointermove',e=>{if(stickPointer===e.pointerId){e.preventDefault();positionStick(e);}});
+for(const ev of ['pointerup','pointercancel','lostpointercapture'])stick.addEventListener(ev,e=>{if(stickPointer===e.pointerId)resetStick();});
+window.addEventListener('blur',resetStick);
+const cameraCanvas=renderer.domElement;
+cameraCanvas.style.touchAction='none';
+// Listen during capture to handle touch reliably despite 3D canvas/overlay stacking.
+function canOrbit(target){return !target.closest?.('button,input,textarea,form,#dialog,#audio-controls,#ai-status');}
+document.addEventListener('pointerdown',e=>{
+ if(!canOrbit(e.target)||swipePointer!==null)return;
+ swipePointer=e.pointerId;swipeX=e.clientX;swipeY=e.clientY;
+},true);
+document.addEventListener('pointermove',e=>{
+ if(swipePointer!==e.pointerId)return;
+ const sx=e.clientX-swipeX,sy=e.clientY-swipeY;
+ cameraYaw-=sx*.008;
+ cameraPitch=Math.max(.24,Math.min(1.24,cameraPitch+sy*.005));
+ swipeX=e.clientX;swipeY=e.clientY;
+},true);
+for(const ev of ['pointerup','pointercancel'])document.addEventListener(ev,e=>{
+ if(e.pointerId===swipePointer)swipePointer=null;
+},true);
+const keyDown=new Set();window.addEventListener('keydown',e=>{const keys={ArrowUp:'up',KeyW:'up',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right'};if(e.code==='ShiftLeft'||e.code==='ShiftRight')keyDown.add('shift');if(keys[e.code]){keyDown.add(keys[e.code]);e.preventDefault()}if(e.code==='Space'||e.code==='Enter')interact()});window.addEventListener('keyup',e=>{const keys={ArrowUp:'up',KeyW:'up',ArrowDown:'down',KeyS:'down',ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right'};keyDown.delete(keys[e.code]);if(e.code==='ShiftLeft'||e.code==='ShiftRight')keyDown.delete('shift');});
+const topics=[['町の噂','rumor'],['この町について','town'],['冒険の話','adventure'],['あなたの仕事','work']];
+function reply(n,topic){
+ n.visits++;const i=npcs.indexOf(n),v=n.visits;
+ const options={
+ rumor:['北門で青い水晶を見たという噂があるんだ。','夜になると古い塔から鐘の音が聞こえるらしい。','市場に珍しい香辛料が届いたらしいよ。','旅人が東の谷で光る獣を見たそうだ。'],
+ town:['レヴナは水晶街道の宿場町。交易で栄えてきたんだ。','昔、この広場には大きな時計塔があったんだよ。','町の中央にある噴水は旅人の待ち合わせ場所なんだ。','石畳は職人たちが何年もかけて敷いたものさ。'],
+ adventure:['北の街道は曲がり角が多い。地図を忘れずにね。','古代遺跡にはまだ解かれていない仕掛けがあるそうだ。','冒険に出るなら回復薬を準備するといいよ。','水晶の欠片を集める旅人が増えているんだ。'],
+ work:['私は町で暮らしながら旅人を助けているんだ。','今日は市場の荷物運びで大忙しだよ。','ときどき町を巡回して困りごとを探している。','職人さんから屋根の修理を頼まれていてね。']
+ };
+ if(n.name==='商人ミラ'&&topic==='work')return '私はミラ。露店で珍しい品物を売っているの。次は東の国から絹を仕入れたいわ。';
+ if(n.name==='旅人レオン'&&topic==='adventure')return '僕はレオン。北の遺跡を調べている。石碑に「灰銀の共鳴」と刻まれていたよ。';
+ const arr=options[topic]||options.town;return arr[(i*3+v+Math.floor(clock.elapsedTime/45))%arr.length];
+}
+function closeDialog(){if('speechSynthesis' in window)speechSynthesis.cancel();speaking=false;currentNPC=null;dialog.style.display='none'}
+function showDialog(npc,text){currentNPC=npc||null;speaking=true;dialog.replaceChildren();const h=document.createElement('b');h.textContent=npc?npc.name:'レヴナの町';const body=document.createElement('div');body.textContent=text;body.style.cssText='max-height:170px;overflow:auto;white-space:pre-wrap';dialog.append(h,body);
+ if(npc){const wrap=document.createElement('div');wrap.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-top:12px';for(const [title,topic] of topics){let b=document.createElement('button');b.textContent=title;b.style.cssText='padding:8px;border:1px solid #d1b986;background:#263c58;color:#fff;border-radius:8px;font-size:12px';b.onclick=e=>{e.stopPropagation();body.textContent=reply(npc,topic);speakNpc(body.textContent,npc)};wrap.append(b)}dialog.append(wrap);
+ const ask=document.createElement('form');ask.style.cssText='display:flex;gap:6px;margin-top:10px';
+ const field=document.createElement('input');field.placeholder='住人に質問する（例：遺跡は？）';field.maxLength=240;field.style.cssText='min-width:0;flex:1;background:#e8edf2;color:#202937;padding:9px;border:0;border-radius:7px;font-size:13px';
+ const send=document.createElement('button');send.type='submit';send.textContent='聞く';send.style.cssText='padding:8px 13px;background:#a08351;color:#fff;border:0;border-radius:7px';
+ ask.append(field,send);ask.onsubmit=async e=>{e.preventDefault();let q=field.value.trim();if(!q||send.disabled)return;field.value='';send.disabled=true;send.textContent='思考中';body.textContent+='\n\nあなた：'+q+'\n'+npc.name+'：…';try{let res=await fetch((apiBase||'')+'/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({npcId:npc.id,npcName:npc.name,message:q,memory:npc.memory.slice(-8)})});let data=await res.json();if(!res.ok)throw Error(data.error||'通信エラー');body.textContent=body.textContent.slice(0,-1)+data.reply;speakNpc(data.reply,npc);}catch(err){let topic=/噂|ニュース|事件|最近/.test(q)?'rumor':/冒険|遺跡|旅|水晶|武器|戦/.test(q)?'adventure':/仕事|職業|何者|名前|商売/.test(q)?'work':'town';let answer=reply(npc,topic);speakNpc(answer,npc);body.textContent=body.textContent.slice(0,-1)+answer+'\n（AI接続失敗：' + (err.message||'中継サーバーを確認') + ' ／オフライン応答）';}npc.memory.push({q,reply:body.textContent.split(npc.name+'：').pop()});npc.memory=npc.memory.slice(-8);body.scrollTop=body.scrollHeight;send.disabled=false;send.textContent='聞く'};dialog.append(ask)}
+ const bye=document.createElement('button');bye.textContent='閉じる ×';bye.style.cssText='display:block;margin-top:10px;padding:6px 14px;background:#566c80;color:white;border:0;border-radius:8px';bye.onclick=e=>{e.stopPropagation();closeDialog()};dialog.append(bye);dialog.style.display='block';
+}
+dialog.onclick=()=>{};
+function interact(){if(speaking){closeDialog();return}let nearest=null,dist=3.9;for(const n of npcs){const d=n.g.position.distanceTo(player.position);if(d<dist){nearest=n;dist=d}}if(nearest){nearest.wait=5.5;showDialog(nearest,nearest.line)}else if(player.position.distanceTo(new THREE.Vector3(fx,0,fz))<5.7)showDialog(null,'噴水の水がきらめいている。');else showDialog(null,'町の人に近づいて話しかけよう。')}$('#talk').onclick=interact;
+$('#quality').onclick=()=>{high=!high;renderer.setPixelRatio(Math.min(devicePixelRatio,high?(mobile?1.6:2):1));sun.shadow.mapSize.set(high?(mobile?1024:2048):512,high?(mobile?1024:2048):512);sun.shadow.map?.dispose();sun.shadow.map=null;$('#quality').textContent='画質：'+(high?'高':'軽量')};
+function staticFree(x,z,r=.34){if(indoorIndex>=0){const room=rooms[indoorIndex];return Math.abs(x-room.x)<room.w/2-.65-r&&Math.abs(z-room.z)<room.d/2-.65-r&&![...room.wallBlocks,...room.furnitureBlocks].some(b=>Math.abs(x-room.x-b.x)<b.w/2+r&&Math.abs(z-room.z-b.z)<b.d/2+r);}if(Math.abs(x)>34-r||z>17-r||z< -59+r)return false;for(const c of colliders)if(Math.abs(x-c.x)<c.w/2+r&&Math.abs(z-c.z)<c.d/2+r)return false;return true}
+function free(x,z){if(!staticFree(x,z))return false;if(indoorIndex>=0)return !rooms[indoorIndex].people.some(n=>Math.hypot(rooms[indoorIndex].x+n.g.position.x-x,rooms[indoorIndex].z+n.g.position.z-z)<1.2);for(const n of npcs)if(Math.abs(n.g.position.x-x)<.73&&Math.abs(n.g.position.z-z)<.73)return false;return true}
+// Townsfolk stay on walkable streets, separate from each other and avoid the player.
+let npcTick=0;
+function updateCitizens(dt){npcTick++;for(let i=0;i<npcs.length;i++){const n=npcs[i],p=n.g.position;
+ if(n.wait>0){n.wait-=dt;setMotion(n.animation,false);continue}
+ if(Math.hypot(p.x-player.position.x,p.z-player.position.z)<1.65){n.wait=.3;setMotion(n.animation,false);continue}
+ if(Math.hypot(p.x-n.homeX,p.z-n.homeZ)>8)n.heading=Math.atan2(n.homeX-p.x,n.homeZ-p.z);
+ if(npcTick%16===i%16&&Math.random()<.12)n.heading+=(Math.random()-.5)*1.2;
+ const step=n.pace*dt,dx=Math.sin(n.heading)*step,dz=Math.cos(n.heading)*step;
+ const nx=p.x+dx,nz=p.z+dz;
+ let open=staticFree(nx,nz,.43)&&Math.hypot(nx-player.position.x,nz-player.position.z)>1.3;
+ if(open){for(let j=0;j<npcs.length;j++){if(i===j)continue;const q=npcs[j].g.position;if(Math.abs(nx-q.x)<.8&&Math.abs(nz-q.z)<.8){open=false;break}}}
+ if(open){p.x=nx;p.z=nz;n.g.rotation.y+=Math.atan2(Math.sin(n.heading-n.g.rotation.y),Math.cos(n.heading-n.g.rotation.y))*Math.min(1,dt*6);setMotion(n.animation,true)}else{n.heading+=(Math.random()-.5)*2.8;n.wait=.5+Math.random()*1.8;setMotion(n.animation,false)}
+ if(Math.random()<dt*.05)n.wait=.7+Math.random()*2.2;
+ }}
+// Explicitly fade geometry that blocks the camera instead of letting foliage cover the player.
+const fadeItems=[];for(const obj of scene.children){if(!(obj instanceof THREE.Group))continue;if(obj===player||npcs.some(n=>n.g===obj))continue;let meshes=[];obj.traverse(child=>{if(child.isMesh){child.material=child.material.clone();child.material.transparent=true;meshes.push(child)}});if(meshes.length)fadeItems.push({obj,meshes})}
+let frameCount=0;
+function updateVisibility(cam){
+ // Fade ALL walls, roofs and foliage intersecting the player-camera view.
+ const a=player.position, vx=cam.x-a.x, vz=cam.z-a.z, len2=vx*vx+vz*vz;
+ for(const item of fadeItems){
+  const o=item.obj, wx=o.position.x-a.x,wz=o.position.z-a.z;
+  const t=len2>0?(wx*vx+wz*vz)/len2:0;
+  const cx=wx-Math.max(0,Math.min(1,t))*vx,cz=wz-Math.max(0,Math.min(1,t))*vz;
+  const radius=Math.max(1.9,Math.min(5.5,Math.max(o.userData?.fadeRadius||0,3.3)));
+  const between=t>-.1&&t<1.1&&Math.hypot(cx,cz)<radius;
+  const alpha=between?.12:1;
+  for(const mesh of item.meshes){
+   mesh.material.opacity=alpha;
+   mesh.material.depthWrite=!between;
+  }
+ }
+}
+const clock=new THREE.Clock();let camPos=new THREE.Vector3(0,9.6,16);function loop(){requestAnimationFrame(loop);const dt=Math.min(clock.getDelta(),.05),time=clock.elapsedTime;updateHouseButton();let inputX=stickX,inputZ=stickY;
+const keyboardX=(keyDown.has('right')?1:0)-(keyDown.has('left')?1:0);
+const keyboardZ=(keyDown.has('down')?1:0)-(keyDown.has('up')?1:0);
+if(keyboardX||keyboardZ){const m=Math.hypot(keyboardX,keyboardZ);inputX=keyboardX/m;inputZ=keyboardZ/m;}
+const strength=Math.min(1,Math.hypot(inputX,inputZ));
+const walking=!speaking&&strength>.09;
+const dashPressed=walking&&(strength>.87||keyDown.has('shift'));
+let dx=0,dz=0;
+if(walking){
+ // Forward on the stick means forward relative to the rotated camera.
+ const forward=-inputZ,side=inputX;
+ dx=side*Math.cos(cameraYaw)-forward*Math.sin(cameraYaw);
+ dz=-side*Math.sin(cameraYaw)-forward*Math.cos(cameraYaw);
+ const speed=dashPressed?12:5.5*Math.max(.35,strength/.82);
+ const nx=player.position.x+dx*speed*dt,nz=player.position.z+dz*speed*dt;
+ if(free(nx,player.position.z))player.position.x=nx;
+ if(free(player.position.x,nz))player.position.z=nz;
+ const face=Math.atan2(dx,dz);
+ player.rotation.y+=Math.atan2(Math.sin(face-player.rotation.y),Math.cos(face-player.rotation.y))*Math.min(1,dt*12);
+}
+$('#input-status').textContent=(dashPressed?'ダッシュ中':'移動：'+(walking?'歩行':'停止'))+' · カメラ連動360°スティック';
+setMotion(playerAnim,walking);if(indoorIndex<0)updateCitizens(dt);for(const entry of mixers){const motion=!!entry.group.userData.chibi?.moving;if(entry.walkAction&&entry.walkAction!==entry.idleAction){entry.walkAction.setEffectiveWeight(motion?1:0);entry.idleAction.setEffectiveWeight(motion?0:1)}entry.mixer.update(dt);}
+// Orbit camera: swipe the world to rotate around the player; about 2x farther.
+const lookAheadX=dx*1.0,lookAheadZ=dz*1.0;
+const distance=indoorIndex>=0?19.0:(walking?33.0:30.0);
+const horizontal=distance*Math.cos(indoorIndex>=0?.85:cameraPitch),height=distance*Math.sin(indoorIndex>=0?.85:cameraPitch);
+const centerX=player.position.x+lookAheadX*.6,centerZ=player.position.z+lookAheadZ*.6;
+let desired;
+if(indoorIndex>=0){
+ // Player-following indoor orbit camera: touch swipe rotates it like outdoors.
+ // Open ceiling and no exterior meshes prevent wall and roof occlusion.
+ const indoorPitch=Math.max(.48,Math.min(1.16,cameraPitch));
+ const room=rooms[indoorIndex];
+ // v4.3: elevated indoor tactical camera, with its position restricted to room bounds.
+ // Prevent the camera from moving behind a room wall or pointing through partitions.
+ // v4.3: low third-person indoor camera rather than top-down tactical view.
+ const safePitch=Math.max(.35,Math.min(.65,indoorPitch));
+ const indoorHorizontal=8.5;
+ const indoorHeight=3.1+indoorHorizontal*Math.tan(safePitch)*.45;
+ const targetX=player.position.x,targetZ=player.position.z;
+ const roomInset=1.1;
+ const minX=room.x-room.w/2+roomInset,maxX=room.x+room.w/2-roomInset;
+ const minZ=room.z-room.d/2+roomInset,maxZ=room.z+room.d/2-roomInset;
+ desired=new THREE.Vector3(
+  THREE.MathUtils.clamp(targetX+Math.sin(cameraYaw)*indoorHorizontal,minX,maxX),
+  indoorHeight,
+  THREE.MathUtils.clamp(targetZ+Math.cos(cameraYaw)*indoorHorizontal,minZ,maxZ));
+ camPos.lerp(desired,Math.min(1,dt*7));
+ // v4.3: partition geometry is detached when the room is entered.
+ // Collision logic remains unchanged; only partition meshes and decorative frames are hidden.
+ for(const partition of room.partitionMeshes)partition.visible=true;
+ camera.position.copy(camPos);
+ camera.up.set(0,1,0);
+ camera.lookAt(targetX,2.1,targetZ);
+
+}else{
+ desired=new THREE.Vector3(centerX+Math.sin(cameraYaw)*horizontal,player.position.y+height,centerZ+Math.cos(cameraYaw)*horizontal);
+ camPos.lerp(desired,Math.min(1,dt*3.1));camera.position.copy(camPos);
+ camera.up.set(0,1,0);
+ camera.lookAt(centerX,1.7,centerZ);
+}
+if(indoorIndex<0)updateVisibility(camera.position);updateModels(dt);renderer.render(indoorIndex>=0?indoorScene:scene,camera);}window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});loop();setTimeout(()=>{Promise.resolve(setupCharacters()).catch(e=>{console.error('3D model load failed',e);finishStartup()});},80);setTimeout(finishStartup,12000);
+</script></body></html>

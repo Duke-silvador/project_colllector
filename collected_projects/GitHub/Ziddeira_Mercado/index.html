@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Mercado Tycoon — protótipo</title>
+<link rel="icon" type="image/png" href="assets/icon-192.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#2b3345;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;user-select:none;-webkit-user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent}
+canvas{display:block}
+.hidden{display:none!important}
+#hud{position:fixed;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:5;gap:8px}
+.ic{width:20px;height:20px;vertical-align:-5px;margin-right:4px}
+.lbl .ic{width:16px;height:16px;vertical-align:-3px;margin-right:2px}
+.row .ic{width:22px;height:22px;vertical-align:-6px;margin-right:6px}
+.pill{background:rgba(20,24,34,.85);color:#fff;border-radius:14px;padding:8px 14px;font-weight:800;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+#money{font-size:22px;color:#7CFC7C}
+#lvl{font-size:12px;color:#cfd6e4;margin-top:4px;padding:5px 10px}
+#boost{color:#ffcc33;font-size:14px;margin-left:6px}
+#right{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+button{pointer-events:auto;border:0;border-radius:12px;padding:10px 14px;font-weight:800;font-size:14px;cursor:pointer;font-family:inherit;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+button:disabled{opacity:.5;cursor:default}
+.b-up{background:#ffcc33;color:#222}
+.b-ad{background:#6c5ce7;color:#fff}
+#labels{position:fixed;inset:0;pointer-events:none;z-index:3;overflow:hidden}
+.lbl{position:absolute;left:0;top:0;transform:translate(-50%,-100%);color:#fff;font-weight:800;text-shadow:0 1px 3px #000,0 0 2px #000;white-space:nowrap;text-align:center;font-size:12px;will-change:transform}
+.box{background:rgba(20,24,34,.8);padding:3px 7px;border-radius:7px;text-shadow:none}
+.box .bar{height:4px;background:#444;border-radius:2px;margin-top:3px;overflow:hidden;min-width:70px}
+.box .bar i{display:block;height:100%;background:#3ddc84}
+.pad{border:2px solid #3ddc84}
+.empty{color:#ff6b6b}
+.float{font-size:17px;color:#7CFC7C}
+.bubble{font-size:17px}
+#hint{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:rgba(20,24,34,.85);color:#fff;padding:9px 14px;border-radius:12px;font-size:14px;font-weight:700;z-index:5;pointer-events:none;text-align:center;max-width:88vw}
+#toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#3ddc84;color:#102;padding:10px 16px;border-radius:12px;font-weight:800;z-index:6;pointer-events:none;transition:opacity .3s}
+#joyBase,#joyKnob{position:fixed;border-radius:50%;pointer-events:none;z-index:4;transform:translate(-50%,-50%)}
+#joyBase{width:110px;height:110px;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.35)}
+#joyKnob{width:50px;height:50px;background:rgba(255,255,255,.6)}
+#modal,#ad{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:10;display:flex;align-items:center;justify-content:center}
+.card{background:#1f2533;color:#fff;border-radius:16px;width:min(420px,92vw);max-height:82vh;display:flex;flex-direction:column;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.mhead{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid #333b4d;font-size:18px}
+.mhead button{background:#333b4d;color:#fff;padding:6px 10px}
+#mlist{overflow:auto;padding:8px 12px 14px}
+.sec{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#8b95a9;margin:12px 4px 6px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;background:#283044;border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.row small{display:block;color:#aab3c5;font-weight:500;margin-top:2px;font-size:12px}
+.row button{background:#ffcc33;color:#222;white-space:nowrap;box-shadow:none}
+.row button.ad{background:#6c5ce7;color:#fff}
+.row button.max{background:#444b5c;color:#aaa}
+.reset{background:transparent;color:#ff8080;box-shadow:none;font-size:12px;margin:6px auto 0;display:block}
+.adbox{background:#fff;color:#222;border-radius:16px;padding:28px 24px;text-align:center;width:min(340px,86vw)}
+.adbox small{display:block;color:#888;letter-spacing:.12em;font-weight:800;margin-bottom:10px}
+.adbox b{display:block;font-size:18px;margin-bottom:14px}
+#adCount{font-size:40px;font-weight:900;color:#6c5ce7}
+</style>
+</head>
+<body>
+<div id="loading" style="position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:#2b3345;color:#fff;font-weight:800;font-size:18px;flex-direction:column;gap:14px"><img src="assets/icon-192.png" width="120" height="120" alt="">Carregando…</div>
+<div id="labels"></div>
+<div id="hud">
+  <div>
+    <div class="pill"><img class="ic" src="assets/cash.png" alt=""><span id="money">$0</span><span id="boost"></span></div>
+    <div class="pill" id="lvl">Loja nível 1</div>
+  </div>
+  <div id="right">
+    <button class="b-up" id="btnUp"><img class="ic" src="assets/upgrade.png" alt="">Melhorias</button>
+    <button class="b-ad" id="btnAd"><img class="ic" src="assets/ad.png" alt="">Dinheiro 2x</button>
+  </div>
+</div>
+<div id="hint"></div>
+<div id="toast" style="opacity:0"></div>
+<div id="joyBase" class="hidden"></div><div id="joyKnob" class="hidden"></div>
+<div id="modal" class="hidden"><div class="card"><div class="mhead"><b>Melhorias</b><button id="closeM">✕</button></div><div id="mlist"></div></div></div>
+<div id="ad" class="hidden"><div class="adbox"><small>ANÚNCIO (SIMULAÇÃO)</small><b>Aqui entra o vídeo da rede de anúncios</b><div id="adCount">3</div></div></div>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+// ---------- Dados ----------
+const PRODUCTS = [
+  {name:'Água',        color:0x4fa3ff, cost:1, price:3,  unlock:0,    brands:['AquaBem','Cristalina','Nascente Pura']},
+  {name:'Salgadinhos', color:0xffa53a, cost:2, price:5,  unlock:40,   brands:['Crocks','Snacko','Golden Chips']},
+  {name:'Refrigerante',color:0xe84a4a, cost:3, price:7,  unlock:120,  brands:['Bolha','Fizz Up','Royal Cola']},
+  {name:'Frutas',      color:0x5cc25c, cost:3, price:8,  unlock:350,  brands:['Pomar','Fruta Boa','Orgânica Sol']},
+  {name:'Laticínios',  color:0xf5ecd0, cost:4, price:10, unlock:600,  brands:['Vaquinha','Leite Serra','Alpes Gold']},
+  {name:'Limpeza',     color:0xb07ae0, cost:5, price:13, unlock:1000, brands:['Limpinho','Brilho+','Ultra Pro']},
+];
+const BRAND_PRICE=[1,1.5,2.2], BRAND_COST=[1,1.3,1.7];
+const SHELF_CAP=[8,12,16];
+const CARRY_CAP=[4,6,8,10,12], CARRY_COST=[40,100,220,450];
+const SPEED=[1,1.15,1.3,1.45], SPEED_COST=[60,150,350];
+// prateleiras: ponto do cliente (frente) e pontos de reposição
+const SLOTS=[
+  {x:-6,  z:-0.8},{x:-2.5,z:-0.8},{x:1,z:-0.8},
+  {x:6.5, z:-0.8},{x:10,  z:-0.8},{x:8.25,z:-3.6,back:true},
+];
+const PALLET_X=[-6.5,-5,-3.5,-2,-0.5,1], PALLET_Z=-4.3;
+const COUNTER={x:-3,z:3}, CASHIER_SPOT=new THREE.Vector3(-3,0,1.9);
+const V=(x,z)=>new THREE.Vector3(x,0,z);
+const custPoint=i=>SLOTS[i].back?V(SLOTS[i].x,SLOTS[i].z+1.2):V(SLOTS[i].x,SLOTS[i].z+1.1);
+const stockPoints=i=>SLOTS[i].back?[custPoint(i)]:[V(SLOTS[i].x,SLOTS[i].z-1.1),custPoint(i)];
+const palletPoint=i=>V(PALLET_X[i],PALLET_Z+1.05);
+const queueSlot=i=>i<5?V(-3-i*1.1,4.1):V(-7.4,4.1-(i-4)*0.9);
+
+// ---------- Estado ----------
+const KEY='mercado-tycoon-v1';
+const S={v:1,money:20,unlocked:[true,false,false,false,false,false],expanded:false,cashier:false,stocker:false,
+  carryLvl:0,speedLvl:0,brand:[0,0,0,0,0,0],shelfLvl:[0,0,0,0,0,0],stock:[4,0,0,0,0,0],padPaid:{}};
+try{const d=JSON.parse(localStorage.getItem(KEY)); if(d&&d.v===1) Object.assign(S,d);}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+const price=i=>Math.round(PRODUCTS[i].price*BRAND_PRICE[S.brand[i]]);
+const cost=i=>Math.round(PRODUCTS[i].cost*BRAND_COST[S.brand[i]]);
+const cap=i=>SHELF_CAP[S.shelfLvl[i]];
+const unlockedList=()=>PRODUCTS.map((_,i)=>i).filter(i=>S.unlocked[i]);
+let boostUntil=0;
+const boost=()=>performance.now()<boostUntil?2:1;
+
+// ---------- Three ----------
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+document.body.prepend(renderer.domElement);
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x2b3345);
+const camera=new THREE.PerspectiveCamera(32,innerWidth/innerHeight,0.1,200);
+scene.add(new THREE.HemisphereLight(0xffffff,0x556070,1.7));
+const sun=new THREE.DirectionalLight(0xffffff,2.2);
+sun.position.set(8,16,10); sun.target.position.set(2,0,0);
+sun.castShadow=true; sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-20,right:20,top:20,bottom:-20,far:60});
+scene.add(sun,sun.target);
+const matCache={};
+const mat=c=>matCache[c]||(matCache[c]=new THREE.MeshLambertMaterial({color:c}));
+const rgCache={};
+function rbox(w,h,d,c,x=0,y=0,z=0,parent=scene,r=0.04){const k=[w,h,d,r].join();const geo=rgCache[k]||(rgCache[k]=new RoundedBoxGeometry(w,h,d,2,Math.min(r,w*0.49,h*0.49,d*0.49)));
+  const m=new THREE.Mesh(geo,mat(c));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;}
+function cyl(rt,rb,h,c,x=0,y=0,z=0,parent=scene,seg=12){const m=new THREE.Mesh(new THREE.CylinderGeometry(rt,rb,h,seg),mat(c));m.position.set(x,y,z);m.castShadow=true;parent.add(m);return m;}
+function box(w,h,d,c,x=0,y=0,z=0,parent=scene){const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(c));m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;}
+
+// chão externo e calçada
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(120,120),mat(0x6b8f5a));ground.rotation.x=-Math.PI/2;ground.position.y=-0.02;ground.receiveShadow=true;scene.add(ground);
+const walk=new THREE.Mesh(new THREE.PlaneGeometry(60,4),mat(0xb9b4a8));walk.rotation.x=-Math.PI/2;walk.position.set(2,-0.01,7.2);walk.receiveShadow=true;scene.add(walk);
+// textura do piso
+const ftc=document.createElement('canvas');ftc.width=ftc.height=256;const fx=ftc.getContext('2d');
+fx.fillStyle='#e7d4b4';fx.fillRect(0,0,256,256);
+function tile(x,y,c,hi){fx.fillStyle=c;fx.beginPath();fx.roundRect(x+5,y+5,118,118,12);fx.fill();
+  fx.strokeStyle=hi;fx.lineWidth=3;fx.beginPath();fx.roundRect(x+7,y+7,114,114,10);fx.stroke();}
+tile(0,0,'#ecce9f','#f2d9b0');tile(128,128,'#ecce9f','#f2d9b0');tile(128,0,'#f2e8cd','#f8f0dc');tile(0,128,'#f2e8cd','#f8f0dc');
+const floorTex=new THREE.CanvasTexture(ftc);floorTex.wrapS=floorTex.wrapT=THREE.RepeatWrapping;floorTex.colorSpace=THREE.SRGBColorSpace;floorTex.anisotropy=4;
+
+const bounds=()=>({minX:-8,maxX:S.expanded?13:4,minZ:-5,maxZ:5});
+let storeGroup=null;
+function buildStore(){
+  if(storeGroup) scene.remove(storeGroup);
+  storeGroup=new THREE.Group();scene.add(storeGroup);
+  const b=bounds(),w=b.maxX-b.minX,d=b.maxZ-b.minZ;
+  const tex=floorTex.clone();tex.needsUpdate=true;tex.repeat.set(w/2,d/2);
+  const fl=new THREE.Mesh(new THREE.PlaneGeometry(w,d),new THREE.MeshLambertMaterial({map:tex}));
+  fl.rotation.x=-Math.PI/2;fl.position.set((b.minX+b.maxX)/2,0.003,(b.minZ+b.maxZ)/2);fl.receiveShadow=true;storeGroup.add(fl);
+  const H=1.1,T=0.3,c=0xe6dccb;
+  box(w+T,H,T,c,(b.minX+b.maxX)/2,H/2,b.minZ,storeGroup);
+  box(T,H,d,c,b.minX,H/2,0,storeGroup);
+  box(T,H,d,c,b.maxX,H/2,0,storeGroup);
+  const l1=-1.4-b.minX; box(l1,H,T,c,b.minX+l1/2,H/2,b.maxZ,storeGroup);
+  const l2=b.maxX-1.4; box(l2,H,T,c,1.4+l2/2,H/2,b.maxZ,storeGroup);
+  // faixa colorida no topo das paredes
+  box(w+T,0.12,T+0.02,0x2d8f5a,(b.minX+b.maxX)/2,H,b.minZ,storeGroup);
+  const mat2=new THREE.Mesh(new THREE.PlaneGeometry(2.6,1.2),mat(0x2d8f5a));mat2.rotation.x=-Math.PI/2;mat2.position.set(0,0.006,4.4);storeGroup.add(mat2);
+}
+
+// ---------- Rótulos (DOM) ----------
+const labelsEl=document.getElementById('labels');
+const labels=new Set();
+function addLabel(cls,getPos){const el=document.createElement('div');el.className='lbl '+cls;labelsEl.appendChild(el);const L={el,getPos,html:''};labels.add(L);return L;}
+function setLabel(L,html){if(L.html!==html){L.html=html;L.el.innerHTML=html;}}
+function removeLabel(L){L.el.remove();labels.delete(L);}
+const tmpV=new THREE.Vector3();
+function updateLabels(){
+  for(const L of labels){
+    tmpV.copy(L.getPos()).project(camera);
+    if(tmpV.z>1||!L.html){L.el.style.display='none';continue;}
+    L.el.style.display='';
+    L.el.style.transform=`translate(${(tmpV.x+1)/2*innerWidth}px,${(1-tmpV.y)/2*innerHeight}px) translate(-50%,-100%)`;
+  }
+}
+const floats=[];
+function floatText(pos,text,color){const p=pos.clone();p.y=1.8;const L=addLabel('float',()=>p);setLabel(L,text);if(color)L.el.style.color=color;floats.push({L,p,life:1.2});}
+const toastEl=document.getElementById('toast');let toastT=0;
+function toast(t){toastEl.textContent=t;toastEl.style.opacity=1;toastT=2.2;}
+
+// ---------- Pessoas (modelos Quaternius, CC0) ----------
+const loader=new GLTFLoader();
+const MODELS={};
+const CUSTOMER_KINDS=['casual_m','casual_f','casual2_m','casual3_m','casual3_f','oldclassy_f','suit_m'];
+await Promise.all(['worker_m','worker_f','casual2_f',...CUSTOMER_KINDS].map(async n=>{
+  const g=await loader.loadAsync(`models/${n}.glb`);
+  g.scene.updateMatrixWorld(true);const b=new THREE.Box3().setFromObject(g.scene,true);
+  MODELS[n]={scene:g.scene,anims:g.animations,scale:1.6/(b.max.y-b.min.y)};
+}));
+const people=new Set();
+// tints: {nomeDoMaterial: cor}
+function makePerson(kind,tints={},moveAnim='Walk'){
+  const M=MODELS[kind];
+  const g=new THREE.Group();
+  const m=SkeletonUtils.clone(M.scene);m.scale.setScalar(M.scale);
+  m.traverse(o=>{if(o.isMesh){o.castShadow=true;o.frustumCulled=false;
+    const mats=Array.isArray(o.material)?o.material:[o.material];
+    const nm=mats.map(mt=>tints[mt.name]!=null?mt.clone():mt);
+    nm.forEach(mt=>{if(tints[mt.name]!=null){mt.color=new THREE.Color(tints[mt.name]);}});
+    o.material=Array.isArray(o.material)?nm:nm[0];}});
+  g.add(m);
+  const mixer=new THREE.AnimationMixer(m),actions={};
+  for(const c of (M.anims.length?M.anims:MODELS.worker_m.anims))actions[c.name]=mixer.clipAction(c);
+  g.userData={mixer,actions,cur:null,moving:false,moveAnim};
+  playAnim(g,'Idle');
+  scene.add(g);people.add(g);return g;
+}
+function playAnim(g,name){const a=g.userData;if(a.cur===name||!a.actions[name])return;
+  const next=a.actions[name];next.reset().fadeIn(0.15).play();if(a.cur)a.actions[a.cur].fadeOut(0.15);a.cur=name;}
+function removePerson(g){scene.remove(g);people.delete(g);g.userData.mixer.stopAllAction();}
+function updatePeople(dt){for(const g of people){playAnim(g,g.userData.moving?g.userData.moveAnim:'Idle');g.userData.mixer.update(dt);}}
+function makeStack(g,n){const st=new THREE.Group();st.position.set(0,0.95,0.42);g.add(st);const arr=[];
+  for(let k=0;k<n;k++){const b=cardBox(0xffffff,0.34,0.2,0.3,st);b.position.y=k*0.205;b.visible=false;b.userData.body=b.children[0];arr.push(b);}return arr;}
+function showStack(arr,n,type){arr.forEach((b,k)=>{b.visible=k<n;if(type>=0)b.userData.body.material=mat(PRODUCTS[type].color);});}
+function step(o,target,speed,dt){
+  const dx=target.x-o.pos.x,dz=target.z-o.pos.z,d=Math.hypot(dx,dz);
+  if(d<0.02)return true;
+  const s=Math.min(d,speed*dt);o.pos.x+=dx/d*s;o.pos.z+=dz/d*s;
+  o.mesh.rotation.y=Math.atan2(dx,dz);o.walkT=(o.walkT||0)+dt*10;
+  return s>=d-1e-4;
+}
+function syncMesh(o){const p=o.mesh.position;o.mesh.userData.moving=Math.hypot(p.x-o.pos.x,p.z-o.pos.z)>0.003;p.set(o.pos.x,0,o.pos.z);}
+// rota que contorna a fileira de prateleiras pelos corredores
+function route(from,to){
+  const band=z=>z<-0.8?-1:1;
+  if(band(from.z)===band(to.z))return[to.clone()];
+  const gaps=[-7.65,-4.25,-0.75,3.75].concat(S.expanded?[8.25,12.15]:[]);
+  let best=gaps[0],bs=1e9;
+  for(const g of gaps){const sc=Math.abs(from.x-g)+Math.abs(to.x-g)+0.01*Math.abs(from.x-g);if(sc<bs){bs=sc;best=g;}}
+  const sz=z=>z<-0.8?-2.2:0.6;
+  return[V(best,sz(from.z)),V(best,sz(to.z)),to.clone()];
+}
+
+// ---------- Obstáculos ----------
+let obstacles=[];
+function rebuildObstacles(){
+  obstacles=[{minX:COUNTER.x-1.2,maxX:COUNTER.x+1.2,minZ:COUNTER.z-0.45,maxZ:COUNTER.z+0.45}];
+  unlockedList().forEach(i=>{const s=SLOTS[i];obstacles.push({minX:s.x-1.3,maxX:s.x+1.3,minZ:s.z-0.4,maxZ:s.z+0.4});
+    obstacles.push({minX:PALLET_X[i]-0.55,maxX:PALLET_X[i]+0.55,minZ:PALLET_Z-0.55,maxZ:PALLET_Z+0.55});});
+}
+function collide(p,r){
+  for(const o of obstacles){
+    const cx=Math.max(o.minX,Math.min(p.x,o.maxX)),cz=Math.max(o.minZ,Math.min(p.z,o.maxZ));
+    const dx=p.x-cx,dz=p.z-cz,d=Math.hypot(dx,dz);
+    if(d<r){if(d>1e-4){p.x=cx+dx/d*r;p.z=cz+dz/d*r;}else{p.z=o.maxZ+r;}}
+  }
+  const b=bounds();p.x=Math.max(b.minX+0.15+r,Math.min(b.maxX-0.15-r,p.x));p.z=Math.max(b.minZ+0.15+r,Math.min(b.maxZ-0.25-r,p.z));
+}
+
+// ---------- Balcão ----------
+{
+  const g=new THREE.Group();g.position.set(COUNTER.x,0,COUNTER.z);scene.add(g);
+  const WOOD=0xdcaa6c,WOOD2=0xc89558,TOP=0xeef0f4;
+  rbox(2.3,0.08,0.78,0xb98a50,0,0.04,0,g,0.03);            // rodapé
+  rbox(2.3,0.76,0.8,WOOD,0,0.46,0,g,0.06);                 // corpo
+  for(const x of[-0.58,0,0.58])for(const z of[-0.41,0.41])box(0.03,0.62,0.01,WOOD2,x,0.46,z,g); // painéis
+  rbox(2.46,0.09,0.96,TOP,0,0.88,0,g,0.04);               // tampo
+  // esteira
+  rbox(0.95,0.05,0.62,WOOD,-0.55,0.95,0.05,g,0.02);
+  for(let k=0;k<5;k++){const r=cyl(0.04,0.04,0.56,0xf3ecd8,-0.9+k*0.17,0.99,0.05,g,10);r.rotation.x=Math.PI/2;}
+  // caixa registradora (virada para o operador, lado -z)
+  const reg=new THREE.Group();reg.position.set(0.45,0.93,-0.08);g.add(reg);
+  rbox(0.52,0.12,0.42,0x8b919c,0,0.06,0,reg,0.03);
+  rbox(0.46,0.18,0.36,0xf1ead2,0,0.21,0.02,reg,0.04);
+  const kp=rbox(0.3,0.03,0.2,0xf7f2e2,-0.05,0.31,-0.06,reg,0.01);kp.rotation.x=0.35;
+  const keyCols=[0xe05252,0xf2c84b,0x4bbf6b,0x9aa0aa];
+  for(let a=0;a<4;a++)for(let b=0;b<3;b++)box(0.045,0.02,0.04,a===0?keyCols[b]:0x9aa0aa,-0.15+a*0.07,0.335-b*0.02,-0.12+b*0.055,reg).rotation.x=0.35;
+  rbox(0.14,0.1,0.03,0x3a4150,0.12,0.36,0.1,reg,0.01);
+  cyl(0.015,0.015,0.18,0x8b919c,0.12,0.42,0.16,reg);
+  rbox(0.16,0.08,0.03,0x8b919c,0.12,0.53,0.16,reg,0.01);
+  // maquininha de cartão
+  rbox(0.13,0.05,0.22,0x5b80d8,0.95,0.95,-0.15,g,0.03);
+  rbox(0.09,0.01,0.07,0x2e3a55,0.95,0.98,-0.2,g,0.005);
+}
+function ring(p,c=0xffffff,r=0.75){const m=new THREE.Mesh(new THREE.RingGeometry(r-0.08,r,32),new THREE.MeshBasicMaterial({color:c,transparent:true,opacity:0.45}));m.rotation.x=-Math.PI/2;m.position.set(p.x,0.015,p.z);scene.add(m);return m;}
+ring(CASHIER_SPOT,0xffcc33);
+const cashLbl=addLabel('box',()=>V(CASHIER_SPOT.x,0).setY(0.2));setLabel(cashLbl,'Caixa');
+
+// ---------- Prateleiras e depósito ----------
+const shelves=[],pallets=[];
+// modelos dos produtos (um tipo por prateleira)
+const PROD_VARIANT=[
+  [0x8fcaf2],                       // água
+  [0xd8324a,0x46b04a],              // salgadinhos
+  [0xe03b3b,0x2f6fd6,0x3cae4a],     // refrigerante
+  [0xd8323a,0x7cc243,0xf28a1e],     // frutas
+  [0xffffff],                       // laticínios
+  [0x46b04a,0x3b8fe0,0xb55fd6],     // limpeza
+];
+function makeItem(type,k){
+  const g=new THREE.Group(),vs=PROD_VARIANT[type],c=vs[k%vs.length];
+  if(type===0){cyl(0.065,0.07,0.26,c,0,0.13,0,g);cyl(0.071,0.071,0.08,0x2f73c9,0,0.13,0,g);cyl(0.035,0.06,0.06,c,0,0.29,0,g);cyl(0.03,0.03,0.04,0x2f73c9,0,0.33,0,g);}
+  else if(type===1){rbox(0.21,0.27,0.08,c,0,0.14,0,g,0.035);rbox(0.13,0.08,0.085,0xf6d23a,0,0.16,0.002,g,0.03);}
+  else if(type===2){cyl(0.06,0.06,0.2,c,0,0.1,0,g,14);cyl(0.055,0.06,0.02,0xc9ced6,0,0.21,0,g,14);cyl(0.062,0.062,0.035,0xffffff,0,0.12,0,g,14);}
+  else if(type===3){const r=k%3===2?0.08:0.07;const f=new THREE.Mesh(new THREE.SphereGeometry(r,12,10),mat(c));f.position.y=r;f.castShadow=true;g.add(f);
+    if(k%3!==2){cyl(0.008,0.008,0.05,0x6b4a2b,0,r*2+0.01,0,g,5);box(0.04,0.008,0.02,0x4caf50,0.02,r*2+0.02,0,g);}}
+  else if(type===4){rbox(0.14,0.22,0.14,0xffffff,0,0.11,0,g,0.015);box(0.142,0.06,0.142,0x3b86d8,0,0.1,0,g);
+    const t=new THREE.Mesh(new THREE.CylinderGeometry(0.0,0.1,0.07,4,1),mat(0xf4f6fa));t.rotation.y=Math.PI/4;t.position.y=0.255;g.add(t);}
+  else{rbox(0.13,0.24,0.09,c,0,0.12,0,g,0.03);rbox(0.1,0.08,0.092,0xf6e65a,0,0.11,0,g,0.02);cyl(0.025,0.03,0.05,0xffffff,0,0.265,0,g,8);rbox(0.04,0.035,0.08,0xe24b4b,0,0.3,0.03,g,0.01);}
+  return g;
+}
+function buildShelf(i){
+  const s=SLOTS[i],g=new THREE.Group();g.position.set(s.x,0,s.z);scene.add(g);
+  const BASE=0x8f9bb0,BOARD=0xb9c2d1,PANEL=0xa9b3c4;
+  rbox(2.6,0.24,0.8,BASE,0,0.12,0,g,0.05);               // degrau de baixo
+  rbox(2.6,0.62,0.4,BOARD,0,0.31,-0.15,g,0.04);          // degrau de cima
+  rbox(2.6,1.0,0.1,PANEL,0,0.5,-0.36,g,0.05);            // fundo
+  for(const x of[-1.27,1.27])rbox(0.08,1.02,0.16,BASE,x,0.51,-0.33,g,0.03);
+  box(2.6,0.05,0.02,PRODUCTS[i].color,0,0.215,0.405,g);  // faixas de preço na cor do produto
+  box(2.6,0.05,0.02,PRODUCTS[i].color,0,0.595,0.055,g);
+  const items=[];
+  for(let k=0;k<16;k++){const it=makeItem(i,k);const lvl=k<8?0:1;
+    it.position.set(-1.05+(k%8)*0.3,lvl?0.62:0.24,lvl?-0.14:0.2);it.rotation.y=(Math.random()-0.5)*0.25;g.add(it);items.push(it);}
+  stockPoints(i).forEach(p=>ring(p,PRODUCTS[i].color,0.6));
+  const L=addLabel('box',()=>V(s.x,s.z).setY(1.7));
+  shelves[i]={g,items,L};updateShelf(i);
+}
+function updateShelf(i){
+  const sh=shelves[i];if(!sh)return;
+  sh.items.forEach((m,k)=>m.visible=k<S.stock[i]);
+  setLabel(sh.L,`${PRODUCTS[i].name} $${price(i)}<br><span class="${S.stock[i]?'':'empty'}">${S.stock[i]}/${cap(i)}</span>`);
+}
+function cardBox(c,w,h,d,parent){const g=new THREE.Group();rbox(w,h,d,c,0,h/2,0,g,0.035);
+  box(w*0.24,0.008,d+0.004,0xf5e6c8,0,h+0.001,0,g).material=mat(0xf5e6c8);
+  box(w*0.24,h*0.3,0.008,0xf5e6c8,0,h*0.85,d/2+0.002,g);parent&&parent.add(g);return g;}
+function buildPallet(i){
+  const g=new THREE.Group();g.position.set(PALLET_X[i],0,PALLET_Z);scene.add(g);
+  const W1=0x9c8668,W2=0x7f6c52;
+  for(const x of[-0.45,0,0.45])for(const z of[-0.45,0,0.45])rbox(0.16,0.09,0.16,W2,x,0.045,z,g,0.02);
+  for(const z of[-0.45,0,0.45])rbox(1.1,0.035,0.18,W1,0,0.105,z,g,0.012);
+  for(const x of[-0.45,-0.15,0.15,0.45])rbox(0.24,0.035,1.12,W1,x,0.14,0,g,0.012);
+  for(let a=0;a<2;a++)for(let b=0;b<2;b++)for(let c=0;c<2;c++){
+    const bx=cardBox(PRODUCTS[i].color,0.5,0.38,0.48,g);bx.position.set(-0.25+a*0.5,0.16+c*0.39,-0.24+b*0.49);bx.rotation.y=(Math.random()-0.5)*0.12;}
+  ring(palletPoint(i),0xffffff,0.6);
+  const L=addLabel('box',()=>V(PALLET_X[i],PALLET_Z).setY(1.5));
+  pallets[i]={g,L};updatePallet(i);
+}
+function updatePallet(i){if(pallets[i])setLabel(pallets[i].L,`<img class="ic" src="assets/box.png">$${cost(i)}`);}
+function unlockProduct(i){S.unlocked[i]=true;S.stock[i]=0;buildShelf(i);buildPallet(i);rebuildObstacles();toast(`Novo produto: ${PRODUCTS[i].name}!`);}
+
+// ---------- Funcionários ----------
+let cashierNpc=null,stocker=null;
+function spawnCashier(){const mesh=makePerson('casual2_f',{Shirt:0xff7f50});cashierNpc={mesh,pos:CASHIER_SPOT.clone()};mesh.position.copy(CASHIER_SPOT);mesh.rotation.y=0;}
+function spawnStocker(){const mesh=makePerson('worker_f',{Shirt:0x20b2aa});stocker={mesh,pos:V(3,-2.6),path:[],state:'idle',type:-1,carry:0,t:0,stack:makeStack(mesh,6)};}
+
+// ---------- Áreas de compra ----------
+const PADS=[
+  {id:'p1',slot:1,cond:()=>S.unlocked[0],buy:()=>unlockProduct(1)},
+  {id:'p2',slot:2,cond:()=>S.unlocked[1],buy:()=>unlockProduct(2)},
+  {id:'cashier',x:-5.6,z:1.7,cost:200,name:'Contratar caixa',cond:()=>S.unlocked[1],buy:()=>{S.cashier=true;spawnCashier();toast('Caixa contratado! Ele atende sozinho.');}},
+  {id:'exp',x:3,z:2.4,cost:250,name:'Ampliar a loja',cond:()=>S.unlocked[2],buy:()=>{S.expanded=true;buildStore();toast('Loja ampliada!');}},
+  {id:'stocker',x:3,z:-3,cost:350,name:'Contratar repositor',cond:()=>S.unlocked[2],buy:()=>{S.stocker=true;spawnStocker();toast('Repositor contratado! Ele abastece as prateleiras.');}},
+  {id:'p3',slot:3,cond:()=>S.expanded,buy:()=>unlockProduct(3)},
+  {id:'p4',slot:4,cond:()=>S.unlocked[3],buy:()=>unlockProduct(4)},
+  {id:'p5',slot:5,cond:()=>S.unlocked[4],buy:()=>unlockProduct(5)},
+];
+PADS.forEach(p=>{if(p.slot!=null){p.x=SLOTS[p.slot].x;p.z=SLOTS[p.slot].z;p.cost=PRODUCTS[p.slot].unlock;p.name=PRODUCTS[p.slot].name;p.w=2.6;p.d=1.2;}else{p.w=p.d=1.8;}});
+const padMat=new THREE.MeshBasicMaterial({color:0x3ddc84,transparent:true,opacity:0.3});
+function isBought(p){return(S.padPaid[p.id]||0)>=p.cost;}
+function updatePads(dt){
+  for(const p of PADS){
+    if(isBought(p)){if(p.mesh){scene.remove(p.mesh);removeLabel(p.L);p.mesh=null;}continue;}
+    if(!p.cond())continue;
+    if(!p.mesh){
+      p.mesh=new THREE.Group();
+      const pl=new THREE.Mesh(new THREE.PlaneGeometry(p.w,p.d),padMat);pl.rotation.x=-Math.PI/2;p.mesh.add(pl);
+      const ed=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(p.w,p.d)),new THREE.LineBasicMaterial({color:0x3ddc84}));ed.rotation.x=-Math.PI/2;p.mesh.add(ed);
+      p.mesh.position.set(p.x,0.02,p.z);scene.add(p.mesh);
+      p.L=addLabel('box pad',()=>V(p.x,p.z).setY(0.3));
+    }
+    let paid=S.padPaid[p.id]||0;
+    const on=Math.abs(player.pos.x-p.x)<p.w/2&&Math.abs(player.pos.z-p.z)<p.d/2;
+    p.stand=on?(p.stand||0)+dt:0;
+    if(on&&p.stand>0.7&&S.money>=1){
+      const amt=Math.min(Math.max(p.cost*0.8,30)*dt,S.money,p.cost-paid);
+      paid+=amt;S.money-=amt;S.padPaid[p.id]=paid;
+      if(paid>=p.cost-1e-6){S.padPaid[p.id]=p.cost;p.buy();save();continue;}
+    }
+    const left=Math.ceil(p.cost-paid);
+    setLabel(p.L,`<img class="ic" src="assets/lock.png">${p.name}<br>$${left}<div class="bar"><i style="width:${paid/p.cost*100}%"></i></div>`);
+  }
+}
+
+// ---------- Jogador ----------
+const player={mesh:makePerson('worker_m',{Shirt:0x4cc24a,Hat:0xffcc33},'Run'),pos:V(0,2),carry:0,type:-1,actT:0};
+player.stack=makeStack(player.mesh,12);
+const carryCap=()=>CARRY_CAP[S.carryLvl];
+function nearBox(p,cx,cz,hw,hd,r){const dx=Math.max(Math.abs(p.x-cx)-hw,0),dz=Math.max(Math.abs(p.z-cz)-hd,0);return Math.hypot(dx,dz)<r;}
+const nearPallet=(p,i)=>nearBox(p,PALLET_X[i],PALLET_Z,0.55,0.55,0.75);
+const nearShelf=(p,i)=>nearBox(p,SLOTS[i].x,SLOTS[i].z,1.3,0.4,0.75);
+function playerActions(dt){
+  if(player.noMoneyT)player.noMoneyT=Math.max(0,player.noMoneyT-dt);
+  player.actT+=dt;if(player.actT<0.12)return;
+  let acted=false;
+  const unl=unlockedList();
+  // 1) repor: carregando produto e perto da prateleira dele
+  if(player.carry>0&&nearShelf(player.pos,player.type)&&S.stock[player.type]<cap(player.type)){
+    const i=player.type;S.stock[i]++;player.carry--;if(!player.carry)player.type=-1;updateShelf(i);acted=true;
+  }else{
+    // 2) pegar no pallet (de qualquer lado)
+    for(const i of unl){
+      if(!nearPallet(player.pos,i))continue;
+      if(player.carry>0&&player.type!==i){player.carry--;S.money+=cost(player.type);if(!player.carry)player.type=-1;acted=true;}
+      else if(player.carry<carryCap()&&S.money>=cost(i)){player.carry++;player.type=i;S.money-=cost(i);acted=true;}
+      else if(S.money<cost(i)&&player.carry===0&&!player.noMoneyT){floatText(player.pos,'Sem dinheiro','#ff6b6b');player.noMoneyT=2;}
+      break;
+    }
+  }
+  if(acted)player.actT=0;
+}
+
+// ---------- Clientes ----------
+const customers=[],queue=[];
+const CUST_COLORS=[0xe74c3c,0x9b59b6,0x34495e,0x16a085,0xd35400,0x8e44ad,0x2c3e50,0xc0392b,0x27ae60,0xf39c12];
+function spawnCustomer(){
+  const unl=unlockedList();
+  const n=1+Math.floor(Math.random()*Math.min(3,unl.length));
+  const wants=unl.sort(()=>Math.random()-0.5).slice(0,n);
+  const col=CUST_COLORS[Math.floor(Math.random()*CUST_COLORS.length)],kind=CUSTOMER_KINDS[Math.floor(Math.random()*CUSTOMER_KINDS.length)];
+  const c={mesh:makePerson(kind,Math.random()<0.6?{Shirt:col}:{}),pos:V(-0.5+Math.random(),9.5),path:[V(0,4.2)],wants,items:[],state:'walk',t:0,angry:false,off:(Math.random()-0.5)*1.6};
+  c.bubble=addLabel('bubble',()=>c.pos.clone().setY(1.75));
+  planNext(c);customers.push(c);
+}
+function lastPoint(c){return c.path.length?c.path[c.path.length-1]:c.pos;}
+function planNext(c){
+  if(c.wants.length){const t=custPoint(c.wants[0]);t.x+=SLOTS[c.wants[0]].back?c.off*0.3:c.off;c.path.push(...route(lastPoint(c),t));c.after='shop';}
+  else if(c.items.length){c.path.push(...route(lastPoint(c),V(-0.8,1.6)),V(-0.8,4.1));c.after='queue';}
+  else{c.path.push(...route(lastPoint(c),V(0,3.5)),V(0,9.5));c.after='gone';c.angry=true;}
+  c.state='walk';
+}
+function updateCustomers(dt){
+  for(const c of customers){
+    if(c.state==='walk'){
+      if(c.path.length){if(step(c,c.path[0],2.4,dt))c.path.shift();}
+      else{c.state=c.after;c.t=0;if(c.state==='queue')queue.push(c);}
+      setLabel(c.bubble,c.after==='gone'&&c.items.length?'😊':c.after==='gone'?'😠':c.items.length?'🛒'+c.items.length:'');
+    }else if(c.state==='shop'){
+      const i=c.wants[0];c.t+=dt;
+      if(S.stock[i]>0){setLabel(c.bubble,'🛒');if(c.t>0.4){S.stock[i]--;c.items.push(price(i));updateShelf(i);c.wants.shift();planNext(c);}}
+      else{setLabel(c.bubble,c.t>3?'😠':'❗');if(c.t>6){c.wants.shift();c.angry=true;planNext(c);}}
+    }
+  }
+  // fila do caixa
+  const playerAtCash=player.pos.distanceTo(CASHIER_SPOT)<1.0;
+  queue.forEach((c,k)=>{step(c,queueSlot(k),2.4,dt);});
+  const f=queue[0];
+  if(f&&f.pos.distanceTo(queueSlot(0))<0.05){
+    f.mesh.rotation.y=Math.PI;
+    const time=0.4+0.25*f.items.length;
+    const rate=playerAtCash?1/time:(cashierNpc?0.65/time:0);
+    f.t+=dt*rate;
+    setLabel(f.bubble,rate?`💳 ${Math.round(Math.min(f.t,1)*100)}%`:'⏳');
+    if(f.t>=1){
+      const total=f.items.reduce((a,b)=>a+b,0)*boost();
+      S.money+=total;floatText(V(COUNTER.x,COUNTER.z),'+$'+total);
+      queue.shift();f.path=[V(0,4.4),V(0,9.5)];f.after='gone';f.state='walk';
+    }
+  }
+  for(let k=customers.length-1;k>=0;k--){
+    const c=customers[k];
+    if(c.state==='gone'){removePerson(c.mesh);removeLabel(c.bubble);customers.splice(k,1);continue;}
+    syncMesh(c);
+  }
+}
+let spawnT=1;
+function updateSpawn(dt){
+  const n=unlockedList().length;
+  spawnT-=dt;
+  if(spawnT<=0){spawnT=Math.max(1.6,5-0.55*n)*(0.7+Math.random()*0.6);if(customers.length<4+2*n)spawnCustomer();}
+}
+
+// ---------- Repositor ----------
+function updateStocker(dt){
+  const s=stocker;if(!s)return;
+  if(s.path.length){if(step(s,s.path[0],2.8,dt))s.path.shift();syncMesh(s);showStack(s.stack,s.carry,s.type);return;}
+  s.t+=dt;
+  if(s.state==='idle'&&s.t>0.5){
+    s.t=0;
+    let best=-1,br=0.7;
+    for(const i of unlockedList()){const r=S.stock[i]/cap(i);if(r<br&&(s.carry===0||s.type===i)){br=r;best=i;}}
+    if(best>=0){
+      s.type=best;
+      if(s.carry>0){s.path=route(s.pos,stockPoints(best)[0]);s.state='drop';}
+      else{s.path=route(s.pos,palletPoint(best));s.state='pick';}
+    }else if(s.carry===0&&s.pos.distanceTo(V(3,-2.6))>0.3){s.path=route(s.pos,V(3,-2.6));}
+  }else if(s.state==='pick'&&s.t>0.2){
+    s.t=0;const i=s.type,need=cap(i)-S.stock[i];
+    if(s.carry<6&&s.carry<need&&S.money>=cost(i)){s.carry++;S.money-=cost(i);}
+    else if(s.carry>0){s.path=route(s.pos,stockPoints(i)[0]);s.state='drop';}
+    else s.state='idle';
+  }else if(s.state==='drop'&&s.t>0.15){
+    s.t=0;const i=s.type;
+    if(s.carry>0&&S.stock[i]<cap(i)){S.stock[i]++;s.carry--;updateShelf(i);}
+    else{if(!s.carry)s.type=-1;s.state='idle';}
+  }
+  syncMesh(s);showStack(s.stack,s.carry,s.type);
+}
+
+// ---------- Controles ----------
+const keys={};addEventListener('keydown',e=>keys[e.key.toLowerCase()]=true);addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+const joy={active:false,ox:0,oy:0,x:0,y:0,id:null};
+const jb=document.getElementById('joyBase'),jk=document.getElementById('joyKnob');
+const cv=renderer.domElement;
+cv.addEventListener('pointerdown',e=>{joy.active=true;joy.id=e.pointerId;joy.ox=e.clientX;joy.oy=e.clientY;joy.x=joy.y=0;cv.setPointerCapture(e.pointerId);
+  jb.style.left=jk.style.left=e.clientX+'px';jb.style.top=jk.style.top=e.clientY+'px';jb.classList.remove('hidden');jk.classList.remove('hidden');});
+cv.addEventListener('pointermove',e=>{if(!joy.active||e.pointerId!==joy.id)return;let dx=e.clientX-joy.ox,dy=e.clientY-joy.oy;const d=Math.hypot(dx,dy),R=50;if(d>R){dx=dx/d*R;dy=dy/d*R;}
+  joy.x=dx/R;joy.y=dy/R;jk.style.left=joy.ox+dx+'px';jk.style.top=joy.oy+dy+'px';});
+const endJoy=e=>{if(e.pointerId!==joy.id)return;joy.active=false;joy.x=joy.y=0;jb.classList.add('hidden');jk.classList.add('hidden');};
+cv.addEventListener('pointerup',endJoy);cv.addEventListener('pointercancel',endJoy);
+function updatePlayer(dt){
+  let ix=joy.x,iz=joy.y;
+  if(keys['a']||keys['arrowleft'])ix-=1;if(keys['d']||keys['arrowright'])ix+=1;
+  if(keys['w']||keys['arrowup'])iz-=1;if(keys['s']||keys['arrowdown'])iz+=1;
+  const m=Math.hypot(ix,iz);
+  if(m>0.15){const k=Math.min(m,1)/m;const sp=4.2*SPEED[S.speedLvl];
+    player.pos.x+=ix*k*sp*dt;player.pos.z+=iz*k*sp*dt;player.mesh.rotation.y=Math.atan2(ix,iz);player.walkT=(player.walkT||0)+dt*12;}
+  collide(player.pos,0.35);syncMesh(player);
+  playerActions(dt);showStack(player.stack,player.carry,player.type);
+}
+
+// ---------- Anúncio simulado ----------
+const adEl=document.getElementById('ad'),adCount=document.getElementById('adCount');
+function showAd(onDone){adEl.classList.remove('hidden');let n=3;adCount.textContent=n;const iv=setInterval(()=>{n--;adCount.textContent=n;if(n<=0){clearInterval(iv);adEl.classList.add('hidden');onDone();}},1000);}
+const btnAd=document.getElementById('btnAd');
+btnAd.onclick=()=>{if(boost()>1)return;showAd(()=>{boostUntil=performance.now()+60000;toast('Dinheiro em dobro por 60s!');});};
+let adCashReady=0;
+
+// ---------- Melhorias ----------
+const modal=document.getElementById('modal'),mlist=document.getElementById('mlist');
+document.getElementById('btnUp').onclick=()=>{renderUpgrades();modal.classList.remove('hidden');};
+document.getElementById('closeM').onclick=()=>modal.classList.add('hidden');
+modal.addEventListener('pointerdown',e=>{if(e.target===modal)modal.classList.add('hidden');});
+let resetArm=false;
+function row(title,desc,label,cls,onClick){
+  const r=document.createElement('div');r.className='row';
+  r.innerHTML=`<div><b>${title}</b><small>${desc}</small></div>`;
+  const b=document.createElement('button');b.textContent=label;if(cls)b.className=cls;
+  if(onClick)b.onclick=()=>{onClick();renderUpgrades();};else b.disabled=true;
+  r.appendChild(b);mlist.appendChild(r);return b;
+}
+function sec(t){const d=document.createElement('div');d.className='sec';d.textContent=t;mlist.appendChild(d);}
+function buyable(c,fn){return S.money>=c?()=>{S.money-=c;fn();save();}:null;}
+function renderUpgrades(){
+  mlist.innerHTML='';
+  sec('Grátis');
+  const adCash=25+15*unlockedList().length;
+  const ready=performance.now()>=adCashReady;
+  row('<img class="ic" src="assets/ad.png">Assistir anúncio',`Ganhe $${adCash} na hora`,ready?'Assistir':'Aguarde',ready?'ad':'max',ready?()=>{modal.classList.add('hidden');showAd(()=>{S.money+=adCash;adCashReady=performance.now()+30000;floatText(player.pos,'+$'+adCash);});}:null);
+  sec('Você');
+  if(S.carryLvl<CARRY_COST.length){const c=CARRY_COST[S.carryLvl];row('<img class="ic" src="assets/box.png">Carregar mais',`${CARRY_CAP[S.carryLvl]} → ${CARRY_CAP[S.carryLvl+1]} itens por vez`,'$'+c,'',buyable(c,()=>S.carryLvl++));}
+  else row('<img class="ic" src="assets/box.png">Carregar mais',`${CARRY_CAP[S.carryLvl]} itens (máximo)`,'MÁX','max',null);
+  if(S.speedLvl<SPEED_COST.length){const c=SPEED_COST[S.speedLvl];row('<img class="ic" src="assets/shoe.png">Velocidade',`Nível ${S.speedLvl+1} → ${S.speedLvl+2}`,'$'+c,'',buyable(c,()=>S.speedLvl++));}
+  else row('<img class="ic" src="assets/shoe.png">Velocidade','Nível máximo','MÁX','max',null);
+  sec('Produtos e marcas');
+  for(const i of unlockedList()){
+    const P=PRODUCTS[i],bl=S.brand[i];
+    if(bl<2){const c=Math.round(P.price*(bl?60:20)+(bl?120:40));const np=Math.round(P.price*BRAND_PRICE[bl+1]);
+      row(`${P.name}: marca ${P.brands[bl+1]}`,`Hoje: ${P.brands[bl]} · preço $${price(i)} → $${np}`,'$'+c,'',buyable(c,()=>{S.brand[i]++;updateShelf(i);updatePallet(i);}));}
+    else row(`${P.name}: ${P.brands[2]}`,'Marca premium (máximo)','MÁX','max',null);
+    const sl=S.shelfLvl[i];
+    if(sl<2){const c=(sl?150:60)+i*(sl?80:40);row(`Prateleira de ${P.name}`,`Capacidade ${cap(i)} → ${SHELF_CAP[sl+1]}`,'$'+c,'',buyable(c,()=>{S.shelfLvl[i]++;updateShelf(i);}));}
+  }
+  const rb=document.createElement('button');rb.className='reset';rb.textContent=resetArm?'Toque de novo para apagar tudo':'Recomeçar jogo';
+  rb.onclick=()=>{if(!resetArm){resetArm=true;renderUpgrades();return;}try{localStorage.removeItem(KEY);}catch(e){}location.reload();};
+  mlist.appendChild(rb);
+}
+
+// ---------- Dica ----------
+const hintEl=document.getElementById('hint');
+function updateHint(){
+  let h='';
+  const waiting=queue.length&&!cashierNpc&&player.pos.distanceTo(CASHIER_SPOT)>1;
+  if(waiting)h='💳 Cliente esperando! Vá até o círculo amarelo do caixa';
+  else if(player.carry>0)h=`Leve ${PRODUCTS[player.type].name} até a prateleira dele`;
+  else if(unlockedList().some(i=>S.stock[i]===0))h='📦 Pegue produtos nos pallets do fundo da loja';
+  else h='Pise nos quadrados verdes para desbloquear coisas novas';
+  hintEl.textContent=h;
+}
+
+// ---------- Câmera ----------
+const camTarget=new THREE.Vector3();
+function updateCamera(dt,snap){
+  const vf=THREE.MathUtils.degToRad(camera.fov)/2,hf=Math.atan(Math.tan(vf)*camera.aspect);
+  const d=Math.max(4.6/Math.tan(hf),5/Math.tan(vf));
+  const dy=d*0.8,dz=d*0.6;
+  camTarget.set(player.pos.x,dy,player.pos.z+dz);
+  if(snap)camera.position.copy(camTarget);else camera.position.lerp(camTarget,Math.min(1,dt*5));
+  camera.lookAt(camera.position.x,0,camera.position.z-dz);
+}
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+
+// ---------- Inicialização ----------
+buildStore();
+unlockedList().forEach(i=>{buildShelf(i);buildPallet(i);});
+rebuildObstacles();
+if(S.cashier)spawnCashier();
+if(S.stocker)spawnStocker();
+updateCamera(0,true);
+
+const moneyEl=document.getElementById('money'),boostEl=document.getElementById('boost'),lvlEl=document.getElementById('lvl');
+let saveT=0,last=performance.now();
+function loop(now){
+  const dt=Math.min(0.05,(now-last)/1000);last=now;
+  updatePlayer(dt);updatePads(dt);updateSpawn(dt);updateCustomers(dt);updateStocker(dt);updatePeople(dt);
+  for(let k=floats.length-1;k>=0;k--){const f=floats[k];f.life-=dt;f.p.y+=dt*1.3;f.L.el.style.opacity=Math.min(1,f.life*2);if(f.life<=0){removeLabel(f.L);floats.splice(k,1);}}
+  if(toastT>0){toastT-=dt;if(toastT<=0)toastEl.style.opacity=0;}
+  updateCamera(dt);renderer.render(scene,camera);updateLabels();
+  moneyEl.textContent='$'+Math.floor(S.money).toLocaleString('pt-BR');
+  const bl=boostUntil-performance.now();
+  boostEl.textContent=bl>0?` ×2 ${Math.ceil(bl/1000)}s`:'';
+  btnAd.disabled=bl>0;
+  lvlEl.textContent='Loja nível '+(1+PADS.filter(isBought).length);
+  updateHint();
+  saveT+=dt;if(saveT>3){saveT=0;save();}
+  requestAnimationFrame(loop);
+}
+document.getElementById('loading').remove();
+requestAnimationFrame(loop);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)save();});
+window.__game={S,player,customers,queue,get stocker(){return stocker}};
+</script>
+</body>
+</html>

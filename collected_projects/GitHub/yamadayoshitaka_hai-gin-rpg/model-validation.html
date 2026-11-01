@@ -1,0 +1,39 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>灰銀のレゾナンス 人物モデル検証</title><style>
+body{margin:0;background:#101b28;color:#e9edf2;font:15px system-ui}header{padding:16px;background:#1c3045}h1{font-size:21px;margin:0 0 8px}main{padding:14px;max-width:850px;margin:auto}canvas{display:block;width:100%;height:48vh;border:1px solid #49617a;border-radius:12px;background:#314657}button,select{font:inherit;padding:11px;border:1px solid #a9c8e0;border-radius:9px;color:white;background:#344b67;min-height:48px}button{cursor:pointer}.controls{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#192a3b;padding:12px;border-radius:9px}small{color:#a6bfcc}</style></head><body>
+<header><h1>人物モデル実機検証 / model-first v1</h1><small>既存のゲームを壊さず、表示モデル・骨・アニメーションを直接検査</small></header><main>
+<div class="controls"><label>モデル <select id="model"><option value="Male_Ranger">男・レンジャー</option><option value="Female_Ranger">女・レンジャー</option><option value="Male_Peasant">男・一般人</option><option value="Female_Peasant">女・一般人</option></select></label><button id="load">モデルを検査</button><button id="spin">360°回転</button><label>アニメーション付きGLB <input type="file" id="glb" accept=".glb,model/gltf-binary"></label><select id="clip" aria-label="モーション選択"></select></div>
+<canvas id="stage"></canvas><pre id="result">モデル確認待ち</pre><p>合格基準：スキン付きモデル、左右の上腕・前腕・脚の関節、idle/walk/run/attack等の有効なアニメーションクリップ。足りない場合は不合格と表示します。</p>
+<p><a style="color:#a9d9ff" href="./">ゲームへ戻る</a></p></main>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+const canvas=document.querySelector('#stage'),renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=THREE.SRGBColorSpace;
+const scene=new THREE.Scene();scene.background=new THREE.Color(0x344e6a);const camera=new THREE.PerspectiveCamera(42,1,.01,100);camera.position.set(0,1.55,4.4);camera.lookAt(0,1,0);
+scene.add(new THREE.HemisphereLight(0xffffff,0x52616b,2));const light=new THREE.DirectionalLight(0xffe6bc,2.1);light.position.set(2,5,3);scene.add(light);
+const floor=new THREE.Mesh(new THREE.CircleGeometry(2.3,64),new THREE.MeshStandardMaterial({color:0x778681,roughness:1}));floor.rotation.x=-Math.PI/2;scene.add(floor);
+const loader=new GLTFLoader();let actor=null,rotating=true,mixer=null,activeActions=[];const clock=new THREE.Clock();
+document.querySelector('#spin').onclick=()=>rotating=!rotating;
+async function inspect(){
+ const id=document.querySelector('#model').value,report=document.querySelector('#result');report.textContent='読み込み中…';
+ try{
+  const gltf=await loader.loadAsync('./assets/characters/quaternius-outfits/'+id+'.gltf');
+  if(actor){scene.remove(actor);actor=null;mixer=null;}
+  actor=gltf.scene;scene.add(actor);actor.updateMatrixWorld(true);
+  const bounds=new THREE.Box3().setFromObject(actor,true),height=bounds.max.y-bounds.min.y;
+  if(!(height>0))throw Error('モデルの高さが不正');
+  actor.scale.setScalar(1.76/height);actor.position.y-=bounds.min.y*actor.scale.y;actor.updateMatrixWorld(true);
+  let skinned=0;const joints=new Set();actor.traverse(o=>{if(o.isSkinnedMesh)skinned++;if(o.isBone)joints.add(o.name);});
+  const required=['upperarm_l','upperarm_r','lowerarm_l','lowerarm_r','thigh_l','thigh_r'],missing=required.filter(x=>!joints.has(x));
+  const clips=(gltf.animations||[]).filter(x=>x.tracks?.length);
+  const actions=['idle','walk','run','attack'],missingActions=actions.filter(x=>!clips.some(c=>c.name.toLowerCase().includes(x)));
+  const compatible=skinned>0&&missing.length===0&&missingActions.length===0;
+  mixer=new THREE.AnimationMixer(actor);activeActions=clips.map(clip=>mixer.clipAction(clip));const selector=document.querySelector('#clip');selector.replaceChildren(...clips.map((clip,i)=>{const opt=document.createElement('option');opt.value=String(i);opt.textContent=clip.name;return opt;}));if(activeActions.length)activeActions[0].play();
+  report.textContent=JSON.stringify({model:id,skinMeshes:skinned,bones:[...joints].length,requiredBoneMissing:missing,embeddedAnimationClips:clips.map(x=>x.name),requiredActionMissing:missingActions,characterAndJobReady:compatible,assessment:compatible?'基本アクション検証へ進める':'モデルは候補。ただし実アニメーションを外部から取り込む必要あり'},null,2);
+ }catch(e){report.textContent='検証失敗: '+(e?.message||e);}
+}
+document.querySelector('#glb').addEventListener('change',async e=>{const file=e.target.files?.[0];if(!file)return;const url=URL.createObjectURL(file);try{const gltf=await loader.loadAsync(url);if(actor)scene.remove(actor);actor=gltf.scene;scene.add(actor);const box=new THREE.Box3().setFromObject(actor,true),height=box.max.y-box.min.y;if(height>0){actor.scale.setScalar(1.76/height);actor.position.y-=box.min.y*actor.scale.y;}mixer=new THREE.AnimationMixer(actor);activeActions=(gltf.animations||[]).map(clip=>mixer.clipAction(clip));const sel=document.querySelector('#clip');sel.replaceChildren(...gltf.animations.map((clip,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent=clip.name;return o;}));if(activeActions.length)activeActions[0].play();document.querySelector('#result').textContent=JSON.stringify({file:file.name,clips:gltf.animations.map(c=>c.name),clipCount:gltf.animations.length,canPlay:activeActions.length>0},null,2);}catch(err){document.querySelector('#result').textContent='GLB読込失敗: '+err.message;}finally{URL.revokeObjectURL(url);}});
+document.querySelector('#clip').onchange=e=>{for(const action of activeActions)action.stop();activeActions[Number(e.target.value)]?.reset().play();};
+function frame(){requestAnimationFrame(frame);if(mixer)mixer.update(Math.min(clock.getDelta(),.05));const w=canvas.clientWidth,h=canvas.clientHeight;if(canvas.width!==Math.round(w*renderer.getPixelRatio())||canvas.height!==Math.round(h*renderer.getPixelRatio())){renderer.setSize(w,h,false);camera.aspect=w/h;camera.updateProjectionMatrix();}if(actor&&rotating)actor.rotation.y+=.004;renderer.render(scene,camera)}frame();
+document.querySelector('#load').onclick=inspect;inspect();
+</script></body></html>

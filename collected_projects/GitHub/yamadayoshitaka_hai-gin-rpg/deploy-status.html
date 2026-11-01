@@ -1,0 +1,22 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>灰銀のレゾナンス デプロイ監視</title><style>body{margin:0;background:#111927;color:#edf4ff;font:15px system-ui;padding:20px}main{max-width:700px;margin:auto}.panel{background:#202d40;border-radius:12px;padding:18px;margin:12px 0}.status{font-weight:bold;font-size:21px}.ok{color:#6fe4a0}.wait{color:#ffce6a}.bad{color:#ff8686}a{color:#9bc9ff}small{color:#b6c6d9}button{padding:10px;border:0;border-radius:8px}code{overflow-wrap:anywhere}</style></head><body><main><h2>灰銀のレゾナンス / デプロイ監視</h2><small>30秒ごとに自動更新。GitHub Actionsと公開サイトの応答を別々に表示します。</small><div class="panel"><div>最新のGitHub Actions</div><p id="action" class="status wait">取得中…</p><div id="detail"></div><a href="https://github.com/yamadayoshitaka/hai-gin-rpg/actions" target="_blank">Actionsを開く</a></div><div class="panel"><div>GitHub Pages 公開応答</div><p id="pages" class="status wait">取得中…</p><div id="pageDetail"></div><small>HTTP応答を確認します。最新コミットの反映までは保証しません。</small></div><div class="panel"><div>最終確認 <span id="time">未実行</span></div><button id="refresh">今すぐ再確認</button><p><a href="./mocap-online.html">剣士モーション検証へ</a></p></div></main><script>
+const base='https://api.github.com/repos/yamadayoshitaka/hai-gin-rpg';
+const $=id=>document.getElementById(id);
+function status(id,text,cls){$(id).textContent=text;$(id).className='status '+cls}
+async function refresh(){
+$('time').textContent='確認中…';
+try{const r=await fetch(base+'/actions/runs?per_page=20',{cache:'no-store',headers:{Accept:'application/vnd.github+json'}});if(!r.ok)throw Error('GitHub API HTTP '+r.status);
+const data=await r.json();const runs=data.workflow_runs||[];const deploy=runs.find(x=>/pages|deploy|build/i.test(x.name||'')||/pages/i.test(x.path||''))||runs[0];
+if(!deploy){status('action','実行履歴なし','wait');$('detail').textContent=''}else{
+const state=deploy.status==='completed'?(deploy.conclusion==='success'?'成功':deploy.conclusion==='failure'?'失敗':deploy.conclusion||'完了'):'実行中 ('+deploy.status+')';
+status('action',state,deploy.status!=='completed'?'wait':deploy.conclusion==='success'?'ok':'bad');
+$('detail').replaceChildren();
+const line=document.createElement('p');line.textContent=(deploy.name||'Workflow')+' / '+deploy.head_sha.slice(0,8)+' / '+new Date(deploy.updated_at).toLocaleString('ja-JP');$('detail').append(line);
+const link=document.createElement('a');link.href=deploy.html_url;link.target='_blank';link.textContent='この実行の詳細を見る';$('detail').append(link);
+}}
+catch(e){status('action','取得できません','bad');$('detail').textContent=e.message}
+try{const r=await fetch('./mocap-online.html?health='+Date.now(),{cache:'no-store'});status('pages',r.ok?'応答正常 (HTTP '+r.status+')':'HTTP '+r.status,r.ok?'ok':'bad');$('pageDetail').textContent='確認先: mocap-online.html'}
+catch(e){status('pages','公開ページに接続できません','bad');$('pageDetail').textContent=e.message}
+$('time').textContent=new Date().toLocaleString('ja-JP');
+}
+$('refresh').onclick=refresh;refresh();setInterval(()=>{if(!document.hidden)refresh()},30000);
+</script></body></html>

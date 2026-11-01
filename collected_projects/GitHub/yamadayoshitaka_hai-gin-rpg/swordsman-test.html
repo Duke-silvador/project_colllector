@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><title>剣士 Assy 検証</title><style>html,body{margin:0;height:100%;background:#10151d;color:#f4f4f4;font-family:system-ui}canvas{display:block}#panel{position:absolute;top:12px;left:12px;right:12px;pointer-events:none}h2{margin:0;font-size:17px}p{margin:4px 0;font-size:12px;color:#cad1d8}#controls{position:absolute;bottom:20px;left:12px;right:12px;display:flex;gap:8px;flex-wrap:wrap}button{border:1px solid #8d9cae;background:#222f40;color:white;border-radius:9px;padding:10px;font-size:14px}</style></head><body><div id="panel"><h2>剣士 Assy 検証 v4</h2><p>指で回転・2本指で拡大／縮小</p><p id="status">3D表示を準備中…</p></div><div id="controls"><button id="reset">正面</button><button id="explode">部品を分離</button><button id="wire">ワイヤー</button><button id="rotate">自動回転</button></div><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"}}</script><script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+const scene=new THREE.Scene();scene.background=new THREE.Color('#10151d');const camera=new THREE.PerspectiveCamera(38,innerWidth/innerHeight,.05,100);camera.position.set(3,2.1,4.5);camera.lookAt(0,1.1,0);
+const renderer=new THREE.WebGLRenderer({antialias:true});renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,2));document.body.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0xffffff,0x283345,2.3));const sun=new THREE.DirectionalLight(0xffffff,3);sun.position.set(3,5,4);scene.add(sun);
+const orbit=new OrbitControls(camera,renderer.domElement);orbit.target.set(0,1.13,0);orbit.enableDamping=true;orbit.update();
+const group=new THREE.Group();scene.add(group);const parts=[];
+const mat=(c)=>new THREE.MeshStandardMaterial({color:c,metalness:c===0x788898||c===0xbcc8ce?.72:.1,roughness:.52});
+const skin=mat(0xb88567),hair=mat(0x31221d),steel=mat(0x788898),silver=mat(0xbcc8ce),leather=mat(0x503225),gold=mat(0xb08942),cloth=mat(0x3a4656),white=mat(0xe6e6d8),iris=mat(0x4b6760);
+function add(name,mesh){mesh.name=name;group.add(mesh);parts.push({mesh,base:mesh.position.clone()});return mesh}
+function ell(name,p,s,m,detail=2){const o=new THREE.Mesh(new THREE.IcosahedronGeometry(1,detail),m);o.position.set(...p);o.scale.set(...s);return add(name,o)}
+function rod(name,a,b,r,m){let v=new THREE.Vector3(...a),w=new THREE.Vector3(...b),d=w.clone().sub(v);let o=new THREE.Mesh(new THREE.CylinderGeometry(r,r,d.length(),20),m);o.position.copy(v.add(w).multiplyScalar(.5));o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize());return add(name,o)}
+function block(name,p,s,m){let o=new THREE.Mesh(new THREE.BoxGeometry(...s),m);o.position.set(...p);return add(name,o)}
+ell('Torso',[0,1.43,0],[.28,.37,.16],cloth,3);ell('Pelvis',[0,1.07,0],[.23,.15,.15],leather);rod('Neck',[0,1.68,0],[0,1.81,0],.08,skin);
+ell('Head',[0,1.94,-.012],[.145,.19,.12],skin,3);ell('Jaw',[0,1.84,-.05],[.116,.085,.105],skin);ell('Nose',[0,1.922,-.139],[.027,.047,.037],skin);
+for(let s of [-1,1]){ell('Ear',[s*.149,1.935,0],[.027,.05,.035],skin);ell('Eye',[s*.064,1.971,-.117],[.029,.017,.012],white);ell('Iris',[s*.064,1.971,-.128],[.012,.012,.006],iris);ell('Brow',[s*.065,2.004,-.124],[.043,.008,.009],hair)}
+ell('Lips',[0,1.856,-.124],[.046,.009,.006],leather);
+ell('HairScalp',[0,2.055,.006],[.146,.096,.12],hair,3);
+for(let i=0;i<170;i++){let theta=2*Math.PI*i/170,r=.02+.12*Math.sqrt((i+.5)/170),x=r*Math.cos(theta),z=r*.8*Math.sin(theta),y=2.125-.09*(r/.14)**2;if(z<-.077&&y<2.06)continue;ell('HairLock',[x,y,z],[.014,.025,.009],hair,1)}
+for(let s of [-1,1]){ell('Shoulder',[s*.315,1.63,0],[.115,.13,.13],cloth);rod('UpperArm',[s*.34,1.6,0],[s*.39,1.34,-.015],.082,cloth);rod('Forearm',[s*.39,1.34,-.015],[s*.41,1.11,-.055],.067,skin);ell('Hand',[s*.41,1.055,-.06],[.057,.088,.038],skin);ell('Pauldron',[s*.318,1.635,-.004],[.16,.12,.16],steel,3);
+for(let j=0;j<3;j++)ell('PauldronPlate',[s*(.32+.018*j),1.58-.037*j,-.032],[.12,.027,.13],j===0?silver:steel);
+rod('Vambrace',[s*.39,1.34,-.015],[s*.41,1.15,-.055],.08,steel);ell('Gauntlet',[s*.41,1.055,-.06],[.069,.09,.052],leather);
+for(let f=0;f<4;f++)rod('Finger',[s*(.37+f*.026),1.02,-.06],[s*(.37+f*.026),.973,-.075],.012,steel);
+rod('Thigh',[s*.135,1.04,0],[s*.15,.64,-.018],.1,cloth);rod('Shin',[s*.15,.64,-.018],[s*.15,.22,-.01],.077,cloth);ell('Cuisse',[s*.14,.86,-.02],[.12,.22,.125],steel);ell('Knee',[s*.15,.64,-.09],[.105,.095,.06],silver);rod('Greave',[s*.15,.56,-.012],[s*.15,.18,-.01],.09,steel);ell('Boot',[s*.15,.115,-.065],[.107,.115,.18],leather);
+for(let j=0;j<3;j++)ell('Fauld',[s*(.17+j*.025),1.03-j*.05,0],[.12,.07,.13],steel)}
+ell('Cuirass',[0,1.44,-.015],[.293,.33,.19],steel,3);ell('BreastRidge',[0,1.47,-.185],[.035,.28,.027],silver);
+for(let s of [-1,1])for(let j=0;j<4;j++)ell('ChestScale',[s*(.085+j*.045),1.46-.025*j,-.19+.01*j],[.05,.11,.019],j%2?steel:silver);
+for(let j=0;j<4;j++)ell('AbPlate',[0,1.24-j*.047,-.16],[.22-j*.008,.042,.037],steel);
+rod('Belt',[0,1.13,0],[0,1.16,0],.25,leather);block('Buckle',[0,1.145,-.183],[.095,.066,.025],gold);
+block('SwordBlade',[.61,1.46,-.13],[.066,.77,.016],silver);let tip=new THREE.Mesh(new THREE.ConeGeometry(.037,.11,4),silver);tip.position.set(.61,1.9,-.13);add('SwordTip',tip);
+rod('Fuller',[.61,1.21,-.145],[.61,1.78,-.145],.006,leather);block('SwordGuard',[.61,1.055,-.13],[.25,.04,.045],gold);rod('SwordGrip',[.61,.91,-.13],[.61,1.045,-.13],.022,leather);ell('Pommel',[.61,.875,-.13],[.035,.035,.035],gold);
+for(let i=0;i<12;i++){let a=i*Math.PI/6;ell('Rivet',[.22*Math.cos(a),1.42+.21*Math.sin(a),-.184],[.012,.012,.009],gold,1)}
+
+/* V3: original, procedural anatomical surface and layered tailoring */
+const porcelain=mat(0xd8a98c),shadowSkin=mat(0xb37b64),blueCloth=mat(0x263747),trim=mat(0xc1a36e),black=mat(0x171d24),hairShine=mat(0x4d3029);
+function loft(name, rings, material, radial=64){
+ const verts=[],normals=[],uv=[],idx=[];
+ rings.forEach((r,j)=>{for(let i=0;i<=radial;i++){let a=2*Math.PI*i/radial,ca=Math.cos(a),sa=Math.sin(a);verts.push(r.x+r.rx*ca,r.y,r.z+r.rz*sa);uv.push(i/radial,j/(rings.length-1));}});
+ for(let j=0;j<rings.length-1;j++)for(let i=0;i<radial;i++){let k=j*(radial+1)+i;idx.push(k,k+radial+1,k+1,k+1,k+radial+1,k+radial+2);}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();return add(name,new THREE.Mesh(g,material));
+}
+function lineTube(name,points,r,m){const c=new THREE.CatmullRomCurve3(points.map(p=>new THREE.Vector3(...p)));return add(name,new THREE.Mesh(new THREE.TubeGeometry(c,Math.max(24,points.length*10),r,7,false),m))}
+function cutGem(name,pts,material){const g=new THREE.BufferGeometry();const v=[],id=[];for(const p of pts)v.push(...p);for(let i=1;i<pts.length-1;i++)id.push(0,i,i+1);g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.setIndex(id);g.computeVertexNormals();return add(name,new THREE.Mesh(g,material))}
+const replaceNames=/^(Torso|Pelvis|Neck|Head|Jaw|Nose|Ear|Eye|Iris|Brow|Lips|HairScalp|HairLock|Shoulder|UpperArm|Forearm|Hand|Pauldron|PauldronPlate|Vambrace|Gauntlet|Finger|Thigh|Shin|Cuisse|Knee|Greave|Boot|Fauld|Cuirass|BreastRidge|ChestScale|AbPlate|Belt|Buckle|SwordBlade|SwordTip|Fuller|SwordGuard|SwordGrip|Pommel|Rivet)$/;
+for(const p of parts){if(replaceNames.test(p.mesh.name)){p.mesh.visible=false;p.mesh.userData.legacy=true}}
+loft('TailoredTorso',[{x:0,y:1.07,z:0,rx:.21,rz:.13},{x:0,y:1.20,z:0,rx:.23,rz:.14},{x:0,y:1.39,z:0,rx:.265,rz:.16},{x:0,y:1.56,z:0,rx:.31,rz:.155},{x:0,y:1.68,z:0,rx:.19,rz:.12}],blueCloth);
+loft('LayeredCuirass',[{x:0,y:1.21,z:0,rx:.235,rz:.16},{x:0,y:1.35,z:0,rx:.262,rz:.19},{x:0,y:1.49,z:0,rx:.294,rz:.194},{x:0,y:1.62,z:0,rx:.258,rz:.167},{x:0,y:1.66,z:0,rx:.17,rz:.13}],steel);
+loft('HeadAnatomical',[{x:0,y:1.80,z:-.005,rx:.045,rz:.065},{x:0,y:1.84,z:-.005,rx:.095,rz:.092},{x:0,y:1.90,z:0,rx:.128,rz:.112},{x:0,y:1.97,z:.008,rx:.142,rz:.119},{x:0,y:2.045,z:.014,rx:.135,rz:.115},{x:0,y:2.105,z:.02,rx:.096,rz:.09},{x:0,y:2.13,z:.02,rx:.018,rz:.03}],porcelain);
+loft('NeckAnatomical',[{x:0,y:1.67,z:0,rx:.09,rz:.082},{x:0,y:1.78,z:0,rx:.073,rz:.073},{x:0,y:1.83,z:0,rx:.078,rz:.07}],porcelain);
+for(let sign of [-1,1]){
+ const side=sign<0?'L':'R';
+ ell('EarDetail_'+side,[sign*.145,1.952,-.006],[.024,.049,.034],porcelain,3);
+ ell('EarInner_'+side,[sign*.163,1.955,-.02],[.007,.027,.018],shadowSkin,2);
+ ell('EyeWhite_'+side,[sign*.061,1.985,-.112],[.037,.014,.012],white,3);
+ ell('EyeIris_'+side,[sign*.061,1.985,-.124],[.013,.013,.006],iris,3);
+ ell('EyePupil_'+side,[sign*.061,1.985,-.130],[.006,.008,.004],black,2);
+ lineTube('UpperEyelid_'+side,[[sign*.024,1.995,-.119],[sign*.06,2.005,-.128],[sign*.101,1.995,-.115]],.006,black);
+ lineTube('Eyebrow_'+side,[[sign*.023,2.037,-.115],[sign*.061,2.048,-.123],[sign*.109,2.039,-.104]],.009,hairShine);
+ ell('Cheek_'+side,[sign*.082,1.928,-.079],[.057,.041,.045],porcelain,3);
+ lineTube('Nasolabial_'+side,[[sign*.028,1.916,-.128],[sign*.04,1.888,-.117]],.0025,shadowSkin);
+}
+ell('NoseBridge',[0,1.95,-.125],[.023,.053,.028],porcelain,3);
+ell('NoseTip',[0,1.918,-.145],[.035,.019,.027],porcelain,3);
+ell('LowerLip',[0,1.86,-.113],[.049,.011,.013],shadowSkin,3);
+lineTube('MouthSeam',[[-.042,1.874,-.122],[0,1.871,-.132],[.042,1.874,-.122]],.0027,black);
+ell('Chin',[0,1.825,-.067],[.075,.027,.049],porcelain,3);
+loft('ScalpFitted',[{x:0,y:2.038,z:.014,rx:.135,rz:.115},{x:0,y:2.09,z:.018,rx:.125,rz:.108},{x:0,y:2.128,z:.02,rx:.089,rz:.082},{x:0,y:2.145,z:.02,rx:.025,rz:.025}],hair);
+for(let i=0;i<95;i++){
+ let a=i*2.399963,r=.128*Math.sqrt((i+.5)/95),x=r*Math.cos(a),z=.02+r*.82*Math.sin(a);
+ let y=2.15-.08*(r/.128)**2;
+ lineTube('LayeredHairStrand_'+i,[[x,y,z],[x+.012,y+.017,z-.016],[x+.027,y-.014,z-.035],[x+.03,y-.042,z-.048]],.005+(i%4)*.0015,i%3===0?hairShine:hair);
+}
+for(let sign of [-1,1]){
+ let x=sign*.34;
+ loft('UpperSleeve_'+sign,[{x:x,y:1.33,z:0,rx:.085,rz:.08},{x:sign*.34,y:1.45,z:0,rx:.093,rz:.087},{x:sign*.31,y:1.59,z:0,rx:.125,rz:.116}],blueCloth,36);
+ loft('ArmGuard_'+sign,[{x:sign*.405,y:1.11,z:-.012,rx:.068,rz:.065},{x:sign*.395,y:1.21,z:-.008,rx:.087,rz:.079},{x:sign*.375,y:1.34,z:0,rx:.079,rz:.074}],steel,36);
+ ell('ShoulderPlate_'+sign,[sign*.32,1.60,0],[.146,.11,.145],steel,3);
+ for(let j=0;j<3;j++)lineTube('ShoulderEngraving_'+sign,[[sign*(.21+j*.027),1.685,-.072],[sign*(.31+j*.025),1.655,-.12],[sign*(.39+j*.01),1.61,-.087]],.004,trim);
+ ell('HandSkin_'+sign,[sign*.405,1.065,-.025],[.062,.089,.042],porcelain,3);
+ for(let finger=0;finger<5;finger++)rod('ArticulatedFinger_'+sign+'_'+finger,[sign*(.36+finger*.022),1.03,-.04],[sign*(.36+finger*.022),.973,-.05],.011,porcelain);
+ loft('Trouser_'+sign,[{x:sign*.14,y:.58,z:0,rx:.083,rz:.09},{x:sign*.135,y:.78,z:0,rx:.112,rz:.114},{x:sign*.12,y:1.10,z:0,rx:.122,rz:.12}],blueCloth,36);
+ loft('GreaveShaped_'+sign,[{x:sign*.145,y:.15,z:0,rx:.08,rz:.105},{x:sign*.145,y:.34,z:0,rx:.092,rz:.10},{x:sign*.145,y:.56,z:0,rx:.112,rz:.11}],steel,36);
+ ell('KneePlateShaped_'+sign,[sign*.145,.62,-.08],[.105,.09,.085],silver,3);
+ ell('LeatherBoot_'+sign,[sign*.145,.1,-.07],[.105,.10,.19],leather,3);
+ lineTube('BootRim_'+sign,[[sign*.05,.19,-.095],[sign*.145,.21,-.15],[sign*.24,.19,-.095]],.01,trim);
+ for(let j=0;j<3;j++)cutGem('WaistSkirtPanel_'+sign+'_'+j,[[sign*(.07+j*.055),1.18,-.155],[sign*(.16+j*.065),1.16,-.13],[sign*(.18+j*.06),.88,-.14],[sign*(.07+j*.05),.91,-.16]],blueCloth);
+}
+for(let i=0;i<7;i++){let y=1.23+i*.055;lineTube('CuirassGroove_'+i,[[-.21,y,-.156],[-.1,y+.014,-.196],[0,y+.022,-.202],[.1,y+.014,-.196],[.21,y,-.156]],.004,i%2?trim:black)}
+for(let sign of [-1,1]){lineTube('ChestFiligree_'+sign,[[0,1.56,-.194],[sign*.09,1.54,-.205],[sign*.19,1.46,-.187],[sign*.22,1.36,-.17]],.008,trim);for(let j=0;j<5;j++)ell('BrassRivet_'+sign+'_'+j,[sign*.21,1.31+j*.063,-.16],[.009,.009,.008],trim,2)}
+loft('LeatherBelt',[{x:0,y:1.10,z:0,rx:.245,rz:.173},{x:0,y:1.15,z:0,rx:.25,rz:.179}],leather);
+block('BeltBuckle',[0,1.125,-.185],[.10,.055,.028],trim);
+const bladePoints=[[-.045,1.13,-.02],[.045,1.13,-.02],[.048,1.74,-.02],[0,1.96,-.02],[-.048,1.74,-.02]];
+const swordX=.61,swordZ=-.13;
+cutGem('SwordFront',bladePoints.map(p=>[p[0]+swordX,p[1],p[2]+swordZ]),silver);
+cutGem('SwordBack',bladePoints.map(p=>[p[0]+swordX,p[1],p[2]+swordZ+.017]),steel);
+lineTube('SwordRidge',[[swordX,1.13,swordZ-.023],[swordX,1.74,swordZ-.023],[swordX,1.96,swordZ-.02]],.006,white);
+rod('SwordHandle',[swordX,.88,swordZ],[swordX,1.13,swordZ],.026,leather);
+lineTube('Crossguard',[[swordX-.16,1.15,swordZ],[swordX-.07,1.17,swordZ-.01],[swordX+.07,1.17,swordZ-.01],[swordX+.16,1.15,swordZ]],.024,trim);
+ell('SwordPommel',[swordX,.86,swordZ],[.038,.042,.038],trim,3);
+document.querySelector('#status').textContent='v3・人体曲面／装甲／髪／顔を再構築（試作・品質未達）';
+
+
+/* V4 topology study: concentric quad eye loops and facial muscle contours */
+const topologySkin=new THREE.MeshStandardMaterial({color:0xc99578,roughness:.73,side:THREE.DoubleSide});
+function quadLoopPatch(name,cx,cy,cz,rx,ry,ringCount,segments,material){
+ const v=[],uv=[],ids=[];
+ for(let j=0;j<=ringCount;j++){
+   const t=.34+j/ringCount*.85;
+   for(let i=0;i<=segments;i++){
+     const a=i/segments*Math.PI*2;
+     const x=cx+Math.cos(a)*rx*t,y=cy+Math.sin(a)*ry*t;
+     const z=cz+.020*Math.pow(t,2)-.011*Math.cos(a*2)*t;
+     v.push(x,y,z);uv.push(i/segments,j/ringCount);
+   }
+ }
+ for(let j=0;j<ringCount;j++)for(let i=0;i<segments;i++){let k=j*(segments+1)+i;ids.push(k,k+1,k+segments+1,k+1,k+segments+2,k+segments+1)}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(ids);g.computeVertexNormals();return add(name,new THREE.Mesh(g,material));
+}
+for(const side of [-1,1]){
+ const x=side*.062;
+ quadLoopPatch('TopologyOrbicularisOculi_'+side,x,1.982,-.119,.050,.030,9,64,topologySkin);
+ for(let ring=0;ring<3;ring++){
+  const p=[],r=1.03+ring*.17;
+  for(let i=0;i<=48;i++){const a=i/48*Math.PI*2;p.push([x+Math.cos(a)*.052*r,1.982+Math.sin(a)*.030*r,-.111+.012*r])}
+  lineTube('OrbitalEdgeFlow_'+side+'_'+ring,p,.0016,ring===0?trim:shadowSkin);
+ }
+}
+quadLoopPatch('TopologyOrbicularisOris',0,1.872,-.121,.075,.033,10,80,topologySkin);
+for(let ring=0;ring<3;ring++){
+ let pts=[],r=1.0+ring*.21;
+ for(let i=0;i<=64;i++){let a=i/64*Math.PI*2;pts.push([Math.cos(a)*.073*r,1.872+Math.sin(a)*.033*r,-.113+.008*r])}
+ lineTube('LipMuscleEdgeFlow_'+ring,pts,.0015,shadowSkin);
+}
+for(const p of parts){if(p.mesh.name.startsWith('Topology')||p.mesh.name.includes('EdgeFlow'))p.mesh.visible=true}
+document.querySelector('#status').textContent='v4・眼輪筋／口輪筋の四角面ループ試作（品質未達）';
+
+const floor=new THREE.Mesh(new THREE.CircleGeometry(2.1,64),new THREE.MeshStandardMaterial({color:0x273342,roughness:1}));floor.rotation.x=-Math.PI/2;floor.position.y=-.02;scene.add(floor);
+let expanded=false,wire=false,spin=false;document.querySelector('#explode').onclick=()=>{expanded=!expanded;for(const p of parts){p.mesh.position.copy(p.base);if(expanded){let v=p.base.clone().sub(new THREE.Vector3(0,1.1,0));p.mesh.position.addScaledVector(v,.24)}}document.querySelector('#explode').textContent=expanded?'組み立てる':'部品を分離'};
+document.querySelector('#wire').onclick=()=>{wire=!wire;const set=new Set(parts.map(p=>p.mesh.material));set.forEach(m=>m.wireframe=wire)};
+document.querySelector('#rotate').onclick=()=>{spin=!spin;document.querySelector('#rotate').textContent=spin?'回転停止':'自動回転'};
+document.querySelector('#reset').onclick=()=>{camera.position.set(0,1.6,4.5);orbit.target.set(0,1.1,0);orbit.update()};
+document.querySelector('#status').textContent='v4・'+parts.filter(p=>!p.mesh.userData.legacy).length+'部品・眼／口周辺の四角面ループ試作';
+window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
+function tick(){requestAnimationFrame(tick);if(spin)group.rotation.y+=.007;orbit.update();renderer.render(scene,camera)}tick();
+</script></body></html>

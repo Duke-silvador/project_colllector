@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>灰銀のレゾナンス | 職業アクションテスト</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#101827;color:#f2e5cb;font:14px system-ui;overflow:hidden}canvas{position:fixed;top:0;left:0;width:100%;height:45vh;touch-action:none}
+header{position:fixed;top:0;left:0;right:0;padding:10px;z-index:3;background:#13243be8;display:flex;justify-content:space-between;gap:8px;align-items:center}a,button,select{color:white;background:#304967;border:1px solid #9caecc;border-radius:8px;padding:10px;font:600 14px system-ui}a{text-decoration:none}main{position:fixed;bottom:0;left:0;right:0;z-index:3;background:#142338ed;padding:10px;max-height:52vh;overflow-y:auto}#actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:9px}#actions button{padding:10px 2px;min-height:47px}button.active{background:#94713c}label{display:inline-flex;gap:5px;align-items:center;margin:3px}select{max-width:165px}#diagnostics{font-size:12px;color:#c9e8e4;margin:7px 0 1px;min-height:17px}#hint{position:fixed;top:70px;left:10px;right:10px;text-align:center;pointer-events:none;color:#e4e8ff;text-shadow:0 2px 4px #000}
+#hint{top:57px;left:12px;right:auto;font-size:11px;opacity:.75;background:#13243b99;padding:3px 8px;border-radius:5px}
+header{min-height:55px;padding:8px 12px}header strong{font-size:13px}#build-info{font-size:11px;font-weight:700;color:#fff3b5}
+main{height:39dvh;max-height:39dvh;padding:8px 10px 20px;scrollbar-width:thin}
+#actions{grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin:5px 0}
+#actions button{font-size:11px;min-height:39px;padding:6px 1px}
+main label{font-size:12px;margin:2px 3px}main button,main select{font-size:12px;padding:7px 6px}
+#editor{margin:4px 0!important;gap:2px!important}
+#diagnostics{font-size:10px;opacity:.75}
+@media(max-width:430px){#actions{grid-template-columns:repeat(4,minmax(0,1fr))}#actions button{min-height:37px}}
+</style><script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js","three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"}}</script>
+<!-- pages redeploy requested for v135.1 -->
+</head><body><canvas id="view"></canvas><header><div><strong>職業別アクションテスト v135.1</strong><div id="build-info">反映版 135.1｜短髪接線追従・浮き抑制</div></div><a href="./play-1210.html?v=127.65">ゲームへ戻る</a></header>
+<div id="hint">ドラッグ：回転 / ピンチ：ズーム</div><button id="faceTab" type="button" style="position:fixed;top:153px;right:8px;z-index:5">顔を編集</button><button id="mannequin" type="button" style="position:fixed;top:109px;right:10px;z-index:5">顔をデフォルトに</button><button id="faceZoom" type="button" style="position:fixed;right:10px;top:65px;z-index:5">顔を拡大</button>
+<main><div id="headEditor" style="display:none;background:#142338;padding:9px;border:1px solid #9caecc;border-radius:8px;max-height:24vh;overflow:auto"><strong>顔パーツ編集</strong><div id="faceControls"></div></div><div><label>職業 <select id="job"></select></label><label>性別 <select id="sex"><option value="male">男性</option><option value="female">女性</option></select></label><label>速度 <select id="speed"><option value="1">標準</option><option value=".5">0.5倍</option><option value="1.5">1.5倍</option></select></label></div>
+<section id="occupationPanel" style="padding:7px;border:1px solid #667b91;border-radius:8px;margin-top:5px"><label>職業カタログ（全50職）<select id="occupation" style="max-width:190px"></select></label><div id="occupationInfo" style="font-size:12px;line-height:1.5;color:#d6e5f3"></div><div id="partAvailability" style="font-size:11px;color:#a8e3c9"></div></section><div id="actions"></div><div id="editor" style="display:flex;flex-wrap:wrap;gap:5px;margin:8px 0"></div><div><label>反映先 <select id="target"><option value="hero">主人公</option><option value="companion-0">仲間1</option><option value="companion-1">仲間2</option><option value="companion-2">仲間3</option></select></label><button id="save">保存してゲームに反映</button><button id="load">保存値を読込</button><button id="export">JSON出力</button></div><div id="diagnostics"></div><button id="all">全動作を連続テスト</button> <button id="repeat">繰返し：OFF</button></main>
+<script type="module">
+import * as THREE from 'three';
+import {createHumanBomRig} from './src/human-bom-renderer.js';
+import {attachMeasuredHair} from './src/measured-scalp-hair.js?v=135.1';
+import {sampleHumanClip} from './src/human-motion-clips.js?v=129.80';
+import {createDynamicBody,createFixedStepWorld} from './src/physics-rigid-body.js';
+import {correctMeshFloor,sampleBoneFloorContacts} from './src/mesh-floor-contact.js?v=128.14';
+import {createRagdoll} from './src/segment-ragdoll.js?v=128.17';
+import {createRapierHuman,createRapierLooseWorld} from './src/rapier-human-physics.js?v=129.80';
+import {createHumanMuscleController} from './src/human-muscle-bom.js?v=129.80';
+import {OBJECT_PHYSICS} from './src/physics-object-bom.js?v=129.80';
+import {createWeightedJointDynamics} from './src/weighted-joint-dynamics.js?v=128.14';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {createLibraryActionPlayer} from './src/action-library-player.js?v=131.7';
+import {bindCharacterActions,BASIC_ACTIONS,ACTION_LABELS} from './src/character-action-binding.js?v=131.6';
+import {createCharacterFaceBase,attachCharacterFaceBase} from './src/character-face-base.js?v=129.99';
+import {applyCharacterVisualVariant,CHARACTER_VISUAL_VARIANTS} from './src/character-visual-variants.js?v=131.0';
+import {resolveOccupationEquipment} from './src/character-equipment-catalog.js?v=131.1';
+import {attachTownOutfitNpc} from './src/cc0-town-npc-visuals.js?v=133.8';
+import {resolveFantasyActor} from './src/fantasy-job-roster.js';
+import {resolveJobVisual,resolveJobIdentity} from './src/job-visual-bom.js';
+import {PLAYER_JOBS} from './src/game-content.js';
+import {JOB_CATALOG,resolveJobLife,resolveJobMotion} from './src/job-catalog.js?v=129.81';
+import {characterAssetRecipe} from './src/character-asset-registry.js';
+import {CHARACTER_PARTS} from './src/character-assembly-bom.js';
+import {CHARACTER_EDIT_FIELDS,readCharacterPresets,saveCharacterPreset} from './src/character-preset-store.js';
+const $=id=>document.getElementById(id);
+const renderer=new THREE.WebGLRenderer({canvas:$('view'),antialias:true});renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));renderer.shadowMap.enabled=true;
+const scene=new THREE.Scene();scene.background=new THREE.Color('#344457');scene.add(new THREE.HemisphereLight(0xe9efff,0x38404e,2.5));
+const key=new THREE.DirectionalLight(0xffe3bd,2.7);key.position.set(-4,10,6);scene.add(key);
+const camera=new THREE.PerspectiveCamera(38,1,.1,100);camera.position.set(0,1.35,3.2);camera.lookAt(0,1.15,0);
+// Drag the preview horizontally to orbit around the character.
+let orbitYaw=0,orbitPitch=0,orbitDistance=3.2,orbitTargetY=1.1;
+const orbitPointers=new Map();
+let handZoom=false,pinchDistance=null;
+const previewCanvas=$('view');
+previewCanvas.addEventListener('pointerdown',e=>{
+ orbitPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ previewCanvas.setPointerCapture(e.pointerId);
+ if(orbitPointers.size===2){const pts=[...orbitPointers.values()];pinchDistance=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);}
+});
+previewCanvas.addEventListener('pointermove',e=>{
+ const prev=orbitPointers.get(e.pointerId);
+ if(!prev)return;
+ if(orbitPointers.size===2){
+  orbitPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+  const pts=[...orbitPointers.values()];const d=Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y);
+  if(pinchDistance&&d>1)orbitDistance=THREE.MathUtils.clamp(orbitDistance*pinchDistance/d,.18,12);
+  pinchDistance=d;updateOrbitCamera();return;
+ }
+ orbitYaw-=(e.clientX-prev.x)*.009;
+ orbitPitch=THREE.MathUtils.clamp(orbitPitch+(e.clientY-prev.y)*.004,-.55,.55);
+ orbitPointers.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ updateOrbitCamera();
+});
+for(const eventName of ['pointerup','pointercancel','lostpointercapture']){
+ previewCanvas.addEventListener(eventName,e=>{orbitPointers.delete(e.pointerId);pinchDistance=null;});
+}
+function updateOrbitCamera(){
+ const horizontal=orbitDistance*Math.cos(orbitPitch);
+ camera.position.set(Math.sin(orbitYaw)*horizontal,orbitTargetY+Math.sin(orbitPitch)*orbitDistance,Math.cos(orbitYaw)*horizontal);
+ camera.lookAt(0,orbitTargetY,0);
+}
+let mannequinMode=true;let faceMode=false;const headParts={eyes:false,nose:false,mouth:false,ears:false,hair:true};function syncHeadParts(){if(!host?.userData.setFacePartEnabled)return;for(const [slot,enabled] of Object.entries(headParts))host.userData.setFacePartEnabled(slot,enabled)}
+function fitCharacterCamera(){
+ if(!rig)return;
+ rig.root.updateMatrixWorld(true);
+ const visual=host.children.find(c=>c.userData?.sourceModelId&&c.visible)||rig.root;
+ const box=new THREE.Box3().setFromObject(visual,true),size=box.getSize(new THREE.Vector3()),center=box.getCenter(new THREE.Vector3());
+ const height=Math.max(.8,size.y),width=Math.max(.55,size.x);
+ const vertical=(camera.fov*Math.PI/180)/2,dist=Math.max(1.2,height/(2*Math.tan(vertical))*1.12,width/(2*Math.tan(vertical)*Math.max(.65,camera.aspect))*1.25);
+ orbitDistance=handZoom?Math.max(.32,dist*.19):faceMode?Math.max(.4,dist*.27):dist;
+ orbitTargetY=handZoom?center.y-height*.12:faceMode?box.max.y-height*.12:center.y;
+ updateOrbitCamera();
+}
+
+function resizePreview(){const headerBottom=document.querySelector('header').getBoundingClientRect().bottom;const panelTop=document.querySelector('main').getBoundingClientRect().top;const height=Math.max(180,Math.floor(panelTop-headerBottom));const canvas=$('view');canvas.style.top=headerBottom+'px';canvas.style.height=height+'px';renderer.setSize(innerWidth,height);camera.aspect=innerWidth/height;camera.updateProjectionMatrix();fitCharacterCamera();}
+window.addEventListener('resize',resizePreview);if(window.ResizeObserver)new ResizeObserver(resizePreview).observe(document.querySelector('main'));
+const ground=new THREE.Mesh(new THREE.CircleGeometry(7,64),new THREE.MeshStandardMaterial({color:0x59665f,roughness:.95}));ground.rotation.x=-Math.PI/2;ground.position.y=-.03;scene.add(ground);
+const grid=new THREE.GridHelper(12,12,0x8996a7,0x65757e);grid.position.y=.005;scene.add(grid);
+let editValues={};let host,rig,action='idle',clock=0,cycle=false,queue=[],last=performance.now(),result=null,modelGeneration=0,modelStatus='読込準備中',sequence=false;
+const groundPhysics=createFixedStepWorld();
+let fallBody=null;
+let boneContacts=[];
+let ragdoll=null;
+let rapierLoading=null;
+let rapierFailure=null;
+let knockback=null;
+const deathJoints=createWeightedJointDynamics();
+const muscles=createHumanMuscleController();
+function equipmentLoadKg(){
+ const slot=String(host?.userData?.characterBOM?.slots?.equipment||'').toLowerCase();
+ const key=Object.keys(OBJECT_PHYSICS).find(k=>slot.includes(k));
+ return key?OBJECT_PHYSICS[key].massKg||0:0;
+}
+const motions=[...BASIC_ACTIONS];
+const labels=ACTION_LABELS;
+for(const [job,data] of Object.entries(PLAYER_JOBS)){const o=document.createElement('option');o.value=job;o.textContent=data.label;$('job').appendChild(o)}
+const occupationSelect=$('occupation');
+const categoryNames={general:'一般',melee:'近接',ranged:'遠距離',magic:'魔法',support:'支援',enemy:'敵・特殊'};
+const VISUAL_READY_JOBS=new Set(Object.keys(CHARACTER_VISUAL_VARIANTS));
+for(const [id,entry] of Object.entries(JOB_CATALOG)){
+ if(!VISUAL_READY_JOBS.has(id))continue;
+ const option=document.createElement('option');option.value=id;option.textContent=categoryNames[entry.category]+' / '+entry.name;occupationSelect.appendChild(option);
+}
+function updateOccupationInfo(){
+ if(typeof drawButtons==='function')drawButtons();
+ const id=occupationSelect.value,entry=JOB_CATALOG[id],life=resolveJobLife(id);
+ const clips=['idle','walk','run','sprint','attack'].map(a=>a+': '+(resolveJobMotion(id,a)||'未割当')).join(' / ');
+ $('occupationInfo').textContent='職業：'+entry.name+'｜モーション系統：'+entry.motionSet+'｜行動：'+life.schedule+'｜活動場所：'+life.workplace+'｜道具：'+(life.equipment||'なし')+'｜クリップ：'+clips+'。※人物表示は既存の対応職業モデルによるプレビューです。実際の独立した衣装形状がある民間人・レンジャーのみ表示。';
+}
+const MODULAR_PARTS=Object.freeze({male:{Peasant:['Arms','Body','Feet','Legs'],Ranger:['Acc_Pauldron','Arms','Body','Feet_Boots','Head_Hood','Legs']},female:{Peasant:['Arms','Body','Feet','Legs'],Ranger:['Acc_Pauldrons','Arms','Body','Feet','Head_Hood','Legs']}});
+function showPartAvailability(){const sex=$('sex').value;const family=($('job').value==='archer'||$('job').value==='ranger'||$('job').value==='rogue'||$('job').value==='assassin'||$('job').value==='monk')?'Ranger':'Peasant';const parts=MODULAR_PARTS[sex][family];$('partAvailability').textContent='GitHub実素材：'+sex+' / '+family+'｜'+parts.join('・')+'（部品GLTF。異なる基本衣装の場合は骨格対応して置換）';}
+const previewByMotion={sword:'swordsman',dagger:'thief',axe:'warrior',spear:'knight',bow:'archer',ranged:'archer',staff:'mage',unarmed:'monk',common:'swordsman',noble:'knight',hammer:'warrior'};
+occupationSelect.onchange=()=>{
+ const entry=JOB_CATALOG[occupationSelect.value];
+ const aliases={blacksmith:'smith',cook:'chef',apothecary:'herbalist',martial_artist:'monk',thief:'rogue',hunter:'ranger',white_mage:'priest',black_mage:'mage',guard:'knight',civilian:'traveler'};
+ const direct=PLAYER_JOBS[occupationSelect.value]?occupationSelect.value:aliases[occupationSelect.value];
+ const preferred=PLAYER_JOBS[direct]?direct:previewByMotion[entry.motionSet];
+ if(PLAYER_JOBS[preferred])$('job').value=preferred;
+ updateOccupationInfo();showPartAvailability();editValues={};build();
+};
+occupationSelect.value='swordsman';$('job').value='swordsman';updateOccupationInfo();showPartAvailability();
+let selectedHairColor='#30211b';
+let initialModelRetryUsed=false;
+function build(){
+ // Single transaction: resolve JSON first, initialize a fresh actor off-scene,
+ // attach ONE visual, then publish the finished actor. Old loads cannot overwrite it.
+ const generation=++modelGeneration;
+ host?.userData?.libraryActionPlayer?.stop();
+ const job=$('job').value,sex=$('sex').value;
+ const actor=resolveFantasyActor(job,sex);
+ const occupationId=$('occupation').value;
+ const characterBinding=bindCharacterActions(occupationId,sex);
+ const characterProfile=characterBinding.profile;
+ const occupationOutfit={blacksmith:'smith',cook:'chef',apothecary:'herbalist',martial_artist:'monk',thief:'rogue',hunter:'ranger',white_mage:'priest',black_mage:'mage',guard:'knight'}[occupationId]||occupationId;
+ const overrides={...editValues};
+ if(!Object.hasOwn(overrides,'outfit')&&Object.hasOwn(CHARACTER_PARTS.outfits,occupationOutfit))overrides.outfit=occupationOutfit;
+ const contract=characterAssetRecipe(job,sex,overrides);
+ for(const [slot,value] of Object.entries(contract.slots)){const selector=$('edit-'+slot);if(selector)selector.value=value;}
+ const occupationEquipment=resolveOccupationEquipment(occupationId);
+ const preset={...actor,...contract.slots,equipment:Object.hasOwn(editValues,'equipment')?contract.slots.equipment:occupationEquipment.weapon,outfit:characterBinding.outfit,modelId:characterBinding.modelId,jobId:job,occupationId,role:'hero',sex};
+ const nextHost=new THREE.Group();
+ // Keep the actor at the world identity orientation; place the preview camera
+ // in front of the imported rig instead of rotating its physics/motion frame.
+ nextHost.rotation.y=0;
+ nextHost.userData.localForward=[0,0,-1];
+ nextHost.userData.motionForward=[0,0,-1];
+ nextHost.userData.actorId='test-'+occupationId+'-'+sex;
+ nextHost.userData.characterBOM=preset;
+ nextHost.userData.useCleanFace=false;
+ attachCharacterFaceBase(nextHost,createCharacterFaceBase({occupationId,sex}));
+ const jobAppearance=resolveJobVisual(job),jobIdentity=resolveJobIdentity(job);
+ const nextRig=createHumanBomRig(THREE,nextHost,{id:'test-'+job,role:'hero',assembly:contract.slots});
+ // Preserve the BOM skeleton for animation and physics but remove its
+ // alternative visual meshes; the imported character is the sole renderer.
+ const obsoleteBomMeshes=[];
+ nextRig.root.traverse(part=>{if(part.isMesh)obsoleteBomMeshes.push(part);});
+ obsoleteBomMeshes.forEach(mesh=>mesh.parent?.remove(mesh));
+ nextRig.root.visible=false;
+ nextHost.userData.visualSelection={...contract.slots,job,sex,modelId:contract.modelId};
+ const oldHost=host;
+ host=nextHost;rig=nextRig;
+ scene.add(host);
+ if(oldHost)scene.remove(oldHost);
+ // Imported rigged skin is the production visual authority; never overlay it with BOM.
+ // Keep the procedural fallback hidden while loading to avoid mannequin flashes.
+ modelStatus='外部3Dモデル読込中（人物の表示を準備中）';
+ $('hint').textContent='3D人物モデルを読み込み中…';
+ fitCharacterCamera();
+ attachTownOutfitNpc({host:nextHost,rig:nextRig,preset,loader:new GLTFLoader(),THREE}).then(ok=>{
+  if(generation!==modelGeneration||host!==nextHost)return;
+  const model=nextHost.children.find(c=>c.userData?.sourceModelId);
+  if(ok&&model){
+   nextHost.userData.externalNpcSync?.();
+   nextHost.userData.visualVariant=applyCharacterVisualVariant({THREE,model,occupationId});
+   createLibraryActionPlayer({THREE,GLTFLoader,model,profile:characterProfile}).then(player=>{if(generation!==modelGeneration){player.stop();return;}nextHost.userData.libraryActionPlayer=player;window.__characterAnimationAudit=()=>({action,occupationId,headAlignmentError:nextHost.userData.headAlignmentError,...player.diagnose()});console.info('GLB animation binary audit',window.__characterAnimationAudit());player.setAction(action);nextHost.userData.syncFacialSkeleton?.();drawButtons();modelStatus+=' / GLBモーション '+JSON.stringify(player.selected);$('diagnostics').textContent='GLB再生可能: '+player.available.length+'クリップ / '+JSON.stringify(player.selected);}).catch(e=>{nextHost.userData.libraryActionError=String(e?.message||e);modelStatus+=' / GLB読込失敗 '+nextHost.userData.libraryActionError;$('diagnostics').textContent='GLB読込失敗: '+nextHost.userData.libraryActionError;});
+   // Occupation BOM is authoritative; legacy combat-job appearance must not overwrite it.
+   nextHost.userData.syncVisibleWeapon?.();
+   nextRig.root.visible=false;
+   model.visible=true;
+   nextHost.userData.setMannequinFace?.(mannequinMode);
+   syncHeadParts();
+   nextHost.userData.setHairColor?.(selectedHairColor);
+   // One fitted hairstyle mesh per imported head. Never attach the 10k straight
+   // downward lines: those formed an opaque curtain across the entire face.
+   // Fit actual imported scalp triangles, not a spherical approximation.
+   const salon=attachMeasuredHair(THREE,model,{
+    style:String(contract.slots.hair||'short'),color:selectedHairColor,
+    logicalCount:100000,renderCount:1200
+   });
+   nextHost.userData.salonHair=salon;
+   if(!salon.ok){
+    console.warn('Measured scalp extraction failed',salon);
+    $('diagnostics').textContent='毛髪型取り失敗: '+salon.reason;
+   }else{
+    console.info('Measured scalp hair',salon.stats);
+    $('diagnostics').textContent='頭皮型取り '+salon.stats.scalpTriangles+'面 / 毛根 '+salon.stats.logicalCount+'本 / 描画 '+salon.stats.renderedStrands+'本';
+   }
+   $('hint').textContent='人物プレビュー';
+   modelStatus='実際の表示モデル '+(model.userData.sourceModelId||'不明')+' / 衣装 '+contract.slots.outfit+' / モジュール '+JSON.stringify(nextHost.userData.modularOutfit||{})+' / 髪 '+contract.slots.hair+' / 武器 '+preset.equipment;
+  }else{
+   if(!initialModelRetryUsed){initialModelRetryUsed=true;modelStatus='初回モデル読込を再試行中';setTimeout(()=>{if(generation===modelGeneration)build();},300);return;}
+   nextRig.root.visible=false;
+   const reason=String(nextHost.userData.characterVisualError||'原因不明').slice(0,150);
+   $('hint').textContent='人物モデル読込失敗：'+reason;
+   modelStatus='外部モデル読込失敗: '+reason;
+  }
+  fitCharacterCamera();
+ }).catch(err=>{
+  if(generation!==modelGeneration||host!==nextHost)return;
+  if(!initialModelRetryUsed){initialModelRetryUsed=true;modelStatus='初回モデル読込を再試行中';setTimeout(()=>{if(generation===modelGeneration)build();},300);return;}
+  nextRig.root.visible=false;
+  const reason=String(err.message||err).slice(0,150);
+  $('hint').textContent='人物モデル読込失敗：'+reason;
+  modelStatus='外部モデル読込失敗: '+reason;
+  fitCharacterCamera();
+ });
+ action='idle';nextHost.userData.physicsDeathActive=false;clock=0;result=null;sequence=false;queue=[];drawButtons();
+}
+let looseWeaponPhysics=null;
+const gripDebugEnabled=new URLSearchParams(location.search).get('gripDebug')==='1';
+let gripDebugMarkers=null;
+let gripDebugData=null;
+function updateGripDebug(){
+ if(!gripDebugEnabled)return;
+ const weapon=host?.userData?.looseWeapon;
+ if(!weapon){gripDebugData={state:'weapon-not-loaded'};return;}
+ if(!gripDebugMarkers){
+  const sphere=(color)=>{
+   const mesh=new THREE.Mesh(new THREE.SphereGeometry(.009,10,8),new THREE.MeshBasicMaterial({color,transparent:true,opacity:.45,depthTest:true}));
+   mesh.renderOrder=1;scene.add(mesh);return mesh;
+  };
+  gripDebugMarkers={palm:sphere(0x00ff44),handle:sphere(0xff3344)};
+ }
+ weapon.handBone.updateWorldMatrix(true,false);
+ weapon.source.updateWorldMatrix(true,false);
+ const handQ=weapon.handBone.getWorldQuaternion(new THREE.Quaternion());
+ const thumb=host.getObjectByName('thumb_01_r');
+ const index=host.getObjectByName('index_01_r');
+ const thumbPoint=thumb?.getWorldPosition(new THREE.Vector3());
+ const indexPoint=index?.getWorldPosition(new THREE.Vector3());
+ const palm=thumbPoint&&indexPoint?thumbPoint.clone().lerp(indexPoint,.48):
+  (thumbPoint||indexPoint||weapon.handBone.getWorldPosition(new THREE.Vector3()).add(weapon.palmOffset.clone().applyQuaternion(handQ)));
+ const handCenter=weapon.handBone.getWorldPosition(new THREE.Vector3());
+ const inward=handCenter.clone().sub(palm);
+ if(inward.lengthSq()>.000001)palm.addScaledVector(inward.normalize(),.012);
+ const handle=weapon.source.localToWorld(weapon.gripLocal.clone());
+ gripDebugMarkers.palm.position.copy(palm);
+ gripDebugMarkers.handle.position.copy(handle);
+ const distance=palm.distanceTo(handle);
+ gripDebugData={state:'equipped-no-gravity',palm:palm.toArray().map(x=>+x.toFixed(3)),handle:handle.toArray().map(x=>+x.toFixed(3)),distance:+distance.toFixed(4),handBone:weapon.handBone.name,body:null};
+ const profile=host.userData.equipmentGripProfile;
+ if(profile&&gripDebugData)gripDebugData.gripFraction=profile.gripFraction;
+ const el=document.getElementById('grip-debug-overlay');
+ if(el)el.textContent='GRIP DEBUG | green=palm red=handle | '+gripDebugData.state+' | distance '+distance.toFixed(3)+'m | fraction '+(profile?.gripFraction??'?')+' | palm '+gripDebugData.palm.join(',')+' | handle '+gripDebugData.handle.join(',');
+}
+
+let pickupStartedAt=null;
+// Equipped weapons are visual attachments, not free-falling rigid bodies.
+function syncEquippedSword(){
+ const weapon=host?.userData?.looseWeapon;
+ if(!weapon)return;
+ weapon.handBone.updateWorldMatrix(true,false);
+ const handQ=weapon.handBone.getWorldQuaternion(new THREE.Quaternion());
+ // Read the live thumb-base position AFTER pose evaluation. The cached
+ // wrist-relative offset was computed at model load and can drift as fingers
+ // and wrist are animated independently.
+ const thumb=weapon.handBone.parent?.getObjectByName('thumb_01_r')
+  ||host.getObjectByName('thumb_01_r');
+ const index=host.getObjectByName('index_01_r');
+ // Grip must sit in the thumb-index web, not at a finger bone pivot.
+ // Both live bones are evaluated after animation. Preserve blade rotation.
+ const thumbPoint=thumb?.getWorldPosition(new THREE.Vector3());
+ const indexPoint=index?.getWorldPosition(new THREE.Vector3());
+ const palm=thumbPoint&&indexPoint
+  ?thumbPoint.clone().lerp(indexPoint,.48)
+  :(thumbPoint||indexPoint||weapon.handBone.getWorldPosition(new THREE.Vector3())
+   .add(weapon.palmOffset.clone().applyQuaternion(handQ)));
+ // Bring the handle a small distance inside the hand rather than leaving it
+ // tangent to the thumb's external bone root.
+ const handCenter=weapon.handBone.getWorldPosition(new THREE.Vector3());
+ const inward=handCenter.clone().sub(palm);
+ if(inward.lengthSq()>.000001)palm.addScaledVector(inward.normalize(),.012);
+ // The equipped blade must point DOWN IN WORLD SPACE. Multiplying by
+ // handQ afterward rotated the blade upward when the wrist was twisted.
+ const bladeInPivot=weapon.bladeAxis.clone().normalize().applyQuaternion(weapon.source.quaternion);
+ const worldDown=new THREE.Vector3(0,-1,0);
+ // Rotate around the grip, not by shifting the socket. Tilt the blade
+ // toward the character's forward direction while retaining downward slope.
+ // Kendo-inspired three-cut combination: men -> right kote -> left do.
+ // Each cut has preparation, strike and follow-through; the grip stays fixed.
+ const combo=host.userData.previewAction==='attack';
+ const comboT=Math.min(.999,Math.max(0,host.userData.previewActionPhase||0))*3;
+ const step=Math.floor(comboT),u=comboT-step;
+ const ease=x=>{x=Math.min(1,Math.max(0,x));return x*x*(3-2*x);};
+ const cut=ease((u-.22)/.55);
+ const from=[[0,.94,-.34],[.65,.60,-.46],[-.68,.62,-.40]];
+ const to=[[0,-.82,-.57],[-.60,-.68,-.42],[.65,-.64,-.42]];
+ const bladeVector=combo
+  ?new THREE.Vector3(...from[step]).lerp(new THREE.Vector3(...to[step]),cut)
+  :new THREE.Vector3(0,-.70,-.714);
+ const bladeAim=bladeVector.normalize()
+  .applyQuaternion(host.getWorldQuaternion(new THREE.Quaternion())).normalize();
+ host.userData.kendoCombo=combo?{step:step+1,name:['面','右小手','左胴'][step],progress:u}:null;
+ const worldQ=new THREE.Quaternion().setFromUnitVectors(bladeInPivot,bladeAim);
+ // Resolve roll about the blade using the edge direction and character forward.
+ const edgeInPivot=weapon.edgeAxis.clone().applyQuaternion(weapon.source.quaternion).applyQuaternion(worldQ);
+ const forward=new THREE.Vector3(0,0,-1).applyQuaternion(host.getWorldQuaternion(new THREE.Quaternion()));
+ forward.y=0;forward.normalize();
+ const edgeFlat=edgeInPivot.clone().addScaledVector(worldDown,-edgeInPivot.dot(worldDown)).normalize();
+ if(edgeFlat.lengthSq()>.001&&forward.lengthSq()>.001){
+  const angle=Math.atan2(bladeAim.dot(new THREE.Vector3().crossVectors(edgeFlat,forward)),edgeFlat.dot(forward));
+  worldQ.premultiply(new THREE.Quaternion().setFromAxisAngle(bladeAim,angle)).normalize();
+ }
+ // v129.80: rotate the whole sword 180 degrees about the character's
+ // vertical axis, keeping the grip as the fixed pivot (position corrected below).
+ const turnAxis=new THREE.Vector3(0,1,0);
+ worldQ.premultiply(new THREE.Quaternion().setFromAxisAngle(turnAxis,Math.PI)).normalize();
+ // Small outward yaw around the same grip pivot; preserve the successful
+ // 180-degree flip and the hand-to-grip translation.
+ const outwardAxis=new THREE.Vector3(0,1,0);
+ worldQ.premultiply(new THREE.Quaternion().setFromAxisAngle(outwardAxis,-Math.PI/18)).normalize();
+ // Apply rotation first, then measure the ACTUAL transformed grip.
+ // This avoids stale offsets and guarantees the grip meets the thumb socket.
+ const parent=weapon.pivot.parent;
+ parent.updateWorldMatrix(true,false);
+ weapon.pivot.quaternion.copy(parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(worldQ));
+ weapon.pivot.updateWorldMatrix(true,true);
+ const actualGrip=weapon.source.localToWorld(weapon.gripLocal.clone());
+ const delta=palm.clone().sub(actualGrip);
+ const localDelta=parent.worldToLocal(actualGrip.clone().add(delta))
+  .sub(parent.worldToLocal(actualGrip.clone()));
+ weapon.pivot.position.add(localDelta);
+ weapon.pivot.updateWorldMatrix(true,true);
+ const alignedGrip=weapon.source.localToWorld(weapon.gripLocal.clone());
+ const error=alignedGrip.distanceTo(palm);
+ gripDebugData={state:'equipped-no-gravity',distance:+error.toFixed(6),passed:error<.003,thumb:palm.toArray(),handle:alignedGrip.toArray(),gripFraction:host.userData.equipmentGripProfile?.gripFraction??null};
+ if(error>.003)console.warn('[grip regression] socket mismatch',gripDebugData);
+
+}
+
+let looseWorld=null;
+let looseWorldLoading=null;
+function ensureLooseWorld(){
+ if(looseWorld||looseWorldLoading)return;
+ looseWorldLoading=createRapierLooseWorld().then(w=>{looseWorld=w;}).catch(e=>{console.error('Loose weapon Rapier initialization failed',e);}).finally(()=>{looseWorldLoading=null;});
+}
+function syncLooseWeaponPhysics(){
+ const weapon=host?.userData?.looseWeapon;
+ if(!weapon)return;
+ ensureLooseWorld();
+ if(!looseWorld)return;
+ if(looseWeaponPhysics?.weapon!==weapon||looseWeaponPhysics?.world!==looseWorld.world){
+  looseWeaponPhysics=null;
+  weapon.pivot.updateWorldMatrix(true,true);
+  // Derive an oriented collision box from actual mesh vertices in the
+  // pivot-local frame. A world AABB would rotate twice and penetrate floor.
+  weapon.pivot.updateWorldMatrix(true,true);
+  const initialRotation=weapon.pivot.getWorldQuaternion(new THREE.Quaternion());
+  const inversePivot=weapon.pivot.matrixWorld.clone().invert();
+  const localBounds=new THREE.Box3().makeEmpty();
+  weapon.source.traverse(mesh=>{
+   if(!mesh.isMesh||!mesh.geometry)return;
+   if(!mesh.geometry.boundingBox)mesh.geometry.computeBoundingBox();
+   const localToPivot=inversePivot.clone().multiply(mesh.matrixWorld);
+   const bb=mesh.geometry.boundingBox;
+   for(const x of [bb.min.x,bb.max.x])
+    for(const y of [bb.min.y,bb.max.y])
+     for(const z of [bb.min.z,bb.max.z])
+      localBounds.expandByPoint(new THREE.Vector3(x,y,z).applyMatrix4(localToPivot));
+  });
+  if(localBounds.isEmpty())return;
+  const localCenter=localBounds.getCenter(new THREE.Vector3());
+  const half=localBounds.getSize(new THREE.Vector3()).multiplyScalar(.5);
+  const center=weapon.pivot.localToWorld(localCenter.clone());
+  const offset=localCenter.clone().negate();
+  const registered=looseWorld.createLooseEquipment({position:center,halfExtents:half,massKg:weapon.massKg,rotation:initialRotation});
+  looseWeaponPhysics={weapon,world:looseWorld.world,registered,offset,initialRotation,localCenter,half,phase:'falling',distance:null};
+
+
+ }
+ const state=looseWeaponPhysics;
+ if(!state.grip)equipSwordAtSpawn();
+ if(state.grip){
+  const palm=weapon.handBone.getWorldPosition(new THREE.Vector3())
+   .add(weapon.palmOffset.clone().applyQuaternion(weapon.handBone.getWorldQuaternion(new THREE.Quaternion())));
+  state.grip.setTarget(palm,weapon.handBone.getWorldQuaternion(new THREE.Quaternion()));
+ }
+ const translation=state.registered.body.translation();
+ const rotation=state.registered.body.rotation();
+ const bodyQ=new THREE.Quaternion(rotation.x,rotation.y,rotation.z,rotation.w);
+ const worldQ=bodyQ.clone();
+ const worldPos=new THREE.Vector3(translation.x,translation.y,translation.z)
+  .add(state.offset.clone().applyQuaternion(bodyQ));
+ const parent=weapon.pivot.parent;
+ parent.updateWorldMatrix(true,false);
+ weapon.pivot.position.copy(parent.worldToLocal(worldPos));
+ weapon.pivot.quaternion.copy(parent.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(worldQ));
+ weapon.pivot.updateWorldMatrix(true,true);
+}
+let getupSnapshot=null;
+function ensurePhysicalBody(){
+ if(ragdoll?.engine==='rapier'||rapierLoading||!host)return;
+ rapierLoading=createRapierHuman().then(physics=>{
+  ragdoll?.dispose?.();
+  ragdoll=physics;
+  if(action==='dead')ragdoll.applyImpulse('torso',0,0,-90);
+ }).catch(err=>{rapierFailure=String(err);console.error('Rapier unavailable',err);})
+ .finally(()=>{rapierLoading=null;});
+}
+function start(name){
+ if(name==='getup'&&action!=='dead')return;
+ if(name==='getup'){
+  getupSnapshot={position:host.position.clone(),rotation:host.quaternion.clone()};
+  // Start a fresh physical body for the next fall, rather than carrying
+  // over the fallen articulated pose into normal animation.
+  ragdoll?.dispose?.();ragdoll=null;
+ }
+ action=name;clock=0;result=null;
+ if(host){host.userData.physicsDeathActive=name==='dead';host.userData.ragdollPose=null;}
+ if(name==='dead'&&ragdoll?.engine==='rapier')ragdoll.applyImpulse('torso',0,0,-90);
+ ensurePhysicalBody();
+ drawButtons();
+}
+function drawButtons(){
+ const root=$('actions');root.replaceChildren();
+ const binding=bindCharacterActions(occupationSelect.value,$('sex').value);
+ for(const motion of motions){const b=document.createElement('button');b.textContent=labels[motion];if(action===motion)b.className='active';const permitted=binding.enabled.includes(motion)||Boolean(host?.userData?.libraryActionPlayer?.selected[motion]);const loaded=host?.userData?.libraryActionPlayer;const available=!loaded||Boolean(loaded.selected[motion]);b.disabled=!permitted||!available;b.style.opacity=b.disabled?'0.32':'1';b.title=!permitted?'この職業には未割当':!available?'GLBに対応モーションなし':'';b.onclick=()=>{queue=[];sequence=false;start(motion)};root.appendChild(b)}
+}
+function poseFrame(dt){
+ const player=host?.userData?.libraryActionPlayer;
+ if(!player)return; // No procedural pose fallback: only authored library clips drive the visible rig.
+ if(player.setAction(action)){
+  player.update(dt);
+  host.userData.syncFacialSkeleton?.();
+  host.userData.libraryActionError=null;
+  host.userData.syncVisibleWeapon?.();
+  host.userData.syncImportedEquipment?.();
+ }else{
+  host.userData.libraryActionError='既存GLBに「'+action+'」のモーションなし';
+ }
+ return;
+ ensurePhysicalBody();
+ const job=$('job').value,actor=resolveFantasyActor(job,$('sex').value),visual=resolveJobVisual(job),identity=resolveJobIdentity(job);
+ const motionClock=clock*(actor.motion.tempo||1);
+ // Clip data drives the hidden BOM joints; the imported skinned model remains
+ // the only visible pose authority via externalNpcSync below.
+ const j=rig.joints;
+ const carriedKg=equipmentLoadKg();
+ // Imported character assets use a T-pose bind. Shoulder adduction is a
+ // separate anatomical axis from forward/backward swing (rotation.x).
+ // Keep arms beside the torso for all active actions, not only idle.
+ const clip=sampleHumanClip(action,motionClock,{...actor.motion,attack:actor.motion.attack});
+ for(const [key,values] of [['shoulders',clip.shoulders],['elbows',clip.elbows],['wrists',clip.wrists],['hips',clip.hips],['knees',clip.knees],['ankles',clip.ankles]]){
+  j[key]?.forEach((joint,i)=>{if(action!=='dead')joint.rotation.x=muscles.advance(key,i,values[i]||0,dt,action,(key==='wrists'||key==='elbows'||key==='shoulders')&&i===1?carriedKg:0);});
+ }
+ if(action!=='dead')j.shoulders.forEach((joint,i)=>{joint.rotation.z=(i===0?1:-1)*(action==='attack'?.70:action==='guard'?.82:1.12);});
+ if(action!=='dead')j.spine.rotation.y=muscles.advance('spine',0,clip.spineY||0,dt,action);
+ j.spine.rotation.z=clip.spineZ||0;
+ if(action!=='dead')j.head.rotation.x=muscles.advance('neck',0,clip.headX||0,dt,action);
+ if(action==='getup'&&getupSnapshot){
+  // Four-phase recovery: reach palms forward, push torso up, kneel, stand.
+  // Joint rotations are staged; the body is never teleported upright in one frame.
+  const t=Math.min(1,clock/2.4);
+  const smooth=x=>{x=THREE.MathUtils.clamp(x,0,1);return x*x*(3-2*x);};
+  const reach=smooth(t/.18);
+  const push=smooth((t-.16)/.33);
+  const kneel=smooth((t-.42)/.31);
+  const stand=smooth((t-.70)/.30);
+  const pose=(key,i,x,z=0)=>{
+   const bone=rig.joints[key]?.[i];if(!bone)return;
+   const target=new THREE.Quaternion().setFromEuler(new THREE.Euler(x,0,z));
+   bone.quaternion.slerp(target,.35*reach+.65*push);
+  };
+  for(let i=0;i<2;i++){
+   // Reach both arms overhead before pushing up.
+   pose('shoulders',i,0,(i===0?-1:1)*1.85);
+   pose('elbows',i,0);
+   pose('wrists',i,0);
+   // Bring knees under the pelvis before extending the legs.
+   pose('hips',i,.95);
+   pose('knees',i,-1.20);
+  }
+  // Hold the supported kneeling pose, then blend to the sampled idle rig.
+  for(const key of ['shoulders','elbows','wrists','hips','knees','ankles']){
+   rig.joints[key]?.forEach((bone,i)=>{
+    const neutral=new THREE.Quaternion();
+    const weight=stand;
+    bone.quaternion.slerp(neutral,weight);
+   });
+  }
+  const upright=Math.max(push*.35,kneel*.78,stand);
+  host.quaternion.copy(getupSnapshot.rotation).slerp(new THREE.Quaternion(),upright);
+  const positionProgress=.18*push+.42*kneel+.40*stand;
+  host.position.copy(getupSnapshot.position).lerp(new THREE.Vector3(0,0,0),positionProgress);
+  host.userData.getupPhase=t<.18?'hands':t<.49?'push':t<.73?'kneel':'stand';
+ }
+ // Motion-specific body weight shift. Retargeted limbs retain their sampled clips.
+ j.spine.rotation.x=action==='run'?.20:action==='attack'?.12:action==='guard'?.08:0;
+ if(action==='run'){
+  j.shoulders.forEach((bone,i)=>{bone.rotation.x+=(i===0?-.20:.20);});
+  j.hips.forEach((bone,i)=>{bone.rotation.x*=1.18;});
+ }
+
+ // Visible skeleton owns kendo footwork; do not add a second competing gait to the hidden rig.
+ host.userData.previewKendo=action==='attack';
+ host.userData.previewAction=action;
+ host.userData.townWind={x:1.8+0.7*Math.sin(clock*.73),z:0.8*Math.cos(clock*.47)};
+ host.userData.previewActionPhase=action==='attack'?Math.min(1,Math.max(0,motionClock/2.1)):0;
+ host.userData.motionContact={action,time:motionClock,period:action==='walk'?.88:action==='run'?.63:1};
+ if(action!=='dead')host.userData.externalNpcSync?.();
+ // Use the hand-mounted weapon and the rig's single grip solver.
+ host.userData.syncVisibleWeapon?.();
+ rig.joints.fingers?.forEach(handJoint=>{
+  const hand=handJoint.userData?.handBom;
+  if(!hand)return;
+  const mount=handJoint.children.find(c=>c.name==='weapon-bom-mount'&&c.visible);
+  const constraint=mount?.userData?.gripConstraint;
+  const contact=constraint?.solve?.();
+  hand.contactActive=Boolean(contact?.contact);
+  hand.contactDistance=contact?.penetration??null;
+  hand.gripState=hand.contactActive?'closed':'open';
+  handJoint.userData.setGrip?.(hand.contactActive?mount.userData.gripSocket:null);
+ });
+
+ // Preview stays in place; feet and body position belong to the rig/IK solver.
+ // Fall as one connected character rather than bending the neck/spine apart.
+ const fall=action==='dead'?Math.min(1,Math.max(0,clock/1.15)):0;
+ const ease=fall*fall*(3-2*fall);
+ if(action==='dead'){
+  if(!ragdoll){
+   // While WASM initializes, retain the old preview solver as a fallback.
+   ragdoll=createRagdoll();
+   const totalMass=[...ragdoll.parts.values()].reduce((sum,p)=>sum+p.m,0)+carriedKg;
+   const impulseNs=240;
+   knockback={position:new THREE.Vector3(0,0,0),velocity:new THREE.Vector3(0,1.1,-impulseNs/totalMass),massKg:totalMass,airborne:true};
+   ragdoll.applyImpulse('torso',0,0,-90);
+  }
+
+  const physicsDebug=new URLSearchParams(location.search).get('physicsDebug')==='1';
+  if(!physicsDebug)ragdoll.drive?.(action,dt);
+  ragdoll.step(dt);
+  const part=id=>ragdoll.parts.get(id).p;
+  // All ragdoll particles and gravity remain in world-space (Y up).
+  const point=id=>new THREE.Vector3(...part(id));
+  const pelvis=point('pelvis'),torso=point('torso');
+  // The pelvis-to-torso vector can become horizontal or point down after
+  // impact. Driving the entire actor from that single vector flips the mesh
+  // upside down and raises the legs above the floor. Preserve the pelvis
+  // body's actual Rapier orientation instead of inferring a root flip.
+  // A ball-shaped pelvis has no anatomically meaningful orientation.
+  // Use the torso-to-pelvis line to derive the sagittal fall angle while
+  // keeping the root upright in the local rig frame; limb bones receive
+  // their own physical directions below.
+  const bodyAxis=new THREE.Vector3().subVectors(torso,pelvis);
+  const rootTilt=new THREE.Quaternion();
+  if(bodyAxis.lengthSq()>1e-8){
+   const sagittal=Math.atan2(bodyAxis.z,bodyAxis.y);
+   rootTilt.setFromAxisAngle(new THREE.Vector3(1,0,0),Math.max(-Math.PI/2,Math.min(Math.PI/2,sagittal)));
+  }
+  host.quaternion.copy(rootTilt);
+  // Retarget every limb from its 3D physics segment direction. The old
+  // atan2(z,-y) discarded lateral motion and inverted the shin when the
+  // torso rotated, producing feet pointing straight up.
+  const inverseRoot=rootTilt.clone().invert();
+  const direction=(a,b)=>point(b).sub(point(a)).normalize().applyQuaternion(inverseRoot);
+  const align=(bone,rest,target)=>{
+   if(!bone||target.lengthSq()<1e-8)return;
+   bone.quaternion.setFromUnitVectors(rest,target);
+  };
+  const down=new THREE.Vector3(0,-1,0);
+  const sideL=new THREE.Vector3(-1,0,0),sideR=new THREE.Vector3(1,0,0);
+  j.spine.rotation.set(0,0,0);
+  j.neck.rotation.set(0,0,0);
+  j.head.rotation.set(0,0,0);
+  for(let i=0;i<2;i++){
+   const k=i===0?'L':'R';
+   const thigh=direction('pelvis','thigh'+k);
+   const shin=direction('thigh'+k,'shin'+k);
+   const upper=direction('torso','upperArm'+k);
+   const lower=direction('upperArm'+k,'forearm'+k);
+   align(j.hips[i],down,thigh);
+   // Child bone rotation is relative to its parent: transform the world
+   // target into the parent's frame before computing the local quaternion.
+   const shinLocal=shin.clone().applyQuaternion(j.hips[i].quaternion.clone().invert());
+   align(j.knees[i],down,shinLocal);
+   align(j.shoulders[i],i===0?sideL:sideR,upper);
+   const forearmLocal=lower.clone().applyQuaternion(j.shoulders[i].quaternion.clone().invert());
+   align(j.elbows[i],i===0?sideL:sideR,forearmLocal);
+   // Continue the physical chain through the wrist and ankle. Previously
+   // these bones retained their animation pose after the forearm/shin fell,
+   // allowing the visible hand and foot to penetrate the floor.
+   const hand=direction('forearm'+k,'hand'+k);
+   const foot=direction('shin'+k,'foot'+k);
+   const forearmFrame=j.shoulders[i].quaternion.clone().multiply(j.elbows[i].quaternion);
+   const shinFrame=j.hips[i].quaternion.clone().multiply(j.knees[i].quaternion);
+   align(j.wrists[i],i===0?sideL:sideR,hand.applyQuaternion(forearmFrame.invert()));
+   align(j.ankles[i],down,foot.applyQuaternion(shinFrame.invert()));
+  }
+  host.userData.ragdollDiagnostics={engine:ragdoll.engine||'legacy-loading',error:rapierFailure,parts:ragdoll.parts.size,joints:ragdoll.links.length};
+  // Apply the final articulated pose to the visible skin before sampling contact.
+  // Physics ownership must not bypass this explicit death-pose sync.
+  host.userData.ragdollPose=Object.fromEntries([...ragdoll.parts].map(([id,p])=>[id,[...p.p]]));
+  host.userData.physicsDeathActive=false;
+  host.userData.externalNpcSync?.();
+  host.userData.physicsDeathActive=true;
+  // Avoid masking broken bone retargeting with a rigid whole-body rotation.
+  // Keep the physics-derived root tilt; do not reset it after retargeting.
+  // Integrate whole-body center-of-mass translation, never pin the actor at the origin.
+  // Physics owns all translations; never integrate a second knockback
+  // trajectory alongside Rapier, which causes an artificial pulling force.
+  const h=Math.min(1/30,Math.max(0,dt));
+  // Rotate the model around its pelvis (about 1m above the foot-origin),
+  // not around the feet. Keep the physical pelvis world position invariant.
+  const pivotLocal=new THREE.Vector3(0,1,0);
+  const pivotWorld=new THREE.Vector3(...ragdoll.parts.get('pelvis').p);
+  const rotatedPivot=pivotLocal.clone().applyQuaternion(host.quaternion);
+  host.position.copy(pivotWorld).sub(rotatedPivot);
+  // The ragdoll solver owns vertical translation. Never apply a second
+  // gravity integrator or mix its vertical state into the visual pelvis.
+  // Keep only the horizontal knockback offset, which is not yet simulated
+  // by the particle solver's center-of-mass translation.
+  // Rapier already applied the impact impulse to the torso.
+  host.userData.ragdollMassKg=[...ragdoll.parts.values()].reduce((sum,p)=>sum+p.m,0)+carriedKg;
+  // Collision-only correction: the visible skinned mesh must not tunnel
+  // below the ground. This does NOT prescribe a standing or limb pose.
+  // The Rapier ground collider is authoritative: mesh-based lifting would
+  // pull the actor away from its rigid bodies every frame.
+  // Rapier's sphere colliders cannot represent the imported skinned mesh.
+  // Correct only the rendered mesh against the floor; never feed the offset
+  // back into Rapier's rigid-body state. Recompute from physics every frame.
+  // The visual mesh is NOT a physical body. Translating the whole actor
+  // when a hand touches the ground pins the pelvis and leaves the legs aloft.
+  // Keep the pelvis anchored to Rapier; report penetration for diagnostics
+  // until per-bone collider retargeting is available.
+  const contact=ragdoll.engine==='rapier'
+   ? {correction:0,source:'rapier-pelvis',visualContact:'not-authoritative'}
+   : correctMeshFloor({THREE,root:host,groundY:0,maxCorrection:.15,maxSamplesPerMesh:512,maxMeshes:24});
+  if(contact.correction>0){
+   // Contact removes downward penetration velocity, not horizontal momentum.
+   // Previous frame-by-frame friction stopped the actor as soon as any mesh
+   // vertex touched the floor, even while the body was still falling.
+   if(knockback.velocity.y<0)knockback.velocity.y=0;
+   const friction=Math.max(0,OBJECT_PHYSICS.floor.friction||.9);
+   const resting=clock>1.2&&Math.abs(knockback.velocity.y)<.05;
+   if(resting){
+    const decay=Math.max(0,1-friction*h*2);
+    knockback.velocity.x*=decay;
+    knockback.velocity.z*=decay;
+   }
+  }
+  // No position feedback into the physics engine.
+  // Contact-aware visual wrists: keep the displayed hand pivots above the
+  // ground independently of the pelvis. This is a visual IK safeguard.
+  host.updateMatrixWorld(true);
+  for(let i=0;i<2;i++){
+   const wrist=j.wrists[i];
+   if(!wrist)continue;
+   if(wrist.userData.floorRestPosition===undefined)wrist.userData.floorRestPosition=wrist.position.clone();
+   wrist.position.copy(wrist.userData.floorRestPosition);
+   host.updateMatrixWorld(true);
+   const worldWrist=wrist.getWorldPosition(new THREE.Vector3());
+   const minHandHeight=.075;
+   if(worldWrist.y<minHandHeight){
+    const desired=worldWrist.clone();
+    desired.y=minHandHeight;
+    wrist.parent.worldToLocal(desired);
+    wrist.position.copy(desired);
+   }
+  }
+  // Visual-only safety clearance for the preview: the physical solver still
+  // owns the rigid-body positions. Never lift a contact body by metres.
+  host.updateMatrixWorld(true);
+  // Sample the actual deformed skin, not the wrist pivot. A wrist can be
+  // above ground while the palm or forearm mesh still penetrates it.
+  // The correction is recomputed from the physics pose on every frame.
+  const clearance=correctMeshFloor({THREE,root:host,groundY:0,maxCorrection:ragdoll.engine==='rapier'?0:.08,maxSamplesPerMesh:1024,maxMeshes:48});
+  host.userData.visualFloorClearance=clearance.correction;
+  host.visible=true;
+  boneContacts=sampleBoneFloorContacts({THREE,root:host,groundY:0});
+  host.userData.meshFloorDiagnostics={...contact,fall,ease,articulated:true,boneContacts:boneContacts.length,boneDrive:host.userData.visibleBoneDrive};
+ }else{
+  if(fallBody){groundPhysics.remove(fallBody);fallBody=null;}
+  if(action!=='getup'){host.quaternion.identity();host.position.set(0,0,0);host.userData.physicsDeathActive=false;host.userData.ragdollPose=null;}
+ }
+ const limit=sequence?({idle:1.1,walk:2,run:2,attack:1.3,guard:1.4,hit:.9,dead:1.25}[action]):({attack:.9,hit:.58,dead:1.15,getup:2.4}[action]);
+ if(limit&&clock>=limit){
+  result='完了';
+  if(sequence){
+   if(queue.length)start(queue.shift());
+   else if(cycle){queue=[...motions];start(queue.shift());}
+   else {sequence=false;start('idle');result='全動作完了';}
+  }else if(!cycle&&action!=='dead')start('idle');
+  else if(cycle)clock=0;
+ }
+ const physicalBalance=ragdoll?.getBalanceDiagnostics?.();
+ host.userData.standingBalanceDiagnostics=physicalBalance;
+ const physicsDebug=new URLSearchParams(location.search).get('physicsDebug')==='1';
+ const physicsState=ragdoll?.parts;
+ const physPelvis=physicsState?.get('pelvis')?.body?.translation?.();
+ const physFeet=['footL','footR'].map(k=>physicsState?.get(k)?.body?.translation?.()).filter(Boolean);
+ const physicalDebugText=physicsDebug?(' / 物理診断:筋力OFF / 骨盤Y '+(physPelvis?.y?.toFixed(2)??'--')+' / 足Y '+physFeet.map(v=>v.y.toFixed(2)).join(',')+' / 足元Y '+(host?.position?.y?.toFixed(2)??'--')):'';
+ const stanceInfo=physicalBalance?.geometry;
+ const stanceText=stanceInfo?' / COM-Z '+stanceInfo.comZ.toFixed(2)+' / 支持Z '+(stanceInfo.supportZ?stanceInfo.supportZ.map(v=>v.toFixed(2)).join(','):'なし')+' / 接地 '+stanceInfo.feet.filter(p=>p.contact).length:'';
+ const boneDrive=host.userData.visibleBoneDrive;
+ const boneStatus=action==='dead'?(boneDrive?' / 実モデル骨 '+boneDrive.mapped+'本 / 駆動 '+boneDrive.bones.filter(b=>b.requested>.01).length+'本':' / 実モデル骨 未接続'):'';
+ const equipmentQA=host.userData.equipmentDiagnostics;
+ const fingerQA=host.userData.fingerGripDiagnostics;
+ const calibrated=host.userData.fingerHingeCalibration;
+ const calibratedCount=calibrated?.filter(x=>x.valid).length??0;
+ const fingerInfo=fingerQA?(' / 指骨 '+fingerQA.jointCount+'本 / 右手 '+fingerQA.right.length+'本 / 左手 '+fingerQA.left.length+'本'+(fingerQA.right.length<15?' / 握持骨不足':' / 握持骨認識OK')):' / 指骨未接続';
+ const equippedInfo=equipmentQA?(' / 武器素材 '+(equipmentQA.loaded.join('+')||'読込待ち')+' / 指先接近 '+(equipmentQA.gripContactDistance==null?'--':equipmentQA.gripContactDistance.toFixed(3)+'m')+' / 接触 '+(equipmentQA.gripContact?'OK':'未達')+' / 手との誤差 '+(equipmentQA.handDistance===null?'未計測':equipmentQA.handDistance.toFixed(3)+'m')+(equipmentQA.error?' / 読込失敗 '+equipmentQA.error:'')):' / 武器検証未初期化';
+ $('diagnostics').textContent='職業 '+PLAYER_JOBS[job].label+' / '+labels[action]+' / '+clock.toFixed(2)+'秒 / '+(result||'実行中')+' / '+modelStatus+' / 接地 '+(physicalBalance?.contacts??'--')+'足 / 重心差 '+(physicalBalance?.offset?physicalBalance.offset.x.toFixed(2)+','+physicalBalance.offset.z.toFixed(2):'--')+'m / 体幹Y '+(physicalBalance?.bodyAxis?.y?.toFixed(2)??'--')+physicalDebugText+stanceText+boneStatus+fingerInfo+equippedInfo+(looseWeaponPhysics?' / 剣Rapier '+looseWeaponPhysics.phase+' / 柄距離 '+(looseWeaponPhysics.distance?.toFixed(2)??'--')+'m / 剛体Y '+looseWeaponPhysics.registered.body.translation().y.toFixed(2):' / 剣Rapier 未登録');
+}
+const faceFields={eyes:{label:'目',params:[['size','大きさ',.5,1.8,.05],['spacing','左右間隔',.035,.09,.005]]},nose:{label:'鼻',params:[['width','幅',.5,1.8,.05],['height','高さ',.5,1.8,.05],['projection','突出量',.5,1.8,.05]]},mouth:{label:'口',params:[['width','幅',.5,1.8,.05],['fullness','厚み',.5,1.8,.05]]},ears:{label:'耳',params:[['size','大きさ',.5,1.8,.05]]},hair:{label:'髪',params:[]}};
+const faceValues={eyes:{size:1,spacing:.061,color:'#654a32'},nose:{width:1,height:1,projection:1},mouth:{width:1,fullness:1,color:'#8b4c46'},ears:{size:1}};
+function refreshFace(){if(mannequinMode){mannequinMode=false;host?.userData.setMannequinFace?.(false);$('mannequin').textContent='顔をデフォルトに'}host?.userData.updateFaceParts?.(faceValues);syncHeadParts()}
+for(const [slot,def] of Object.entries(faceFields)){
+ const group=document.createElement('section');group.style.cssText='padding:5px;border-bottom:1px solid #53647a;display:none';group.dataset.faceSlot=slot;
+ const heading=document.createElement('button');heading.textContent=def.label+'を編集';heading.onclick=()=>{headParts[slot]=true;refreshFace()};group.append(heading);
+ if(slot==='hair'){
+  const styleLabel=document.createElement('label');styleLabel.textContent='髪型';
+  const styleSelect=document.createElement('select');styleSelect.id='face-hair-style';
+  for(const style of CHARACTER_EDIT_FIELDS.hair){const option=document.createElement('option');option.value=style;option.textContent=style;styleSelect.append(option)}
+  styleSelect.onchange=()=>{headParts.hair=true;editValues={...editValues,hair:styleSelect.value};build();const lower=$('edit-hair');if(lower)lower.value=styleSelect.value;};
+  styleLabel.append(styleSelect);group.append(styleLabel);
+  const colorLabel=document.createElement('label');colorLabel.textContent='髪色';
+  const colorInput=document.createElement('input');colorInput.type='color';colorInput.id='face-hair-color';colorInput.value='#30211b';
+  colorInput.oninput=()=>{selectedHairColor=colorInput.value;host?.userData.setHairColor?.(selectedHairColor);};
+  colorLabel.append(colorInput);group.append(colorLabel);
+ }
+ for(const [key,label,min,max,step] of def.params){const row=document.createElement('label');row.textContent=label;const input=document.createElement('input');input.type='range';input.min=min;input.max=max;input.step=step;input.value=faceValues[slot][key];input.oninput=()=>{faceValues[slot][key]=Number(input.value);headParts[slot]=true;refreshFace()};row.append(input);group.append(row)}
+ if(slot==='eyes'||slot==='mouth'){const color=document.createElement('input');color.type='color';color.value=faceValues[slot].color;color.oninput=()=>{faceValues[slot].color=color.value;headParts[slot]=true;refreshFace()};group.append(color)}
+ $('faceControls').append(group);
+}
+const faceTabs=document.createElement('nav');faceTabs.style.cssText='display:flex;gap:4px;overflow-x:auto;position:sticky;top:0;background:#142338;padding:3px 0';$('headEditor').insertBefore(faceTabs,$('faceControls'));for(const [slot,def] of Object.entries(faceFields)){const b=document.createElement('button');b.textContent=def.label;b.style.cssText='flex:1;min-width:45px;padding:7px';b.onclick=()=>{for(const s of $('faceControls').children)s.style.display=s.dataset.faceSlot===slot?'block':'none';};faceTabs.append(b)}faceTabs.firstChild.click();
+$('faceTab').onclick=()=>{const panel=$('headEditor');panel.style.display=panel.style.display==='none'?'block':'none';resizePreview();if(panel.style.display==='block'&&!faceMode){faceMode=true;$('faceZoom').textContent='全身に戻す';fitCharacterCamera()}};
+
+$('mannequin').onclick=()=>{mannequinMode=!mannequinMode;host?.userData.setMannequinFace?.(mannequinMode);$('mannequin').textContent=mannequinMode?'元の顔を表示':'顔をデフォルトに'};
+$('faceZoom').onclick=()=>{faceMode=!faceMode;$('faceZoom').textContent=faceMode?'全身に戻す':'顔を拡大';fitCharacterCamera()};
+previewCanvas.addEventListener('wheel',e=>{e.preventDefault();orbitDistance=THREE.MathUtils.clamp(orbitDistance*(e.deltaY>0?1.12:.89),.18,12);updateOrbitCamera()},{passive:false});
+$('job').onchange=()=>{
+ // Legacy combat job must not disagree with the occupation driving model and equipment.
+ const id=$('job').value;
+ const aliases={warrior:'swordsman',monk:'martial_artist',rogue:'thief',priest:'white_mage',mage:'black_mage'};
+ const occupation=JOB_CATALOG[id]?id:aliases[id];
+ if(occupation&&JOB_CATALOG[occupation])occupationSelect.value=occupation;
+ updateOccupationInfo();showPartAvailability();editValues={};build();
+};$('sex').onchange=()=>{showPartAvailability();editValues={};build()};
+const jp={body:'体格',face:'顔',hair:'髪',outfit:'衣装',equipment:'武器'};
+for(const key of ['body','face','hair','outfit','equipment']){const label=document.createElement('label');label.textContent=jp[key];const select=document.createElement('select');select.id='edit-'+key;for(const v of CHARACTER_EDIT_FIELDS[key]){const option=document.createElement('option');option.value=v;option.textContent=v;select.appendChild(option)}select.onchange=()=>{editValues={...editValues,[key]:select.value};build();for(const field of Object.keys(jp))if(editValues[field])$('edit-'+field).value=editValues[field];};label.append(select);$('editor').append(label)}
+function readEditor(){const p=readCharacterPresets()[$('target').value]||{};editValues={...p};if(p.jobId&&PLAYER_JOBS[p.jobId])$('job').value=p.jobId;if(p.sex)$('sex').value=p.sex;build();for(const key of Object.keys(jp))if(editValues[key])$('edit-'+key).value=editValues[key];}
+$('target').onchange=readEditor;$('load').onclick=readEditor;
+$('save').onclick=()=>{const p={...editValues,jobId:$('job').value,sex:$('sex').value};saveCharacterPreset($('target').value,p);modelStatus='保存済み：ゲーム再起動で反映';alert('保存しました。ゲームに戻って再起動すると反映されます。')};
+$('export').onclick=()=>{const blob=new Blob([JSON.stringify(readCharacterPresets(),null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='character-presets.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),500)};
+$('all').onclick=()=>{queue=[...motions];sequence=true;start(queue.shift());};
+$('repeat').onclick=()=>{cycle=!cycle;$('repeat').textContent='繰返し：'+(cycle?'ON':'OFF')};
+function loop(now){requestAnimationFrame(loop);const dt=Math.min(.05,(now-last)/1000);last=now;clock+=dt*Number($('speed').value);poseFrame(dt);syncEquippedSword();updateGripDebug();host?.userData?.salonHair?.update?.(clock);renderer.render(scene,camera)}
+
+readEditor();resizePreview();requestAnimationFrame(loop);
+window.__actionTestQA=()=>({gripDebug:gripDebugData,swordPhysics:looseWeaponPhysics?{phase:looseWeaponPhysics.phase,distance:looseWeaponPhysics.distance,bodyY:looseWeaponPhysics.registered.body.translation().y,halfY:looseWeaponPhysics.half.y,gripped:!!looseWeaponPhysics.grip}:null,job:$('job').value,action,seconds:clock,hasRig:!!rig?.joints,jointCount:rig?.root?.userData?.jointCount,queue:queue.length,sequence,modelStatus,footContact:host?.userData?.footContactDiagnostics||null,meshFloor:host?.userData?.meshFloorDiagnostics||null,visualError:host?.userData?.characterVisualError||null,availableBones:host?.userData?.characterAvailableBones?.length||0,mappedBones:host?.userData?.characterMappedBones||[],equipment:host?.userData?.equipmentDiagnostics||null,facialAlignment:host?.userData?.characterFacialAlignment||null,fingerGrip:host?.userData?.fingerGripDiagnostics||null,skeletonAuthority:host?.userData?.skeletonAuthority||null,weaponActionPose:host?.userData?.visibleWeaponActionPose||null,attackPhase:host?.userData?.previewActionPhase??null,poseDiagnostics:rig?.joints?{spineX:rig.joints.spine.rotation.x,shoulders:rig.joints.shoulders.map(x=>x.rotation.x),knees:rig.joints.knees.map(x=>x.rotation.x),rootY:rig.root.position.y}:null,visibleModels:host?.children?.filter?.(x=>x.visible&&x.userData?.sourceModelId).map(x=>x.userData.sourceModelId)});
+</script><div id="grip-debug-overlay" style="position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#111e;color:#fff;font:12px monospace;padding:8px;pointer-events:none;overflow-wrap:anywhere;display:none"></div><script>if(new URLSearchParams(location.search).get('gripDebug')==='1')document.getElementById('grip-debug-overlay').style.display='block';</script></body></html>
