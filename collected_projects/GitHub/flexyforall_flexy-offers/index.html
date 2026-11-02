@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Flexy Global Offer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* Layout: fixed WebGL layer (drifting sand + 3D book) under a pinned stage; book turns 90° in-plane while the cover swings open on its spine, then settles into a centred card under a headline; regular sections scroll over the sand. */
+:root{
+  --ink:#0D0D0D;
+  --night:#191A1D;
+  --fg:#FFFFFF;
+  --fg-dim:rgba(255,255,255,.7);
+  --line:rgba(255,255,255,.12);
+  --glass:rgba(255,255,255,.10);
+  --paper:#ECECEF;
+  --paper-ink:#0D0D0D;
+  --paper-dim:rgba(13,13,13,.5);
+  --paper-line:rgba(13,13,13,.12);
+  --lilac:#9999A8;
+  --f-sans:"Nimbus Sans Novus","Nimbus Sans","Helvetica Neue",Helvetica,"Inter Tight",Arial,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+  --gut:max(16px,env(safe-area-inset-left,0px));
+  --gutR:max(16px,env(safe-area-inset-right,0px));
+  color-scheme:dark;
+}
+html{background:var(--ink)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+body{background:var(--ink);color:var(--fg);font-family:var(--f-sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+*{box-sizing:border-box}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--fg);outline-offset:3px;border-radius:6px}
+
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0;pointer-events:none}
+main{position:relative;z-index:1}
+
+/* ---------- pinned stage ---------- */
+.track{position:relative;height:640vh}
+.stage{position:sticky;top:0;height:100vh;height:100lvh;overflow:hidden}
+
+.hud{position:absolute;inset:0;pointer-events:none;padding:max(28px,env(safe-area-inset-top,0px)) var(--gutR) 40px var(--gut);display:flex;flex-direction:column;justify-content:space-between}
+.hud>*{pointer-events:auto}
+@media (min-width:900px){.hud{padding-left:60px;padding-right:60px}}
+.logo{display:block;width:139px;height:auto;border-radius:10px}
+.hud-bottom{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap}
+.hero-title{margin:0;font-weight:500;font-size:clamp(44px,8.6vw,132px);line-height:.95;letter-spacing:-.02em;text-wrap:balance}
+.tags{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;max-width:280px}
+.tag{font-size:15px;padding:8px 14px;border-radius:8px;background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);color:var(--fg-dim)}
+.hint{position:absolute;left:50%;bottom:max(18px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);font-family:var(--f-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-dim);display:flex;align-items:center;gap:10px;pointer-events:none}
+.hint i{display:block;width:1px;height:28px;background:linear-gradient(var(--fg),transparent);animation:drip 1.8s ease-in-out infinite}
+@keyframes drip{0%{transform:scaleY(0);transform-origin:top}50%{transform:scaleY(1);transform-origin:top}51%{transform-origin:bottom}100%{transform:scaleY(0);transform-origin:bottom}}
+
+/* final headline above the card */
+.head{text-shadow:0 2px 28px rgba(0,0,0,.85);position:absolute;left:0;right:0;top:max(9vh,calc(env(safe-area-inset-top,0px) + 32px));padding-left:var(--gut);padding-right:var(--gutR);text-align:center;opacity:0;visibility:hidden}
+.head h2{margin:0 auto;font-weight:500;font-size:clamp(34px,4.6vw,76px);line-height:1.02;letter-spacing:-.025em;text-wrap:balance;max-width:14em}
+.head h2 span{display:block;color:var(--lilac)}
+.head h2 .l1{color:var(--fg)}
+.head p{margin:20px auto 0;max-width:34em;font-size:clamp(15px,1.25vw,19px);line-height:1.5;color:var(--fg-dim);text-wrap:pretty}
+@media (max-width:600px){.head p{display:none}}
+
+/* the card the page turns into */
+.card{position:absolute;left:0;top:0;background:var(--paper);color:var(--paper-ink);border-radius:20px;overflow:hidden;opacity:0;visibility:hidden;container-type:inline-size;box-shadow:0 30px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06)}
+.spread{padding:5cqw;display:flex;flex-direction:column;gap:4.2cqw}
+.sp-top{display:flex;justify-content:space-between;gap:16px;font-family:var(--f-mono);font-size:max(10px,1.2cqw);letter-spacing:.12em;text-transform:uppercase;color:var(--paper-dim);border-bottom:1px solid var(--paper-line);padding-bottom:1.6cqw}
+.sp-top span:first-child{white-space:nowrap}
+.sp-top span:last-child{text-align:right}
+.parties{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:3cqw}
+.party{display:grid;gap:.5cqw;min-width:0;align-content:start}
+.party small{font-family:var(--f-mono);font-size:max(10px,1.1cqw);letter-spacing:.12em;text-transform:uppercase;color:var(--paper-dim)}
+.party b{font-weight:500;font-size:2.3cqw;line-height:1.2;letter-spacing:-.01em}
+.party span{font-size:1.7cqw;line-height:1.4;color:rgba(13,13,13,.62)}
+.tbl{width:100%;border-collapse:collapse;font-size:1.85cqw;color:var(--paper-ink)}
+.tbl td{color:var(--paper-ink)}
+.tbl th{font-family:var(--f-mono);font-weight:400;font-size:max(10px,1.1cqw);letter-spacing:.12em;text-transform:uppercase;color:var(--paper-dim);text-align:left;padding:0 0 1.2cqw;border-bottom:1px solid var(--paper-line)}
+.tbl td{padding:1.4cqw 0;border-bottom:1px solid var(--paper-line);vertical-align:top}
+.tbl th+th,.tbl td+td{padding-left:2cqw}
+.tbl .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbl td:first-child{font-weight:500;width:48%}
+.tbl td.meta{display:none}
+.sum{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:3cqw;align-items:end}
+.notes{font-size:1.6cqw;line-height:1.45;color:rgba(13,13,13,.62);white-space:pre-line;max-width:36em}
+.notes small{display:block;font-family:var(--f-mono);font-size:max(10px,1.1cqw);letter-spacing:.12em;text-transform:uppercase;color:var(--paper-dim);margin-bottom:.6cqw}
+.totals{display:grid;gap:.8cqw;min-width:28cqw}
+.totals div{display:flex;justify-content:space-between;gap:3cqw;font-size:1.8cqw;color:rgba(13,13,13,.7);font-variant-numeric:tabular-nums}
+.totals .grand{margin-top:.8cqw;padding-top:1.4cqw;border-top:1px solid var(--paper-ink);align-items:baseline;color:var(--paper-ink)}
+.totals .grand span{font-family:var(--f-mono);font-size:max(10px,1.1cqw);letter-spacing:.12em;text-transform:uppercase}
+.totals .grand b{font-weight:500;font-size:5cqw;letter-spacing:-.02em;line-height:1}
+@container (max-width:560px){
+  .spread{padding:20px;gap:20px}
+  .sp-top{font-size:10px;padding-bottom:10px}
+  .parties{grid-template-columns:1fr 1fr;gap:16px}
+  .party:first-child{grid-column:span 2}
+  .party small,.tbl th,.notes small,.totals .grand span{font-size:10px}
+  .party b{font-size:16px}
+  .party span{font-size:13px}
+  .tbl,.tbl thead,.tbl tbody,.tbl tr,.tbl td{display:block;width:auto}
+  .tbl thead{display:none}
+  .tbl tr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:12px 0;border-bottom:1px solid var(--paper-line)}
+  .tbl td{border:0;padding:0!important;font-size:15px}
+  .tbl td:first-child{width:auto}
+  .tbl td.mid{display:none}
+  .tbl td.tot{grid-column:2;grid-row:1}
+  .tbl td.meta{display:block;grid-column:1;font-size:12px;color:var(--paper-dim);text-align:left}
+  .sum{grid-template-columns:1fr;gap:16px}
+  .notes{font-size:13px}
+  .totals{min-width:0;gap:6px}
+  .totals div{font-size:14px}
+  .totals .grand b{font-size:32px}
+}
+
+/* ---------- after the book ---------- */
+.wrap{max-width:1800px;margin:0 auto;padding-left:var(--gut);padding-right:var(--gutR)}
+@media (min-width:900px){.wrap{padding-left:60px;padding-right:60px}}
+.services{padding-block:clamp(96px,14vw,200px) clamp(72px,10vw,140px)}
+.label{font-family:var(--f-mono);font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--lilac)}
+.services h3{margin:18px 0 0;font-weight:500;font-size:clamp(34px,5vw,72px);line-height:1;letter-spacing:-.01em;max-width:14em;text-wrap:balance}
+.svc{margin-top:clamp(40px,6vw,80px);display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.svc article{min-width:0;background:rgba(25,26,29,.78);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--line);border-radius:16px;padding:28px;display:flex;flex-direction:column;justify-content:space-between;gap:56px;min-height:260px;transition:background .3s,border-color .3s}
+.svc article:hover{background:rgba(36,37,42,.9);border-color:rgba(255,255,255,.22)}
+.svc .label{color:var(--fg-dim)}
+.svc h4{margin:0;font-weight:500;font-size:clamp(24px,2vw,32px);line-height:1.1;letter-spacing:-.01em}
+.svc p{margin:12px 0 0;color:var(--fg-dim);font-size:16px;line-height:1.45}
+@media (max-width:1000px){.svc{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:560px){.svc{grid-template-columns:1fr}.svc article{min-height:0;gap:32px}}
+
+.cta{border-top:1px solid var(--line)}
+.cta .wrap{padding-block:clamp(80px,12vw,160px) 40px;display:grid;gap:56px}
+.cta h3{margin:0;font-weight:500;font-size:clamp(40px,7vw,112px);line-height:.95;letter-spacing:-.02em;max-width:10em;text-wrap:balance}
+.btn{display:inline-flex;align-items:center;gap:14px;width:fit-content;padding:14px 22px;border:1.75px solid var(--fg);border-radius:14px;background:rgba(0,0,0,.5);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);font-size:clamp(18px,1.6vw,24px);text-decoration:underline;text-underline-offset:4px;transition:background .25s,color .25s}
+.btn:hover{background:var(--fg);color:var(--ink)}
+.btn svg{width:20px;height:20px}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;padding-top:24px;border-top:1px solid var(--line);font-family:var(--f-mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-dim)}
+.foot .logo{width:110px}
+
+@media (max-width:600px){
+  .tags,.hint{display:none}
+  .hero-title{font-size:clamp(40px,12vw,64px)}
+}
+@media (prefers-reduced-motion:reduce){.hint i{animation:none}}
+</style>
+
+</head>
+<body>
+<canvas id="gl" aria-hidden="true"></canvas>
+
+<main>
+  <section class="track" aria-label="Offer">
+    <div class="stage" id="stage">
+      <div class="hud" id="hud">
+        <img class="logo" src="assets/logo.png" alt="Flexy Global" width="277" height="80">
+        <div class="hud-bottom">
+          <h1 class="hero-title" id="heroTitle">Offer</h1>
+          <div class="tags" id="heroTags"></div>
+        </div>
+      </div>
+      <div class="hint" id="hint"><i></i>Scroll to open</div>
+
+      <div class="head" id="head">
+        <h2><span id="headLine1" class="l1"></span><span id="headLine2"></span></h2>
+      </div>
+
+      <div class="card" id="card"><div class="spread" id="spread"></div></div>
+    </div>
+  </section>
+
+  <section class="services">
+    <div class="wrap">
+      <div class="label">What we do</div>
+      <h3>Strategy, design, software and AI under one team</h3>
+      <div class="svc">
+        <article><div class="label">Strategy</div><div><h4>Product strategy</h4><p>Discovery, positioning and roadmaps that turn an idea into a plan.</p></div></article>
+        <article><div class="label">Design</div><div><h4>UX/UI design</h4><p>Research, flows and interfaces people trust from the first screen.</p></div></article>
+        <article><div class="label">Engineering</div><div><h4>Software development</h4><p>Web and mobile builds, shipped in 6 to 8 sprints.</p></div></article>
+        <article><div class="label">AI</div><div><h4>AI development</h4><p>Agents and AI features built to perform in real products.</p></div></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="cta">
+    <div class="wrap">
+      <h3 id="ctaTitle">Ready when you are</h3>
+      <a class="btn" href="https://www.flexy.global/our-projects" target="_blank" rel="noopener">See Our Works
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
+      <div class="foot"><img class="logo" src="assets/logo.png" alt="Flexy Global" width="277" height="80"><span id="fromLine">© 2026 Flexy Global</span></div>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const track = document.querySelector('.track'), stage = $('stage'), hud = $('hud'), hint = $('hint'),
+        head = $('head'), card = $('card'), glCanvas = $('gl');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const range = (p, a, b) => clamp((p - a) / (b - a));
+  const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  const easeIO = t => -(Math.cos(Math.PI * t) - 1) / 2;
+  const lerp = (a, b, t) => a + (b - a) * t;
+
+  /* ---------------- offer data ---------------- */
+  /* Two ways to load an offer:
+       ?c=<file name>   → Apps Script web app (sheets stay private, live in Drive › Offers)
+       ?id=<sheet ID>   → the sheet itself, shared as "Anyone with the link → Viewer" */
+  const API = 'https://script.google.com/macros/s/AKfycbyWz0RkUh1tN8lY0QyDGg5bNmUmhPo9vYzYqLUmDh1Pz-dJ5ojv0xoQult6_T4hj4HS/exec';
+  /* Data (?id): each client sheet is shared as "Anyone with the link → Viewer".
+     The page link is  ?id=<Google Sheet ID>  and the sheet is read straight from Google as CSV. */
+  const sheetUrls = id => [
+    `https://docs.google.com/spreadsheets/d/${id}/export?format=csv`,
+    `https://docs.google.com/spreadsheets/d/${id}/pub?output=csv`
+  ];
+  function parseCSV(t) {
+    const rows = []; let r = [], f = '', q = false;
+    for (let i = 0; i < t.length; i++) {
+      const ch = t[i];
+      if (q) { if (ch === '"' && t[i + 1] === '"') { f += '"'; i++; } else if (ch === '"') q = false; else f += ch; }
+      else if (ch === '"') q = true;
+      else if (ch === ',') { r.push(f); f = ''; }
+      else if (ch === '\n') { r.push(f); rows.push(r); r = []; f = ''; }
+      else if (ch !== '\r') f += ch;
+    }
+    if (f || r.length) { r.push(f); rows.push(r); }
+    return rows;
+  }
+  async function loadSheet(id) {
+    for (const url of sheetUrls(id)) {
+      try {
+        const res = await fetch(url, { redirect: 'follow' });
+        if (!res.ok) continue;
+        const text = await res.text();
+        if (/^\s*</.test(text)) continue;            // an HTML sign-in page, not CSV
+        return parseOffer(parseCSV(text));
+      } catch (e) { /* try the next URL */ }
+    }
+    throw new Error('unavailable');
+  }
+  const DEMO = { title: 'Offer', submitted: '', number: '', due: '', project: '', client: { name: '', company: '', address: [] }, payableTo: '', from: [], columns: [], items: [], totals: [], total: '', notes: '' };
+  const esc = v => String(v == null ? '' : v).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  const isNum = v => /^[-–+]?\s*[$€£₽]?\s*\d[\d\s.,]*\s*[$€£₽%]?$/.test(String(v).trim());
+  let OFFER = DEMO;
+
+  // same parser as apps-script/Code.gs
+  function parseOffer(grid) {
+    const norm = v => String(v == null ? '' : v).trim();
+    const low = v => norm(v).toLowerCase().replace(/\s+/g, ' ').replace(/:+$/, '').trim();
+    const rows = grid.map(r => r.map(norm));
+  
+    const find = (label, startsWith) => {
+      const want = low(label);
+      for (let r = 0; r < rows.length; r++)
+        for (let c = 0; c < rows[r].length; c++) {
+          const v = rows[r][c].toLowerCase();
+          if (startsWith ? v.indexOf(want) === 0 : low(rows[r][c]) === want) return { r, c };
+        }
+      return null;
+    };
+    const cell = (r, c) => (rows[r] && rows[r][c]) || '';
+    const below = (label, n) => { const p = find(label); return p ? cell(p.r + (n || 1), p.c) : ''; };
+    const belowList = (label, max) => {
+      const p = find(label); if (!p) return [];
+      const out = [];
+      for (let i = 1; i <= max; i++) { const v = cell(p.r + i, p.c); if (!v) break; out.push(v); }
+      return out;
+    };
+  
+    // header block
+    const head = find('description');
+    const titleCell = (() => {           // the line right above "Submitted on…" — any text, e.g. "Offer Acme"
+      const p = find('submitted on', true);
+      if (p) for (let r = p.r - 1; r >= 0; r--) { const v = cell(r, p.c); if (v) return v; }
+      const words = ['invoice', 'proposal', 'offer', 'quote', 'estimate'];
+      for (let r = 0; r < (head ? head.r : rows.length); r++)
+        for (let c = 0; c < rows[r].length; c++) if (words.indexOf(low(rows[r][c]).split(' ')[0]) >= 0) return rows[r][c];
+      return 'Offer';
+    })();
+    const submitted = (() => { const p = find('submitted on', true); return p ? cell(p.r, p.c).replace(/^submitted on\s*/i, '') : ''; })();
+  
+    const client = belowList('invoice for', 4);
+    const from = (() => {               // company block at the very top (above the title)
+      const out = [];
+      for (let r = 0; r < rows.length && out.length < 4; r++) {
+        const v = rows[r].filter(Boolean)[0];
+        if (!v) { if (out.length) break; continue; }
+        if (low(v) === low(titleCell)) break;
+        out.push(v);
+      }
+      return out;
+    })();
+  
+    // items table: header row = row with "Description", read until "Notes" / "Subtotal"
+    let columns = [], items = [], stop = rows.length;
+    if (head) {
+      const hr = rows[head.r];
+      for (let c = head.c; c < hr.length; c++) if (hr[c]) columns.push({ label: hr[c], col: c });
+      const notesAt = find('notes'), subAt = find('subtotal');
+      stop = Math.min(notesAt ? notesAt.r : rows.length, subAt ? subAt.r : rows.length);
+      for (let r = head.r + 1; r < stop; r++) {
+        const vals = columns.map(k => cell(r, k.col));
+        if (!vals[0]) continue;                     // skip rows without a description (empty formula rows)
+        items.push(vals);
+      }
+    }
+  
+    // totals: label/value pairs from the "Subtotal" row down; a lone money value is the grand total
+    const totals = []; let total = '';
+    const sub = find('subtotal');
+    if (sub) {
+      for (let r = sub.r; r < rows.length; r++) {
+        const label = cell(r, sub.c), value = cell(r, sub.c + 1);
+        if (!label && !value) continue;
+        if (/^[-–]?\s*[$€£₽]|[\d.,]+\s*[$€£₽]?$/.test(label) && !value) { total = label; continue; }
+        if (label) totals.push({ label, value });
+      }
+    }
+  
+    // notes: text next to or under "Notes:"
+    const notes = (() => {
+      const p = find('notes'); if (!p) return '';
+      const inline = rows[p.r].slice(p.c + 1, sub ? sub.c : undefined).filter(Boolean);
+      const under = [];
+      for (let r = p.r + 1; r < rows.length; r++) {
+        const v = rows[r].slice(p.c, sub ? sub.c : undefined).filter(Boolean);
+        if (!v.length) continue; under.push(v.join(' '));
+      }
+      return inline.concat(under).join('\n');
+    })();
+  
+    return {
+      title: titleCell,
+      submitted,
+      number: below('invoice #', 1),
+      due: below('due date', 1),
+      project: below('project', 1),
+      client: { name: client[0] || '', company: client[1] || '', address: client.slice(2) },
+      payableTo: below('payable to', 1),
+      from,
+      columns: columns.map(k => k.label),
+      items,
+      totals,
+      total,
+      notes
+    };
+  }
+
+  function fillOffer(d) {
+    OFFER = d;
+    const who = d.client.company || d.client.name;
+    $('heroTitle').textContent = d.title || 'Offer';
+    $('heroTags').innerHTML = [who && 'For ' + who, d.project].filter(Boolean).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+    $('headLine1').textContent = d.project || d.title;
+    $('headLine2').textContent = who ? 'Prepared for ' + who : '';
+    $('fromLine').textContent = (d.from && d.from.length ? d.from.join(' · ') : '© Flexy Global');
+    document.title = (d.title || 'Offer') + ' · Flexy Global';
+
+    const dates = [d.submitted && 'Submitted ' + d.submitted, d.due && 'Due ' + d.due].filter(Boolean).join(' · ');
+    const cols = d.columns || [];
+    const numCol = cols.map((_, i) => i > 0 && (d.items || []).every(r => !r[i] || isNum(r[i])));
+    const last = cols.length - 1;
+    const rows = (d.items || []).map(r => {
+      const mids = cols.slice(1, last).map((c, k) => r[k + 1] ? `${esc(c)} ${esc(r[k + 1])}` : '').filter(Boolean).join(' · ');
+      return '<tr>' + r.map((v, i) => `<td class="${i === 0 ? '' : i === last ? 'tot' : 'mid'}${numCol[i] ? ' num' : ''}">${esc(v)}</td>`).join('') +
+        `<td class="meta">${mids}</td></tr>`;
+    }).join('');
+    const totals = (d.totals || []).map(t => `<div><span>${esc(t.label)}</span><span>${esc(t.value)}</span></div>`).join('');
+    $('spread').innerHTML = `
+      <div class="sp-top"><span>${d.number ? 'No. ' + esc(d.number) : esc(d.title)}</span><span>${esc(dates)}</span></div>
+      <div class="parties">
+        <div class="party"><small>Prepared for</small><b>${esc(d.client.name)}</b><span>${[d.client.company].concat(d.client.address || []).filter(Boolean).map(esc).join('<br>')}</span></div>
+        <div class="party"><small>Project</small><b>${esc(d.project)}</b></div>
+        <div class="party"><small>Payable to</small><b>${esc(d.payableTo)}</b></div>
+      </div>
+      <table class="tbl"><thead><tr>${cols.map((c, i) => `<th class="${numCol[i] ? 'num' : ''}">${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>
+      <div class="sum">
+        <div class="notes">${d.notes ? '<small>Notes</small>' + esc(d.notes) : ''}</div>
+        <div class="totals">${totals}${d.total ? `<div class="grand"><span>Total</span><b>${esc(d.total)}</b></div>` : ''}</div>
+      </div>`;
+  }
+
+  /* ---------------- renderer ---------------- */
+  const renderer = new THREE.WebGLRenderer({ canvas: glCanvas, antialias: true, alpha: false });
+  renderer.setClearColor(0x0d0d0d, 1);
+  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
+  renderer.autoClear = false;
+
+  /* ---------------- sand ---------------- */
+  const sandScene = new THREE.Scene();
+  const sandCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const N = innerWidth < 700 ? 45000 : 110000;
+  const seed = new Float32Array(N * 4), rnd = new Float32Array(N), pos = new Float32Array(N * 3);
+  const gauss = () => { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); };
+  for (let i = 0; i < N; i++) {
+    seed[i * 4] = Math.random();
+    seed[i * 4 + 1] = gauss();
+    seed[i * 4 + 2] = Math.random();
+    const r = Math.random();
+    seed[i * 4 + 3] = r < .58 ? 0 : r < .9 ? 1 : 2;   // band A, band B, loose dust
+    rnd[i] = Math.random();
+  }
+  const sandGeo = new THREE.BufferGeometry();
+  sandGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  sandGeo.setAttribute('aSeed', new THREE.BufferAttribute(seed, 4));
+  sandGeo.setAttribute('aRnd', new THREE.BufferAttribute(rnd, 1));
+  const sandMat = new THREE.ShaderMaterial({
+    transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { uT: { value: 0 }, uScroll: { value: 0 }, uDpr: { value: renderer.getPixelRatio() }, uFade: { value: 1 } },
+    vertexShader: `
+      attribute vec4 aSeed; attribute float aRnd;
+      uniform float uT, uScroll, uDpr;
+      varying float vA; varying vec3 vC;
+      void main(){
+        float t = uT + uScroll;
+        float sp = 0.5 + aSeed.z;
+        float u = fract(aSeed.x + t * 0.006 * sp);
+        float x = u * 2.8 - 1.4;
+        float n = aSeed.y;
+        float y; float w;
+        if (aSeed.w < 0.5) {            // sweep from bottom-left up to the right
+          y = -0.5 + 0.42 * x + 0.17 * sin(1.7 * x + t * 0.07);
+          w = 0.11 + 0.08 * sin(2.3 * x - t * 0.09 + 1.0);
+        } else if (aSeed.w < 1.5) {     // thinner band across the top right
+          y = 0.7 - 0.32 * x + 0.1 * sin(2.6 * x + t * 0.08 + 2.0);
+          w = 0.06 + 0.045 * sin(3.1 * x + t * 0.06);
+        } else {                        // loose dust
+          y = aSeed.y * 0.55; w = 0.0; n = 0.0;
+          x = (aSeed.x * 2.8 - 1.4) + 0.03 * sin(t * 0.2 + aRnd * 40.0);
+        }
+        float swirl = sin(8.0 * x + t * 0.35 + aRnd * 6.2831) * 0.018 + sin(17.0 * x - t * 0.5 + aSeed.z * 9.0) * 0.008;
+        y += n * w + swirl * (0.4 + abs(n));
+        x += cos(t * 0.3 + aRnd * 30.0) * 0.006;
+        gl_Position = vec4(x, y, 0.0, 1.0);
+        gl_PointSize = (0.7 + aRnd * aRnd * 1.9) * uDpr;
+        float core = exp(-n * n * 0.8);
+        vA = aSeed.w > 1.5 ? 0.22 : (0.12 + 0.6 * core);
+        vec3 lilac = vec3(0.62, 0.62, 0.74);
+        vec3 violet = vec3(0.62, 0.52, 1.0);
+        vC = mix(lilac, vec3(1.0), aRnd * 0.8);
+        if (aSeed.z > 0.9) vC = violet;
+      }`,
+    fragmentShader: `
+      uniform float uFade;
+      varying float vA; varying vec3 vC;
+      void main(){
+        vec2 d = gl_PointCoord - 0.5;
+        if (dot(d, d) > 0.25) discard;
+        gl_FragColor = vec4(vC * vA * uFade, 1.0);
+      }`
+  });
+  const sand = new THREE.Points(sandGeo, sandMat);
+  sand.frustumCulled = false;
+  sandScene.add(sand);
+
+  /* ---------------- book ---------------- */
+  const scene = new THREE.Scene();
+  const FOV = 28;
+  const camera = new THREE.PerspectiveCamera(FOV, 1, 10, 20000);
+  // tuned so a page facing the camera lands at ~1.0 brightness and matches the HTML card
+  scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+  const key = new THREE.DirectionalLight(0xffffff, 0.46); key.position.set(-0.35, 0.45, 1); scene.add(key);
+  const rim = new THREE.DirectionalLight(0xb9b4ff, 0.18); rim.position.set(1, -0.6, 0.4); scene.add(rim);
+
+  const W = 300, H = 400, t = 7, T = 26;     // cover width/height, cover thickness, page block thickness
+  const BW = W - 8, BH = H - 12;             // page block slightly smaller than the covers
+
+  const mkCanvas = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  const tex = c => { const tx = new THREE.CanvasTexture(c); tx.anisotropy = renderer.capabilities.getMaxAnisotropy(); tx.minFilter = THREE.LinearMipmapLinearFilter; return tx; };
+  const font = (wgt, px, fam) => `${wgt} ${px}px ${fam || '"Helvetica Neue", Helvetica, "Inter Tight", Arial, sans-serif'}`;
+  const MONO = '"JetBrains Mono", ui-monospace, Menlo, monospace';
+
+  // landscape image → portrait texture, so it reads upright after the book turns 90°
+  function rotated(img) {
+    const c = mkCanvas(img.height, img.width), g = c.getContext('2d');
+    g.translate(0, img.width); g.rotate(-Math.PI / 2); g.drawImage(img, 0, 0);
+    return c;
+  }
+
+  function drawCover(d) {
+    d = d || OFFER;
+    const c = mkCanvas(900, 1200), g = c.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, 900, 1200);
+    gr.addColorStop(0, '#2a2b31'); gr.addColorStop(.55, '#18191d'); gr.addColorStop(1, '#111114');
+    g.fillStyle = gr; g.fillRect(0, 0, 900, 1200);
+    for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(255,255,255,${Math.random() * .05})`; g.fillRect(Math.random() * 900, Math.random() * 1200, 1.5, 1.5); }
+    g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(46, 0, 4, 1200);
+    g.fillStyle = 'rgba(255,255,255,.05)'; g.fillRect(50, 0, 2, 1200);
+    g.fillStyle = 'rgba(255,255,255,.72)'; g.font = font(400, 34); g.fillText('Flexy Global', 92, 120);
+    // title, wrapped to the cover width and shrunk if it is long
+    const title = d.title || 'Offer', maxW = 720;
+    let size = 96, lines;
+    const wrap = () => { g.font = font(500, size); const out = []; let line = '';
+      title.split(/\s+/).forEach(w => { const t = line ? line + ' ' + w : w; if (g.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t; });
+      out.push(line); return out; };
+    do { lines = wrap(); size -= 6; } while ((lines.length > 3 || lines.some(l => g.measureText(l).width > maxW)) && size > 40);
+    size += 6; g.font = font(500, size); g.fillStyle = '#fff';
+    const lh = size * 1.04, baseY = 1040 - (lines.length - 1) * lh;
+    lines.forEach((l, i) => g.fillText(l, 92, baseY + i * lh));
+    const who = d.client && (d.client.company || d.client.name);
+    g.fillStyle = '#9999A8'; g.font = font(400, 24, MONO);
+    g.fillText([d.number && 'NO. ' + d.number, who && ('FOR ' + who).toUpperCase()].filter(Boolean).join('  ·  ').slice(0, 52), 94, 1110);
+    return tex(c);
+  }
+  function solid(col) { const c = mkCanvas(8, 8), g = c.getContext('2d'); g.fillStyle = col; g.fillRect(0, 0, 8, 8); return tex(c); }
+  function edges(vertical) {
+    const c = mkCanvas(512, 512), g = c.getContext('2d');
+    g.fillStyle = '#e3e3e7'; g.fillRect(0, 0, 512, 512);
+    for (let i = 0; i < 512; i += 3) {
+      g.fillStyle = `rgba(120,120,135,${.12 + Math.random() * .22})`;
+      vertical ? g.fillRect(i, 0, 1, 512) : g.fillRect(0, i, 512, 1);
+    }
+    return tex(c);
+  }
+  function drawPage2() {
+    const c = mkCanvas(1600, 1200), g = c.getContext('2d');
+    g.fillStyle = '#ECECEF'; g.fillRect(0, 0, 1600, 1200);
+    const sh = g.createLinearGradient(0, 0, 0, 90); sh.addColorStop(0, 'rgba(0,0,0,.16)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = sh; g.fillRect(0, 0, 1600, 90);
+    g.fillStyle = 'rgba(13,13,13,.45)'; g.font = font(400, 22, MONO);
+    g.fillText('02 · WHAT WE DO', 80, 140);
+    g.fillStyle = 'rgba(13,13,13,.12)'; g.fillRect(80, 168, 1440, 2);
+    g.fillStyle = 'rgba(13,13,13,.4)'; g.fillText('02', 1500, 1130);
+    return rotated(c);
+  }
+  // fallback for the card face until the real card is captured
+  function drawCardFallback() {
+    const c = mkCanvas(1600, 1200), g = c.getContext('2d');
+    g.fillStyle = '#ECECEF'; g.fillRect(0, 0, 1600, 1200);
+    g.fillStyle = 'rgba(13,13,13,.5)'; g.font = font(400, 20, MONO); g.fillText('01 · COMPANY OVERVIEW', 80, 110);
+    g.fillStyle = 'rgba(13,13,13,.12)'; g.fillRect(80, 135, 1440, 2);
+    g.fillStyle = '#0D0D0D'; g.font = font(500, 100); g.fillText('Company overview', 80, 300);
+    g.fillStyle = 'rgba(13,13,13,.18)'; for (let i = 0; i < 5; i++) g.fillRect(80, 360 + i * 54, i === 4 ? 700 : 1180, 22);
+    return rotated(c);
+  }
+
+  const paperMat = map => new THREE.MeshLambertMaterial({ map });
+  const darkTex = solid('#16171a'), darkMat = paperMat(darkTex);
+  const coverMats = [darkMat, darkMat, darkMat, darkMat, paperMat(drawCover()), null];
+  const insideTex = tex(drawCardFallback());
+  coverMats[5] = paperMat(insideTex);
+  const edgeV = paperMat(edges(true)), edgeH = paperMat(edges(false));
+  const blockMats = [edgeV, edgeV, edgeH, edgeH, paperMat(tex(drawPage2())), paperMat(solid('#e6e6ea'))];
+
+  const book = new THREE.Group();
+  const back = new THREE.Mesh(new THREE.BoxGeometry(W, H, t), darkMat);
+  back.position.set(0, 0, t / 2);
+  const block = new THREE.Mesh(new THREE.BoxGeometry(BW, BH, T), blockMats);
+  block.position.set(-W / 2 + BW / 2 + 1, 0, t + T / 2);
+  const hinge = new THREE.Group();
+  hinge.position.set(-W / 2, 0, t + T);
+  const front = new THREE.Mesh(new THREE.BoxGeometry(W, H, t), coverMats);
+  front.position.set(W / 2, 0, t / 2);
+  hinge.add(front);
+  book.add(back, block, hinge);
+  scene.add(book);
+
+  // soft contact shadow
+  const shC = mkCanvas(256, 256), shG = shC.getContext('2d');
+  const rg = shG.createRadialGradient(128, 128, 10, 128, 128, 128); rg.addColorStop(0, 'rgba(0,0,0,.85)'); rg.addColorStop(1, 'rgba(0,0,0,0)');
+  shG.fillStyle = rg; shG.fillRect(0, 0, 256, 256);
+  const shadow = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: tex(shC), transparent: true, depthWrite: false }));
+  scene.add(shadow);
+
+  /* ---------------- layout ---------------- */
+  let CW, VH, s0, s1, sF, Cw, cardTop, cardH0, cardHfull, D;
+  function layout() {
+    CW = document.documentElement.clientWidth; VH = stage.clientHeight;
+    renderer.setSize(innerWidth, innerHeight, false);
+    camera.aspect = innerWidth / innerHeight;
+    D = (innerHeight / 2) / Math.tan(THREE.MathUtils.degToRad(FOV / 2));
+    camera.position.set(0, 0, D); camera.near = D / 10; camera.far = D * 4;
+    camera.updateProjectionMatrix();
+
+    s0 = Math.min(VH * .5 / H, CW * .6 / W);
+    s1 = Math.min(VH * .8 / (2 * W), CW * .86 / H);
+    Cw = CW > 900 ? Math.min(1040, CW * .6) : CW - 32;
+    sF = Cw / H;
+    cardH0 = Cw * W / H;
+    const hb = head.getBoundingClientRect(), sb = stage.getBoundingClientRect();
+    cardTop = (hb.bottom - sb.top) + (CW > 900 ? 56 : 28);
+    card.style.width = Cw + 'px';
+    card.style.left = (CW - Cw) / 2 + 'px';
+    card.style.top = cardTop + 'px';
+    card.style.height = 'auto';
+    cardHfull = Math.max(cardH0, card.scrollHeight);
+    card.style.height = cardH0 + 'px';
+    capture();
+    render();
+  }
+
+  let capId = 0;
+  function capture() {
+    if (!window.html2canvas) return;
+    const id = ++capId;
+    const scale = 1600 / Cw;
+    html2canvas(card, {
+      backgroundColor: '#ECECEF', scale, logging: false,
+      onclone: doc => { const c = doc.getElementById('card'); c.style.opacity = '1'; c.style.visibility = 'visible'; c.style.height = cardH0 + 'px'; c.style.boxShadow = 'none'; c.style.borderRadius = '0'; }
+    }).then(img => {
+      if (id !== capId) return;
+      // crop to the card's exact 4:3 frame before mapping it onto the page
+      const fit = mkCanvas(1600, 1200), fg = fit.getContext('2d');
+      fg.fillStyle = '#ECECEF'; fg.fillRect(0, 0, 1600, 1200);
+      fg.drawImage(img, 0, 0, Cw * scale, cardH0 * scale, 0, 0, 1600, 1200);
+      insideTex.image = rotated(fit); insideTex.needsUpdate = true;
+    }).catch(() => {});
+  }
+
+  function progress() {
+    const r = track.getBoundingClientRect();
+    return clamp(-r.top / (track.offsetHeight - VH));
+  }
+
+  function render() {
+    const p = progress();
+    const tHero = ease(range(p, 0, .08));
+    const tOpen = range(p, .06, .5), eO = easeIO(tOpen);
+    const tTurn = ease(range(p, .06, .42));
+    const tCover = ease(range(p, .12, .48));
+    const tZoom = ease(range(p, .54, .84));
+    const tHead = ease(range(p, .74, .86));
+    const tFade = range(p, .838, .856);
+    const tGrow = ease(range(p, .9, .97));
+
+    hud.style.opacity = 1 - tHero;
+    hud.style.transform = `translateY(${-tHero * 40}px)`;
+    hud.style.visibility = tHero >= 1 ? 'hidden' : 'visible';
+    hint.style.opacity = 1 - range(p, 0, .04);
+
+    head.style.opacity = tHead;
+    head.style.transform = `translateY(${(1 - tHead) * 24}px)`;
+    head.style.visibility = tHead > 0 ? 'visible' : 'hidden';
+
+    card.style.opacity = tFade;
+    card.style.visibility = tFade > 0 ? 'visible' : 'hidden';
+    card.style.height = lerp(cardH0, cardHfull, tGrow) + 'px';
+
+    // the book: turn 90° in-plane while the cover swings over the spine
+    hinge.rotation.y = -Math.PI * tCover;
+    const wob = Math.sin(Math.PI * eO) * (1 - tZoom);
+    book.rotation.set(-0.42 * wob, 0.5 * wob * (1 - tCover * .6), -Math.PI / 2 * tTurn);
+
+    const lift = VH * (CW > 600 ? .07 : .04);
+    const sO = lerp(s0, s1, eO);
+    const yOpen = lerp(lift, -sO * W / 2, eO);
+    const yFinal = (VH / 2 - cardTop - cardH0 / 2) - sF * W;
+    const s = sO * Math.pow(sF / sO, tZoom);
+    const y = lerp(yOpen, yFinal, tZoom);
+    book.scale.setScalar(s);
+    book.position.set(0, y, -(t + T) * s);
+    book.visible = tFade < 1;
+
+    shadow.visible = book.visible;
+    shadow.position.set(0, y - s * 40, -(t + T) * s - 2);
+    const shW = lerp(lerp(W, H, tTurn), H * 1.1, tZoom) * s * 1.5, shH = lerp(lerp(H, 2 * W, eO), W, tZoom) * s * 1.4;
+    shadow.scale.set(shW, shH, 1);
+    shadow.material.opacity = .9 * (1 - tFade);
+
+    sandMat.uniforms.uScroll.value = scrollY / Math.max(1, VH) * .9;
+  }
+
+  /* ---------------- loop ---------------- */
+  let last = performance.now(), time = Math.random() * 100, needs = true;
+  function loop(now) {
+    const dt = Math.min(.05, (now - last) / 1000); last = now;
+    if (!reduce) time += dt;
+    sandMat.uniforms.uT.value = time;
+    if (needs) { render(); needs = false; }
+    renderer.clear();
+    renderer.render(sandScene, sandCam);
+    renderer.clearDepth();
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  }
+  addEventListener('scroll', () => { needs = true; }, { passive: true });
+  let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(layout, 120); });
+  function unavailable(msg) {
+    $('heroTitle').textContent = msg; $('heroTags').innerHTML = '';
+    $('headLine1').textContent = msg; $('headLine2').textContent = '';
+    $('spread').innerHTML = `<div class="sp-top"><span>Flexy Global</span><span></span></div><div class="party"><b>${esc(msg)}</b><span>Please use the link you received from Flexy Global.</span></div>`;
+    layout();
+  }
+  fillOffer(DEMO);
+  layout();
+  requestAnimationFrame(loop);
+  const params = new URLSearchParams(location.search);
+  const slug = (params.get('c') || '').trim(), sheetId = (params.get('id') || '').trim();
+  const show = d => {
+    if (!d || d.error || (!d.items.length && !d.client.name && !d.total)) { unavailable('Offer not available'); return; }
+    fillOffer(d); coverMats[4].map = drawCover(d); coverMats[4].needsUpdate = true; layout();
+  };
+  if (slug && /^[a-z0-9][a-z0-9-]{1,60}$/i.test(slug)) {
+    fetch(API + '?c=' + encodeURIComponent(slug)).then(r => r.json()).then(show).catch(() => unavailable('Offer not available'));
+  } else if (/^[\w-]{20,}$/.test(sheetId)) {
+    loadSheet(sheetId).then(show).catch(() => unavailable('Offer not available'));
+  } else unavailable('Offer not available');
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { coverMats[4].map = drawCover(OFFER); coverMats[4].needsUpdate = true; layout(); });
+  window.__render = () => { render(); renderer.clear(); renderer.render(sandScene, sandCam); renderer.clearDepth(); renderer.render(scene, camera); };
+})();
+</script>
+</body>
+</html>
