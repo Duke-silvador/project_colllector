@@ -1,0 +1,228 @@
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Matt Pocock 的 AI 开发全流程</title>
+<style>
+/* 布局概念：单栏阅读流（max 680px），五步流程用真实序列编号，token 数字用比例条呈现 */
+:root {
+  --bg: #f6f7f9;
+  --fg: #1b2330;
+  --muted: #5b6675;
+  --line: #d8dde4;
+  --card: #ffffff;
+  --accent: #2f54c9;
+  --accent-ink: #24409c;
+  --code-bg: #eef0f4;
+  --s1: #2e9e5b; --s2: #d9a413; --s3: #cf4b3c; --s4: #7d4bc4; --s5: #2f78c9;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171c; --fg: #e6e9ee; --muted: #98a2b0; --line: #2b323c;
+    --card: #1b2027; --accent: #7d9cf0; --accent-ink: #a5baf5; --code-bg: #232a33;
+    --s1: #4fbd7e; --s2: #dcb23e; --s3: #e06a5a; --s4: #a477e0; --s5: #5a9be0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171c; --fg: #e6e9ee; --muted: #98a2b0; --line: #2b323c;
+  --card: #1b2027; --accent: #7d9cf0; --accent-ink: #a5baf5; --code-bg: #232a33;
+  --s1: #4fbd7e; --s2: #dcb23e; --s3: #e06a5a; --s4: #a477e0; --s5: #5a9be0;
+  color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); margin: 0;
+  font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 16px; line-height: 1.9;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 700px; margin: 0 auto; padding-block: 48px 64px; }
+a { color: var(--accent); }
+
+.eyebrow {
+  font-size: 12px; letter-spacing: .18em; color: var(--muted);
+  text-transform: uppercase; margin: 0 0 14px;
+}
+h1 {
+  font-family: "Noto Serif SC", serif; font-weight: 900;
+  font-size: clamp(1.9rem, 6vw, 2.7rem); line-height: 1.28;
+  margin: 0 0 10px; text-wrap: balance;
+}
+.standfirst { font-size: 1.05rem; color: var(--muted); margin: 0 0 28px; }
+.meta { font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 10px 0; margin-bottom: 34px; }
+
+h2 {
+  font-family: "Noto Serif SC", serif; font-weight: 700;
+  font-size: 1.42rem; line-height: 1.4; margin: 52px 0 14px; text-wrap: balance;
+}
+h2 .no { color: var(--accent); font-family: "JetBrains Mono", monospace; font-size: .85em; margin-right: 10px; }
+p { margin: 0 0 16px; }
+strong { color: var(--fg); }
+.hl { color: var(--accent-ink); font-weight: 700; }
+.muted { color: var(--muted); }
+
+code, .mono {
+  font-family: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  font-size: .88em; background: var(--code-bg);
+  padding: .12em .4em; border-radius: 5px;
+}
+.cmd {
+  display: block; background: var(--code-bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 12px 16px; margin: 18px 0;
+  font-family: "JetBrains Mono", monospace; font-size: .88rem;
+  overflow-x: auto; white-space: pre; line-height: 1.7;
+}
+
+/* 五步流程 */
+.flow { margin: 26px 0 8px; display: flex; flex-direction: column; gap: 0; }
+.flow .step { display: flex; gap: 16px; padding: 14px 0; position: relative; }
+.flow .step + .step { border-top: 1px dashed var(--line); }
+.flow .ring {
+  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%;
+  border: 2.5px solid var(--c); color: var(--c);
+  display: flex; align-items: center; justify-content: center;
+  font-family: "JetBrains Mono", monospace; font-weight: 600; font-size: 15px;
+}
+.flow .body { min-width: 0; }
+.flow .skill { font-family: "JetBrains Mono", monospace; font-weight: 600; font-size: .95rem; }
+.flow .skill .slash { color: var(--muted); }
+.flow p { margin: 4px 0 0; font-size: .92rem; color: var(--muted); line-height: 1.7; }
+
+/* token 比例条 */
+.budget { margin: 22px 0; }
+.budget .bar { display: flex; height: 34px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); }
+.budget .used { background: var(--s2); }
+.budget .free { background: var(--code-bg); }
+.budget .legend { display: flex; gap: 22px; margin-top: 10px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+.budget .legend b { color: var(--fg); font-variant-numeric: tabular-nums; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 7px; vertical-align: baseline; }
+
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 20px 22px; margin: 22px 0;
+}
+.card h3 { margin: 0 0 8px; font-size: 1.02rem; }
+.card p { margin: 0 0 10px; font-size: .93rem; color: var(--muted); line-height: 1.8; }
+.card p:last-child { margin-bottom: 0; }
+.card .tag {
+  display: inline-block; font-size: 12px; font-weight: 700; color: var(--accent-ink);
+  border: 1px solid var(--accent-ink); border-radius: 999px; padding: 1px 10px; margin-bottom: 10px;
+}
+
+ul.plain { margin: 0 0 16px; padding-left: 1.3em; }
+ul.plain li { margin-bottom: 8px; }
+
+.takeaway {
+  border-left: 3px solid var(--accent); background: var(--card);
+  padding: 14px 18px; margin: 24px 0; font-size: .95rem;
+}
+.takeaway p { margin: 0; }
+
+.footnote {
+  margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--line);
+  font-size: 13px; color: var(--muted);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .flow .step, h2 { animation: rise .4s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+}
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">工作流拆解 · unintended.ai</p>
+  <h1>Matt Pocock 的 AI 开发全流程</h1>
+  <p class="standfirst">从一个想法开始，经过 5 步，到代码提交——30 万 Star 技能仓库作者的完整主流程。</p>
+  <p class="meta">来源：小红书 @unintended.ai《30w Star 项目作者的 AI 编程工作流》 · 共 5 步 · 每步一个 skill</p>
+
+  <p>Matt Pocock 的 skills 仓库有 30.6 万 Star、3060 万次下载，但一直没有教程。最近他录了第一个完整的主流程演示：从一个想法开始，经过 5 步，到代码提交。具体技能可能会换，但他每次做的事情没变：<span class="hl">先花 token 把需求聊清楚，按 140K 的预算切好工作量，最后用没写过这段代码的 agent 来审</span>。</p>
+  <p>需要的东西很简单：一个本地 Agent，比如 Claude Code、Codex、WorkBuddy。一行命令安装：</p>
+  <div class="cmd">npx skills@latest add mattpocock/skills</div>
+  <p>装完跑 <code>/setup-matt-pocock-skills</code>，配置三样：issue tracker（GitHub Issues、Jira、Linear 或本地 Markdown 都行）、分诊标签（默认就好）、领域文档（单上下文，99% 的项目够用）。</p>
+
+  <h2 id="flow"><span class="no">01</span>主流程的五步</h2>
+  <p>38 个技能分两组：Matt Pocock Skills 是他认可的正式技能，Other 是实验中的。几乎全部是用户主动调用——你打命令它才加载，不打就不占上下文。<span class="hl">38 个技能只占 660 个 token</span>，因为技能描述被压到最短，需要时才展开。很多别的 skills 仓库一装上来就往系统提示词里塞一大堆描述，这是他刻意避开的做法。</p>
+
+  <div class="flow">
+    <div class="step" style="--c: var(--s1)">
+      <div class="ring">1</div>
+      <div class="body"><span class="skill"><span class="slash">/</span>grill-with-docs</span>
+        <p>动手写代码之前，先跟 AI 对齐理解。整个流程的起点，也是 Matt 认为最关键的一步。</p></div>
+    </div>
+    <div class="step" style="--c: var(--s2)">
+      <div class="ring">2</div>
+      <div class="body"><span class="skill"><span class="slash">/</span>to-spec</span>
+        <p>把当前窗口的所有讨论压缩成一份终态文档。</p></div>
+    </div>
+    <div class="step" style="--c: var(--s3)">
+      <div class="ring">3</div>
+      <div class="body"><span class="skill"><span class="slash">/</span>to-tickets</span>
+        <p>把 spec 拆成一张张可执行的工单，每张 = 一个上下文窗口的工作量。</p></div>
+    </div>
+    <div class="step" style="--c: var(--s4)">
+      <div class="ring">4</div>
+      <div class="body"><span class="skill"><span class="slash">/</span>implement</span>
+        <p>写代码，跑完整验证：type check、build、测试。</p></div>
+    </div>
+    <div class="step" style="--c: var(--s5)">
+      <div class="ring">5</div>
+      <div class="body"><span class="skill"><span class="slash">/</span>code-review</span>
+        <p>用独立的子 agent 审查，不让写代码的 agent 自己说了算。</p></div>
+    </div>
+  </div>
+
+  <h2 id="grill"><span class="no">02</span>Grill with Docs：先对齐，再动手</h2>
+  <p>用法很简单：输入 <code>/grill-with-docs</code>，加上一个粗略的想法。Matt 演示里的输入是"我想删掉这个 CLI 里大部分内部工具，只保留面向公众的功能"。就这么模糊，不需要更多准备。</p>
+  <p>接下来 agent 主导。它先扫描整个代码库，搞清楚现状（比如发现 internal 命名空间下有 11 个子命令），然后开始结构化追问。每个问题都指向一个具体的决策点：这 10 个命令哪些要删？共享模块会不会被连带影响？agent 的开发脚手架要不要一起清掉？</p>
+  <p>Matt 这次只被问了 6 个问题就结束了；他说通常会有 20 个左右，取决于任务复杂度。<span class="hl">关键不在问题数量，而在结束条件：双方都认为已经达成了共同理解（shared understanding）</span>。agent 最后还会主动确认："我们是不是达成了共同理解？可以开始执行了吗？"</p>
+  <p>最终产出是一份明确的计划：删除 10 个命令文件、删除 3 个测试、重新连接共享模块、移除 5 个依赖、删掉 sandcastle 工具链。每一项都是具体的文件和操作。</p>
+
+  <h2 id="zone"><span class="no">03</span>岔路口：一个窗口做完，还是拆成多个</h2>
+  <p>grill 做完，这个上下文窗口已经用了 46.1K tokens。判断依据是 Matt 说的 <strong>smart zone</strong>：他认为 LLM 在上下文超过大约 140K tokens 之后会明显变笨——注意力退化，开始出现幻觉。140K 以内是 smart zone，在这个范围里 agent 的输出质量是稳定的。</p>
+
+  <div class="budget">
+    <div class="bar">
+      <div class="used" style="width: 33%"></div>
+      <div class="free" style="width: 67%"></div>
+    </div>
+    <div class="legend">
+      <span><span class="dot" style="background: var(--s2)"></span>grill 已用 <b>46.1K</b></span>
+      <span><span class="dot" style="background: var(--code-bg); border: 1px solid var(--line)"></span>剩余预算 <b>约 100K</b>（smart zone 上限 140K）</span>
+    </div>
+  </div>
+
+  <p>判断方式很直接：剩余预算够不够把活干完？Matt 看了一下任务量——删 10 个命令——觉得绰绰有余，正常情况下他会直接输入 <code>/implement this</code>，让 agent 一口气做完（这个任务的 implement 阶段实际只用了 42.7K tokens，属于轻量任务）。但为了演示完整流程，他选择了走 spec + tickets 的路线——<span class="hl">这条路线是为那些一个窗口装不下的大任务准备的</span>。</p>
+
+  <h2 id="spec"><span class="no">04</span>Spec + Tickets：把理解压缩好，跨窗口传递</h2>
+  <p><code>/to-spec</code> 把之前 46.1K tokens 的对话——包括你回答的每个问题、双方确认的每个决策——浓缩成一份 spec。这份 spec 描述的是"做完之后应该长成什么样"：问题陈述、解决方案、用户故事、实现决策、测试决策、明确不做的范围，都在里面。</p>
+  <p><code>/to-tickets</code> 再把 spec 拆成一张张可执行的工单，每张工单的大小 = 一个上下文窗口（smart zone）能完成的工作量。Matt 这次演示里 agent 给了 3 张工单，他觉得太多了，1 张就够，让 agent 改成 1 张。</p>
+  <p>他展示了一个真实的大任务拆分：几天前的一份 spec，下面挂了 11 张工单。每张工单内容很短，因为验收标准已经在主 spec 里了，<span class="hl">工单只回答一个问题：这一轮会话里你要做什么</span>。</p>
+  <p>执行时一张一张来。做完一张，清掉上下文（<code>/clear</code>），开始下一张。每张工单从干净的窗口启动，加载 spec 和当前工单作为上下文，在 smart zone 内完成工作。</p>
+  <div class="takeaway"><p>这就是 spec 和 tickets 存在的原因：grill 阶段花大量 token 建立的共同理解，不能因为清上下文就丢掉。<strong>Spec 是压缩后的共识载体，tickets 是按窗口容量切好的执行单元。</strong></p></div>
+
+  <h2 id="review"><span class="no">05</span>Implement + Code Review：执行，然后换人审查</h2>
+  <p>所有工单做完——或者 grill 完直接走 implement 的情况下——输入 <code>/implement</code>，agent 开始写代码。Implement 技能会做完整的验证：跑 type check、跑 build、跑测试。验证通过后，<span class="hl">它会自动启动 code review，而且用的是独立的子 agent，不是刚才写代码的那个</span>。</p>
+  <p>Matt 解释了为什么这么做：agent 审查自己刚写的代码效果很差。因为代码是它自己写的，它倾向于觉得没问题，不会认真找毛病。但如果另起一个干净的上下文窗口，新 agent 没有写代码时的心理惯性，审查质量会好得多。</p>
+  <p>Code review 按两个维度展开，两个子 agent 并行跑：</p>
+  <ul class="plain">
+    <li><strong>对照 spec 逐条验收</strong>：检查实现是否覆盖了 spec 里的每一条要求。Matt 说这在大任务里特别有用，因为 agent 可能漏掉工单里的东西，或者工单本身就写得不够明确。</li>
+    <li><strong>对照编码规范检查代码异味</strong>：如果仓库里有编码规范文档就用你自己的，没有的话会用一套经典规范。</li>
+  </ul>
+  <p>Matt 的演示里两个维度都通过了，代码直接提交到当前分支。</p>
+
+  <h2 id="when"><span class="no">06</span>什么时候走全流程，什么时候跳步</h2>
+  <p>这套流程不是每次都要从头到尾走完，判断标准很简单：</p>
+  <div class="card">
+    <h3>小任务</h3>
+    <p class="tag">grill → implement this</p>
+    <p>grill 完估算 token 预算够用，直接 <code>/implement this</code>，跳过 spec 和 tickets。删命令这个任务的 implement 阶段只用了 42.7K tokens，就是轻量任务。</p>
+  </div>
+  <div class="card">
+    <h3>大任务</h3>
+    <p class="tag">grill → spec → tickets → 逐张 implement</p>
+    <p>一个窗口装不下的，走完整路线。每张工单之间清上下文，保证 agent 始终在 smart zone 内工作。</p>
+  </div>
+  <div class="takeaway"><p>不变的是前后两端：<strong>前端永远是 grill</strong>——在写代码之前跟 AI 建立共同理解；<strong>后端永远是 code review</strong>——用独立 agent 审查，不让写代码的 agent 自己说了算。中间的 spec 和 tickets 可按任务大小增删。</p></div>
+
+  <div class="footnote">
+    <p style="margin:0">本文为小红书 @unintended.ai《30w Star 项目作者的 AI 编程工作流》系列图文的内容整理；原文结尾预告了下一篇：Matt 的 handoff 方法——需求聊清楚了、上下文快用满了，怎么让下一个 Agent 接得住，不用从头再解释一遍。</p>
+  </div>
+</div>
