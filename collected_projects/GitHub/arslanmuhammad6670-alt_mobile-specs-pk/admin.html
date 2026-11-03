@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Check Specs — Admin Panel</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:#f6f7f9;color:#17202a}
+  header{background:linear-gradient(90deg,#081230,#0b1e3f);color:#fff;padding:14px 16px}
+  header b{font-size:20px} header span{color:#38bdf8}
+  header p{margin:4px 0 0;font-size:13px;color:#c7d6f2}
+  main{max-width:760px;margin:0 auto;padding:16px 14px 60px}
+  section{background:#fff;border-radius:14px;box-shadow:0 1px 4px #0001;padding:18px;margin-bottom:16px}
+  h2{margin:0 0 10px;font-size:18px;color:#0b1e3f}
+  h3{margin:16px 0 8px;font-size:15px;color:#0b1e3f}
+  label{display:block;font-size:13px;font-weight:700;margin:12px 0 5px;color:#0b1e3f}
+  input,select,textarea{width:100%;padding:11px;border:1.5px solid #c9d4e6;border-radius:9px;font-size:15px;background:#fff}
+  textarea{resize:vertical}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:520px){.row2{grid-template-columns:1fr}}
+  button{background:#1677ff;color:#fff;border:0;border-radius:9px;padding:12px 18px;font-size:15px;font-weight:800;cursor:pointer}
+  button:disabled{opacity:.55;cursor:wait}
+  button.alt{background:#e8f1ff;color:#0b55c4}
+  button.danger{background:#c62828}
+  button.small{padding:9px 13px;font-size:13.5px}
+  .btnrow{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  .specrow{display:grid;grid-template-columns:1fr 1.4fr auto;gap:6px;margin-bottom:6px}
+  .specrow input{padding:9px}
+  .specrow button{padding:9px 11px;background:#eef3fb;color:#c62828}
+  #msg{border-radius:10px;padding:12px 14px;font-size:14.5px;margin-bottom:16px;display:none;white-space:pre-wrap}
+  #msg.ok{display:block;background:#e7f8ee;border:1.5px solid #2e9e5b;color:#14532d}
+  #msg.err{display:block;background:#fdecec;border:1.5px solid #c62828;color:#7f1d1d}
+  #msg.info{display:block;background:#e8f1ff;border:1.5px solid #1677ff;color:#0b3d91}
+  .note{font-size:12.5px;color:#667;margin-top:6px}
+  .mode{font-size:13px;font-weight:800;color:#0b55c4;background:#e8f1ff;border-radius:999px;padding:4px 12px;display:inline-block}
+  .count{font-size:13.5px;color:#555;margin-top:8px}
+</style>
+</head>
+<body>
+<header><b>Check <span>Specs</span></b> — Admin Panel<p>Add, edit or delete models yourself. Changes go to GitHub and the website updates automatically.</p></header>
+<main>
+
+<div id="msg"></div>
+
+<section>
+  <h2>1) GitHub Token</h2>
+  <label for="token">Your GitHub Personal Access Token</label>
+  <input id="token" type="password" placeholder="github_pat_..." autocomplete="off">
+  <p class="note">The token is saved only in this phone's browser (localStorage). It is never sent anywhere except GitHub. Do not share it with anyone. See the README file for how to create a token.</p>
+  <div class="btnrow">
+    <button id="btnSaveToken" class="small">Save token</button>
+    <button id="btnTest" class="small alt">Test connection</button>
+    <button id="btnForget" class="small alt">Forget token</button>
+  </div>
+  <p class="count" id="whoami"></p>
+</section>
+
+<section>
+  <h2>2) Choose a file</h2>
+  <label for="fileSel">Models file (in verified/)</label>
+  <select id="fileSel"></select>
+  <p class="note"><b>expand-manual.json</b> is your own file — new models you add go here by default. The other expand-*.json files were made by Muse's pipeline; you can edit them too, but be careful.</p>
+  <div class="btnrow">
+    <button id="btnRefreshFiles" class="small alt">Refresh file list</button>
+    <button id="btnLoad" class="small">Load models</button>
+  </div>
+  <p class="count" id="fileInfo">No file loaded yet.</p>
+
+  <h3>Manage models in this file</h3>
+  <label for="modelSel">Pick a model</label>
+  <select id="modelSel"><option value="">— load a file first —</option></select>
+  <div class="btnrow">
+    <button id="btnEdit" class="small" disabled>Edit selected</button>
+    <button id="btnDelete" class="small danger" disabled>Delete selected</button>
+    <button id="btnNew" class="small alt">Add new model</button>
+  </div>
+</section>
+
+<section>
+  <h2>3) Model form</h2>
+  <p><span class="mode" id="modeLabel">Adding a NEW model</span></p>
+
+  <div class="row2">
+    <div><label for="f_brand">Brand</label>
+      <input id="f_brand" list="brands" placeholder="Samsung">
+      <datalist id="brands">
+        <option>Apple</option><option>Samsung</option><option>Xiaomi</option><option>Infinix</option>
+        <option>Tecno</option><option>Vivo</option><option>Oppo</option><option>Realme</option>
+        <option>Honor</option><option>OnePlus</option><option>Google</option><option>Nothing</option>
+        <option>Nokia</option><option>HMD</option><option>Motorola</option><option>Huawei</option>
+        <option>iQOO</option><option>Poco</option><option>Lenovo</option><option>HP</option>
+        <option>Dell</option><option>Asus</option><option>Acer</option>
+      </datalist>
+    </div>
+    <div><label for="f_name">Model name (full)</label>
+      <input id="f_name" placeholder="Samsung Galaxy A56"></div>
+  </div>
+
+  <div class="row2">
+    <div><label for="f_price">Price in Pakistan (Rs) — empty = not announced</label>
+      <input id="f_price" type="number" inputmode="numeric" placeholder="119999"></div>
+    <div><label for="f_year">Launch year</label>
+      <input id="f_year" type="number" inputmode="numeric" placeholder="2026"></div>
+  </div>
+
+  <div class="row2">
+    <div><label for="f_cat">Category</label>
+      <select id="f_cat">
+        <option>Smartphones</option>
+        <option>Keypad Phones</option>
+        <option>Tablets</option>
+        <option>Laptops</option>
+      </select></div>
+    <div><label for="f_slug">Page address name (slug) — auto-made, you can change it</label>
+      <input id="f_slug" placeholder="samsung-galaxy-a56"></div>
+  </div>
+
+  <label for="f_tag">Short tagline (one line, shows on the card)</label>
+  <input id="f_tag" placeholder="Bari battery aur acha camera kam qeemat mein">
+
+  <label for="f_hl">Highlights — one per line (3–4 short lines)</label>
+  <textarea id="f_hl" rows="4" placeholder="6.7&quot; AMOLED 120Hz&#10;Dimensity 7300 · 8 GB RAM&#10;50MP camera · 5,000 mAh"></textarea>
+
+  <label for="f_source">Specs source link (optional)</label>
+  <input id="f_source" placeholder="https://www.gsmarena.com/...">
+
+  <h3>Specs (label / value rows)</h3>
+  <div id="rows"></div>
+  <button id="btnAddRow" class="small alt" type="button">+ Add a spec row</button>
+  <p class="note">Tip: check every spec from GSMArena or the brand's official page before saving. A "Launch Year" row is added automatically from the year above.</p>
+
+  <h3>Photo</h3>
+  <label for="f_photo">Model photo (JPG/PNG) — needed for a new model; for editing, choose only if you want to replace it</label>
+  <input id="f_photo" type="file" accept="image/*">
+  <p class="note">Use the correct model's real photo. It is saved as img/&lt;slug&gt;/main.jpg.</p>
+
+  <div class="btnrow">
+    <button id="btnSave">Save model</button>
+    <button id="btnCancelEdit" class="alt" style="display:none">Cancel editing</button>
+  </div>
+</section>
+
+<p class="note">After saving, GitHub Actions rebuilds the website (once the workflow file is installed in the repo). The change usually appears on checkspecs.work.gd in 2–5 minutes.</p>
+
+</main>
+
+<script>
+"use strict";
+/* ============ Config ============ */
+var OWNER = "arslanmuhammad6670-alt";
+var REPO  = "mobile-specs-pk";
+var BRANCH = "main";
+var MANUAL_FILE = "verified/expand-manual.json";
+var API = "https://api.github.com/repos/" + OWNER + "/" + REPO;
+
+/* ============ Pure helpers (also used by the schema test) ============ */
+function slugify(name, brand) {
+  var b = (brand || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  var s = (name || "").toLowerCase()
+    .replace(/\+/g, " plus ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-{2,}/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (b && s.indexOf(b + "-") !== 0 && s !== b) s = b + "-" + s;
+  return s;
+}
+
+function buildDevice(st) {
+  var year = parseInt(st.year, 10);
+  if (isNaN(year)) year = new Date().getFullYear();
+  var rows = [];
+  (st.rows || []).forEach(function (r) {
+    var k = (r[0] || "").trim(), v = (r[1] == null ? "" : String(r[1])).trim();
+    if (k) rows.push([k, v]);
+  });
+  var hasLaunch = rows.some(function (r) { return r[0].toLowerCase() === "launch year"; });
+  if (!hasLaunch) rows.unshift(["Launch Year", String(year)]);
+  var hl = (st.hlLines || []).map(function (x) { return String(x).trim(); }).filter(Boolean);
+  var price = null;
+  if (st.price !== "" && st.price != null) {
+    var p = parseInt(String(st.price).replace(/[^0-9]/g, ""), 10);
+    price = isNaN(p) ? null : p;
+  }
+  return {
+    brand: (st.brand || "").trim(),
+    cat: st.cat,
+    hl: hl.length ? hl : [(st.name || "").trim()],
+    name: (st.name || "").trim(),
+    price: price,
+    price_src: "manual",
+    rows: rows,
+    slug: st.slug,
+    source: (st.source || "").trim(),
+    tag: (st.tag || "").trim(),
+    year: year
+  };
+}
+
+/* ============ Browser-only code below ============ */
+if (typeof document !== "undefined") {
+
+var $ = function (id) { return document.getElementById(id); };
+var token = "";
+try { token = localStorage.getItem("cs_admin_token") || ""; } catch (e) {}
+var currentFile = MANUAL_FILE;
+var devices = [];        // devices in the loaded file
+var fileExists = false;  // whether currentFile exists in the repo
+var editingSlug = null;  // null = add mode
+
+function showMsg(kind, text) {
+  var m = $("msg"); m.className = kind; m.textContent = text;
+  m.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+function busy(btn, on, label) {
+  if (!btn) return;
+  if (on) { btn.dataset.old = btn.textContent; btn.disabled = true; btn.textContent = label || "Please wait..."; }
+  else { btn.disabled = false; if (btn.dataset.old) btn.textContent = btn.dataset.old; }
+}
+function needToken() {
+  if (!token) { showMsg("err", "First save your GitHub token in section 1."); return false; }
+  return true;
+}
+
+/* ---- base64 helpers (UTF-8 safe) ---- */
+function b64EncodeText(text) {
+  var bytes = new TextEncoder().encode(text);
+  var bin = ""; bytes.forEach(function (b) { bin += String.fromCharCode(b); });
+  return btoa(bin);
+}
+function b64DecodeText(b64) {
+  var bin = atob((b64 || "").replace(/\n/g, ""));
+  var bytes = new Uint8Array(bin.length);
+  for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+function bufToB64(buf) {
+  var bytes = new Uint8Array(buf), bin = "", CH = 0x8000;
+  for (var i = 0; i < bytes.length; i += CH) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  }
+  return btoa(bin);
+}
+
+/* ---- GitHub API ---- */
+function gh(url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({
+    "Authorization": "Bearer " + token,
+    "Accept": "application/vnd.github+json",
+    "Content-Type": "application/json"
+  }, opts.headers || {});
+  return fetch(url, opts);
+}
+function ghError(what, res, body) {
+  var hint = "";
+  if (res.status === 401) hint = " Token is wrong or expired — create a new one.";
+  if (res.status === 403) hint = " Token has no permission — it needs Contents: Read and write on this repo.";
+  if (res.status === 404) hint = " Not found — check the repo name and token repository access.";
+  if (res.status === 409 || res.status === 422) hint = " The file changed on GitHub meanwhile. Press “Load models” again and retry.";
+  return new Error(what + " failed (HTTP " + res.status + "). " + ((body && body.message) || "") + hint);
+}
+async function getContents(path) {
+  var res = await gh(API + "/contents/" + path + "?ref=" + BRANCH);
+  if (res.status === 404) return { exists: false, sha: null, text: null };
+  var body = await res.json().catch(function () { return null; });
+  if (!res.ok) throw ghError("Reading " + path, res, body);
+  if (!body.content) throw new Error("File " + path + " is too big for this panel (over 1 MB). Please ask Muse for help with this file.");
+  return { exists: true, sha: body.sha, text: b64DecodeText(body.content) };
+}
+async function putTextFile(path, text, sha, message) {
+  var payload = { message: message, content: b64EncodeText(text), branch: BRANCH };
+  if (sha) payload.sha = sha;
+  var res = await gh(API + "/contents/" + path, { method: "PUT", body: JSON.stringify(payload) });
+  if (!res.ok) throw ghError("Saving " + path, res, await res.json().catch(function () { return null; }));
+}
+async function putPhotoFile(slug, file) {
+  var path = "img/" + slug + "/main.jpg";
+  var cur = await getContents(path);
+  var b64 = bufToB64(await file.arrayBuffer());
+  var payload = { message: "img: " + slug + " photo (admin panel)", content: b64, branch: BRANCH };
+  if (cur.exists) payload.sha = cur.sha;
+  var res = await gh(API + "/contents/" + path, { method: "PUT", body: JSON.stringify(payload) });
+  if (!res.ok) throw ghError("Uploading photo", res, await res.json().catch(function () { return null; }));
+}
+async function deletePhotoFile(slug) {
+  try {
+    var path = "img/" + slug + "/main.jpg";
+    var cur = await getContents(path);
+    if (!cur.exists) return;
+    await gh(API + "/contents/" + path, {
+      method: "DELETE",
+      body: JSON.stringify({ message: "img: remove " + slug + " photo (admin panel)", sha: cur.sha, branch: BRANCH })
+    });
+  } catch (e) { /* photo delete is best-effort only */ }
+}
+
+/* ---- File picker ---- */
+async function refreshFiles() {
+  var sel = $("fileSel");
+  var names = [MANUAL_FILE.split("/").pop()];
+  if (token) {
+    try {
+      var res = await gh(API + "/contents/verified?ref=" + BRANCH);
+      if (res.ok) {
+        var items = await res.json();
+        names = items.map(function (i) { return i.name; })
+          .filter(function (n) { return /^expand-.*\.json$/.test(n); });
+        if (names.indexOf("expand-manual.json") === -1) names.unshift("expand-manual.json");
+        names.sort();
+      }
+    } catch (e) { /* keep manual only */ }
+  }
+  sel.innerHTML = "";
+  names.forEach(function (n) {
+    var o = document.createElement("option");
+    o.value = "verified/" + n; o.textContent = n + (n === "expand-manual.json" ? "  (your file)" : "");
+    sel.appendChild(o);
+  });
+  sel.value = currentFile;
+}
+
+/* ---- Load + list ---- */
+async function loadFile() {
+  if (!needToken()) return;
+  var btn = $("btnLoad"); busy(btn, true);
+  try {
+    currentFile = $("fileSel").value || MANUAL_FILE;
+    var got = await getContents(currentFile);
+    fileExists = got.exists;
+    devices = got.exists ? JSON.parse(got.text) : [];
+    if (!Array.isArray(devices)) throw new Error("This file is not a model list — the panel cannot manage it.");
+    renderModelList();
+    $("fileInfo").textContent = fileExists
+      ? currentFile + " — " + devices.length + " model(s) loaded."
+      : currentFile + " does not exist yet. It will be created when you save the first model.";
+    showMsg("ok", "Loaded " + devices.length + " model(s) from " + currentFile + ".");
+  } catch (e) { showMsg("err", e.message); }
+  busy(btn, false);
+}
+function renderModelList() {
+  var sel = $("modelSel"); sel.innerHTML = "";
+  if (!devices.length) {
+    sel.innerHTML = "<option value=''>— no models in this file —</option>";
+  } else {
+    devices.forEach(function (d) {
+      var o = document.createElement("option");
+      o.value = d.slug;
+      o.textContent = d.name + (d.price != null ? " — Rs " + Number(d.price).toLocaleString("en-PK") : " — price not announced");
+      sel.appendChild(o);
+    });
+  }
+  var has = devices.length > 0;
+  $("btnEdit").disabled = !has; $("btnDelete").disabled = !has;
+}
+
+/* ---- Form ---- */
+var COMMON_ROWS = ["Network", "Display", "Chipset", "RAM", "Storage", "Main Camera",
+  "Selfie Camera", "Battery", "Charging", "Operating System", "Weight", "Colors"];
+function addSpecRow(label, value) {
+  var div = document.createElement("div"); div.className = "specrow";
+  div.innerHTML = "<input class='rl' placeholder='Label (e.g. Display)'>" +
+                  "<input class='rv' placeholder='Value'>" +
+                  "<button type='button' title='Remove row'>✕</button>";
+  div.querySelector(".rl").value = label || "";
+  div.querySelector(".rv").value = value || "";
+  div.querySelector("button").addEventListener("click", function () { div.remove(); });
+  $("rows").appendChild(div);
+}
+function resetSpecRows(prefill) {
+  $("rows").innerHTML = "";
+  if (prefill && prefill.length) prefill.forEach(function (r) { addSpecRow(r[0], r[1]); });
+  else COMMON_ROWS.forEach(function (l) { addSpecRow(l, ""); });
+}
+function collectState() {
+  var rows = [];
+  document.querySelectorAll(".specrow").forEach(function (div) {
+    rows.push([div.querySelector(".rl").value, div.querySelector(".rv").value]);
+  });
+  return {
+    brand: $("f_brand").value,
+    name: $("f_name").value,
+    price: $("f_price").value,
+    cat: $("f_cat").value,
+    year: $("f_year").value,
+    tag: $("f_tag").value,
+    source: $("f_source").value,
+    slug: $("f_slug").value.trim(),
+    hlLines: $("f_hl").value.split("\n"),
+    rows: rows
+  };
+}
+function setMode(slug) {
+  editingSlug = slug;
+  $("f_slug").disabled = !!slug;
+  $("modeLabel").textContent = slug ? ("Editing: " + slug + "  (in " + currentFile + ")") : "Adding a NEW model";
+  $("btnSave").textContent = slug ? "Save changes" : "Save model";
+  $("btnCancelEdit").style.display = slug ? "" : "none";
+}
+function clearForm() {
+  ["f_brand", "f_name", "f_price", "f_tag", "f_source", "f_slug"].forEach(function (id) { $(id).value = ""; });
+  $("f_year").value = new Date().getFullYear();
+  $("f_cat").value = "Smartphones";
+  $("f_hl").value = ""; $("f_photo").value = "";
+  resetSpecRows(null); setMode(null);
+}
+function fillForm(d) {
+  $("f_brand").value = d.brand || ""; $("f_name").value = d.name || "";
+  $("f_price").value = d.price == null ? "" : d.price;
+  $("f_year").value = d.year || ""; $("f_cat").value = d.cat || "Smartphones";
+  $("f_tag").value = d.tag || ""; $("f_source").value = d.source || "";
+  $("f_slug").value = d.slug || ""; $("f_hl").value = (d.hl || []).join("\n");
+  $("f_photo").value = "";
+  resetSpecRows((d.rows || []).filter(function (r) { return String(r[0]).toLowerCase() !== "launch year"; }));
+  setMode(d.slug);
+}
+
+/* ---- Save (add or edit) ---- */
+async function saveModel() {
+  if (!needToken()) return;
+  var st = collectState();
+  if (!st.brand.trim() || !st.name.trim()) { showMsg("err", "Brand and model name are required."); return; }
+  if (!st.slug) st.slug = slugify(st.name, st.brand);
+  var photo = $("f_photo").files[0];
+  if (!editingSlug && !photo) { showMsg("err", "Please choose a photo for the new model."); return; }
+  var dev = buildDevice(st);
+  var btn = $("btnSave"); busy(btn, true);
+  try {
+    if (photo) { showMsg("info", "Uploading photo..."); await putPhotoFile(dev.slug, photo); }
+    showMsg("info", "Saving model data...");
+    var got = await getContents(currentFile);
+    var list = got.exists ? JSON.parse(got.text) : [];
+    if (!Array.isArray(list)) throw new Error("This file is not a model list — the panel cannot manage it.");
+    if (editingSlug) {
+      var i = list.findIndex(function (d) { return d.slug === editingSlug; });
+      if (i === -1) throw new Error("This model is no longer in the file. Press “Load models” again.");
+      list[i] = dev;
+    } else {
+      if (list.some(function (d) { return d.slug === dev.slug; }))
+        throw new Error("A model with slug “" + dev.slug + "” already exists in this file. Change the name or the slug.");
+      list.push(dev);
+    }
+    await putTextFile(currentFile, JSON.stringify(list, null, 1),
+      got.exists ? got.sha : null,
+      (editingSlug ? "admin: edit " : "admin: add ") + dev.slug);
+    devices = list; fileExists = true; renderModelList();
+    $("fileInfo").textContent = currentFile + " — " + devices.length + " model(s) loaded.";
+    if (!editingSlug) clearForm();
+    showMsg("ok", "Saved: " + dev.name + " (" + dev.slug + ") in " + currentFile + ".\nThe website rebuild starts automatically — the change should be live on checkspecs.work.gd in 2–5 minutes.");
+  } catch (e) { showMsg("err", e.message); }
+  busy(btn, false);
+}
+
+/* ---- Edit / Delete / New buttons ---- */
+$("btnEdit").addEventListener("click", function () {
+  var slug = $("modelSel").value;
+  var d = devices.find(function (x) { return x.slug === slug; });
+  if (!d) { showMsg("err", "Pick a model from the list first."); return; }
+  fillForm(d);
+  showMsg("info", "Editing " + d.name + ". Change anything and press “Save changes”. The slug cannot be changed — to rename the page address, delete the model and add it again.");
+  window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+});
+$("btnNew").addEventListener("click", function () { clearForm(); showMsg("info", "Form cleared — adding a new model to " + currentFile + "."); });
+$("btnCancelEdit").addEventListener("click", function () { clearForm(); });
+$("btnDelete").addEventListener("click", async function () {
+  if (!needToken()) return;
+  var slug = $("modelSel").value;
+  var d = devices.find(function (x) { return x.slug === slug; });
+  if (!d) { showMsg("err", "Pick a model from the list first."); return; }
+  if (!confirm("Delete " + d.name + " from " + currentFile + "?\n\nIt will disappear from the website after the next rebuild. This cannot be undone from the panel.")) return;
+  var btn = $("btnDelete"); busy(btn, true);
+  try {
+    var got = await getContents(currentFile);
+    var list = got.exists ? JSON.parse(got.text) : [];
+    var before = list.length;
+    list = list.filter(function (x) { return x.slug !== slug; });
+    if (list.length === before) throw new Error("Model not found in the fresh copy of the file. Press “Load models” again.");
+    await putTextFile(currentFile, JSON.stringify(list, null, 1), got.sha, "admin: delete " + slug);
+    await deletePhotoFile(slug);
+    devices = list; renderModelList();
+    $("fileInfo").textContent = currentFile + " — " + devices.length + " model(s) loaded.";
+    if (editingSlug === slug) clearForm();
+    showMsg("ok", "Deleted: " + d.name + ". The website rebuild starts automatically — it will be gone from checkspecs.work.gd in a few minutes.");
+  } catch (e) { showMsg("err", e.message); }
+  busy(btn, false);
+});
+
+/* ---- Token buttons + misc wiring ---- */
+$("btnSaveToken").addEventListener("click", function () {
+  var v = $("token").value.trim();
+  if (!v) { showMsg("err", "Paste your token first."); return; }
+  token = v;
+  try { localStorage.setItem("cs_admin_token", v); } catch (e) {}
+  showMsg("ok", "Token saved in this browser only.");
+  refreshFiles();
+});
+$("btnForget").addEventListener("click", function () {
+  token = ""; $("token").value = ""; $("whoami").textContent = "";
+  try { localStorage.removeItem("cs_admin_token"); } catch (e) {}
+  showMsg("info", "Token removed from this browser.");
+});
+$("btnTest").addEventListener("click", async function () {
+  var v = $("token").value.trim() || token;
+  if (!v) { showMsg("err", "Paste your token first."); return; }
+  token = v;
+  var btn = $("btnTest"); busy(btn, true);
+  try {
+    var res = await gh("https://api.github.com/user");
+    if (!res.ok) throw ghError("Connection test", res, await res.json().catch(function () { return null; }));
+    var me = await res.json();
+    $("whoami").textContent = "Connected as GitHub user: " + me.login;
+    showMsg("ok", "Connection OK — token works (GitHub user: " + me.login + ").");
+    refreshFiles();
+  } catch (e) { showMsg("err", e.message); }
+  busy(btn, false);
+});
+$("btnRefreshFiles").addEventListener("click", refreshFiles);
+$("btnLoad").addEventListener("click", loadFile);
+$("btnSave").addEventListener("click", saveModel);
+$("btnAddRow").addEventListener("click", function () { addSpecRow("", ""); });
+$("fileSel").addEventListener("change", function () {
+  currentFile = $("fileSel").value;
+  devices = []; renderModelList();
+  $("fileInfo").textContent = "File selected: " + currentFile + " — press “Load models”.";
+});
+function autoSlug() {
+  if (editingSlug) return;
+  var s = slugify($("f_name").value, $("f_brand").value);
+  if (s) $("f_slug").value = s;
+}
+$("f_name").addEventListener("input", autoSlug);
+$("f_brand").addEventListener("input", autoSlug);
+
+/* ---- Init ---- */
+if (token) $("token").value = token;
+refreshFiles();
+clearForm();
+}
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { slugify: slugify, buildDevice: buildDevice };
+}
+</script>
+</body>
+</html>

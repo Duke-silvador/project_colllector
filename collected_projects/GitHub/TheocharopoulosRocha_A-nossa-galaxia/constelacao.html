@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Galáxia do Nosso Amor</title>
+  <meta name="description" content="Galáxia interativa de frases de carinho 💘">
+  <meta property="og:title" content="Galáxia para você">
+  <meta property="og:description" content="Uma galáxia interativa com palavras de carinho 💖">
+  <meta property="og:image" content="og-cover.png">
+  <link rel="icon" type="image/png" href="favicon.png">
+  <style>
+    html,body{margin:0;height:100%;background:#000;overflow:hidden}
+    #galaxy-canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+    .attribution{position:fixed;left:10px;bottom:10px;font-size:11px;color:#b9a0ff;opacity:.8;background:rgba(0,0,0,.35);padding:6px 8px;border-radius:8px}
+    .player{position:fixed;left:10px;right:10px;bottom:10px;display:flex;gap:8px;align-items:center;
+             background:rgba(20,15,35,.35);border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:8px;
+             backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial}
+    .player button{padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff}
+    .player input[type=file]{display:none}
+    .pill{position:fixed;top:10px;left:50%;transform:translateX(-50%);padding:6px 12px;border-radius:999px;
+          background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.18);color:#fff;font:12px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial}
+    .error{position:fixed;inset:auto 10px 70px 10px;background:#260015;color:#ffd9f7;border:1px solid #ff8ae5;border-radius:10px;padding:10px;font:12px system-ui;display:none;}
+    /* o player do YouTube precisa existir DENTRO da tela (fora dela o navegador bloqueia o som),
+       então fica no canto, quase invisível e sem receber cliques */
+    #ytWrap{position:fixed;right:6px;bottom:74px;width:200px;height:113px;opacity:.03;pointer-events:none;z-index:0}
+    #status{position:fixed;right:10px;top:10px;font:11px system-ui;color:#c9b3ff;opacity:.75;background:rgba(0,0,0,.35);padding:4px 8px;border-radius:8px}
+    #overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:50;
+             background:rgba(0,0,0,.55);backdrop-filter:blur(2px);cursor:pointer;
+             color:#fff;font:600 18px -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial;text-align:center;padding:24px}
+    .player input[type=range]{width:90px;accent-color:#EAAEFF}
+    .player .lbl{font-size:12px;opacity:.9;white-space:nowrap}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+<canvas id="galaxy-canvas"></canvas>
+<div class="pill">Te Amo Muito Minha Linda 💛</div>
+<div class="attribution">Rafael codex💫</div>
+<div id="err" class="error"></div>
+
+<div class="player">
+  <button id="playBtn">▶︎</button>
+  <span class="lbl">Música de fundo 💙🌹♥️</span>
+  <input type="range" id="volRange" min="0" max="100" value="12" title="Volume">
+  <input type="file" id="pickFile" accept="audio/*">
+  <button id="pickBtn">Escolher outra música</button>
+  <audio id="audio" preload="none" loop></audio>
+</div>
+
+<div id="ytWrap"><div id="yt-player"></div></div>
+<div id="status">iniciando…</div>
+<div id="overlay">Toque na tela para começar 💛</div>
+
+<canvas id="fx" style="position:fixed;inset:0;pointer-events:none;"></canvas>
+
+<script>
+(function(){
+const err = document.getElementById('err');
+function showError(msg){ err.textContent = msg; err.style.display='block'; }
+
+const audio = document.getElementById('audio');
+const playBtn = document.getElementById('playBtn');
+const pickBtn = document.getElementById('pickBtn');
+const pickFile = document.getElementById('pickFile');
+const volRange = document.getElementById('volRange');
+
+/* ===== Música de fundo (YouTube, em loop e volume ameno) ===== */
+const YT_ID = 'bD6ifecX6rs';
+const ARQUIVO_LOCAL = 'musica.mp3';   // se existir na mesma pasta, tem prioridade
+const VOL_PADRAO = 12;                // volume ameno (0-100)
+
+let ytPlayer = null, ytPronto = false, usandoArquivoLocal = false, tocando = false;
+let tentouNocookie = false;
+const rodandoLocal = (location.protocol === 'file:');
+const status = document.getElementById('status');
+
+function diz(txt){ if (status) status.textContent = txt; }
+function marcarBotao(estaTocando){ tocando = estaTocando; playBtn.textContent = estaTocando ? '⏸︎' : '▶︎'; }
+function volAtual(){ return Number(volRange.value) || VOL_PADRAO; }
+
+/* ---------- Plano A: MP3 local (musica.mp3) ---------- */
+audio.loop = true;
+audio.volume = volAtual() / 100;
+audio.addEventListener('canplay', function(){
+  usandoArquivoLocal = true;
+  diz('MP3 local pronto');
+  esconderOverlay(false);
+}, {once:true});
+audio.addEventListener('error', function(){ /* sem arquivo local: segue com o YouTube */ }, {once:true});
+audio.src = ARQUIVO_LOCAL;
+
+/* ---------- Plano B: player do YouTube ---------- */
+function criarPlayer(usarNocookie){
+  diz('criando player…');
+  ytPlayer = new YT.Player('yt-player', {
+    videoId: YT_ID,
+    width: 200, height: 113,
+    host: usarNocookie ? 'https://www.youtube-nocookie.com' : 'https://www.youtube.com',
+    playerVars: {
+      autoplay: 0, controls: 0, disablekb: 1, fs: 0,
+      modestbranding: 1, playsinline: 1, rel: 0,
+      loop: 1, playlist: YT_ID      // loop infinito da mesma faixa
+    },
+    events: {
+      onReady: function(e){
+        ytPronto = true;
+        err.style.display = 'none';
+        e.target.setVolume(volAtual());
+        diz('pronto — toque na tela');
+      },
+      onStateChange: function(e){
+        if (usandoArquivoLocal) return;
+        if (e.data === YT.PlayerState.ENDED) { e.target.seekTo(0); e.target.playVideo(); }
+        if (e.data === YT.PlayerState.PLAYING) { marcarBotao(true); diz('tocando'); }
+        if (e.data === YT.PlayerState.PAUSED)  { marcarBotao(false); diz('pausado'); }
+      },
+      onError: function(e){
+        const codigo = e && e.data;
+        if (!tentouNocookie) {                  // 2ª tentativa: youtube-nocookie
+          tentouNocookie = true; ytPronto = false;
+          try { ytPlayer.destroy(); } catch(_){}
+          const div = document.createElement('div'); div.id = 'yt-player';
+          const wrap = document.getElementById('ytWrap'); wrap.innerHTML = ''; wrap.appendChild(div);
+          criarPlayer(true);
+          return;
+        }
+        diz('erro ' + codigo);
+        showError(
+          (codigo === 101 || codigo === 150)
+            ? 'O canal desativou a reprodução deste vídeo fora do YouTube (erro ' + codigo + '). Coloque um arquivo musica.mp3 na pasta ou use “Escolher outra música”.'
+            : 'Não consegui carregar a música do YouTube (erro ' + codigo + '). Coloque um arquivo musica.mp3 na pasta ou use “Escolher outra música”.'
+        );
+      }
+    }
+  });
+}
+
+window.onYouTubeIframeAPIReady = function(){ diz('API carregada'); criarPlayer(false); };
+
+(function carregarAPI(){
+  diz('carregando YouTube…');
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  tag.onerror = function(){
+    diz('API bloqueada');
+    showError('O script do YouTube não carregou (rede, bloqueador de anúncios ou extensão). Coloque um arquivo musica.mp3 na mesma pasta desta página, ou use “Escolher outra música”.');
+  };
+  document.head.appendChild(tag);
+})();
+
+setTimeout(function(){
+  if (!ytPronto && !usandoArquivoLocal) {
+    diz(typeof YT === 'undefined' ? 'API não respondeu' : 'player não ficou pronto');
+    showError(rodandoLocal
+      ? 'A página está aberta direto do arquivo (file://) e o YouTube costuma recusar assim. Publique a página, rode um servidor local, ou coloque um musica.mp3 na mesma pasta.'
+      : 'A música do YouTube não respondeu. Coloque um arquivo musica.mp3 na mesma pasta desta página, ou use “Escolher outra música”.');
+  }
+}, 10000);
+
+/* ---------- Um toque na tela dá início ao som (exigência dos navegadores) ---------- */
+const overlay = document.getElementById('overlay');
+function esconderOverlay(){ if (overlay) overlay.style.display = 'none'; }
+
+function comecar(){
+  esconderOverlay();
+  if (usandoArquivoLocal) {
+    audio.volume = volAtual() / 100;
+    audio.play().then(()=>{ marcarBotao(true); diz('tocando'); }).catch(()=>{});
+    return;
+  }
+  if (ytPronto) {
+    ytPlayer.unMute();
+    ytPlayer.setVolume(volAtual());
+    ytPlayer.playVideo();
+    marcarBotao(true);
+  } else {
+    diz('ainda carregando…');
+  }
+}
+if (overlay) overlay.addEventListener('click', comecar);
+addEventListener('pointerdown', function um(){ comecar(); removeEventListener('pointerdown', um); }, {passive:true});
+
+/* ---------- Volume ---------- */
+volRange.oninput = () => {
+  const v = Number(volRange.value);
+  audio.volume = v / 100;
+  if (ytPronto) { ytPlayer.setVolume(v); if (v > 0) ytPlayer.unMute(); }
+};
+
+/* ---------- Play / pause ---------- */
+playBtn.onclick = async () => {
+  esconderOverlay();
+  if (usandoArquivoLocal) {
+    try {
+      if (audio.paused) { await audio.play(); marcarBotao(true); diz('tocando'); }
+      else { audio.pause(); marcarBotao(false); diz('pausado'); }
+    } catch(e){ showError('Não consegui tocar esse arquivo. Tente outro MP3.'); }
+    return;
+  }
+  if (!ytPronto) { showError('A música ainda não carregou. Veja o aviso acima — o caminho garantido é um arquivo musica.mp3 na mesma pasta desta página.'); return; }
+  if (tocando) { ytPlayer.pauseVideo(); marcarBotao(false); }
+  else { ytPlayer.unMute(); ytPlayer.setVolume(volAtual()); ytPlayer.playVideo(); marcarBotao(true); }
+};
+
+/* ---------- Trocar por um MP3 do aparelho ---------- */
+pickBtn.onclick = () => pickFile.click();
+pickFile.onchange = () => {
+  if (pickFile.files && pickFile.files[0]) {
+    if (ytPronto) { try { ytPlayer.pauseVideo(); } catch(_){} }
+    usandoArquivoLocal = true;
+    esconderOverlay();
+    audio.src = URL.createObjectURL(pickFile.files[0]);
+    audio.loop = true;
+    audio.volume = volAtual() / 100;
+    audio.play().then(()=>{ marcarBotao(true); diz('tocando'); }).catch(()=>{});
+  }
+};
+
+try { 
+  const test = document.createElement('canvas').getContext('webgl') || document.createElement('canvas').getContext('experimental-webgl');
+  if(!test) throw new Error('Seu navegador não tem WebGL ativo');
+} catch(e) { showError('O WebGL parece desativado. Tente com Chrome/Edge/Firefox, ou habilite a aceleração por hardware.'); return; }
+
+try {
+// Configuração
+const canvas = document.getElementById('galaxy-canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:false });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio||1));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 2000);
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.06;
+controls.minDistance = 10; controls.maxDistance = 220;
+controls.target.set(0,0,0);
+
+function setCam(){
+  const w = window.innerWidth, h = window.innerHeight;
+  const isMobile = w < 768 || w < h;
+  camera.fov = isMobile ? 90 : 75;
+  camera.position.set(0, isMobile? 26 : 22, isMobile? 110 : 75);
+  camera.updateProjectionMatrix(); controls.update();
+} setCam();
+
+function makePrettyStarTexture(size=1024, count=2000) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const g = c.getContext('2d');
+
+  const r = size/2;
+  const bg = g.createRadialGradient(r,r, r*0.2, r,r, r);
+  bg.addColorStop(0,'#050010');
+  bg.addColorStop(1,'#000000');
+  g.fillStyle = bg; g.fillRect(0,0,size,size);
+
+  for (let i=0;i<count;i++) {
+    const x = Math.random()*size, y = Math.random()*size;
+    const base = Math.random()*0.7 + 0.3; // brilho
+    const glow = g.createRadialGradient(x,y,0, x,y, Math.random()*2.2+1.6);
+    // tom de cor puxando para lilás/azul
+    const huePick = Math.random();
+    let colInner = 'rgba(255,255,255,'+(0.65*base)+')';
+    let colOuter = 'rgba(180,190,255,'+(0.12*base)+')';
+    if (huePick < 0.25) { colOuter = 'rgba(255,180,240,'+(0.12*base)+')'; }
+    glow.addColorStop(0, colInner);
+    glow.addColorStop(1, colOuter);
+    g.fillStyle = glow; g.beginPath(); g.arc(x,y, Math.random()*1.2+0.6, 0, Math.PI*2); g.fill();
+  }
+  return new THREE.CanvasTexture(c);
+}
+
+const bgGeo = new THREE.SphereGeometry(600, 64, 64);
+const starTex = makePrettyStarTexture(1024, 2600);
+starTex.wrapS = starTex.wrapT = THREE.RepeatWrapping;
+const bg = new THREE.Mesh(bgGeo, new THREE.MeshBasicMaterial({ map: starTex, side: THREE.BackSide, transparent:false, opacity:0.85 }));
+scene.add(bg);
+
+const galaxy = new THREE.Group(); scene.add(galaxy);
+const phrases = ["Linda ✨", " Formosa 💛", "Meu Bebê", "Meu Céu 🌌", "Maravilhosa ✨", "Minha Infinita ♾️", "Meu Tudo", "Me Encanta 🥰", " love 💫", "Te Amo💛", "Minha Música Favorita 🎶", "Única 😊", "Minha Rainha 👑", "Meu Amor", "Meu Mundo", "Minha Luz 🌠", "Minha Menina", "Meu Tesouro💛", "Minha Paz", "Minha Eterna", "Meu Sonho", "Meu Pensamento Favorito", "Meu Docinho", "Minha Deusa", "Te Amo Infinitamente ♾️"];
+const phraseCount = Math.max(phrases.length * 6, 180);
+const arms = 5, radius = 82, maxH = 22;
+
+function makeTextTexture(text, size=48){
+  const c=document.createElement('canvas'); c.width=1024; c.height=128;
+  const g=c.getContext('2d'); g.clearRect(0,0,c.width,c.height);
+  g.font='800 '+size+'px -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial';
+  g.textAlign='center'; g.textBaseline='middle';
+  g.shadowColor='rgba(210,140,255,0.95)'; g.shadowBlur=24;
+  g.fillStyle='rgba(255,240,255,0.98)'; g.fillText(text,c.width/2,c.height/2);
+  return new THREE.CanvasTexture(c);
+}
+
+for(let i=0;i<phraseCount;i++){ const text = phrases[i%phrases.length];
+  const tex=makeTextTexture(text,48);
+  const spr=new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, depthWrite:false }));
+  spr.isPhrase=true;
+  const perArm=phraseCount/arms; const ang=(i%perArm)*(Math.PI*2/perArm);
+  const armAng=Math.floor(i/perArm)*(Math.PI*2/arms);
+  const dist=Math.pow(i/phraseCount,0.72)*radius;
+  const thickness=Math.pow(1-(dist/radius),2);
+  const x=Math.cos(ang+armAng)*dist, z=Math.sin(ang+armAng)*dist, y=(Math.random()-0.5)*maxH*thickness*.9;
+  spr.position.set(x,y,z); spr.scale.set(20,2.6,1); galaxy.add(spr);
+}
+
+const starCount=8000, geom=new THREE.BufferGeometry(), pos=new Float32Array(starCount*3);
+for(let i=0;i<starCount;i++){ const ang=Math.random()*Math.PI*2, dist=Math.random()*radius*1.15;
+  const y=(Math.random()-0.5)*36*Math.pow(1-Math.min(dist,radius)/radius,1.5);
+  pos[i*3]=Math.cos(ang)*dist; pos[i*3+1]=y; pos[i*3+2]=Math.sin(ang)*dist; }
+geom.setAttribute('position', new THREE.BufferAttribute(pos,3));
+galaxy.add(new THREE.Points(geom, new THREE.PointsMaterial({ color:0xffffff, size:0.28, transparent:true, opacity:0.65, blending:THREE.AdditiveBlending })));
+
+const coreR=12;
+const coreTexCanvas=document.createElement('canvas'); coreTexCanvas.width=coreTexCanvas.height=256;
+const cg=coreTexCanvas.getContext('2d'); const grd=cg.createRadialGradient(128,128,10,128,128,128);
+grd.addColorStop(0,'#140018'); grd.addColorStop(0.6,'#090012'); grd.addColorStop(1,'#000'); cg.fillStyle=grd; cg.arc(128,128,128,0,Math.PI*2); cg.fill();
+const core=new THREE.Mesh(new THREE.SphereGeometry(coreR,64,64), new THREE.MeshBasicMaterial({ map:new THREE.CanvasTexture(coreTexCanvas) }));
+core.renderOrder=1; scene.add(core);
+
+const photonRing=new THREE.Mesh(new THREE.RingGeometry(coreR*1.05, coreR*1.18, 128), new THREE.MeshBasicMaterial({ color:0xEAAEFF, transparent:true, opacity:0.95, side:THREE.DoubleSide }));
+photonRing.rotation.x=-Math.PI/2; photonRing.renderOrder=0.5; scene.add(photonRing);
+
+function makeHaloTexture(size=1024, inner=0.45){
+  const c=document.createElement('canvas'); c.width=c.height=size; const g=c.getContext('2d'); const r=size/2;
+  const grd=g.createRadialGradient(r,r,r*inner, r,r,r);
+  // cores mais claras e nítidas
+  grd.addColorStop(0.0,'rgba(255,200,240,0.45)');
+  grd.addColorStop(0.35,'rgba(220,180,255,0.35)');
+  grd.addColorStop(0.7,'rgba(160,200,255,0.28)');
+  grd.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=grd; g.fillRect(0,0,size,size); const tex=new THREE.CanvasTexture(c); tex.needsUpdate=true; return tex;
+}
+const haloPlane=new THREE.Mesh(new THREE.PlaneGeometry(320,320), new THREE.MeshBasicMaterial({ map:makeHaloTexture(1024,0.45), transparent:true, depthWrite:false, blending:THREE.AdditiveBlending, opacity:0.9 }));
+haloPlane.rotation.x=-Math.PI/2; haloPlane.renderOrder=0.2; scene.add(haloPlane);
+
+let tw = 0;
+function animate(){
+  requestAnimationFrame(animate);
+  const t = performance.now()*0.001;
+  tw = (tw + 0.0003) % 1;
+  starTex.offset.set(tw, 0); // leve deslocamento
+  galaxy.rotation.y = t * 0.05;
+  core.rotation.y = t * 0.12;
+  photonRing.rotation.z = t * 0.18;
+  haloPlane.rotation.z = t * 0.02;
+  controls.update();
+  renderer.render(scene, camera);
+} animate();
+
+const fx = document.getElementById('fx');
+const ctx2 = fx.getContext('2d');
+function resizeFx(){
+  fx.width = Math.floor(innerWidth * Math.min(2, window.devicePixelRatio||1));
+  fx.height = Math.floor(innerHeight * Math.min(2, window.devicePixelRatio||1));
+  fx.style.width = innerWidth + 'px';
+  fx.style.height = innerHeight + 'px';
+}
+addEventListener('resize', resizeFx); resizeFx();
+const DPR = Math.min(2, window.devicePixelRatio || 1);
+const hearts = [];
+function spawnHearts(x,y,n=20){
+  x *= DPR; y *= DPR;
+  for(let i=0;i<n;i++){ const a=Math.random()*Math.PI*2;
+    hearts.push({x,y,vx:Math.cos(a)*(0.6+Math.random()*0.8),vy:-(0.8+Math.random()*1.2),life:1,size:10+Math.random()*16});
+  }
+}
+function drawHeart(x,y,size){
+  const s=size; ctx2.save(); ctx2.translate(x,y);
+  ctx2.beginPath(); ctx2.moveTo(0,-0.25*s);
+  ctx2.bezierCurveTo(.5*s,-.9*s,1.4*s,-.1*s,0,.9*s);
+  ctx2.bezierCurveTo(-1.4*s,-.1*s,-.5*s,-.9*s,0,-.25*s);
+  const g=ctx2.createRadialGradient(0,0,0,0,0,s);
+  g.addColorStop(0,'rgba(255,190,220,.95)'); g.addColorStop(1,'rgba(255,90,160,0)');
+  ctx2.fillStyle=g; ctx2.fill(); ctx2.restore();
+}
+let lastTap=0;
+addEventListener('click', (e)=>{ const now=performance.now(); if(now-lastTap<320) spawnHearts(e.clientX,e.clientY,20); lastTap=now; }, {passive:true});
+addEventListener('touchend', (e)=>{ const now=performance.now(); const t=e.changedTouches&&e.changedTouches[0]; if(now-lastTap<320&&t) spawnHearts(t.clientX,t.clientY,20); lastTap=now; }, {passive:true});
+
+function loopFx(){
+  ctx2.clearRect(0,0,fx.width,fx.height);
+  for(let i=hearts.length-1;i>=0;i--){ const h=hearts[i]; h.x+=h.vx; h.y+=h.vy; h.vy-=0.02; h.life-=0.015;
+    ctx2.globalAlpha=Math.max(0,h.life); drawHeart(h.x,h.y,h.size); ctx2.globalAlpha=1; if(h.life<=0) hearts.splice(i,1);
+  }
+  requestAnimationFrame(loopFx);
+} loopFx();
+
+} catch(e) { showError('Erro ao carregar a galáxia: '+e.message); console.error(e); }
+})();
+</script>
+<style>#status{display:none!important}</style>
+
+<!-- ===== Navegação do Nosso Cantinho (adicionada automaticamente) ===== -->
+<div id="nc-nav-host"></div>
+<script>
+(function(){
+  var LISTA = [{"id": "bom-dia", "titulo": "Bom dia, meu bem", "emoji": "☀️", "cor": "#f6c66b"}, {"id": "boa-noite", "titulo": "Boa noite, meu bem", "emoji": "🌙", "cor": "#9f8cff"}, {"id": "tantos-mares", "titulo": "Tantos Mares", "emoji": "🌊", "cor": "#b79cff"}, {"id": "pra-voce", "titulo": "Pra você, meu bem", "emoji": "💌", "cor": "#ff8fb4"}, {"id": "constelacao", "titulo": "Galáxia do Nosso Amor", "emoji": "💫", "cor": "#8fb8ff"}, {"id": "galaxy-gallery", "titulo": "Galaxy Gallery", "emoji": "🪐", "cor": "#e7a6ff"}, {"id": "redacao", "titulo": "A redação que eu te devia", "emoji": "🐱", "cor": "#c9a8ef"}, {"id": "carta", "titulo": "Carta pra minha princesa", "emoji": "✉️", "cor": "#f3a6c8"}, {"id": "um-mes", "titulo": "O Fio do Niko", "emoji": "🧶", "cor": "#ff8fc4"}];
+  var ATUAL = "constelacao";
+  var INICIO = "index.html";
+  var i = LISTA.findIndex(function(s){ return s.id === ATUAL; });
+  var ant = LISTA[(i - 1 + LISTA.length) % LISTA.length];
+  var prox = LISTA[(i + 1) % LISTA.length];
+  var host = document.getElementById('nc-nav-host');
+  host.style.cssText = 'position:fixed;top:0;right:0;z-index:2147483000;';
+  ['click','pointerdown','pointerup','mousedown','touchstart','touchend','dblclick','wheel'].forEach(function(ev){
+    host.addEventListener(ev, function(e){ e.stopPropagation(); }, {passive:true});
+  });
+  var raiz = host.attachShadow({mode:'open'});
+  function esc(t){ return String(t).replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  var itens = LISTA.map(function(s, n){
+    return '<a class="item' + (s.id === ATUAL ? ' atual' : '') + '" href="' + s.id + '.html"' +
+      (s.id === ATUAL ? ' aria-current="page"' : '') + '>' +
+      '<span class="em" style="--c:' + s.cor + '">' + s.emoji + '</span>' +
+      '<span class="tx">' + esc(s.titulo) + '</span>' +
+      (s.id === ATUAL ? '<span class="aqui">aqui</span>' : '') + '</a>';
+  }).join('');
+  raiz.innerHTML =
+    '<style>' +
+    ':host{all:initial}' +
+    '*{box-sizing:border-box;margin:0}' +
+    '.btn{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));' +
+      'width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.28);cursor:pointer;' +
+      'background:rgba(22,14,40,.55);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);' +
+      'color:#fff;font:20px/1 system-ui,sans-serif;display:grid;place-items:center;' +
+      'box-shadow:0 4px 18px rgba(0,0,0,.28);transition:transform .2s ease,background .2s ease}' +
+    '.btn:hover{transform:scale(1.06);background:rgba(40,26,70,.7)}' +
+    '.btn:focus-visible,.item:focus-visible,.pn a:focus-visible,.home:focus-visible{outline:2px solid #ffd37a;outline-offset:2px}' +
+    '.painel{position:fixed;top:calc(64px + env(safe-area-inset-top,0px));right:calc(12px + env(safe-area-inset-right,0px));' +
+      'width:min(300px,calc(100vw - 24px));max-height:calc(100vh - 90px);overflow:auto;padding:14px;border-radius:18px;' +
+      'background:rgba(20,13,38,.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);' +
+      'border:1px solid rgba(255,255,255,.16);box-shadow:0 18px 50px rgba(0,0,0,.45);color:#f3ecff;' +
+      'font:15px/1.35 "Nunito",system-ui,-apple-system,"Segoe UI",sans-serif;' +
+      'transform-origin:top right;transition:opacity .2s ease,transform .2s ease}' +
+    '.painel[hidden]{display:block;opacity:0;transform:scale(.92);pointer-events:none;visibility:hidden}' +
+    '.cab{font:600 11px/1 system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#bfb0dd;padding:2px 6px 10px}' +
+    '.item{display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:12px;color:inherit;text-decoration:none}' +
+    '.item:hover{background:rgba(255,255,255,.08)}' +
+    '.item.atual{background:rgba(255,255,255,.1)}' +
+    '.em{width:30px;height:30px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:15px;' +
+      'background:color-mix(in srgb,var(--c) 28%,transparent);border:1px solid color-mix(in srgb,var(--c) 60%,transparent)}' +
+    '.tx{flex:1;min-width:0}' +
+    '.aqui{font-size:11px;color:#ffd37a}' +
+    '.pn{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}' +
+    '.pn a,.home{display:block;text-align:center;padding:9px 8px;border-radius:12px;color:#f3ecff;text-decoration:none;' +
+      'background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);font-size:13px}' +
+    '.pn a:hover,.home:hover{background:rgba(255,255,255,.14)}' +
+    '.home{margin-top:8px;background:rgba(255,211,122,.14);border-color:rgba(255,211,122,.4);color:#ffe3a6}' +
+    '@media (prefers-reduced-motion:reduce){.btn,.painel{transition:none}}' +
+    '</style>' +
+    '<button class="btn" type="button" aria-label="Abrir o menu das surpresas" aria-expanded="false">✦</button>' +
+    '<nav class="painel" hidden aria-label="Surpresas">' +
+      '<div class="cab">Nosso cantinho</div>' + itens +
+      '<div class="pn"><a href="' + ant.id + '.html">← Anterior</a><a href="' + prox.id + '.html">Próxima →</a></div>' +
+      '<a class="home" href="' + INICIO + '">Voltar ao início</a>' +
+    '</nav>';
+  var btn = raiz.querySelector('.btn'), painel = raiz.querySelector('.painel');
+  function abrir(sim){ painel.hidden = !sim; btn.setAttribute('aria-expanded', sim); btn.textContent = sim ? '✕' : '✦'; }
+  btn.addEventListener('click', function(){ abrir(painel.hidden); });
+  document.addEventListener('pointerdown', function(e){ if (!painel.hidden && !e.composedPath().includes(host)) abrir(false); }, true);
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape' && !painel.hidden) abrir(false); });
+})();
+</script>
+<!-- ===== fim da navegação ===== -->
+</body>
+</html>
