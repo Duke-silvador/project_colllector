@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+<title>뚝섬유원지 홈</title>
+<!-- 🏝 뚝섬.kr 주소만 치면(또는 카톡에 붙이면) '뚝섬유원지 홈' + 뚝섬 배너 그림으로 보이게. 포스터 링크(?type=…)는 예전처럼 포스터 뷰어 -->
+<meta name="description" content="대회 캘린더 · 포스터 · 참가 현황 · 입상 순위 · 게임 · 홀덤학습을 한곳에서">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="뚝섬유원지">
+<meta property="og:title" content="🏝 뚝섬유원지 홈">
+<meta property="og:description" content="대회 캘린더 · 포스터 · 참가 현황 · 입상 순위 · 게임 · 홀덤학습을 한곳에서">
+<meta property="og:image" content="https://xn--bc2b73r.kr/hub/banner.jpg">
+<meta property="og:url" content="https://xn--bc2b73r.kr/">
+<meta name="twitter:card" content="summary_large_image">
+<script>
+// 주소 뒤에 ?type= 이 없으면(= 뚝섬.kr 만 친 경우) 뚝섬유원지 홈으로 바로 이동
+(function(){try{if(!new URLSearchParams(location.search).get('type'))location.replace('hub/'+location.hash);}catch(e){}})();
+</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { background: #121212; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+         display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
+  .header { padding: 10px 44px; text-align: center; font-size: 14px; font-weight: 700; background: #1f1f1f; border-bottom: 1px solid #333;
+            letter-spacing: -0.5px; position: relative; flex: none; }
+  .rotbtn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: #333; color: #fff; border: 1px solid #555;
+            border-radius: 8px; font-size: 13px; padding: 4px 8px; cursor: pointer; }
+  .swiper { width: 100%; flex: 1; min-height: 0; }
+  .swiper-slide { display: flex; align-items: center; justify-content: center; background: #121212; overflow: hidden; }
+  .swiper-zoom-container { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+  .swiper-zoom-target { display: flex; align-items: center; justify-content: center; }
+  .swiper-zoom-target img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+  .swiper-zoom-target img.rot { transform: rotate(90deg); }
+  .swiper-pagination-fraction { color: #fff; font-size: 14px; bottom: 12px !important; font-weight: 600; text-shadow: 0 1px 4px rgba(0,0,0,.8); }
+  .hint { position: absolute; left: 0; right: 0; bottom: 36px; text-align: center; font-size: 12px; color: #bbb; pointer-events: none; z-index: 5;
+          text-shadow: 0 1px 3px #000; }
+</style>
+</head>
+<body>
+  <div class="header"><span id="page-title">포스터</span><button class="rotbtn" id="rotbtn" type="button">↻ 회전</button></div>
+  <div class="swiper">
+    <div class="swiper-wrapper" id="slide-container"></div>
+    <div class="swiper-pagination"></div>
+  </div>
+  <div class="hint" id="hint"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
+<script>
+// 💡 뷰어 목록 — 서버가 깃허브 폴더(대회일정·뚝섬제작·대회사·APL제휴)를 보고 자동으로 맞춰요. 파일명 끝 _PC / _MOBILE 로 기기별 이미지를 나눠요 (이 목록은 기본값)
+const LISTS = {"sched": {"title": "📅 대회일정", "names": []}, "contest": {"title": "🏆 자체제작 대회 포스터", "names": ["contest-00 4사비교", "contest-6TH HPT00", "contest-6TH HPT01", "contest-9th wpl", "contest-20261205-20261213 R1", "contest-APL01", "contest-APL02", "contest-apl프라이즈율", "contest-pmang", "contest-하"]}, "ofapl": {"title": "📋 공식 · APL", "names": ["ofapl-261223-261227 apl", "ofapl-261223-261227_APL Seoul", "ofapl-261223-261227_APL Winter Games Seoul"]}, "ofwpl": {"title": "📋 공식 · WPL", "names": ["ofwpl-261002-261213 9th wpl (1)", "ofwpl-261002-261213 9th wpl (2)", "ofwpl-261002-261213 9th wpl (3)", "ofwpl-261002-261213 9th wpl (4)", "ofwpl-261002-261213 9th wpl (5)", "ofwpl-261002-261213 9th wpl (6)", "ofwpl-261002-261213 9th wpl (7)", "ofwpl-261002-261213 9th wpl (8)", "ofwpl-261002-261213 9th wpl (9)"]}, "ofhg": {"title": "📋 공식 · 한게임", "names": ["ofhg-20261126-20261129 (1)", "ofhg-20261126-20261129 (2)", "ofhg-20261126-20261129 (3)", "ofhg-20261126-20261129 (4)", "ofhg-20261126-20261129 (5)", "ofhg-20261126-20261129 (6)", "ofhg-20261126-20261129 (7)"]}, "ofpm": {"title": "📋 공식 · 피망", "names": ["ofpm-60902-261223 showdown (1)", "ofpm-260902-261223 showdown (2)", "ofpm-260902-261223 showdown (3)", "ofpm-260902-261223 showdown (4)", "ofpm-260902-261223 showdown (5)"]}, "aplmatch": {"title": "📋 APL · 경기별", "names": []}, "aplshop": {"title": "🤝 APL · 제휴업체", "names": ["aplshop-apl01", "aplshop-apl02", "aplshop-apl03", "aplshop-apl04", "aplshop-apl05", "aplshop-apl06", "aplshop-apl07"]}, "intl": {"title": "🌏 해외 공식 포스터", "names": []}, "공식러너": {"title": "📋 공식 · 러너", "names": ["공식러너-20261205-20261213 R1 (1)", "공식러너-20261205-20261213 R1 (2)", "공식러너-20261205-20261213 R1 (3)", "공식러너-20261205-20261213 R1 (4)", "공식러너-20261205-20261213 R1 (5)", "공식러너-20261205-20261213 R1 (6)", "공식러너-20261205-20261213 R1 (7)"]}, "공식슈퍼컵": {"title": "📋 공식 · 슈퍼컵", "names": ["공식슈퍼컵-270110-270117_Super Cup Jeju", "공식슈퍼컵-270110-270117_Super Cup Jeju_2"]}, "공식파이널나인": {"title": "📋 공식 · 파이널나인", "names": ["공식파이널나인-261101-261130_Finalnine Tournament", "공식파이널나인-261101-261130_Finalnine Tournament_0", "공식파이널나인-261107_Finalnine Lucky Nine Suwon", "공식파이널나인-261115_Finalnine Masters Cup Seoul", "공식파이널나인-261122_Finalnine Champions Cup Suwon"]}, "공식헤즈업": {"title": "📋 공식 · 헤즈업", "names": ["공식헤즈업-261101-261129_HGP Winter Series", "공식헤즈업-261101-261129_HGP Winter Series_2"]}, "공식히든에이스": {"title": "📋 공식 · 히든에이스", "names": ["공식히든에이스-261115_IPS Festival Event", "공식히든에이스-261115_IPS Hidden Monthly Championship", "공식히든에이스-261122_IPS City Tour Gwangju", "공식히든에이스-261122_IPS City Tour Ulsan", "공식히든에이스-261129_IPS Main Event", "공식히든에이스-261130_IPS Only One"]}, "해외공식APT": {"title": "🌏 해외 공식 · APT", "names": ["해외공식APT-261102-261107_APTC Challenge Taipei", "해외공식APT-261102-261107_APTC Challenge Taipei_2", "해외공식APT-261113-261129_APT Championship Taipei", "해외공식APT-270122-270131_APT Jeju", "해외공식APT-270421-270503_APT Taipei"]}, "해외공식CTP": {"title": "🌏 해외 공식 · CTP", "names": ["해외공식CTP-270113-270201_TMT Taipei"]}, "해외공식Crown": {"title": "🌏 해외 공식 · Crown", "names": ["해외공식Crown-270408-270424_Aussie Millions Melbourne"]}, "해외공식GLPC": {"title": "🌏 해외 공식 · GLPC", "names": ["해외공식GLPC-261118-261129_GLPC Hanoi", "해외공식GLPC-261118-261129_GLPC Hanoi_3", "해외공식GLPC-261118-261129_GLPC Hanoi_banner"]}, "해외공식IrishOpen": {"title": "🌏 해외 공식 · IrishOpen", "names": ["해외공식IrishOpen-261110-261115_Irish Open Marrakech", "해외공식IrishOpen-270318-270329_Irish Open Dublin"]}, "해외공식JOPT": {"title": "🌏 해외 공식 · JOPT", "names": ["해외공식JOPT-261224-270103_JOPT Tokyo", "해외공식JOPT-270128-270131_JOPT Sapporo", "해외공식JOPT-270318-270322_JOPT Osaka", "해외공식JOPT-270527-270530_JOPT Fukuoka"]}, "해외공식Kings": {"title": "🌏 해외 공식 · Kings", "names": ["해외공식Kings-270101-270111_EPM Euro Poker Million Rozvadov"]}, "해외공식Merit": {"title": "🌏 해외 공식 · Merit", "names": ["해외공식Merit-270111-270122_Merit Western Series North Cyprus"]}, "해외공식Ola": {"title": "🌏 해외 공식 · Ola", "names": ["해외공식Ola-261216-261221_Ola Poker Tour Taipei"]}, "해외공식PGT": {"title": "🌏 해외 공식 · PGT", "names": ["해외공식PGT-270111-270112_PGT Championship Las Vegas"]}, "해외공식PokerStars": {"title": "🌏 해외 공식 · PokerStars", "names": ["해외공식PokerStars-261101-261108_PSO Aix-en-Provence_2", "해외공식PokerStars-261126-261207_Manila Megastack 25"]}, "해외공식QPC": {"title": "🌏 해외 공식 · QPC", "names": ["해외공식QPC-261212-261223_QPC Hanoi", "해외공식QPC-261212-261223_QPC Hanoi_2"]}, "해외공식RDPT": {"title": "🌏 해외 공식 · RDPT", "names": ["해외공식RDPT-261028-261111_JPF Jeju", "해외공식RDPT-261028-261111_JPF Jeju_2"]}, "해외공식TMTC": {"title": "🌏 해외 공식 · TMTC", "names": []}, "해외공식Triton": {"title": "🌏 해외 공식 · Triton", "names": ["해외공식Triton-261105-261115_Triton ONE North Cyprus_2", "해외공식Triton-261115-261130_Triton SHRS North Cyprus_2"]}, "해외공식Venetian": {"title": "🌏 해외 공식 · Venetian", "names": ["해외공식Venetian-261116-261223_Venetian DSE Las Vegas"]}, "해외공식WPT": {"title": "🌏 해외 공식 · WPT", "names": ["해외공식WPT-261028-261115_WPT Venetian Las Vegas", "해외공식WPT-261127-261221_WPT World Championship Las Vegas", "해외공식WPT-270102-270111_WPT Prime Taipei", "해외공식WPT-270112-270202_WPT Phnom Penh", "해외공식WPT-270112-270202_WPT Phnom Penh_2", "해외공식WPT-270112-270202_WPT Phnom Penh_3"]}, "해외공식WPT서울": {"title": "🌏 해외 공식 · WPT서울", "names": ["해외공식WPT서울-261030-261109_WPT Seoul"]}, "해외공식WSOP": {"title": "🌏 해외 공식 · WSOP", "names": ["해외공식WSOP-261028-261109_WSOPC Durant", "해외공식WSOP-261028-261111_WSOP Super Circuit Rozvadov", "해외공식WSOP-261029-261109_WSOPC Toledo", "해외공식WSOP-261102-261117_WSOPC Playground", "해외공식WSOP-261105-261116_WSOPC Elgin", "해외공식WSOP-261106-261115_WSOPC Middelkerke", "해외공식WSOP-261106-261115_WSOPC Middelkerke_2", "해외공식WSOP-261106-261116_WSOPC Nottingham", "해외공식WSOP-261106-261116_WSOPC Nottingham_2", "해외공식WSOP-261120-261130_WSOPC Sanremo", "해외공식WSOP-261120-261130_WSOPC Sanremo_2", "해외공식WSOP-261202-261217_WSOP Paradise", "해외공식WSOP-270124-270202_WSOP Super Circuit Punta Cana"]}, "해외공식인피니티": {"title": "🌏 해외 공식 · 인피니티", "names": ["해외공식인피니티-270305-270314_Infinity Incheon", "해외공식인피니티-270305-270314_Infinity Incheon_2"]}, "해외공식TMTC·일자별일정": {"title": "🌏 해외 공식 · TMTC·일자별일정", "names": []}, "해외공식TMTC·전체일정": {"title": "🌏 해외 공식 · TMTC·전체일정", "names": []}};
+const VER = "11041646";
+const FOLDERS = ["대회일정", "뚝섬제작", "공식APL", "공식WPL", "공식한게임", "공식피망", "APL제휴매장", "해외공식"];     // 사본이 없을 때 원본을 찾아볼 폴더
+const EXTS = ['.jpg', '.JPG', '.png', '.PNG', '.jpeg', '.webp'];
+const isPC = () => matchMedia('(min-width:760px)').matches;
+
+const params = new URLSearchParams(location.search);
+const ALIAS = { official: 'ofapl', apl: 'aplshop' };   // 예전 링크(?type=official / ?type=apl)가 깨지지 않게
+const rawType = ALIAS[params.get('type')] || params.get('type');
+const type = LISTS[rawType] ? rawType : 'contest';
+document.getElementById('page-title').textContent = LISTS[type].title;
+document.title = LISTS[type].title;
+const container = document.getElementById('slide-container');
+
+// 가로 포스터 자동 회전 (세로로 든 휴대폰에서만) · 버튼으로 켜고 끄기
+let autoRot = true;
+try { autoRot = localStorage.getItem('rot') !== 'off'; } catch (e) {}
+const portrait = () => innerHeight > innerWidth;
+const btn = document.getElementById('rotbtn');
+const imgs = [];
+let sw = null;
+
+function fit(img) {
+  const wide = img.naturalWidth > img.naturalHeight * 1.1;
+  const box = img.closest('.swiper-slide');
+  const W = box.clientWidth, H = box.clientHeight - 30;     // 아래 번호 표시 자리
+  const rot = autoRot && wide && portrait();
+  img.classList.toggle('rot', rot);
+  if (rot) { img.style.maxWidth = H + 'px'; img.style.maxHeight = W + 'px'; }
+  else { img.style.maxWidth = W + 'px'; img.style.maxHeight = H + 'px'; }
+}
+function fitAll() { imgs.forEach(i => i.complete && i.naturalWidth && fit(i)); updateHint(); }
+function updateHint() {
+  btn.textContent = autoRot ? '↻ 회전 끄기' : '↻ 회전 켜기';
+  const any = imgs.some(i => i.classList.contains('rot'));
+  document.getElementById('hint').textContent = any && sw && imgs[sw.activeIndex] && imgs[sw.activeIndex].classList.contains('rot')
+    ? '가로 포스터예요 · 폰을 옆으로 눕혀서 보세요' : '';
+}
+btn.onclick = () => { autoRot = !autoRot; try { localStorage.setItem('rot', autoRot ? 'on' : 'off'); } catch (e) {} fitAll(); };
+
+LISTS[type].names.forEach((name, idx) => {
+  const slide = document.createElement('div'); slide.className = 'swiper-slide';
+  const zc = document.createElement('div'); zc.className = 'swiper-zoom-container';
+  const tg = document.createElement('div'); tg.className = 'swiper-zoom-target';
+  const img = document.createElement('img'); img.alt = '포스터 ' + (idx + 1);
+  if (idx > 1) img.loading = 'lazy';
+  // PC(화면 760px 이상)는 pc/ → m/, 모바일은 m/ → pc/ 순으로 찾고, 둘 다 없으면 폴더의 원본
+  const enc = encodeURIComponent(name);
+  const mob = 'm/' + enc + '.jpg?v=' + VER, pcv = 'pc/' + enc + '.jpg?v=' + VER;
+  const tries = isPC() ? [pcv, mob] : [mob, pcv];
+  FOLDERS.forEach(f => EXTS.forEach(e => tries.push(encodeURIComponent(f) + '/' + enc + e)));
+  let step = 0;
+  img.src = tries[0];
+  img.onerror = function () { step++; if (step < tries.length) this.src = tries[step]; else this.onerror = null; };
+  img.onload = function () { fit(this); updateHint(); };
+  imgs.push(img);
+  tg.appendChild(img); zc.appendChild(tg); slide.appendChild(zc); container.appendChild(slide);
+});
+
+sw = new Swiper('.swiper', {
+  loop: false,
+  zoom: { maxRatio: 4, minRatio: 1, toggle: true },
+  pagination: { el: '.swiper-pagination', type: 'fraction' },
+  on: { slideChange: updateHint }
+});
+addEventListener('resize', () => setTimeout(fitAll, 150));
+addEventListener('orientationchange', () => setTimeout(fitAll, 300));
+</script>
+</body>
+</html>
