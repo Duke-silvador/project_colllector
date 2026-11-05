@@ -1,0 +1,728 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="Ferramentas de obra sobre o modelo IFC: mapa de risco, mapa de concretagem e outras.">
+<title>Ferramentas da Obra</title>
+<link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icone-apple.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Obra"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2322425c'/%3E%3Ccircle cx='10' cy='11' r='4' fill='%235cb531'/%3E%3Ccircle cx='22' cy='11' r='4' fill='%23e3141b'/%3E%3Ccircle cx='16' cy='21' r='5' fill='%231736e0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@400;600;700&family=Source+Sans+3:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --navy:#22425c; --petrol:#074669; --brand-ink:#ffffff; --brand-soft:#9fc3d6;
+  --bg:#eef2f5; --panel:#ffffff; --ink:#14222e; --muted:#5a6b78; --line:#d3dce3; --line-2:#e4eaef;
+  --accent:#074669; --accent-ink:#ffffff; --accent-soft:#dcebf2;
+  --ok:#23804a; --ok-soft:#dcf0e3; --bad:#c23b2f; --bad-soft:#f8e0dc; --warn:#b86e00; --warn-soft:#fbecd2;
+  --f-disp:"Titillium Web","Segoe UI",Arial,sans-serif; --f-body:"Source Sans 3","Segoe UI",Arial,sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+  --r:10px; color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0d1720; --panel:#14212c; --ink:#e3eaf0; --muted:#93a5b3; --line:#27394a; --line-2:#1d2d3a;
+  --accent:#62aed3; --accent-ink:#06202e; --accent-soft:#163445;
+  --ok:#53c07f; --ok-soft:#163a26; --bad:#f07a6c; --bad-soft:#41201c; --warn:#f0a93a; --warn-soft:#3d2c10; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d1720; --panel:#14212c; --ink:#e3eaf0; --muted:#93a5b3; --line:#27394a; --line-2:#1d2d3a;
+  --accent:#62aed3; --accent-ink:#06202e; --accent-soft:#163445;
+  --ok:#53c07f; --ok-soft:#163a26; --bad:#f07a6c; --bad-soft:#41201c; --warn:#f0a93a; --warn-soft:#3d2c10; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{min-height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px var(--f-body);-webkit-tap-highlight-color:transparent}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* faixa da marca */
+.brand{background:var(--navy);color:var(--brand-ink);position:relative;overflow:hidden}
+.brand::after{content:"";position:absolute;right:-40px;top:0;bottom:0;width:min(46%,560px);background:var(--petrol);clip-path:polygon(64px 0,100% 0,100% 100%,0 100%);z-index:0}
+.brand-in{position:relative;z-index:1;display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;max-width:1180px;margin:0 auto;padding:12px 16px}
+.logo{display:block;color:inherit;text-decoration:none}
+.logo svg{height:34px;width:auto;display:block}
+.ttl{display:grid;border-left:1px solid rgba(255,255,255,.25);padding-left:18px;min-width:0}
+.ttl .kick{font:600 .68rem var(--f-disp);letter-spacing:.14em;text-transform:uppercase;color:var(--brand-soft)}
+.ttl h1{font:700 1.45rem/1.1 var(--f-disp);margin:0}
+.hctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-left:auto}
+.hbtn{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:6px;padding:6px 11px;font:600 .82rem var(--f-body);display:inline-flex;gap:6px;align-items:center;white-space:nowrap;text-decoration:none}
+.hbtn:hover{background:rgba(255,255,255,.2)}
+.modechip{font:500 .7rem var(--f-mono);color:#d4e4ee;border:1px dashed rgba(255,255,255,.35);border-radius:12px;padding:2px 8px;white-space:nowrap}
+
+/* conteúdo */
+main{max-width:1180px;margin:0 auto;padding:22px 16px 48px;display:grid;gap:18px}
+.crumbs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:.88rem;color:var(--muted)}
+.crumbs a{font-weight:600;text-decoration:none}
+.crumbs a:hover{text-decoration:underline}
+.head{display:flex;flex-wrap:wrap;gap:12px;align-items:end;justify-content:space-between}
+.head h2{margin:0;font:700 1.6rem/1.15 var(--f-disp)}
+.head p{margin:4px 0 0;color:var(--muted);max-width:62ch}
+.tools{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.tool{display:grid;grid-template-rows:auto 1fr auto;gap:10px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px;text-align:left;color:inherit;text-decoration:none;min-height:190px;position:relative}
+a.tool:hover{border-color:var(--accent);box-shadow:0 6px 20px rgba(10,30,45,.08)}
+.tool .ic{width:46px;height:46px;border-radius:10px;display:grid;place-items:center;background:var(--accent-soft)}
+.tool .ic svg{width:30px;height:30px}
+.tool h3{margin:0;font:700 1.2rem var(--f-disp)}
+.tool p{margin:4px 0 0;color:var(--muted);font-size:.9rem;line-height:1.4}
+.tool .go{font:600 .86rem var(--f-body);color:var(--accent)}
+.tool.off{opacity:.62}
+.tag{position:absolute;top:14px;right:14px;font:600 .68rem var(--f-body);padding:2px 8px;border-radius:10px;background:var(--warn-soft);color:var(--warn)}
+
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.search{flex:1 1 220px;max-width:360px;background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:8px 11px}
+.btn{background:var(--accent);color:var(--accent-ink);border:1px solid var(--accent);border-radius:7px;padding:8px 14px;font:600 .9rem var(--f-body);white-space:nowrap}
+.btn.ghost{background:none;color:var(--accent)}
+.btn.sm{padding:4px 10px;font-size:.8rem}
+.btn.danger{background:none;color:var(--bad);border-color:var(--bad)}
+.btn:disabled{opacity:.5;cursor:default}
+.obras{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.obra{display:grid;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:0 16px 14px;overflow:hidden}
+.obra .ft{display:block;margin:0 -16px 4px;aspect-ratio:16/7;background:linear-gradient(135deg,var(--navy),var(--petrol));position:relative;overflow:hidden;text-decoration:none}
+.obra .ft img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.obra .ft span{position:absolute;left:16px;bottom:10px;font:700 1.9rem/1 var(--f-disp);color:rgba(255,255,255,.85);letter-spacing:.04em}
+.ft-prev{position:relative;aspect-ratio:16/7;border-radius:8px;overflow:hidden;background:linear-gradient(135deg,var(--navy),var(--petrol))}
+.ft-prev img{position:absolute;inset:0;width:100%;height:100%}
+.ft-prev span{position:absolute;left:16px;bottom:10px;font:700 1.9rem/1 var(--f-disp);color:rgba(255,255,255,.85)}
+.seg2{display:flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:7px;overflow:hidden;width:max-content;max-width:100%}
+.seg2 button{background:var(--bg);border:0;padding:7px 12px;font:600 .86rem var(--f-body);color:var(--muted)}
+.seg2 button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.aj{display:grid;gap:6px}
+.aj label{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:center;font-size:.86rem;color:var(--muted)}
+.aj input{accent-color:var(--accent);width:100%}
+@media (max-width:640px){.aj label{grid-template-columns:1fr}}
+.eq{display:grid;gap:8px}
+.eq-l{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;padding:8px 10px;border:1px solid var(--line-2);border-radius:8px}
+.eq-l input{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 9px;width:100%;min-width:0}
+.eq-l small{grid-column:1/-1;color:var(--muted);font-size:.78rem;overflow-wrap:anywhere}
+.sheet.larga{width:min(820px,100%)}
+.adm{display:grid;gap:8px}
+.adm-l{display:grid;grid-template-columns:minmax(0,1fr) 190px;gap:4px 12px;align-items:center;padding:9px 11px;border:1px solid var(--line-2);border-radius:8px}
+.adm-l.pend{border-color:var(--warn);background:var(--warn-soft)}
+.adm-l .nm2{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;min-width:0}
+.adm-l .nm2 input{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 8px;min-width:0;flex:1 1 160px;font-weight:600}
+.adm-l select{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 8px;width:100%}
+.adm-l small{grid-column:1/-1;color:var(--muted);font-size:.78rem;overflow-wrap:anywhere}
+.adm-add{display:grid;grid-template-columns:minmax(0,1fr) 190px auto;gap:8px;align-items:end}
+.adm-add input,.adm-add select{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:8px 9px;width:100%;min-width:0}
+.adm-l .cg{grid-column:1/-1;display:grid;gap:6px;border-top:1px dashed var(--line);padding-top:7px}
+.adm-l .cg label{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font:600 .74rem var(--f-disp);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.adm-l .cg label select{width:auto;min-width:170px;text-transform:none;letter-spacing:0;font:500 .9rem var(--f-body);color:var(--ink)}
+.dsc{display:flex;flex-wrap:wrap;gap:5px}
+.dsc button{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:4px 10px;font:600 .8rem var(--f-body);color:var(--muted)}
+.dsc button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.dsc button:disabled{opacity:.4;cursor:default}
+.hbtn .cnt{background:#f0a93a;color:#22425c;border-radius:9px;padding:0 6px;font-size:.72rem;font-weight:700}
+@media (max-width:640px){.adm-l,.adm-add{grid-template-columns:1fr}}
+.obra:hover{border-color:var(--accent)}
+.obra a.nm{font:700 1.15rem/1.2 var(--f-disp);color:var(--ink);text-decoration:none;overflow-wrap:anywhere}
+.obra a.nm::after{content:" →";color:var(--accent)}
+.obra a.nm:hover{color:var(--accent)}
+.obra .rs{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.obra .rs li{display:grid;grid-template-columns:20px auto 1fr;gap:6px;align-items:center;font-size:.84rem;min-width:0}
+.obra .rs li a{font-weight:600;color:var(--ink);text-decoration:none;white-space:nowrap}
+.obra .rs li a:hover{color:var(--accent);text-decoration:underline}
+.obra .rs li>span:last-child{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.ic2{width:20px;height:20px;display:grid;place-items:center}.ic2 svg{width:18px;height:18px}
+.ruim{color:var(--bad)}
+.tool .rs1{margin:4px 0 0;font:600 .9rem var(--f-body);color:var(--ink)}
+.hero{display:grid;grid-template-columns:minmax(180px,320px) 1fr;gap:16px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px}
+.hero .hft{aspect-ratio:16/7;border-radius:8px;overflow:hidden;position:relative;background:linear-gradient(135deg,var(--navy),var(--petrol))}
+.hero .hft img{position:absolute;inset:0;width:100%;height:100%}
+.hero .hft span{position:absolute;left:14px;bottom:8px;font:700 1.8rem/1 var(--f-disp);color:rgba(255,255,255,.85)}
+.hero .hinfo{display:grid;gap:6px;min-width:0}
+.hero h2{margin:0;font:700 1.6rem/1.15 var(--f-disp)}
+.hero .acts{display:flex;flex-wrap:wrap;gap:6px}
+@media (max-width:640px){.hero{grid-template-columns:1fr}}
+.obra dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0;font-size:.84rem}
+.obra dt{color:var(--muted)} .obra dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.obra .acts{display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--line-2);padding-top:8px}
+.pill{font:600 .7rem var(--f-body);padding:1px 7px;border-radius:10px}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)}
+.vazio{background:var(--panel);border:1px dashed var(--line);border-radius:var(--r);padding:28px 20px;text-align:center;display:grid;gap:10px;justify-items:center}
+.vazio h3{margin:0;font:700 1.2rem var(--f-disp)}
+.vazio p{margin:0;color:var(--muted);max-width:52ch}
+.muted{color:var(--muted);font-size:.88rem}
+.aviso{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:10px 12px;font-size:.9rem}
+
+/* janelas */
+.overlay{position:fixed;inset:0;background:rgba(6,20,30,.5);display:grid;place-items:center;padding:16px;z-index:20}
+.sheet{background:var(--panel);border:1px solid var(--line);border-radius:10px;width:min(560px,100%);max-height:calc(100dvh - 32px);display:grid;grid-template-rows:auto 1fr auto;box-shadow:0 18px 50px rgba(0,0,0,.3)}
+.sheet>header{padding:12px 16px;border-bottom:1px solid var(--line)}
+.sheet>header h3{margin:0;font:700 1.25rem var(--f-disp)}
+.sheet .body{overflow:auto;padding:14px 16px;display:grid;gap:12px}
+.sheet>footer{padding:10px 16px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:flex-end}
+.fld{display:grid;gap:4px}
+.fld label{font:600 .7rem var(--f-disp);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.fld input{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:9px 10px;width:100%}
+.msg{font-size:.84rem;margin-right:auto}.msg.err{color:var(--bad)}.msg.ok{color:var(--ok)}
+.prog{height:6px;background:var(--line);border-radius:3px;overflow:hidden}.prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--panel);padding:9px 15px;border-radius:8px;font-size:.88rem;z-index:30;max-width:calc(100% - 32px)}
+@media (max-width:640px){
+  .brand::after{display:none}
+  .ttl{border-left:0;padding-left:0}
+  .hctl{margin-left:0;width:100%}
+  .head h2{font-size:1.35rem}
+}
+</style>
+</head>
+<body>
+<header class="brand"><div class="brand-in">
+  <a class="logo" href="index.html" aria-label="Início"><svg viewBox="0 0 40 40" aria-hidden="true">
+    <rect x="1" y="1" width="38" height="38" rx="8" fill="none" stroke="currentColor" stroke-opacity=".35"/>
+    <!-- prédio em construção: pavimentos empilhados + grua -->
+    <rect x="7" y="25.5" width="17" height="6.5" rx="1" fill="#9fc3d6"/>
+    <rect x="7" y="18.5" width="17" height="5.5" rx="1" fill="#9fc3d6" fill-opacity=".75"/>
+    <rect x="7" y="11.5" width="17" height="5.5" rx="1" fill="none" stroke="#9fc3d6" stroke-width="1.3" stroke-dasharray="2.2 1.6"/>
+    <path d="M29 33V7.5M18.5 7.5H35M29 7.5l-4.5 4" stroke="#f0a93a" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <path d="M33 7.5v5" stroke="#f0a93a" stroke-width="1.3"/>
+    <rect x="31.6" y="12.4" width="2.8" height="2.6" rx=".5" fill="#f0a93a"/>
+  </svg></a>
+  <div class="ttl"><span class="kick">Engenharia e segurança</span><h1>Ferramentas da Obra</h1></div>
+  <div class="hctl"><span class="modechip" id="modeChip" hidden>Carregando…</span></div>
+</div></header>
+
+<main id="main" aria-live="polite"></main>
+
+<div class="overlay" id="ovl" hidden><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ovlT"><header><h3 id="ovlT"></h3></header><div class="body" id="ovlB"></div><footer id="ovlF"></footer></div></div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.js"></script>
+<script src="app.js"></script>
+<script src="config.js"></script>
+<script src="nuvem.js"></script>
+<script src="carga-start.js"></script>
+<script>
+(function () {
+'use strict';
+/* Ferramentas disponíveis. Para incluir uma nova: crie a página (ex.: concretagem.html,
+   com window.NUVEM_FERRAMENTA='concretagem') e preencha "pagina" aqui. */
+const FERRAMENTAS = [
+  { id: 'risco', nome: 'Mapa de Risco', pagina: 'risco.html',
+    desc: 'Áreas de risco por grupo e intensidade (NR-5), símbolos de sinalização, revisões e pranchas em PDF sobre o modelo da obra.',
+    icone: '<svg viewBox="0 0 30 30"><circle cx="9" cy="10" r="5" fill="#5cb531"/><circle cx="21" cy="10" r="5" fill="#e3141b"/><circle cx="15" cy="21" r="6.5" fill="#1736e0"/></svg>' },
+  { id: 'concretagem', nome: 'Mapa de Concretagem', pagina: 'concretagem.html',
+    desc: 'Concretagens por pavimento e por caminhão, áreas e pilares concretados, corpos de prova e pendências de rompimento, sobre o mesmo modelo IFC da obra.',
+    icone: '<svg viewBox="0 0 30 30"><rect x="3" y="18" width="24" height="7" rx="1.5" fill="#8d979f"/><rect x="6" y="10" width="18" height="6" rx="1.5" fill="#b9c5ce"/><rect x="9" y="3" width="12" height="5" rx="1.5" fill="#d9701c"/></svg>' },
+  { id: 'pendencias', nome: 'Pendências de obra', pagina: 'pendencias.html', soOnline: true,
+    desc: 'Registro de pendências e retrabalhos com fotos, responsável pela correção, prazos, bloqueios de frentes, histórico e relatórios em PDF. Funciona sem sinal.',
+    icone: '<svg viewBox="0 0 40 40"><rect x="9" y="7" width="22" height="27" rx="3" fill="#9fc3d6"/><rect x="15" y="5" width="10" height="5" rx="1.5" fill="#22425c"/><path d="M14 18l3 3 6-6" stroke="#23804a" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 27h12" stroke="#d9701c" stroke-width="2.6" stroke-linecap="round"/></svg>' }
+];
+// encarregados usam só o painel de pendências
+const ferramentasVisiveis = () => FERRAMENTAS.filter(f => !(NV && NV.cargo === 'encarregado' && f.id !== 'pendencias') && !(f.soOnline && !NV));
+const MAX_UP = 50 * 1024 * 1024;
+
+const $ = id => document.getElementById(id);
+const esc = t => String(t ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function toast(t, ms) { const el = $('toast'); el.textContent = t; el.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => el.hidden = true, ms || 4000); }
+const fmtDH = s => { if (!s) return '—'; const d = new Date(s); if (isNaN(d)) return '—';
+  return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }); };
+const fmtMB = b => b ? (b / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' MB' : '';
+const quem = e => !e ? 'alguém' : (NV && NV.pessoas ? NV.pessoas.nome(e) : String(e).split('@')[0]);
+const iniciais = n => String(n || '').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0].toUpperCase()).join('');
+
+function openSheet(t, body, foot) { $('ovl').querySelector('.sheet').classList.remove('larga'); $('ovlT').textContent = t; $('ovlB').innerHTML = body; $('ovlF').innerHTML = foot; $('ovl').hidden = false;
+  const f = $('ovlB').querySelector('input'); if (f) setTimeout(() => f.focus(), 30); }
+function closeSheet() { $('ovl').hidden = true; $('ovlB').innerHTML = ''; $('ovlF').innerHTML = ''; }
+$('ovl').addEventListener('click', ev => { if (ev.target === $('ovl') && !$('ovl').dataset.ocupado) closeSheet(); });
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && !$('ovl').hidden && !$('ovl').dataset.ocupado) closeSheet(); });
+
+let NV = null, lista = [], filtro = '';
+const ferr = () => ferramentasVisiveis().find(f => f.id === new URLSearchParams(location.search).get('ferramenta')) || null;
+const podeEditar = () => NV && NV.papel === 'editor';
+
+/* ---------------- navegação: obra primeiro, depois a ferramenta ---------------- */
+const obraUrl = id => 'index.html?obra=' + encodeURIComponent(id);
+const ferramentasComPagina = () => ferramentasVisiveis().filter(f => f.pagina);
+// quem só tem uma ferramenta (encarregado) vai direto para ela
+const destinoObra = id => { const fs = ferramentasComPagina(); return fs.length === 1 ? fs[0].pagina + '?obra=' + encodeURIComponent(id) : obraUrl(id); };
+const obraAtual = () => new URLSearchParams(location.search).get('obra');
+function redesenhar() { if (obraAtual()) telaObra(obraAtual()); else desenharLista(); }
+
+/* ---------------- resumo de cada obra (pendências, concretagens, mapa de risco) ---------------- */
+let RESUMO = {};
+const hojeIso = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const fmtD = s => { if (!s) return ''; const [y, m, d] = String(s).slice(0, 10).split('-'); return d + '/' + m + '/' + y; };
+async function carregarResumo() {
+  const R = {}; const g = id => R[id] || (R[id] = {});
+  const sb = NV.cliente; const hoje = hojeIso();
+  try {
+    const { data, error } = await sb.from('pendencias').select('obra,status,prazo');
+    if (!error) for (const p of data || []) { const r = g(p.obra); r.pend = r.pend || { abertas: 0, corrigidas: 0, fechadas: 0, venc: 0 };
+      if (p.status === 'aberta' || p.status === 'em_correcao') { r.pend.abertas++; if (p.prazo && p.prazo < hoje) r.pend.venc++; }
+      else if (p.status === 'corrigida') r.pend.corrigidas++; else r.pend.fechadas++; }
+  } catch (e) {}
+  if (NV.cargo !== 'encarregado') try {
+    const { data, error } = await sb.from('registros').select('painel,colecao,id,data:dados->>data,rev:dados->>rev').in('colecao', ['concretagens', 'revisoes', 'areas']);
+    if (!error) for (const x of data || []) { const [fe, ob] = String(x.painel).split(':'); if (!ob) continue; const r = g(ob);
+      if (fe === 'concretagem' && x.colecao === 'concretagens') { r.conc = r.conc || { n: 0, ultima: '' }; r.conc.n++; if (x.data && x.data > r.conc.ultima) r.conc.ultima = x.data; }
+      if (fe === 'risco' && x.colecao === 'areas') { r.risco = r.risco || { areas: 0 }; r.risco.areas++; }
+      if (fe === 'risco' && x.colecao === 'revisoes') { r.risco = r.risco || { areas: 0 }; if (!r.risco.revData || (x.data || '') > r.risco.revData) { r.risco.revData = x.data || ''; r.risco.rev = x.rev; } } }
+  } catch (e) {}
+  RESUMO = R;
+}
+// uma linha de resumo por ferramenta
+function resumoDe(id, fid) {
+  const r = RESUMO[id] || {};
+  if (fid === 'pendencias') { const p = r.pend; if (!p) return 'Nenhuma pendência';
+    return [p.abertas ? p.abertas + ' aberta' + (p.abertas > 1 ? 's' : '') : 'Nenhuma aberta', p.venc ? `<b class="ruim">${p.venc} vencida${p.venc > 1 ? 's' : ''}</b>` : '', p.corrigidas ? p.corrigidas + ' para aprovar' : ''].filter(Boolean).join(' · '); }
+  if (fid === 'concretagem') { const c = r.conc; return c ? c.n + ' concretage' + (c.n > 1 ? 'ns' : 'm') + (c.ultima ? ' · última em ' + fmtD(c.ultima) : '') : 'Nenhuma concretagem'; }
+  if (fid === 'risco') { const k = r.risco; return k ? k.areas + ' área' + (k.areas === 1 ? '' : 's') + (k.rev ? ' · R' + esc(k.rev) + (k.revData ? ' de ' + fmtD(k.revData) : '') : ' · sem revisão') : 'Nenhuma área'; }
+  return '';
+}
+const fotoHtml = o => o.foto && o.foto.asset ? `<img alt="" data-foto="${esc(o.foto.asset)}" style="${fotoEstilo(o.foto)}" hidden>` : `<span>${esc(iniciais(o.nome))}</span>`;
+const pintarFotos = box => box.querySelectorAll('img[data-foto]').forEach(img => NV.blobUrl(img.dataset.foto).then(u => { img.src = u; img.hidden = false; }).catch(() => {}));
+const acoesObra = o => podeEditar() ? `<div class="acts"><button class="btn sm ghost" data-ren="${esc(o.id)}">Renomear</button><button class="btn sm ghost" data-fot="${esc(o.id)}">Foto</button><button class="btn sm ghost" data-mod="${esc(o.id)}">${o.modelo && o.modelo.asset ? 'Trocar modelo' : 'Enviar modelo'}</button><button class="btn sm danger" data-del="${esc(o.id)}">Excluir</button></div>` : '';
+function ligarAcoes(box) {
+  const porId = id => lista.find(o => o.id === id);
+  box.querySelectorAll('[data-fot]').forEach(b => b.onclick = () => formFoto(null, porId(b.dataset.fot)));
+  box.querySelectorAll('[data-ren]').forEach(b => b.onclick = () => formRenomear(null, porId(b.dataset.ren)));
+  box.querySelectorAll('[data-mod]').forEach(b => b.onclick = () => formModelo(null, porId(b.dataset.mod)));
+  box.querySelectorAll('[data-del]').forEach(b => b.onclick = () => formExcluir(null, porId(b.dataset.del)));
+}
+
+/* ---------------- sem banco online: só as ferramentas (dados no navegador) ---------------- */
+function telaFerramentas() {
+  document.title = 'Ferramentas da Obra';
+  $('main').innerHTML = `<div class="head"><div><h2>Escolha a ferramenta</h2><p>Sem conexão com o banco online.</p></div></div>
+    <div class="aviso">Modo local: os dados ficam só neste navegador e não há cadastro de obras.</div>
+    <div class="tools">${ferramentasComPagina().map(f => `<a class="tool" href="${f.pagina}"><span class="ic">${f.icone}</span><div><h3>${esc(f.nome)}</h3><p>${esc(f.desc)}</p></div><span class="go">Abrir →</span></a>`).join('')}</div>`;
+}
+
+/* ---------------- tela 1: as obras ---------------- */
+async function telaObras() {
+  document.title = 'Ferramentas da Obra';
+  $('main').innerHTML = `<div class="head"><div><h2>Obras</h2><p>Escolha a obra para abrir as ferramentas${ferramentasComPagina().length > 1 ? ': ' + ferramentasComPagina().map(f => f.nome.toLowerCase()).join(', ') : ''}.</p></div></div>
+    <div class="bar"><input class="search" id="busca" type="search" placeholder="Buscar obra…" aria-label="Buscar obra" value="${esc(filtro)}">
+      ${podeEditar() ? '<button class="btn" id="bNova">+ Nova obra</button>' : ''}</div>
+    <div id="lista"><p class="muted">Carregando obras…</p></div>`;
+  $('busca').oninput = ev => { filtro = ev.target.value; desenharLista(); };
+  if ($('bNova')) $('bNova').onclick = () => formNova(null);
+  await Promise.all([carregar(), carregarResumo()]);
+  desenharLista();
+  cargaStart(null);
+}
+async function carregar() {
+  try { lista = await NV.obras.listar(); }
+  catch (e) { console.error(e); lista = null; }
+}
+function desenharLista() {
+  const box = $('lista'); if (!box) return;
+  if (lista == null) { box.innerHTML = `<div class="vazio"><h3>Não foi possível carregar as obras</h3><p>Confira a conexão e recarregue a página.</p><button class="btn" onclick="location.reload()">Recarregar</button></div>`; return; }
+  if (!lista.length) { box.innerHTML = `<div class="vazio"><h3>Nenhuma obra cadastrada</h3><p>Cadastre a primeira obra com o nome e o modelo IFC. Depois ela aparece aqui para toda a equipe.</p>${podeEditar() ? '<button class="btn" id="bNova2">+ Nova obra</button>' : '<p class="muted">Peça a um editor para cadastrar a obra.</p>'}</div>`;
+    if ($('bNova2')) $('bNova2').onclick = () => formNova(null); return; }
+  const q = filtro.trim().toLowerCase();
+  const vis = lista.filter(o => !q || (o.nome + ' ' + o.id).toLowerCase().includes(q));
+  if (!vis.length) { box.innerHTML = '<p class="muted">Nenhuma obra encontrada com essa busca.</p>'; return; }
+  const fs = ferramentasComPagina();
+  box.innerHTML = '<div class="obras">' + vis.map(o => `<article class="obra">
+      <a class="ft" href="${destinoObra(o.id)}" tabindex="-1" aria-hidden="true">${fotoHtml(o)}</a>
+      <a class="nm" href="${destinoObra(o.id)}">${esc(o.nome)}</a>
+      <ul class="rs">${fs.map(f => `<li><span class="ic2">${f.icone}</span><a href="${f.pagina}?obra=${encodeURIComponent(o.id)}" title="Abrir ${esc(f.nome)}">${esc(f.nome)}</a><span>${resumoDe(o.id, f.id)}</span></li>`).join('')}</ul>
+      <dl><dt>Modelo IFC</dt><dd>${o.modelo && o.modelo.asset ? esc(o.modelo.nome) + (o.modelo.bytes ? ' <span class="muted">(' + fmtMB(o.modelo.bytes) + ')</span>' : '') : '<span class="pill warn">sem modelo</span>'}</dd></dl>
+      ${acoesObra(o)}
+    </article>`).join('') + '</div>';
+  pintarFotos(box); ligarAcoes(box);
+}
+
+/* ---------------- tela 2: a obra e as suas ferramentas ---------------- */
+async function telaObra(id) {
+  if (!lista.length) await carregar();
+  const o = (lista || []).find(x => x.id === id);
+  if (!o) { $('main').innerHTML = `<div class="vazio"><h3>Obra não encontrada</h3><p>Esta obra não existe ou foi excluída.</p><a class="btn" href="index.html" style="text-decoration:none">Ver as obras</a></div>`; return; }
+  const fs = ferramentasComPagina();
+  if (fs.length === 1) { location.replace(fs[0].pagina + '?obra=' + encodeURIComponent(id)); return; }
+  document.title = o.nome + ' · Ferramentas da Obra';
+  $('main').innerHTML = `<nav class="crumbs" aria-label="Caminho"><a href="index.html">Obras</a><span>›</span><span>${esc(o.nome)}</span></nav>
+    <section class="hero"><div class="hft">${fotoHtml(o)}</div><div class="hinfo"><h2>${esc(o.nome)}</h2>
+      <p class="muted" style="margin:0">Modelo IFC: ${o.modelo && o.modelo.asset ? esc(o.modelo.nome) : 'nenhum'} · alterada em ${fmtDH(o.atualizado_em)}${o.atualizado_por ? ' por ' + esc(quem(o.atualizado_por)) : ''}</p>${acoesObra(o)}</div></section>
+    <div class="tools">${fs.map(f => `<a class="tool" href="${f.pagina}?obra=${encodeURIComponent(o.id)}"><span class="ic">${f.icone}</span><div><h3>${esc(f.nome)}</h3><p class="rs1">${resumoDe(o.id, f.id)}</p><p>${esc(f.desc)}</p></div><span class="go">Abrir →</span></a>`).join('')}</div>`;
+  pintarFotos($('main')); ligarAcoes($('main'));
+}
+/* ---------------- IFC: confere, compacta e envia ---------------- */
+async function lerIfc(arq) {
+  const buf = await arq.arrayBuffer();
+  const ini = new TextDecoder('latin1').decode(buf.slice(0, 300));
+  if (!/ISO-10303-21/.test(ini)) throw new Error(arq.name + ' não parece ser um arquivo IFC.');
+  let gz = null;
+  try { gz = await new Response(new Blob([buf]).stream().pipeThrough(new CompressionStream('gzip'))).blob(); } catch (e) { gz = null; }
+  const up = gz ? new Blob([gz], { type: 'application/gzip' }) : new Blob([buf], { type: 'application/octet-stream' });
+  if (up.size > MAX_UP) throw new Error('O modelo, mesmo compactado, passa de 50 MB.');
+  return { up, gz: !!gz, bytes: arq.size, nome: arq.name };
+}
+async function enviarModelo(obraId, arq, progresso, lido) {
+  progresso && progresso('Compactando o modelo…', .25);
+  const m = lido || await lerIfc(arq);
+  progresso && progresso('Enviando o modelo (' + fmtMB(m.up.size) + ')…', .55);
+  const r = await NV.obras.enviarModelo(obraId, m.up);
+  return { asset: r.id, nome: m.nome, bytes: m.bytes, gz: m.gz, em: new Date().toISOString() };
+}
+/* ---------------- foto da obra: reduz para no máximo 1000 px e envia em JPEG ---------------- */
+async function prepararFoto(arq) {
+  if (!/^image\//.test(arq.type)) throw new Error('escolha uma imagem (JPG, PNG…).');
+  const url = URL.createObjectURL(arq); const img = new Image();
+  try { await new Promise((res, rej) => { img.onload = res; img.onerror = () => rej(new Error('não foi possível ler a imagem.')); img.src = url; }); }
+  finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
+  const sc = Math.min(1, 1000 / Math.max(img.naturalWidth, img.naturalHeight));
+  const cv = document.createElement('canvas'); cv.width = Math.max(1, Math.round(img.naturalWidth * sc)); cv.height = Math.max(1, Math.round(img.naturalHeight * sc));
+  cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+  const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', .85));
+  return { blob, proporcao: img.naturalWidth / img.naturalHeight };
+}
+// imagem quadrada ou em pé entra mostrando inteira; imagem larga preenche o cartão
+async function enviarFoto(obraId, arq) {
+  const { blob, proporcao } = await prepararFoto(arq);
+  const r = await NV.obras.enviarModelo(obraId, blob);
+  return { asset: r.id, em: new Date().toISOString(), modo: proporcao < 1.6 ? 'inteira' : 'cobrir', x: 50, y: 50, zoom: 100 };
+}
+const campoFoto = `<div class="fld"><label for="nFoto">Foto da obra (opcional)</label><input type="file" id="nFoto" accept="image/*"></div>`;
+
+const campoIfc = `<div class="fld"><label for="nIfc">Modelo IFC da obra</label><input type="file" id="nIfc" accept=".ifc"></div>
+  <p class="muted" style="margin:0">IFC de arquitetura ou estrutura (Revit, ArchiCAD, TQS, Eberick…). É compactado antes do envio; limite de 50 MB compactado. Dá para enviar depois, se preferir.</p>`;
+const barraProg = `<div id="pBox" hidden><div class="muted" id="pTxt"></div><div class="prog"><i id="pBar"></i></div></div>`;
+function prog(t, p) { $('pBox').hidden = false; $('pTxt').textContent = t; $('pBar').style.width = Math.round(p * 100) + '%'; }
+function ocupado(sim) { if (sim) $('ovl').dataset.ocupado = '1'; else delete $('ovl').dataset.ocupado; }
+const msgErro = e => e && e.code === 'permission_denied' ? 'Você não tem permissão de edição.' : (e && e.message) || 'erro';
+
+function formNova(f) {
+  openSheet('Nova obra', `<div class="fld"><label for="nNome">Nome da obra</label><input id="nNome" maxlength="120" placeholder="Ex.: Residencial X" autocomplete="off"></div>${campoFoto}${campoIfc}${barraProg}`,
+    `<span class="msg" id="nMsg"></span><button class="btn ghost" id="nC">Cancelar</button><button class="btn" id="nOk">Criar obra e abrir</button>`);
+  $('nC').onclick = closeSheet;
+  $('nOk').onclick = async () => {
+    const nome = $('nNome').value.trim(), arq = $('nIfc').files[0], foto = $('nFoto').files[0];
+    if (!nome) { $('nMsg').textContent = 'Informe o nome da obra.'; $('nMsg').className = 'msg err'; $('nNome').focus(); return; }
+    if (lista && lista.some(o => o.nome.trim().toLowerCase() === nome.toLowerCase())) { $('nMsg').textContent = 'Já existe uma obra com esse nome.'; $('nMsg').className = 'msg err'; return; }
+    $('nOk').disabled = $('nC').disabled = true; ocupado(true); $('nMsg').textContent = '';
+    let obra = null;
+    try {
+      // confere e compacta o arquivo antes de criar a obra
+      if (arq) prog('Conferindo o modelo…', .05);
+      const lido = arq ? await lerIfc(arq) : null;
+      prog('Criando a obra…', .15);
+      obra = await NV.obras.criar(nome);
+      const campos = {};
+      if (foto) { prog('Enviando a foto…', .3); try { campos.foto = await enviarFoto(obra.id, foto); } catch (e) { toast('A foto não foi enviada (' + msgErro(e) + '). Dá para enviar depois pelo botão "Foto".', 6000); } }
+      if (arq) campos.modelo = await enviarModelo(obra.id, arq, prog, lido);
+      if (Object.keys(campos).length) { prog('Salvando…', .9); obra = await NV.obras.alterar(obra.id, campos, obra.atualizado_em); }
+      prog('Pronto. Abrindo…', 1);
+      location.href = destinoObra(obra.id);
+    } catch (e) {
+      console.error(e); ocupado(false); $('nOk').disabled = $('nC').disabled = false;
+      $('nMsg').className = 'msg err';
+      $('nMsg').textContent = obra ? 'A obra foi criada, mas o modelo não foi enviado (' + msgErro(e) + '). Envie depois pelo botão "Enviar modelo".' : 'Não foi possível criar: ' + msgErro(e);
+      if (obra) { $('nOk').textContent = 'Abrir a obra mesmo assim'; $('nOk').onclick = () => location.href = destinoObra(obra.id); carregar().then(redesenhar); }
+    }
+  };
+  $('nNome').onkeydown = ev => { if (ev.key === 'Enter') $('nOk').click(); };
+}
+
+function avisoConflito(e, f) {
+  if (e && e.code === 'conflito') {
+    toast(e.atual ? 'Esta obra foi alterada por ' + quem(e.por) + ' agora há pouco. A lista foi atualizada; confira e tente de novo.' : 'Esta obra foi excluída por outra pessoa.', 7000);
+    closeSheet(); carregar().then(redesenhar); return true;
+  }
+  return false;
+}
+
+function formRenomear(f, o) {
+  if (!o) return;
+  openSheet('Renomear obra', `<div class="fld"><label for="rNome">Nome da obra</label><input id="rNome" maxlength="120" value="${esc(o.nome)}" autocomplete="off"></div>
+    <p class="muted" style="margin:0">O endereço da obra (<code>${esc(o.id)}</code>) não muda, então os links já compartilhados continuam funcionando.</p>`,
+    `<span class="msg" id="rMsg"></span><button class="btn ghost" id="rC">Cancelar</button><button class="btn" id="rOk">Salvar</button>`);
+  $('rC').onclick = closeSheet;
+  $('rOk').onclick = async () => {
+    const nome = $('rNome').value.trim(); if (!nome) return;
+    $('rOk').disabled = true;
+    try { await NV.obras.alterar(o.id, { nome }, o.atualizado_em); closeSheet(); toast('Obra renomeada.'); await carregar(); redesenhar(); }
+    catch (e) { if (!avisoConflito(e, f)) { $('rOk').disabled = false; $('rMsg').className = 'msg err'; $('rMsg').textContent = 'Não foi possível salvar: ' + msgErro(e); } }
+  };
+}
+
+function formModelo(f, o) {
+  if (!o) return;
+  const tem = o.modelo && o.modelo.asset;
+  openSheet(tem ? 'Trocar modelo IFC' : 'Enviar modelo IFC', `<p style="margin:0"><b>${esc(o.nome)}</b>${tem ? '<br><span class="muted">Modelo atual: ' + esc(o.modelo.nome) + '</span>' : ''}</p>${campoIfc}
+    ${tem ? '<p class="muted" style="margin:0">O modelo novo vale para todas as ferramentas desta obra. As áreas ficam guardadas por coordenadas e nome de pavimento, então continuam no lugar se o projeto não mudou de posição.</p>' : ''}${barraProg}`,
+    `<span class="msg" id="mMsg"></span><button class="btn ghost" id="mC">Cancelar</button><button class="btn" id="mOk">Enviar</button>`);
+  $('mC').onclick = closeSheet;
+  $('mOk').onclick = async () => {
+    const arq = $('nIfc').files[0]; if (!arq) { $('mMsg').className = 'msg err'; $('mMsg').textContent = 'Escolha o arquivo .ifc.'; return; }
+    $('mOk').disabled = $('mC').disabled = true; ocupado(true); $('mMsg').textContent = '';
+    let modelo = null;
+    try {
+      modelo = await enviarModelo(o.id, arq, prog);
+      prog('Salvando…', .9);
+      await NV.obras.alterar(o.id, { modelo }, o.atualizado_em);
+      if (tem) NV.obras.apagarArquivo(o.modelo.asset).catch(() => {});
+      ocupado(false); closeSheet(); toast('Modelo enviado. Ele vale para todas as ferramentas desta obra.'); await carregar(); redesenhar();
+    } catch (e) {
+      ocupado(false); $('mOk').disabled = $('mC').disabled = false;
+      if (modelo) NV.obras.apagarArquivo(modelo.asset).catch(() => {});
+      if (!avisoConflito(e, f)) { $('mMsg').className = 'msg err'; $('mMsg').textContent = 'Não foi possível enviar: ' + msgErro(e); }
+    }
+  };
+}
+
+// como a foto aparece no cartão: modo 'inteira' (mostra tudo) ou 'cobrir' (preenche e corta),
+// com a posição (x, y em %) e o zoom (100–300%) quando preenche
+const fotoEstilo = ft => {
+  const inteira = ft && ft.modo === 'inteira';
+  const x = ft && ft.x != null ? ft.x : 50, y = ft && ft.y != null ? ft.y : 50, z = ft && ft.zoom ? ft.zoom : 100;
+  return inteira ? 'object-fit:contain' : `object-fit:cover;object-position:${x}% ${y}%;transform:scale(${z / 100});transform-origin:${x}% ${y}%`;
+};
+function formFoto(f, o) {
+  if (!o) return;
+  const tem = o.foto && o.foto.asset;
+  const aj = Object.assign({ modo: 'cobrir', x: 50, y: 50, zoom: 100 }, tem ? o.foto : {});
+  let novoArq = null, novoUrl = null;
+  openSheet('Foto da obra', `<p style="margin:0"><b>${esc(o.nome)}</b></p>
+    <div class="ft-prev"><span id="fIni">${esc(iniciais(o.nome))}</span><img id="fPrev" alt="Prévia do cartão" hidden></div>
+    <div class="fld"><label for="fArq">${tem ? 'Trocar a imagem' : 'Imagem'}</label><input type="file" id="fArq" accept="image/*"></div>
+    <div class="fld"><label>Como aparece no cartão</label><div class="seg2" role="group" aria-label="Enquadramento">
+      <button type="button" data-modo="inteira">Mostrar a imagem inteira</button><button type="button" data-modo="cobrir">Preencher o cartão</button></div></div>
+    <div id="fAj" class="aj">
+      <label>Zoom <input type="range" id="fZ" min="100" max="300" step="5"></label>
+      <label>Posição horizontal <input type="range" id="fX" min="0" max="100"></label>
+      <label>Posição vertical <input type="range" id="fY" min="0" max="100"></label>
+    </div>
+    <p class="muted" style="margin:0">A prévia mostra o cartão como fica na lista. A imagem é reduzida antes do envio.</p>`,
+    `<span class="msg" id="fMsg"></span>${tem ? '<button class="btn danger" id="fRem" style="margin-right:auto">Remover foto</button>' : ''}<button class="btn ghost" id="fC">Cancelar</button><button class="btn" id="fOk">Salvar</button>`);
+  const prev = $('fPrev');
+  const desenhar = () => {
+    $('ovlB').querySelectorAll('[data-modo]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.modo === aj.modo)));
+    $('fAj').hidden = aj.modo === 'inteira';
+    $('fZ').value = aj.zoom; $('fX').value = aj.x; $('fY').value = aj.y;
+    prev.style.cssText = fotoEstilo(aj);
+    $('fIni').hidden = !prev.hidden;
+  };
+  $('ovlB').querySelectorAll('[data-modo]').forEach(b => b.onclick = () => { aj.modo = b.dataset.modo; desenhar(); });
+  $('fZ').oninput = ev => { aj.zoom = +ev.target.value; desenhar(); };
+  $('fX').oninput = ev => { aj.x = +ev.target.value; desenhar(); };
+  $('fY').oninput = ev => { aj.y = +ev.target.value; desenhar(); };
+  if (tem) NV.blobUrl(o.foto.asset).then(u => { prev.src = u; prev.hidden = false; desenhar(); }).catch(() => {});
+  $('fArq').onchange = ev => {
+    const a = ev.target.files[0]; if (!a) return;
+    if (novoUrl) URL.revokeObjectURL(novoUrl);
+    novoArq = a; novoUrl = URL.createObjectURL(a);
+    prev.onload = () => { // imagem quadrada ou em pé: começa mostrando inteira
+      aj.modo = prev.naturalWidth / prev.naturalHeight < 1.6 ? 'inteira' : 'cobrir'; aj.x = 50; aj.y = 50; aj.zoom = 100; desenhar(); prev.onload = null; };
+    prev.src = novoUrl; prev.hidden = false;
+  };
+  desenhar();
+  const fechar = () => { if (novoUrl) URL.revokeObjectURL(novoUrl); closeSheet(); };
+  $('fC').onclick = fechar;
+  const gravar = async (foto, apagarAntiga) => {
+    await NV.obras.alterar(o.id, { foto }, o.atualizado_em);
+    if (apagarAntiga && tem) NV.obras.apagarArquivo(o.foto.asset).catch(() => {});
+    fechar(); toast(foto ? 'Foto salva.' : 'Foto removida.'); await carregar(); redesenhar();
+  };
+  if ($('fRem')) $('fRem').onclick = async () => { $('fRem').disabled = true; try { await gravar(null, true); } catch (e) { if (!avisoConflito(e, f)) { $('fRem').disabled = false; $('fMsg').className = 'msg err'; $('fMsg').textContent = msgErro(e); } } };
+  $('fOk').onclick = async () => {
+    if (!novoArq && !tem) { $('fMsg').className = 'msg err'; $('fMsg').textContent = 'Escolha uma imagem.'; return; }
+    $('fOk').disabled = true; $('fMsg').className = 'msg'; $('fMsg').textContent = novoArq ? 'Enviando…' : 'Salvando…';
+    const ajuste = { modo: aj.modo, x: aj.x, y: aj.y, zoom: aj.zoom };
+    let enviada = null;
+    try {
+      if (novoArq) { enviada = await enviarFoto(o.id, novoArq); await gravar(Object.assign(enviada, ajuste), true); }
+      else await gravar(Object.assign({}, o.foto, ajuste), false);
+    } catch (e) { if (enviada) NV.obras.apagarArquivo(enviada.asset).catch(() => {}); if (!avisoConflito(e, f)) { $('fOk').disabled = false; $('fMsg').className = 'msg err'; $('fMsg').textContent = 'Não foi possível salvar: ' + msgErro(e); } }
+  };
+}
+/* ---------------- equipe: nomes das pessoas ---------------- */
+async function formEquipe() {
+  if (!NV.pessoas.disponivel()) {
+    openSheet('Equipe', '<p style="margin:0">Para dar nome às pessoas, rode o arquivo <b>atualizacao-perfis.sql</b> no Supabase (SQL Editor) e recarregue a página.</p>', '<button class="btn" id="eqC">Fechar</button>');
+    $('eqC').onclick = closeSheet; return;
+  }
+  openSheet('Equipe', '<p class="muted" style="margin:0">Carregando…</p>', '<button class="btn ghost" id="eqC">Fechar</button>');
+  $('eqC').onclick = closeSheet;
+  let eq;
+  try { await NV.pessoas.carregar(); eq = await NV.pessoas.equipe(); }
+  catch (e) { $('ovlB').innerHTML = '<p class="msg err">Não foi possível carregar a equipe: ' + esc(msgErro(e)) + '</p>'; return; }
+  const eu = String(NV.usuario.email).toLowerCase();
+  const pode = m => podeEditar() || String(m.email).toLowerCase() === eu;
+  $('ovlB').innerHTML = `<p class="muted" style="margin:0">O nome aparece para a equipe no lugar do e-mail. ${podeEditar() ? 'Como editor, você pode dar nome a qualquer pessoa.' : 'Você pode mudar o seu nome.'} Para incluir ou tirar pessoas, use o Supabase (veja o README).</p>
+    <div class="eq">${eq.map((m, i) => `<div class="eq-l"><input data-i="${i}" maxlength="80" value="${esc(m.nome)}" placeholder="${esc(String(m.email).split('@')[0])}" aria-label="Nome de ${esc(m.email)}" ${pode(m) ? '' : 'disabled'}>
+      <span class="pill ${m.papel === 'editor' ? 'ok' : 'warn'}">${m.papel === 'editor' ? 'editor' : 'leitor'}</span><small>${esc(m.email)}${String(m.email).toLowerCase() === eu ? ' · você' : ''}</small></div>`).join('')}</div>`;
+  $('ovlF').innerHTML = '<span class="msg" id="eqMsg"></span><button class="btn ghost" id="eqC">Fechar</button><button class="btn" id="eqOk">Salvar nomes</button>';
+  $('eqC').onclick = closeSheet;
+  $('eqOk').onclick = async () => {
+    $('eqOk').disabled = true;
+    try {
+      for (const inp of $('ovlB').querySelectorAll('input[data-i]:not([disabled])')) {
+        const m = eq[+inp.dataset.i]; const n = inp.value.trim();
+        if (n !== (m.nome || '')) await NV.pessoas.salvarNome(m.email, n);
+      }
+      closeSheet(); toast('Nomes salvos.');
+      const q = document.getElementById('bQuem'); if (q) q.textContent = NV.pessoas.nome(NV.usuario.email) + (NV.papel === 'leitor' ? ' · leitura' : '');
+      redesenhar();
+    } catch (e) { $('eqOk').disabled = false; $('eqMsg').className = 'msg err'; $('eqMsg').textContent = 'Não foi possível salvar: ' + msgErro(e); }
+  };
+}
+
+/* ---------------- administração: acesso de cada pessoa (só administradores) ---------------- */
+const ACESSOS = [['nenhum', 'Sem acesso'], ['leitor', 'Só visualizar'], ['editor', 'Editar'], ['admin', 'Administrador']];
+const acessoDe = u => !u.papel ? 'nenhum' : u.admin ? 'admin' : u.papel;
+const fmtDia = s => s ? new Date(s).toLocaleDateString('pt-BR') : '';
+async function contarPendentes() {
+  const b = $('bAdmin'); if (!b) return;
+  try { const l = await NV.administracao.listar(); const n = l.filter(u => u.tem_conta && !u.papel).length;
+    b.innerHTML = 'Administração' + (n ? ` <span class="cnt" title="${n} aguardando liberação">${n}</span>` : ''); } catch (e) {}
+}
+async function formAdmin() {
+  openSheet('Administração', '<p class="muted" style="margin:0">Carregando…</p>', '<button class="btn ghost" id="adC">Fechar</button>');
+  $('ovl').querySelector('.sheet').classList.add('larga');
+  $('adC').onclick = fecharAdmin;
+  let lista;
+  let DISC = [];
+  try { const r = await NV.cliente.from('pend_listas').select('valor,extra,ordem').eq('tipo', 'disciplina').order('ordem'); if (!r.error) DISC = r.data || []; } catch (e) {}
+  try { await NV.pessoas.carregar(); lista = await NV.administracao.listar(); }
+  catch (e) {
+    $('ovlB').innerHTML = `<p class="msg err" style="margin:0">Não foi possível carregar a lista: ${esc(msgErro(e))}</p><p class="muted" style="margin:0">Se esta é a primeira vez, rode o arquivo <b>atualizacao-admin.sql</b> no Supabase (SQL Editor) e recarregue a página.</p>`;
+    return;
+  }
+  const eu = String(NV.usuario.email).toLowerCase();
+  let filtroAd = '';
+  // cargos das pendências (só aparecem depois de rodar o atualizacao-pendencias.sql)
+  const temCargos = lista.length ? ('cargo' in lista[0]) : false;
+  const CARGOS = [['', 'Sem cargo'], ['engenharia', 'Engenharia'], ['seguranca', 'Segurança'], ['encarregado', 'Encarregado']];
+  const grupoDe = v => (((DISC.find(d => d.valor === v) || {}).extra) || {}).grupo || v;
+  const desenhar = () => {
+    const q = filtroAd.trim().toLowerCase();
+    const vis = lista.filter(u => !q || (u.email + ' ' + (u.nome || '')).toLowerCase().includes(q))
+      .sort((a, b) => (+(b.tem_conta && !b.papel) - +(a.tem_conta && !a.papel)) || String(a.nome || a.email).localeCompare(String(b.nome || b.email), 'pt-BR'));
+    const nPend = lista.filter(u => u.tem_conta && !u.papel).length;
+    $('adList').innerHTML = (nPend ? `<p class="aviso" style="margin:0">${nPend} pessoa${nPend > 1 ? 's criaram' : ' criou'} a conta e ${nPend > 1 ? 'aguardam' : 'aguarda'} liberação. Escolha o acesso na lista.</p>` : '') +
+      (vis.length ? vis.map(u => { const i = lista.indexOf(u); const pend = u.tem_conta && !u.papel; const sou = u.email === eu;
+        return `<div class="adm-l${pend ? ' pend' : ''}">
+          <div class="nm2"><input data-nome="${i}" maxlength="80" value="${esc(u.nome || '')}" placeholder="${esc(u.email.split('@')[0])}" aria-label="Nome de ${esc(u.email)}">${pend ? '<span class="pill warn">aguardando liberação</span>' : ''}${sou ? '<span class="pill ok">você</span>' : ''}</div>
+          ${u.cargo === 'encarregado' ? `<select disabled aria-label="Acesso de ${esc(u.email)}" title="Encarregados usam só o painel de pendências. Para mudar, troque o cargo."><option>Só pendências</option></select>`
+            : `<select data-acesso="${i}" aria-label="Acesso de ${esc(u.email)}" ${sou ? 'disabled title="Para mudar o seu próprio acesso, peça a outro administrador."' : ''}>${ACESSOS.map(([v, t]) => `<option value="${v}" ${acessoDe(u) === v ? 'selected' : ''}>${t}</option>`).join('')}</select>`}
+          <small>${esc(u.email)} · ${u.tem_conta ? 'conta criada em ' + fmtDia(u.criado_em) + (u.ultimo_acesso ? ' · último acesso em ' + fmtDia(u.ultimo_acesso) : ' · ainda não entrou') : 'liberado, mas ainda não criou a conta'}</small>
+          ${temCargos && u.papel ? `<div class="cg"><label>Cargo nas pendências <select data-cargo="${i}">${CARGOS.map(([v, t]) => `<option value="${v}" ${(u.cargo || '') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>
+            ${u.cargo === 'encarregado' ? `<div class="dsc" role="group" aria-label="Disciplinas de ${esc(u.email)}">${DISC.map(d => { const on = (u.disciplinas || []).includes(d.valor); const g = grupoDe(d.valor); const ok = on || !(u.disciplinas || []).length || (u.disciplinas || []).every(x => grupoDe(x) === g);
+              return `<button type="button" data-disc="${i}" data-v="${esc(d.valor)}" aria-pressed="${on}" ${ok ? '' : 'disabled title="Não é complementar às disciplinas já escolhidas"'}>${esc(d.valor)}</button>` }).join('')}</div>` : ''}</div>` : ''}
+        </div>`; }).join('') : '<p class="muted" style="margin:0">Ninguém encontrado com essa busca.</p>');
+    $('adList').querySelectorAll('[data-acesso]').forEach(sel => sel.onchange = async () => {
+      const u = lista[+sel.dataset.acesso]; const v = sel.value; const antes = acessoDe(u);
+      sel.disabled = true; $('adMsg').className = 'msg'; $('adMsg').textContent = 'Salvando…';
+      try {
+        await NV.administracao.definir(u.email, v === 'admin' ? 'editor' : v, v === 'admin');
+        u.papel = v === 'nenhum' ? null : (v === 'admin' ? 'editor' : v); u.admin = v === 'admin';
+        $('adMsg').className = 'msg ok'; $('adMsg').textContent = (u.nome || u.email) + ': ' + ACESSOS.find(a => a[0] === v)[1].toLowerCase() + '.';
+        if (!u.tem_conta && v === 'nenhum') lista.splice(lista.indexOf(u), 1);
+        desenhar();
+      } catch (e) { sel.value = antes; sel.disabled = false; $('adMsg').className = 'msg err'; $('adMsg').textContent = 'Não foi possível salvar: ' + msgErro(e); }
+    });
+    const salvarCargo = async (u, cargo, ds) => {
+      $('adMsg').className = 'msg'; $('adMsg').textContent = 'Salvando…';
+      try {
+        await NV.administracao.definirCargo(u.email, cargo, ds);
+        u.cargo = cargo; u.disciplinas = cargo === 'encarregado' ? ds : [];
+        if (cargo === 'encarregado') { u.papel = 'leitor'; u.admin = false; }
+        $('adMsg').className = 'msg ok'; $('adMsg').textContent = (u.nome || u.email) + ': ' + (CARGOS.find(c => c[0] === (cargo || ''))[1]).toLowerCase() + (ds.length ? ' · ' + ds.join(', ') : '') + '.';
+      } catch (e) { $('adMsg').className = 'msg err'; $('adMsg').textContent = 'Não foi possível salvar o cargo: ' + msgErro(e); }
+      desenhar();
+    };
+    $('adList').querySelectorAll('[data-cargo]').forEach(sel => sel.onchange = () => {
+      const u = lista[+sel.dataset.cargo]; const v = sel.value || null;
+      if (v === 'encarregado') {
+        // encarregado precisa de ao menos uma disciplina: a escolha é feita logo abaixo
+        u.cargo = 'encarregado'; u.disciplinas = []; desenhar();
+        $('adMsg').className = 'msg'; $('adMsg').textContent = 'Escolha as disciplinas de ' + (u.nome || u.email) + ' (só as complementares).';
+        return;
+      }
+      salvarCargo(u, v, []);
+    });
+    $('adList').querySelectorAll('[data-disc]').forEach(b => b.onclick = () => {
+      const u = lista[+b.dataset.disc]; const v = b.dataset.v; const ds = (u.disciplinas || []).slice();
+      const i = ds.indexOf(v); if (i >= 0) ds.splice(i, 1); else ds.push(v);
+      if (!ds.length) { u.disciplinas = []; desenhar(); $('adMsg').className = 'msg err'; $('adMsg').textContent = 'O encarregado precisa de ao menos uma disciplina.'; return; }
+      salvarCargo(u, 'encarregado', ds);
+    });
+    $('adList').querySelectorAll('[data-nome]').forEach(inp => inp.onchange = async () => {
+      const u = lista[+inp.dataset.nome]; const n = inp.value.trim();
+      try { await NV.pessoas.salvarNome(u.email, n); u.nome = n; $('adMsg').className = 'msg ok'; $('adMsg').textContent = 'Nome salvo.'; }
+      catch (e) { $('adMsg').className = 'msg err'; $('adMsg').textContent = 'Não foi possível salvar o nome: ' + msgErro(e); }
+    });
+  };
+  $('ovlB').innerHTML = `${temCargos ? '<p class="muted" style="margin:0"><b>Cargo nas pendências</b>: <b>Engenharia</b> abre, vê e fecha todas (exceto as de segurança); <b>Segurança</b> abre, vê e fecha só as de segurança; <b>Encarregado</b> vê só as das suas disciplinas, marca como corrigida e não entra nos mapas.</p>' : ''}<p class="muted" style="margin:0"><b>Só visualizar</b>: vê as obras e os mapas. <b>Editar</b>: cria e altera obras, modelos e mapas. <b>Administrador</b>: edita e também libera e muda o acesso das pessoas. <b>Sem acesso</b>: a conta existe, mas não vê nenhum dado.</p>
+    <input class="search" id="adBusca" type="search" placeholder="Buscar por nome ou e-mail…" aria-label="Buscar pessoa" style="max-width:none">
+    <div class="adm" id="adList"></div>
+    <div class="fld"><label for="adEmail">Liberar um e-mail antes de a pessoa criar a conta</label>
+      <div class="adm-add"><input id="adEmail" type="email" placeholder="colega@empresa.com" autocomplete="off"><select id="adPapel">${ACESSOS.filter(a => a[0] !== 'nenhum').map(([v, t]) => `<option value="${v}" ${v === 'editor' ? 'selected' : ''}>${t}</option>`).join('')}</select><button class="btn" id="adAdd" type="button">Liberar</button></div></div>
+    <p class="muted" style="margin:0">Para convidar alguém novo, envie o convite pelo Supabase (<b>Authentication → Users → Invite user</b>). Quando a pessoa criar a conta, ela aparece aqui como “aguardando liberação”, a menos que o e-mail já tenha sido liberado acima.</p>`;
+  $('ovlF').innerHTML = '<span class="msg" id="adMsg"></span><button class="btn ghost" id="adC">Fechar</button>';
+  $('adC').onclick = fecharAdmin;
+  $('adBusca').oninput = ev => { filtroAd = ev.target.value; desenhar(); };
+  $('adAdd').onclick = async () => {
+    const e = $('adEmail').value.trim().toLowerCase(), v = $('adPapel').value;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) { $('adMsg').className = 'msg err'; $('adMsg').textContent = 'Escreva um e-mail válido.'; return; }
+    $('adAdd').disabled = true;
+    try {
+      await NV.administracao.definir(e, v === 'admin' ? 'editor' : v, v === 'admin');
+      lista = await NV.administracao.listar(); $('adEmail').value = '';
+      $('adMsg').className = 'msg ok'; $('adMsg').textContent = e + ' liberado.'; desenhar();
+    } catch (err) { $('adMsg').className = 'msg err'; $('adMsg').textContent = 'Não foi possível liberar: ' + msgErro(err); }
+    $('adAdd').disabled = false;
+  };
+  desenhar();
+}
+function fecharAdmin() { $('ovl').querySelector('.sheet').classList.remove('larga'); closeSheet(); contarPendentes(); if (NV) redesenhar(); }
+
+function formExcluir(f, o) {
+  if (!o) return;
+  openSheet('Excluir obra', `<p style="margin:0">Isto apaga <b>${esc(o.nome)}</b> para todas as pessoas, em <b>todas as ferramentas</b>: o modelo IFC, as áreas, os símbolos, as revisões e as imagens.</p>
+    <p class="muted" style="margin:0">Não dá para desfazer. Se quiser guardar uma cópia, exporte as pranchas em PDF antes.</p>
+    <div class="fld"><label for="xTxt">Para confirmar, digite EXCLUIR</label><input id="xTxt" autocomplete="off" autocapitalize="characters"></div>`,
+    `<span class="msg" id="xMsg"></span><button class="btn ghost" id="xC">Cancelar</button><button class="btn danger" id="xOk" disabled>Excluir obra</button>`);
+  $('xC').onclick = closeSheet;
+  $('xTxt').oninput = () => { $('xOk').disabled = $('xTxt').value.trim().toUpperCase() !== 'EXCLUIR'; };
+  $('xOk').onclick = async () => {
+    $('xOk').disabled = $('xC').disabled = true; $('xOk').textContent = 'Excluindo…'; ocupado(true);
+    try { await NV.obras.apagar(o.id, FERRAMENTAS.map(x => x.id)); ocupado(false); closeSheet(); toast('Obra excluída.'); if (obraAtual()) { location.href = 'index.html'; return; } await carregar(); redesenhar(); }
+    catch (e) { ocupado(false); $('xC').disabled = false; $('xOk').textContent = 'Excluir obra'; $('xMsg').className = 'msg err'; $('xMsg').textContent = 'Não foi possível excluir: ' + msgErro(e); }
+  };
+}
+
+/* ---------------- carga inicial: obra Start (carga-start.js) ---------------- */
+// Enquanto prepara, mostra uma janela de progresso: assim ninguém abre a obra
+// pela metade. A mesma carga também roda ao abrir a obra Start numa ferramenta.
+async function cargaStart(f) {
+  if (!window.CargaStart || !lista) return;
+  if (!(await CargaStart.precisa(NV))) return;
+  openSheet('Preparando a obra Start', `<p style="margin:0">Gravando o modelo IFC, o mapa de risco do térreo e as concretagens da obra Start. Leva menos de um minuto. <b>Não feche a página.</b></p>${barraProg}`, '<span class="msg" id="csMsg"></span>');
+  ocupado(true);
+  try {
+    const r = await CargaStart.rodar(NV, prog);
+    ocupado(false); closeSheet();
+    toast('Obra Start pronta: modelo IFC, mapa de risco do térreo e ' + r.concretagens + ' concretagens.', 7000);
+  } catch (e) {
+    console.error(e); ocupado(false);
+    $('csMsg').className = 'msg err'; $('csMsg').textContent = 'Não foi possível terminar: ' + msgErro(e) + '. Recarregue a página para continuar de onde parou.';
+    $('ovlF').insertAdjacentHTML('beforeend', '<button class="btn" onclick="location.reload()">Recarregar</button>');
+  }
+  await carregar(); redesenhar();
+}
+/* ---------------- início ---------------- */
+(async function () {
+  NV = await (window.NUVEM_PRONTA || Promise.resolve(null));
+  $('modeChip').textContent = NV ? 'Online' + (NV.papel === 'leitor' ? ' · leitura' : '') : 'Modo local';
+  if (NV) {
+    const b = document.createElement('button'); b.className = 'hbtn'; b.id = 'bEquipe'; b.textContent = 'Equipe'; b.title = 'Nomes das pessoas da equipe';
+    b.onclick = formEquipe; $('modeChip').after(b);
+    if (NV.admin) {
+      const a = document.createElement('button'); a.className = 'hbtn'; a.id = 'bAdmin'; a.textContent = 'Administração'; a.title = 'Liberar pessoas e definir quem visualiza, edita ou administra';
+      a.onclick = formAdmin; b.after(a); contarPendentes();
+    }
+  }
+  if (!NV) { telaFerramentas(); return; }
+  // Equipe vai para o menu "⋯" (Administração continua à vista, com o contador)
+  if (window.AppObra && AppObra.paraMenu) AppObra.paraMenu($('bEquipe'));
+  if (obraAtual()) { await Promise.all([carregar(), carregarResumo()]); await telaObra(obraAtual()); }
+  else await telaObras();
+  NV.obras.aoMudar(async () => { if (!$('ovl').hidden) return; await Promise.all([carregar(), carregarResumo()]); redesenhar(); });
+})();
+})();
+</script>
+</body>
+</html>

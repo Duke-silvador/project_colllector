@@ -1,0 +1,1486 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>기초번호판 측량지점</title>
+<style>
+:root {
+  --primary:#1a6ee0; --primary-dark:#1456b0;
+  --teal:#00b8a9; --teal-dark:#008f83;
+  --danger:#e5534b; --success:#2ecc71;
+  --gray-50:#f8f9fa; --gray-100:#f1f3f4; --gray-200:#e8eaed;
+  --gray-400:#9aa0a6; --gray-600:#5f6368; --gray-800:#3c4043; --gray-900:#202124;
+  --font:'Noto Sans KR',-apple-system,BlinkMacSystemFont,sans-serif;
+  --r-sm:8px; --r-md:12px; --r-lg:20px;
+  --sh-sm:0 1px 4px rgba(0,0,0,.12); --sh-md:0 4px 16px rgba(0,0,0,.16);
+  --pin:#1a6ee0; --pin-dk:#1456b0;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;font-family:var(--font);background:#f0f2f5;color:var(--gray-900);}
+#app{position:relative;width:100%;height:100dvh;overflow:hidden;}
+
+/* SCREENS */
+.screen{position:absolute;inset:0;width:100%;height:100%;background:#fff;
+  display:flex;flex-direction:column;transition:transform .32s cubic-bezier(.4,0,.2,1);}
+.screen.s-back{transform:translateX(-28%);}
+.screen.s-right{transform:translateX(100%);}
+.screen.s-active{transform:translateX(0);}
+
+/* TOPNAV */
+.tnav{display:flex;align-items:center;justify-content:space-between;padding:0 8px;height:52px;
+  flex-shrink:0;background:#fff;border-bottom:1px solid var(--gray-200);position:relative;z-index:10;}
+.tnav-title{font-size:15px;font-weight:700;position:absolute;left:50%;transform:translateX(-50%);white-space:nowrap;
+  display:flex;flex-direction:column;align-items:center;gap:0;}
+.tnav-sub{font-size:10px;font-weight:500;color:var(--gray-400);}
+.ico-btn{width:40px;height:40px;border:none;background:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:50%;color:var(--gray-600);transition:background .15s;flex-shrink:0;}
+.ico-btn:hover{background:var(--gray-100);}
+.ico-btn svg{width:22px;height:22px;}
+.ico-row{display:flex;gap:2px;}
+
+/* MAP CONTENT */
+#mapContent{flex:1;position:relative;overflow:hidden;}
+#kakaoMap{width:100%;height:100%;}
+
+/* STATS BAR */
+.stats-bar{position:absolute;top:12px;left:12px;
+  background:rgba(255,255,255,.96);border-radius:var(--r-sm);box-shadow:var(--sh-sm);z-index:5;
+  padding:7px 12px;display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;}
+.stats-bar:active{background:rgba(240,242,245,.96);}
+.stat-label{font-size:11px;font-weight:800;color:var(--gray-800);}
+.stat-divider{width:1px;height:14px;background:var(--gray-200);}
+.stat-item{display:flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:var(--gray-700);}
+.stat-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+
+/* SIGUNGU SHEET */
+.sg-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:200;opacity:0;pointer-events:none;transition:opacity .25s;}
+.sg-overlay.on{opacity:1;pointer-events:all;}
+.sg-sheet{position:fixed;bottom:0;left:0;right:0;z-index:201;background:#fff;
+  border-radius:20px 20px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,.18);
+  transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);
+  display:flex;flex-direction:column;max-height:72vh;}
+.sg-sheet.on{transform:translateY(0);}
+.sg-handle{width:36px;height:4px;background:var(--gray-200);border-radius:2px;margin:12px auto 0;}
+.sg-hdr{padding:14px 20px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--gray-100);flex-shrink:0;}
+.sg-hdr-title{font-size:15px;font-weight:700;color:var(--gray-900);}
+.sg-hdr-sub{font-size:12px;color:var(--gray-400);}
+.sg-body{overflow-y:auto;-webkit-overflow-scrolling:touch;flex:1;padding:6px 0 env(safe-area-inset-bottom,12px);}
+.sg-row{display:flex;align-items:center;padding:10px 20px;gap:12px;border-bottom:1px solid var(--gray-100);}
+.sg-row:last-child{border-bottom:none;}
+.sg-name{font-size:13px;font-weight:600;color:var(--gray-800);min-width:72px;}
+.sg-cnt{font-size:12px;color:var(--gray-500);min-width:44px;}
+.sg-done-wrap{flex:1;display:flex;align-items:center;gap:8px;justify-content:flex-end;}
+.sg-done{font-size:12px;font-weight:700;}
+.sg-done.all{color:var(--teal-dark);}
+.sg-done.none{color:var(--gray-300);}
+.sg-done.part{color:var(--primary);}
+.sg-pct{font-size:11px;color:var(--gray-400);min-width:34px;text-align:right;}
+
+/* MAP CONTROLS */
+.map-ctrls{position:absolute;top:200px;right:12px;display:flex;flex-direction:column;gap:4px;z-index:5;}
+.map-ctrl{width:40px;height:40px;background:#fff;border:none;border-radius:var(--r-sm);
+  box-shadow:var(--sh-md);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  color:var(--gray-600);transition:background .15s;}
+.map-ctrl:hover{background:var(--gray-50);}
+.map-ctrl svg{width:18px;height:18px;}
+
+/* MAP TYPE BAR */
+.map-type-bar{position:absolute;z-index:5;left:50%;transform:translateX(-50%);
+  bottom:calc(20px + env(safe-area-inset-bottom,0px));
+  display:flex;background:rgba(255,255,255,.96);border-radius:100px;box-shadow:var(--sh-sm);overflow:hidden;}
+.mt-btn{padding:6px 14px;font-size:12px;font-weight:600;border:none;background:none;
+  cursor:pointer;color:var(--gray-600);transition:all .15s;font-family:var(--font);}
+.mt-btn.on{background:var(--primary);color:#fff;}
+
+/* LEGEND */
+.legend{position:absolute;z-index:5;right:12px;
+  bottom:calc(90px + env(safe-area-inset-bottom,0px));
+  background:rgba(255,255,255,.96);border-radius:var(--r-sm);
+  padding:8px 10px;box-shadow:var(--sh-sm);display:flex;flex-direction:column;gap:5px;min-width:100px;}
+.lg-i{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--gray-700);font-weight:500;}
+
+/* BOTTOM SHEET */
+.bsheet{position:absolute;bottom:0;left:0;right:0;background:#fff;
+  border-radius:20px 20px 0 0;box-shadow:0 -4px 24px rgba(0,0,0,.14);
+  transform:translateY(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);
+  z-index:20;padding-bottom:env(safe-area-inset-bottom,0px);max-height:72dvh;overflow-y:auto;}
+.bsheet.open{transform:translateY(0);}
+.bs-handle{width:36px;height:4px;background:var(--gray-200);border-radius:2px;margin:10px auto 0;}
+.bs-body{padding:12px 16px 16px;}
+.bs-close{position:absolute;top:12px;right:12px;width:28px;height:28px;border:none;
+  background:var(--gray-100);border-radius:50%;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;color:var(--gray-600);}
+.bs-close svg{width:14px;height:14px;}
+.bs-tag{display:inline-block;padding:3px 8px;background:var(--primary);color:#fff;
+  border-radius:4px;font-size:11px;font-weight:700;margin-bottom:8px;}
+.bs-tag.done{background:var(--teal-dark);}
+.bs-tag.fail{background:var(--danger);}
+.bs-addr{font-size:17px;font-weight:800;margin-bottom:5px;line-height:1.4;}
+.bs-meta{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--gray-600);
+  margin-bottom:14px;flex-wrap:wrap;}
+.ms{font-weight:600;} .ms.ok{color:var(--teal-dark);} .ms.bad{color:var(--danger);}
+.ms.unk{color:var(--gray-400);} .ms.chk{color:var(--primary);}
+
+/* SHEET PHOTOS */
+.bs-photos{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.bs-photo{aspect-ratio:4/3;border-radius:var(--r-sm);overflow:hidden;background:var(--gray-100);position:relative;}
+.bs-photo img{width:100%;height:100%;object-fit:cover;display:none;}
+.bs-photo img.on{display:block;}
+.ph-empty{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:4px;color:var(--gray-400);font-size:11px;}
+.ph-empty svg{width:22px;height:22px;opacity:.5;}
+.ph-tag{position:absolute;top:6px;left:6px;background:rgba(0,0,0,.55);color:#fff;
+  font-size:10px;padding:2px 6px;border-radius:3px;}
+
+/* SHEET ACTIONS */
+.bs-acts{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.act-btn{height:40px;border:1.5px solid var(--gray-200);background:#fff;border-radius:var(--r-sm);
+  font-size:13px;font-weight:500;color:var(--gray-800);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:4px;
+  transition:all .15s;font-family:var(--font);}
+.act-btn svg{width:13px;height:13px;}
+.act-btn:hover{border-color:var(--primary);color:var(--primary);}
+.act-btn.prim{border-color:var(--teal);color:var(--teal);font-weight:600;}
+.act-btn.prim:hover{background:var(--teal);color:#fff;}
+
+/* DETAIL SCROLL */
+.d-scroll{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:76px;}
+
+/* PHOTO GRID */
+.ph-grid{display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--gray-200);}
+.ph-slot{position:relative;aspect-ratio:4/3;background:#1a1a2e;overflow:hidden;cursor:pointer;}
+.ph-slot+.ph-slot{border-left:1px solid rgba(255,255,255,.1);}
+.ph-slot img{width:100%;height:100%;object-fit:cover;display:none;}
+.ph-slot img.on{display:block;}
+.ph-slot input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;z-index:2;}
+.ph-ph{position:absolute;inset:0;z-index:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:8px;color:rgba(255,255,255,.45);transition:opacity .2s;}
+.ph-ph.gone{opacity:0;pointer-events:none;}
+.ph-ph svg{width:30px;height:30px;}
+.ph-ph span{font-size:12px;font-weight:500;}
+.ph-lbl{position:absolute;top:8px;left:8px;z-index:3;background:rgba(0,0,0,.6);color:#fff;
+  font-size:11px;padding:3px 8px;border-radius:3px;font-weight:500;}
+.ph-cam{position:absolute;bottom:10px;right:10px;z-index:3;width:34px;height:34px;
+  background:rgba(255,255,255,.18);border:none;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;color:#fff;pointer-events:none;}
+.ph-cam svg{width:16px;height:16px;}
+
+/* INFO CARD */
+.i-card{margin:16px;border:1px solid var(--gray-200);border-radius:var(--r-md);overflow:hidden;}
+.i-row{display:flex;align-items:flex-start;padding:11px 14px;font-size:14px;
+  border-bottom:1px solid var(--gray-100);}
+.i-row:last-child{border-bottom:none;}
+.i-lbl{width:90px;flex-shrink:0;color:var(--gray-600);padding-top:1px;}
+.i-val{flex:1;color:var(--gray-900);font-weight:500;line-height:1.4;}
+
+/* SECTION HEAD */
+.sec-h{padding:16px 16px 8px;font-size:15px;font-weight:700;}
+
+/* FORM */
+.f-wrap{padding:0 16px 16px;}
+.f-row{margin-bottom:16px;}
+.f-lbl{font-size:13px;color:var(--gray-600);margin-bottom:6px;display:flex;align-items:center;gap:4px;}
+.f-lbl .req{color:var(--danger);font-size:15px;line-height:1;}
+.f-input,.f-select,.f-textarea{width:100%;border:1.5px solid var(--gray-200);border-radius:var(--r-sm);
+  font-family:var(--font);font-size:14px;color:var(--gray-900);transition:border-color .15s;background:#fff;}
+.f-input,.f-select{height:44px;padding:0 12px;}
+.f-select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239aa0a6' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 12px center;background-size:16px;padding-right:36px;}
+.f-textarea{padding:10px 12px;min-height:80px;resize:vertical;line-height:1.6;}
+.f-input:focus,.f-select:focus,.f-textarea:focus{outline:none;border-color:var(--primary);}
+.f-input::placeholder,.f-textarea::placeholder{color:var(--gray-400);}
+
+/* 측량상태 버튼 그룹 */
+.stat-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.stat-btn{height:44px;border:1.5px solid var(--gray-200);border-radius:var(--r-sm);
+  font-size:13px;font-weight:600;cursor:pointer;background:#fff;
+  font-family:var(--font);color:var(--gray-600);transition:all .15s;}
+.stat-btn:hover{border-color:var(--primary);color:var(--primary);}
+.stat-btn.sel-완료{border-color:var(--teal-dark);background:var(--teal-dark);color:#fff;}
+.stat-btn.sel-불가{border-color:var(--danger);background:var(--danger);color:#fff;}
+.stat-btn.sel-이설{border-color:#ea7c1a;background:#ea7c1a;color:#fff;}
+.stat-btn.sel-기타{border-color:#9333ea;background:#9333ea;color:#fff;}
+
+/* SAVE BAR */
+.save-bar{position:fixed;bottom:0;left:0;right:0;
+  padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));
+  background:#fff;border-top:1px solid var(--gray-200);display:flex;gap:10px;z-index:30;}
+.s-btn{flex:1;height:46px;border:none;border-radius:var(--r-md);
+  font-size:15px;font-weight:700;font-family:var(--font);cursor:pointer;transition:all .2s;}
+.s-btn.p{background:var(--teal);color:#fff;}
+.s-btn.p:hover{background:var(--teal-dark);}
+.s-btn.s{background:var(--gray-100);color:var(--gray-700);}
+.s-btn:disabled{opacity:.55;cursor:not-allowed;}
+
+/* MODALS */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;
+  z-index:500;opacity:0;pointer-events:none;transition:opacity .25s;}
+.modal-bg.open{opacity:1;pointer-events:auto;}
+.modal-pnl{width:100%;background:#fff;border-radius:20px 20px 0 0;
+  padding:20px 20px calc(20px + env(safe-area-inset-bottom,0px));max-height:88dvh;overflow-y:auto;
+  transform:translateY(40px);transition:transform .3s cubic-bezier(.4,0,.2,1);}
+.modal-bg.open .modal-pnl{transform:translateY(0);}
+.modal-ttl{font-size:17px;font-weight:800;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;}
+.cfg-row{margin-bottom:14px;}
+.cfg-lbl{font-size:12px;color:var(--gray-600);font-weight:600;margin-bottom:5px;}
+.cfg-in{width:100%;height:42px;border:1.5px solid var(--gray-200);border-radius:var(--r-sm);
+  padding:0 12px;font-size:13px;font-family:var(--font);transition:border-color .15s;}
+.cfg-in:focus{outline:none;border-color:var(--primary);}
+.cfg-hint{font-size:11px;color:var(--gray-400);margin-top:3px;}
+.cfg-save{width:100%;height:46px;background:var(--primary);color:#fff;border:none;
+  border-radius:var(--r-md);font-size:15px;font-weight:700;font-family:var(--font);cursor:pointer;margin-top:10px;}
+.cfg-info{margin-top:14px;padding:12px;background:var(--gray-50);border-radius:var(--r-sm);
+  font-size:12px;color:var(--gray-600);line-height:1.7;}
+.dl-btn{width:100%;height:48px;border:1.5px solid var(--gray-200);background:#fff;
+  border-radius:var(--r-md);font-size:14px;font-weight:600;font-family:var(--font);cursor:pointer;
+  margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px;
+  color:var(--gray-800);transition:all .15s;}
+.dl-btn svg{width:18px;height:18px;}
+.dl-btn:hover{border-color:var(--primary);color:var(--primary);}
+.dl-btn:last-child{margin-bottom:0;}
+
+/* TOAST & LOADER */
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(12px);
+  background:var(--gray-900);color:#fff;padding:9px 18px;border-radius:100px;
+  font-size:13px;font-weight:500;opacity:0;transition:all .22s;z-index:9999;white-space:nowrap;pointer-events:none;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#loader{position:fixed;inset:0;background:rgba(255,255,255,.88);display:none;
+  flex-direction:column;align-items:center;justify-content:center;gap:14px;z-index:9998;}
+#loader.show{display:flex;}
+.spinner{width:38px;height:38px;border:3px solid var(--gray-200);border-top-color:var(--primary);
+  border-radius:50%;animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loader-msg{font-size:14px;color:var(--gray-600);}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ======================================================
+  SCREEN 1: MAP
+  ====================================================== -->
+<div id="scnMap" class="screen s-active">
+  <div class="tnav">
+    <button class="ico-btn" onclick="UI.showCfg()" title="설정">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+      </svg>
+    </button>
+    <div class="tnav-title">
+      <span>기초번호판 측량지점</span>
+      <span class="tnav-sub">㈜대국지아이에스</span>
+    </div>
+    <div class="ico-row">
+      <button class="ico-btn" onclick="UI.showSearch()" title="검색">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </button>
+      <div style="position:relative;display:inline-flex;">
+        <button class="ico-btn" onclick="UI.showDL()" title="내보내기">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </button>
+        <span id="queueBadge" style="display:none;position:absolute;top:4px;right:2px;
+          background:#e5534b;color:#fff;font-size:10px;font-weight:800;
+          min-width:16px;height:16px;border-radius:8px;padding:0 3px;
+          align-items:center;justify-content:center;pointer-events:none;"></span>
+      </div>
+    </div>
+  </div>
+
+  <div id="mapContent">
+    <div id="kakaoMap"></div>
+
+    <div class="stats-bar" onclick="SG.open()">
+      <span class="stat-label">대국지아이에스</span>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <div class="stat-dot" style="background:var(--primary)"></div>
+        <span>전체 <span id="sTot">0</span></span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <div class="stat-dot" style="background:var(--teal-dark)"></div>
+        <span>완료 <span id="sDone">0</span></span>
+      </div>
+    </div>
+
+    <!-- 시군별 현황 시트 -->
+    <div class="sg-overlay" id="sgOverlay" onclick="SG.close()"></div>
+    <div class="sg-sheet" id="sgSheet">
+      <div class="sg-handle"></div>
+      <div class="sg-hdr">
+        <span class="sg-hdr-title">시군별 현황</span>
+        <span class="sg-hdr-sub" id="sgSub">전체 0 / 완료 0</span>
+      </div>
+      <div class="sg-body" id="sgBody"></div>
+    </div>
+
+    <div class="map-ctrls">
+      <button class="map-ctrl" onclick="MC.refresh()" title="새로고침">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+        </svg>
+      </button>
+      <button class="map-ctrl" onclick="MC.myLoc()" title="내 위치">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="map-type-bar">
+      <button class="mt-btn on" id="mtRoad" onclick="MC.setType('road')">일반</button>
+      <button class="mt-btn" id="mtDist" onclick="MC.setType('district')">지적편집도</button>
+      <button class="mt-btn" id="mtSky" onclick="MC.setType('sky')">스카이뷰</button>
+    </div>
+
+    <div class="legend">
+      <div class="lg-i">
+        <svg width="14" height="17" viewBox="0 0 40 48" fill="none">
+          <path d="M20 2C11.16 2 4 9.16 4 18C4 30 20 46 20 46S36 30 36 18C36 9.16 28.84 2 20 2Z" fill="#1a6ee0" stroke="#fff" stroke-width="1.5"/>
+          <circle cx="20" cy="18" r="6" fill="white"/>
+        </svg>미촬영
+      </div>
+      <div class="lg-i">
+        <svg width="14" height="17" viewBox="0 0 40 48" fill="none">
+          <path d="M20 2C11.16 2 4 9.16 4 18C4 30 20 46 20 46S36 30 36 18C36 9.16 28.84 2 20 2Z" fill="#008f83" stroke="#fff" stroke-width="1.5"/>
+          <polyline points="13,18 18,23 27,13" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>촬영완료
+      </div>
+      <div class="lg-i">
+        <svg width="14" height="17" viewBox="0 0 40 48" fill="none">
+          <path d="M20 2C11.16 2 4 9.16 4 18C4 30 20 46 20 46S36 30 36 18C36 9.16 28.84 2 20 2Z" fill="#e5534b" stroke="#fff" stroke-width="1.5"/>
+          <text x="20" y="25" text-anchor="middle" fill="white" font-size="20" font-weight="bold" font-family="Arial,sans-serif">!</text>
+        </svg>불가
+      </div>
+    </div>
+
+    <!-- Bottom Sheet -->
+    <div class="bsheet" id="bsheet">
+      <div class="bs-handle"></div>
+      <button class="bs-close" onclick="UI.closeSh()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+      <div class="bs-body">
+        <span class="bs-tag" id="bsTag">기초번호판</span>
+        <div class="bs-addr" id="bsAddr">-</div>
+        <div class="bs-meta">
+          <span>측량상태 · <span class="ms unk" id="bsStat">미촬영</span></span>
+        </div>
+        <div class="bs-photos">
+          <div class="bs-photo">
+            <img id="bsImgF" src=""><div class="ph-empty" id="bsEmpF">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg><span>원거리</span></div>
+            <span class="ph-tag">원거리</span>
+          </div>
+          <div class="bs-photo">
+            <img id="bsImgC" src=""><div class="ph-empty" id="bsEmpC">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <circle cx="8.5" cy="8.5" r="1.5"/>
+                <polyline points="21 15 16 10 5 21"/>
+              </svg><span>근거리</span></div>
+            <span class="ph-tag">근거리</span>
+          </div>
+        </div>
+        <div class="bs-acts">
+          <button class="act-btn" onclick="MC.focus()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>위치보기
+          </button>
+          <button class="act-btn" onclick="MC.navTo()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+            </svg>길찾기
+          </button>
+          <button class="act-btn prim" onclick="UI.goDetail()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>측량촬영
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div><!-- /scnMap -->
+
+<!-- ======================================================
+  SCREEN 2: DETAIL
+  ====================================================== -->
+<div id="scnDet" class="screen s-right">
+  <div class="tnav">
+    <button class="ico-btn" onclick="UI.goBack()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <span class="tnav-title" id="dTitle">측량 등록</span>
+    <div class="ico-btn" style="visibility:hidden"></div>
+  </div>
+
+  <div class="d-scroll" id="dScroll">
+    <!-- 사진 촬영 그리드 -->
+    <div class="ph-grid">
+      <div class="ph-slot" onclick="Ph.trigger('f')">
+        <img id="prvF" src=""><div class="ph-ph" id="phF">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+            <circle cx="12" cy="13" r="4"/></svg><span>원거리 사진</span></div>
+        <span class="ph-lbl">원거리</span>
+        <div class="ph-cam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+          <circle cx="12" cy="13" r="4"/></svg></div>
+        <input type="file" id="inpF" accept="image/*" capture="environment"
+          onchange="Ph.handle(event,'f')" onclick="event.stopPropagation()">
+      </div>
+      <div class="ph-slot" onclick="Ph.trigger('c')">
+        <img id="prvC" src=""><div class="ph-ph" id="phC">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+            <circle cx="12" cy="13" r="4"/></svg><span>근거리 사진</span></div>
+        <span class="ph-lbl">근거리</span>
+        <div class="ph-cam"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/>
+          <circle cx="12" cy="13" r="4"/></svg></div>
+        <input type="file" id="inpC" accept="image/*" capture="environment"
+          onchange="Ph.handle(event,'c')" onclick="event.stopPropagation()">
+      </div>
+    </div>
+
+    <!-- 기본정보 -->
+    <div class="i-card">
+      <div class="i-row"><span class="i-lbl">도로명주소</span><span class="i-val" id="dAddr">-</span></div>
+      <div class="i-row"><span class="i-lbl">지역</span><span class="i-val" id="dRegion">-</span></div>
+      <div class="i-row"><span class="i-lbl">시설물관리번호</span><span class="i-val" id="dFacId" style="font-size:12px;word-break:break-all;">-</span></div>
+      <div class="i-row"><span class="i-lbl">점검상태</span><span class="i-val" id="dChkStatus">-</span></div>
+      <div class="i-row"><span class="i-lbl">현장판정</span><span class="i-val" id="dFieldJudge">-</span></div>
+      <div class="i-row"><span class="i-lbl">점검메모</span><span class="i-val" id="dChkMemo">-</span></div>
+    </div>
+
+    <!-- 측량정보 -->
+    <div class="sec-h">측량정보</div>
+    <div class="f-wrap">
+      <div class="f-row">
+        <div class="f-lbl">이전 측량이력</div>
+        <div id="dLastSurvey" style="font-size:13px;color:var(--gray-400);padding:2px 0">이력 없음</div>
+      </div>
+      <div class="f-row">
+        <div class="f-lbl">측량자</div>
+        <input type="text" class="f-input" id="fSurveyor" placeholder="측량자 이름">
+      </div>
+      <div class="f-row">
+        <div class="f-lbl">측량상태 <span class="req">*</span></div>
+        <div class="stat-btns">
+          <button type="button" class="stat-btn" data-val="촬영완료" onclick="FM.statSel(this)">✓ 촬영완료</button>
+          <button type="button" class="stat-btn" data-val="이설필요" onclick="FM.statSel(this)">⚠ 이설필요</button>
+          <button type="button" class="stat-btn" data-val="촬영불가" onclick="FM.statSel(this)">✕ 촬영불가</button>
+          <button type="button" class="stat-btn" data-val="기타" onclick="FM.statSel(this)">· 기타</button>
+        </div>
+      </div>
+      <div class="f-row">
+        <div class="f-lbl">특이사항</div>
+        <textarea class="f-textarea" id="fMemo" placeholder="특이사항을 입력하세요."></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="save-bar">
+    <button class="s-btn s" onclick="UI.goBack()">취소</button>
+    <button class="s-btn p" id="btnSv" onclick="FM.save()">저장</button>
+  </div>
+  <div id="tokenWarn" style="display:none;text-align:center;padding:6px 16px 10px;
+    font-size:12px;color:#e5534b;font-weight:600;">
+    ⚠️ Token이 입력되지 않았습니다. 설정에서 먼저 입력해 주세요.
+  </div>
+</div><!-- /scnDet -->
+
+</div><!-- /app -->
+
+<!-- CONFIG MODAL -->
+<div id="modCfg" class="modal-bg">
+  <div class="modal-pnl">
+    <div class="modal-ttl">시스템 설정
+      <button class="ico-btn" onclick="UI.closeMod('modCfg')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="cfg-row">
+      <div class="cfg-lbl">Access Token</div>
+      <input type="password" class="cfg-in" id="cToken" placeholder="토큰을 입력하세요.">
+      <div class="cfg-hint">Expires on 2026년 10월 31일</div>
+    </div>
+    <div class="cfg-row">
+      <div class="cfg-lbl">측량자 기본값</div>
+      <input class="cfg-in" id="cInsp" placeholder="측량자 이름 입력하세요">
+    </div>
+    <input type="hidden" id="cKakao"><input type="hidden" id="cOwner"><input type="hidden" id="cRepo"><input type="hidden" id="cBranch">
+    <button class="cfg-save" onclick="Cfg.save()">저장 및 적용</button>
+    <div class="cfg-info">
+      <b>📁 레포 구조 (자동 생성)</b><br>
+      data/facilities.json &nbsp;— 측량지점 목록<br>
+      data/inspections.json — 전체 측량결과<br>
+      photos/{시도} {시군구} {도로명} {번호}_far_{날짜}.jpg<br>
+      photos/{시도} {시군구} {도로명} {번호}_close_{날짜}.jpg
+    </div>
+    <div style="text-align:center;padding:8px 0 4px;font-size:12px;color:var(--gray-400);">
+      기초번호판 측량지점 <span id="cfgVersion"></span>
+    </div>
+  </div>
+</div>
+
+<!-- SEARCH MODAL -->
+<div id="modSearch" class="modal-bg">
+  <div class="modal-pnl" style="padding-bottom:env(safe-area-inset-bottom,0px)">
+    <div class="modal-ttl">측량지점 검색
+      <button class="ico-btn" onclick="UI.closeMod('modSearch')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div style="display:flex;gap:8px;padding:0 0 12px;">
+      <input id="searchInput" class="cfg-in" placeholder="도로명 또는 지역 입력 (예: 영주시, 시청로)"
+        style="flex:1;margin:0;" oninput="Srch.suggest()" onkeydown="if(event.key==='Enter')Srch.go()">
+      <button onclick="Srch.go()" style="padding:0 18px;height:42px;background:var(--primary);color:#fff;
+        border:none;border-radius:var(--r-sm);font-size:14px;font-weight:700;cursor:pointer;
+        font-family:var(--font);flex-shrink:0;">이동</button>
+    </div>
+    <div id="searchResults" style="max-height:280px;overflow-y:auto;padding:0 0 8px;"></div>
+  </div>
+</div>
+
+<!-- DOWNLOAD MODAL -->
+<div id="modDL" class="modal-bg">
+  <div class="modal-pnl">
+    <div class="modal-ttl">데이터 내보내기
+      <button class="ico-btn" onclick="UI.closeMod('modDL')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <button class="dl-btn" onclick="Ex.json()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/><polyline points="8 13 12 17 16 13"/>
+        <line x1="12" y1="17" x2="12" y2="9"/>
+      </svg>측량결과 JSON 다운로드
+    </button>
+    <button class="dl-btn" onclick="Ex.csv()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/><polyline points="8 13 12 17 16 13"/>
+        <line x1="12" y1="17" x2="12" y2="9"/>
+      </svg>측량결과 CSV 다운로드
+    </button>
+    <button class="dl-btn" onclick="Ex.github()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/>
+      </svg>GitHub 사진 폴더 보기
+    </button>
+  </div>
+</div>
+
+<div id="loader"><div class="spinner"></div><div class="loader-msg" id="loaderMsg">처리 중...</div></div>
+<div id="toast"></div>
+
+<script>
+/* ============================================================
+   CONFIG
+   ============================================================ */
+const Cfg = {
+  K: 'dggis_cfg',
+  def: { kakaoKey:'3c55a8281f53c899abbbbe6960e519bf', token:'', owner:'smbahk', repo:'dggis.addr.chk', branch:'main', inspector:'' },
+  get() { try { return {...this.def,...JSON.parse(localStorage.getItem(this.K)||'{}')}; } catch { return {...this.def}; } },
+  validToken(token) {
+    return /^ghp_[A-Za-z0-9]{36}$/.test(token) ||
+           /^github_pat_[A-Za-z0-9_]{82}$/.test(token);
+  },
+  save() {
+    const c = {
+      kakaoKey: this.def.kakaoKey,
+      token:    g('cToken').value.trim(),
+      owner:    this.def.owner,
+      repo:     this.def.repo,
+      branch:   this.def.branch,
+      inspector:g('cInsp').value.trim()
+    };
+    if (!c.token) { UI.toast('⚠️ Token을 입력해 주세요.'); return; }
+    if (!this.validToken(c.token)) { UI.toast('⚠️ Token 형식이 올바르지 않습니다. 다시 확인해 주세요.'); return; }
+if (!c.inspector) { UI.toast('⚠️ 측량자 이름을 입력해 주세요.'); return; }
+    localStorage.setItem(this.K, JSON.stringify(c));
+    UI.closeMod('modCfg');
+    UI.toast('설정이 저장되었습니다.');
+    const btnSv=g('btnSv'), warn=g('tokenWarn');
+    if (btnSv) { btnSv.disabled=false; }
+    if (warn)  { warn.style.display='none'; }
+    if (c.token && c.owner && c.repo) MC.loadAll();
+  },
+  fill() {
+    const c = this.get();
+    g('cKakao').value=c.kakaoKey; g('cToken').value=c.token;
+    g('cOwner').value=c.owner;    g('cRepo').value=c.repo;
+    g('cBranch').value=c.branch;  g('cInsp').value=c.inspector;
+    const el=g('cfgVersion'); if(el) el.textContent=APP_VERSION;
+  }
+};
+
+/* ============================================================
+   GITHUB API
+   ============================================================ */
+const GH = {
+  base() { const c=Cfg.get(); return `https://api.github.com/repos/${c.owner}/${c.repo}/contents`; },
+  hdrs() { const c=Cfg.get(); return {'Authorization':`token ${c.token}`,'Accept':'application/vnd.github+json','Content-Type':'application/json'}; },
+  // 경로의 각 세그먼트를 URL 인코딩 (한글 파일명 지원)
+  _encPath(path) { return path.split('/').map(s => encodeURIComponent(s)).join('/'); },
+  async getFile(path) {
+    try {
+      const c=Cfg.get();
+      const hdrs = c.token ? this.hdrs() : {'Accept':'application/vnd.github+json'};
+      const r = await fetch(`${this.base()}/${this._encPath(path)}?ref=${c.branch}`,{headers:hdrs});
+      if (!r.ok) return null;
+      const d = await r.json();
+      return {sha:d.sha, content:decodeURIComponent(escape(atob(d.content.replace(/\n/g,''))))};
+    } catch { return null; }
+  },
+  async putFile(path, content, sha, msg) {
+    const c=Cfg.get();
+    const body = {message:msg||`Update ${path}`, content:btoa(unescape(encodeURIComponent(content))), branch:c.branch};
+    if (sha) body.sha = sha;
+    const r = await fetch(`${this.base()}/${this._encPath(path)}`,{method:'PUT',headers:this.hdrs(),body:JSON.stringify(body)});
+    if (r.ok) return await r.json();
+    if (r.status===409||r.status===422) return {_conflict:true};
+    return null;
+  },
+  async putBin(path, b64, sha, msg) {
+    const c=Cfg.get();
+    const raw = b64.includes(',') ? b64.split(',')[1] : b64;
+    const body = {message:msg||`Upload ${path}`, content:raw, branch:c.branch};
+    if (sha) body.sha = sha;
+    const r = await fetch(`${this.base()}/${this._encPath(path)}`,{method:'PUT',headers:this.hdrs(),body:JSON.stringify(body)});
+    return r.ok ? await r.json() : null;
+  },
+  async loadFacs() {
+    const f = await this.getFile('data/facilities.json');
+    if (f) try { App.facs=JSON.parse(f.content); } catch {}
+    if (!App.facs.length) App.facs = DEMO;
+  },
+  async loadInsp() {
+    const c=Cfg.get();
+    const LS_KEY = 'dggis_i';
+    if (!c.owner||!c.repo) { App.insp=JSON.parse(localStorage.getItem(LS_KEY)||'{}'); return; }
+    const f = await this.getFile('data/inspections.json');
+    if (f) {
+      try {
+        const remote=JSON.parse(f.content);
+        const local=JSON.parse(localStorage.getItem(LS_KEY)||'{}');
+        App.insp={...remote,...local}; App.inspSha=f.sha;
+      } catch { App.insp=JSON.parse(localStorage.getItem(LS_KEY)||'{}'); }
+    } else {
+      App.insp=JSON.parse(localStorage.getItem(LS_KEY)||'{}');
+    }
+    MC.redraw();
+  },
+  async saveInsp(insp) {
+    const LS_KEY = 'dggis_i';
+    App.insp[insp.id]=insp;
+    localStorage.setItem(LS_KEY,JSON.stringify(App.insp));
+    const c=Cfg.get();
+    if (!c.token||!c.owner||!c.repo) return true;
+    for (let i=0; i<3; i++) {
+      const res=await this.putFile('data/inspections.json',JSON.stringify(App.insp,null,2),App.inspSha,`측량: ${insp.addr||insp.id}`);
+      if (res && !res._conflict) { App.inspSha=res.content.sha; return true; }
+      if (res?._conflict) {
+        const f=await this.getFile('data/inspections.json');
+        if (f) { try { const r=JSON.parse(f.content); App.insp={...r,...App.insp}; App.inspSha=f.sha; } catch {} }
+      } else break;
+    }
+    return false;
+  },
+  async uploadPhoto(fac, typeLabel, b64, dateStr) {
+    const c=Cfg.get();
+    if (!c.token||!c.owner||!c.repo) return null;
+    const type2 = typeLabel==='원거리'?'far':'close';
+    // 파일명: {시도} {시군구} {도로명} {번호}_{시설물관리번호}_far/close_{YYYYMMDD}.jpg
+    const fname = `${fac.sido} ${fac.sigungu} ${fac.road} ${fac.num}_${fac.id}_${type2}_${dateStr}.jpg`;
+    const path = `photos/${fname}`;
+    const ex = await this.getFile(path);
+    const res = await this.putBin(path, b64, ex?.sha, `사진: ${fac.addr}(${typeLabel})`);
+    return res ? `https://raw.githubusercontent.com/${c.owner}/${c.repo}/${c.branch}/${this._encPath(path)}` : null;
+  }
+};
+
+/* ============================================================
+   APP STATE
+   ============================================================ */
+const App = { facs:[], insp:{}, inspSha:null, cur:null, photos:{f:null,c:null} };
+
+/* ============================================================
+   SIGUNGU SHEET
+   ============================================================ */
+const SG = {
+  _data: {}, _tot:0, _done:0,
+  setData(map, tot, done) { this._data=map; this._tot=tot; this._done=done; },
+  open() {
+    const rows = Object.entries(this._data)
+      .sort((a,b)=>b[1].tot-a[1].tot)
+      .map(([sg,v])=>{
+        const pct = v.tot>0 ? Math.round(v.done/v.tot*100) : 0;
+        const cls = v.done===0?'none':v.done===v.tot?'all':'part';
+        return `<div class="sg-row">
+          <span class="sg-name">${sg}</span>
+          <span class="sg-cnt">${v.tot}개소</span>
+          <div class="sg-done-wrap">
+            <span class="sg-done ${cls}">완료 ${v.done}</span>
+            <span class="sg-pct">${pct}%</span>
+          </div>
+        </div>`;
+      }).join('');
+    g('sgBody').innerHTML = rows || '<div style="padding:20px;text-align:center;color:var(--gray-400);">데이터 없음</div>';
+    g('sgSub').textContent = `전체 ${this._tot} / 완료 ${this._done}`;
+    g('sgOverlay').classList.add('on');
+    g('sgSheet').classList.add('on');
+  },
+  close() {
+    g('sgOverlay').classList.remove('on');
+    g('sgSheet').classList.remove('on');
+  }
+};
+
+/* ============================================================
+   UPLOAD QUEUE
+   ============================================================ */
+const Queue = {
+  processing: false,
+  async updateBadge() {
+    const items = await IDB.queueList();
+    const el = g('queueBadge');
+    if (!el) return;
+    if (items.length > 0) { el.textContent=items.length; el.style.display='flex'; }
+    else { el.style.display='none'; }
+  },
+  async add(facId, photoItems, inspData) {
+    for (const p of photoItems) {
+      await IDB.queueAdd({kind:'photo', facId, ...p, inspData:null});
+    }
+    await IDB.queueAdd({kind:'insp', facId, inspData});
+    await this.updateBadge();
+  },
+  async process() {
+    if (this.processing) return;
+    if (!navigator.onLine) return;
+    const c = Cfg.get();
+    if (!c.token||!c.owner||!c.repo) return;
+    const items = await IDB.queueList();
+    if (items.length===0) return;
+    this.processing=true;
+    UI.toast(`📡 대기 중인 ${items.length}건 업로드 시작...`);
+    let successCount=0;
+    const photos=items.filter(i=>i.kind==='photo');
+    const insps =items.filter(i=>i.kind==='insp');
+    for (const item of photos) {
+      try {
+        const b64=await IDB.get(item.idbKey);
+        if (!b64) { await IDB.queueRemove(item.qid); continue; }
+        const fac=App.facs.find(f=>f.id===item.facId);
+        if (!fac) { await IDB.queueRemove(item.qid); continue; }
+        const url=await GH.uploadPhoto(fac, item.typeLabel, b64, item.dateStr);
+        if (url) {
+          if (App.insp[item.facId]) {
+            if (item.typeLabel==='원거리') App.insp[item.facId].farPhotoUrl=url;
+            if (item.typeLabel==='근거리') App.insp[item.facId].closePhotoUrl=url;
+            localStorage.setItem('dggis_i', JSON.stringify(App.insp));
+          }
+          await IDB.queueRemove(item.qid); successCount++;
+        }
+      } catch(e) { console.warn('사진 재업로드 실패:', e); }
+    }
+    for (const item of insps) {
+      try {
+        const f=await GH.getFile('data/inspections.json');
+        if (f) { try { const r=JSON.parse(f.content); App.insp={...r,...App.insp}; } catch {} App.inspSha=f.sha; }
+        else { App.inspSha=null; }
+        localStorage.setItem('dggis_i', JSON.stringify(App.insp));
+        const latestInsp=App.insp[item.facId]||item.inspData;
+        if (!latestInsp) { await IDB.queueRemove(item.qid); continue; }
+        const ok=await GH.saveInsp(latestInsp);
+        if (ok) { await IDB.queueRemove(item.qid); successCount++; }
+      } catch(e) { console.warn('점검데이터 재업로드 실패:', e); }
+    }
+    this.processing=false;
+    await this.updateBadge();
+    const remaining=(await IDB.queueList()).length;
+    if (remaining===0) { MC.redraw(); UI.toast(`✅ 대기 중이던 데이터 업로드 완료!`); }
+    else UI.toast(`⚠️ ${remaining}건 업로드 실패 — 재시도 대기 중`);
+  }
+};
+
+/* ============================================================
+   DEMO DATA (연결 전 샘플)
+   ============================================================ */
+const DEMO = [
+  {id:'FRF_DEMO_001',sido:'경상북도',sigungu:'영주시',road:'시청로',num:'10',addr:'경상북도 영주시 시청로 10',lat:36.8054,lng:128.6244,region:'경상북도 영주시'},
+  {id:'FRF_DEMO_002',sido:'경상북도',sigungu:'안동시',road:'경동로',num:'1375',addr:'경상북도 안동시 경동로 1375',lat:36.5685,lng:128.7294,region:'경상북도 안동시'}
+];
+
+/* ============================================================
+   MAP CONTROLLER
+   ============================================================ */
+let kakaoMap, mkrs={}, overlayType=null, myMk=null;
+const MC = {
+  init() {
+    kakaoMap = new kakao.maps.Map(g('kakaoMap'),{
+      center: new kakao.maps.LatLng(36.5, 128.5), level:9
+    });
+    kakaoMap.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+    kakao.maps.event.addListener(kakaoMap,'click',()=>UI.closeSh());
+    this.myLoc(true);
+    this.loadAll();
+  },
+  svgPin(status) {
+    let col, inner;
+    if (!status) {
+      col='#1a6ee0';
+      inner=`<circle cx="20" cy="18" r="6" fill="white"/>`;
+    } else if (status==='촬영완료') {
+      col='#008f83';
+      inner=`<polyline points="13,18 18,23 27,13" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+    } else if (status==='촬영불가') {
+      col='#e5534b';
+      inner=`<text x="20" y="25" text-anchor="middle" fill="white" font-size="20" font-weight="bold" font-family="Arial,sans-serif">!</text>`;
+    } else {
+      col='#ea7c1a';
+      inner=`<text x="20" y="25" text-anchor="middle" fill="white" font-size="16" font-weight="bold" font-family="Arial,sans-serif">?</text>`;
+    }
+    return 'data:image/svg+xml;base64,'+btoa(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 40 48">
+        <defs><filter id="sh"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,.3)"/></filter></defs>
+        <path d="M20 2C11.16 2 4 9.16 4 18C4 30 20 46 20 46S36 30 36 18C36 9.16 28.84 2 20 2Z"
+              fill="${col}" stroke="rgba(255,255,255,.6)" stroke-width="1.5" filter="url(#sh)"/>
+        ${inner}
+      </svg>`
+    );
+  },
+  async loadAll() {
+    Ld.show('시설 데이터 로드 중...');
+    try { await GH.loadFacs(); await GH.loadInsp(); this.redraw(); }
+    finally { Ld.hide(); }
+  },
+  redraw() {
+    Object.values(mkrs).forEach(m=>m.setMap(null)); mkrs={};
+    let tot=0, done=0;
+    const sgMap={}; // {sigungu: {tot, done}}
+    App.facs.forEach(fac=>{
+      const insp=App.insp[fac.id];
+      const status=insp?.surveyStatus||null;
+      tot++;
+      if (status==='촬영완료') done++;
+      // 시군별 집계
+      const sg=fac.sigungu||fac.region||'기타';
+      if (!sgMap[sg]) sgMap[sg]={tot:0,done:0};
+      sgMap[sg].tot++;
+      if (status==='촬영완료') sgMap[sg].done++;
+      const img=new kakao.maps.MarkerImage(this.svgPin(status), new kakao.maps.Size(32,40),
+        {offset:new kakao.maps.Point(16,40)});
+      const mk=new kakao.maps.Marker({position:new kakao.maps.LatLng(fac.lat,fac.lng),image:img,clickable:true});
+      mk.setMap(kakaoMap);
+      kakao.maps.event.addListener(mk,'click',()=>this.openSh(fac));
+      mkrs[fac.id]=mk;
+    });
+    g('sTot').textContent=tot;
+    g('sDone').textContent=done;
+    SG.setData(sgMap, tot, done);
+  },
+  async openSh(fac) {
+    App.cur=fac;
+    const insp=App.insp[fac.id];
+    const status=insp?.surveyStatus||null;
+    const tag=g('bsTag');
+    if (status==='촬영완료') { tag.textContent='촬영완료'; tag.className='bs-tag done'; }
+    else if (status==='촬영불가') { tag.textContent='촬영불가'; tag.className='bs-tag fail'; }
+    else { tag.textContent='기초번호판'; tag.className='bs-tag'; }
+    g('bsAddr').textContent=fac.addr||fac.id;
+    const ce=g('bsStat');
+    if (status) { ce.textContent=status; ce.className='ms '+(status==='촬영완료'?'ok':'bad'); }
+    else { ce.textContent='미촬영'; ce.className='ms unk'; }
+    // 사진 표시
+    const setP = async (imgId, empId, ghUrl, idbKey) => {
+      const im=g(imgId), em=g(empId);
+      let src=ghUrl||null;
+      if (!src && idbKey) { try { src=await IDB.get(idbKey); } catch {} }
+      if (src) { im.src=src; im.className='on'; em.style.display='none'; }
+      else     { im.className=''; im.src=''; em.style.display=''; }
+    };
+    await setP('bsImgF','bsEmpF', insp?.farPhotoUrl||null, insp?.farPhotoLocal||null);
+    await setP('bsImgC','bsEmpC', insp?.closePhotoUrl||null, insp?.closePhotoLocal||null);
+    UI.openSh();
+  },
+  focus() {
+    if (!App.cur) return;
+    kakaoMap.setCenter(new kakao.maps.LatLng(App.cur.lat,App.cur.lng));
+    kakaoMap.setLevel(3);
+  },
+  navTo() {
+    if (!App.cur) return;
+    const {addr,lat,lng}=App.cur, n=encodeURIComponent(addr||'');
+    const ios=/iP(hone|od|ad)/.test(navigator.userAgent);
+    window.open(ios?`kakaomap://route?ep=${lat},${lng}&by=CAR&en=${n}`:`https://map.kakao.com/link/to/${n},${lat},${lng}`,'_blank');
+  },
+  myLoc(silent) {
+    if (!navigator.geolocation) { if (!silent) UI.toast('위치 서비스 미지원'); return; }
+    navigator.geolocation.getCurrentPosition(pos=>{
+      const ll=new kakao.maps.LatLng(pos.coords.latitude,pos.coords.longitude);
+      kakaoMap.setCenter(ll); if (!silent) kakaoMap.setLevel(4);
+      if (myMk) myMk.setMap(null);
+      const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" fill="#e5534b" stroke="white" stroke-width="2.5"/>
+        <circle cx="12" cy="12" r="4" fill="white"/></svg>`;
+      myMk=new kakao.maps.Marker({position:ll,
+        image:new kakao.maps.MarkerImage('data:image/svg+xml;base64,'+btoa(svg),
+          new kakao.maps.Size(20,20),{offset:new kakao.maps.Point(10,10)})});
+      myMk.setMap(kakaoMap);
+    },()=>{ if (!silent) UI.toast('위치를 가져올 수 없습니다.'); });
+  },
+  refresh() { this.loadAll(); UI.toast('새로고침 완료'); },
+  setType(t) {
+    ['mtRoad','mtDist','mtSky'].forEach(id=>g(id).classList.remove('on'));
+    if (overlayType) { kakaoMap.removeOverlayMapTypeId(overlayType); overlayType=null; }
+    if (t==='district') {
+      g('mtDist').classList.add('on');
+      kakaoMap.addOverlayMapTypeId(kakao.maps.MapTypeId.USE_DISTRICT);
+      overlayType=kakao.maps.MapTypeId.USE_DISTRICT;
+    } else if (t==='sky') {
+      g('mtSky').classList.add('on');
+      kakaoMap.setMapTypeId(kakao.maps.MapTypeId.HYBRID);
+    } else {
+      g('mtRoad').classList.add('on');
+      kakaoMap.setMapTypeId(kakao.maps.MapTypeId.ROADMAP);
+    }
+  }
+};
+
+/* ============================================================
+   INDEXEDDB
+   ============================================================ */
+const IDB = {
+  db: null,
+  async open() {
+    if (this.db) return this.db;
+    return new Promise((res, rej) => {
+      const req = indexedDB.open('dggis_photos', 2);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('photos'))
+          db.createObjectStore('photos', {keyPath:'name'});
+        if (!db.objectStoreNames.contains('upload_queue'))
+          db.createObjectStore('upload_queue', {keyPath:'qid', autoIncrement:true});
+      };
+      req.onsuccess = e => { this.db=e.target.result; res(this.db); };
+      req.onerror   = () => rej(new Error('IDB 열기 실패'));
+      req.onblocked = () => rej(new Error('IDB 차단됨'));
+    });
+  },
+  async save(name, b64) {
+    try {
+      const db=await this.open();
+      await new Promise((res, rej) => {
+        const tx=db.transaction('photos','readwrite');
+        tx.objectStore('photos').put({name, b64, savedAt:new Date().toISOString()});
+        tx.oncomplete=()=>res(true); tx.onerror=()=>rej(new Error('IDB 쓰기 실패'));
+      });
+      return {ok:true, storage:'idb'};
+    } catch(e) {
+      try {
+        const thumb=await this._thumb(b64, 400);
+        const key='dggis_ph_'+name;
+        localStorage.setItem(key, thumb);
+        return {ok:true, storage:'ls', key};
+      } catch(e2) { return {ok:false}; }
+    }
+  },
+  async get(name) {
+    try {
+      const db=await this.open();
+      const result=await new Promise((res, rej) => {
+        const req=db.transaction('photos','readonly').objectStore('photos').get(name);
+        req.onsuccess=e=>res(e.target.result?.b64||null);
+        req.onerror=()=>rej(new Error('IDB 읽기 실패'));
+      });
+      if (result) return result;
+    } catch(e) {}
+    return localStorage.getItem('dggis_ph_'+name)||null;
+  },
+  async queueAdd(item) {
+    try {
+      const db=await this.open();
+      return new Promise((res, rej) => {
+        const tx=db.transaction('upload_queue','readwrite');
+        tx.objectStore('upload_queue').add({...item, createdAt:new Date().toISOString()});
+        tx.oncomplete=()=>res(true); tx.onerror=()=>rej(new Error('큐 추가 실패'));
+      });
+    } catch(e) { console.error('queueAdd 실패:', e); }
+  },
+  async queueList() {
+    try {
+      const db=await this.open();
+      return new Promise((res, rej) => {
+        const items=[];
+        const req=db.transaction('upload_queue','readonly').objectStore('upload_queue').openCursor();
+        req.onsuccess=e=>{ const cur=e.target.result; if(cur){items.push(cur.value);cur.continue();}else res(items); };
+        req.onerror=()=>rej([]);
+      });
+    } catch(e) { return []; }
+  },
+  async queueRemove(qid) {
+    try {
+      const db=await this.open();
+      return new Promise((res, rej) => {
+        const tx=db.transaction('upload_queue','readwrite');
+        tx.objectStore('upload_queue').delete(qid);
+        tx.oncomplete=()=>res(true); tx.onerror=()=>rej(false);
+      });
+    } catch(e) {}
+  },
+  _thumb(b64, maxSize) {
+    return new Promise((res, rej) => {
+      const img=new Image();
+      img.onload=()=>{
+        let w=img.width, h=img.height;
+        if(w>maxSize){h=h*maxSize/w;w=maxSize;} if(h>maxSize){w=w*maxSize/h;h=maxSize;}
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        cv.getContext('2d').drawImage(img,0,0,w,h);
+        res(cv.toDataURL('image/jpeg',0.7));
+      };
+      img.onerror=()=>rej(new Error('이미지 변환 실패'));
+      img.src=b64;
+    });
+  }
+};
+
+/* ============================================================
+   PHOTO
+   ============================================================ */
+const Ph = {
+  trigger(t) { g(t==='f'?'inpF':'inpC').click(); },
+  handle(e,t) {
+    const file=e.target.files[0]; if (!file) return;
+    const rd=new FileReader();
+    rd.onload=ev=>this.compress(ev.target.result,comp=>{
+      App.photos[t]=comp;
+      const prv=g(t==='f'?'prvF':'prvC'), ph=g(t==='f'?'phF':'phC');
+      prv.src=comp; prv.className='on'; ph.classList.add('gone');
+    });
+    rd.readAsDataURL(file);
+  },
+  compress(src,cb) {
+    const img=new Image(); img.onload=()=>{
+      const MAX=1200; let w=img.width,h=img.height;
+      if(w>MAX){h=h*MAX/w;w=MAX;} if(h>MAX){w=w*MAX/h;h=MAX;}
+      const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+      cv.getContext('2d').drawImage(img,0,0,w,h);
+      cb(cv.toDataURL('image/jpeg',.82));
+    }; img.src=src;
+  }
+};
+
+/* ============================================================
+   FORM
+   ============================================================ */
+const FM = {
+  _stat: '',
+  statSel(btn) {
+    const val=btn.dataset.val;
+    this._stat=val;
+    document.querySelectorAll('.stat-btn').forEach(b=>{
+      b.className='stat-btn';
+      if(b.dataset.val===val) b.classList.add(`sel-${val==='촬영완료'?'완료':val==='촬영불가'?'불가':val==='이설필요'?'이설':'기타'}`);
+    });
+  },
+  statLoad(val) {
+    this._stat=val||'';
+    document.querySelectorAll('.stat-btn').forEach(b=>{
+      b.className='stat-btn';
+      if(val && b.dataset.val===val) b.classList.add(`sel-${val==='촬영완료'?'완료':val==='촬영불가'?'불가':val==='이설필요'?'이설':'기타'}`);
+    });
+  },
+  async load(fac) {
+    const insp=App.insp[fac.id]||{};
+    App.photos={f:null,c:null};
+    ['prvF','prvC'].forEach(id=>{const e=g(id);e.src='';e.className='';});
+    ['phF','phC'].forEach(id=>g(id).classList.remove('gone'));
+
+    const validToken=Cfg.validToken(Cfg.get().token);
+    g('btnSv').disabled=!validToken;
+    g('tokenWarn').style.display=validToken?'none':'block';
+
+    const showPhoto=async(imgId,empId,ghUrl,idbKey)=>{
+      let src=ghUrl||null;
+      if (!src && idbKey) { try { src=await IDB.get(idbKey); } catch {} }
+      if (src) { g(imgId).src=src; g(imgId).className='on'; g(empId).classList.add('gone'); }
+    };
+    await showPhoto('prvF','phF', insp.farPhotoUrl, insp.farPhotoLocal||null);
+    await showPhoto('prvC','phC', insp.closePhotoUrl, insp.closePhotoLocal||null);
+
+    g('dAddr').textContent=fac.addr||'-';
+    g('dRegion').textContent=fac.region||'-';
+    g('dFacId').textContent=fac.id||'-';
+    g('dChkStatus').textContent=fac.chkStatus||'-';
+    g('dFieldJudge').textContent=fac.fieldJudge||'-';
+    g('dChkMemo').textContent=fac.chkMemo||'-';
+    g('dLastSurvey').textContent=insp.surveyDate?`${insp.surveyDate} · ${insp.surveyor||''}`:'이력 없음';
+    const cfg=Cfg.get();
+    g('fSurveyor').value=insp.surveyor||cfg.inspector||'';
+    g('fMemo').value=insp.memo||'';
+    this.statLoad(insp.surveyStatus||'');
+    g('dTitle').textContent=`${fac.road} ${fac.num}`;
+    g('dScroll').scrollTop=0;
+  },
+  async save() {
+    const fac=App.cur; if (!fac) return;
+    if (!this._stat) { UI.toast('측량상태를 선택해 주세요.'); return; }
+    const btn=g('btnSv'); btn.disabled=true;
+    Ld.show('GPS 위치 확인 중...');
+    const gps=await getGPS();
+    Ld.show('저장 중...');
+    try {
+      const now=new Date();
+      const dateStr=now.getFullYear()+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0');
+      const surveyor=g('fSurveyor').value.trim();
+      const insp={...(App.insp[fac.id]||{}),
+        id:fac.id, addr:fac.addr,
+        surveyDate:dateStr, surveyor,
+        surveyStatus:this._stat,
+        memo:g('fMemo').value.trim(),
+        gpsLat:gps?gps.lat:null, gpsLng:gps?gps.lng:null,
+        gpsAccuracy:gps?gps.accuracy:null,
+        distFromPoint:gps?calcDist(gps.lat,gps.lng,fac.lat,fac.lng):null,
+        gpsAt:gps?now.toISOString():null,
+        updatedAt:now.toISOString()};
+
+      const pendingPhotos=[];
+      // 파일명: {시도} {시군구} {도로명} {번호}_far/close_{YYYYMMDD}.jpg
+      const makePhName=(type2)=>`${fac.sido} ${fac.sigungu} ${fac.road} ${fac.num}_${fac.id}_${type2}_${dateStr}.jpg`;
+      if (App.photos.f) {
+        const fname=makePhName('far');
+        const r=await IDB.save(fname, App.photos.f);
+        if (r.ok) { insp.farPhotoLocal=fname; pendingPhotos.push({idbKey:fname,typeLabel:'원거리',dateStr,facId:fac.id}); }
+      }
+      if (App.photos.c) {
+        const cname=makePhName('close');
+        const r=await IDB.save(cname, App.photos.c);
+        if (r.ok) { insp.closePhotoLocal=cname; pendingPhotos.push({idbKey:cname,typeLabel:'근거리',dateStr,facId:fac.id}); }
+      }
+
+      App.insp[fac.id]=insp;
+      localStorage.setItem('dggis_i',JSON.stringify(App.insp));
+
+      const isOnline=navigator.onLine;
+      if (isOnline) {
+        const latest=await GH.getFile('data/inspections.json');
+        if (latest) {
+          try { const r=JSON.parse(latest.content); App.insp={...r,...App.insp}; } catch {}
+          App.inspSha=latest.sha;
+          localStorage.setItem('dggis_i', JSON.stringify(App.insp));
+        } else { App.inspSha=null; }
+      }
+
+      let uploadedPhotos=0;
+      if (isOnline) {
+        Ld.show('사진 업로드 중...');
+        const stillPending=[];
+        for (const p of pendingPhotos) {
+          const b64=p.typeLabel==='원거리'?App.photos.f:App.photos.c;
+          const u=await GH.uploadPhoto(fac, p.typeLabel, b64, dateStr);
+          if (u) {
+            if (p.typeLabel==='원거리') insp.farPhotoUrl=u;
+            if (p.typeLabel==='근거리') insp.closePhotoUrl=u;
+            uploadedPhotos++;
+          } else { stillPending.push(p); }
+        }
+        Ld.show('결과 저장 중...');
+        const ok=await GH.saveInsp(insp);
+        if (stillPending.length>0||!ok) {
+          for (const p of stillPending) await IDB.queueAdd({kind:'photo',...p,createdAt:new Date().toISOString()});
+          if (!ok) await IDB.queueAdd({kind:'insp',facId:fac.id,inspData:insp,createdAt:new Date().toISOString()});
+          await Queue.updateBadge();
+          UI.toast(uploadedPhotos>0?`일부 저장 완료 — 나머지 LTE 연결 시 자동 업로드`:`저장 완료!`);
+        } else { UI.toast(`저장 완료!`); }
+      } else {
+        for (const p of pendingPhotos) await IDB.queueAdd({kind:'photo',...p,createdAt:new Date().toISOString()});
+        await IDB.queueAdd({kind:'insp',facId:fac.id,inspData:insp,createdAt:new Date().toISOString()});
+        await Queue.updateBadge();
+        UI.toast(`📥 로컬 저장 완료 — LTE 연결 시 자동 업로드`);
+      }
+      MC.redraw();
+      setTimeout(()=>UI.goBack(),400);
+    } catch(e) {
+      console.error(e);
+      try {
+        const insp=App.insp[fac.id];
+        if (insp) { await IDB.queueAdd({kind:'insp',facId:fac.id,inspData:insp,createdAt:new Date().toISOString()}); await Queue.updateBadge(); }
+      } catch {}
+      UI.toast('오류 발생 — 로컬 저장 후 LTE 연결 시 자동 재시도');
+    } finally { btn.disabled=false; Ld.hide(); }
+  }
+};
+
+/* ============================================================
+   SEARCH
+   ============================================================ */
+const Srch = {
+  suggest() {
+    const q=g('searchInput').value.trim().toLowerCase();
+    const box=g('searchResults');
+    if (!q) { box.innerHTML=''; return; }
+    const matches=App.facs.filter(f=>
+      f.addr.toLowerCase().includes(q)||
+      f.road.toLowerCase().includes(q)||
+      f.sigungu.toLowerCase().includes(q)||
+      f.sido.toLowerCase().includes(q)
+    ).slice(0,20);
+    if (matches.length===0) {
+      box.innerHTML='<div style="padding:16px;text-align:center;color:var(--gray-400);font-size:13px;">검색 결과가 없습니다.</div>';
+      return;
+    }
+    box.innerHTML=matches.map(f=>{
+      const insp=App.insp[f.id];
+      const status=insp?.surveyStatus;
+      const col=status==='촬영완료'?'#008f83':status==='촬영불가'?'#e5534b':'#1a6ee0';
+      return `<div onclick="Srch.select('${f.id.replace(/'/g,"\\'")}')\" style="
+        display:flex;align-items:center;gap:10px;padding:10px 8px;
+        border-radius:var(--r-sm);cursor:pointer;transition:background .1s;"
+        onmouseover="this.style.background='var(--gray-100)'"
+        onmouseout="this.style.background=''">
+        <div style="width:10px;height:10px;border-radius:50%;background:${col};flex-shrink:0;"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13px;font-weight:700;color:var(--gray-900);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${f.addr}</div>
+          <div style="font-size:11px;color:var(--gray-400);">${f.region}</div>
+        </div>
+        <div style="font-size:11px;font-weight:700;color:${status==='촬영완료'?'#008f83':'var(--gray-400)'};flex-shrink:0;">
+          ${status||'미촬영'}
+        </div>
+      </div>`;
+    }).join('');
+  },
+  go() {
+    const q=g('searchInput').value.trim().toLowerCase();
+    if (!q) return;
+    const match=App.facs.find(f=>f.addr.toLowerCase()===q||f.road.toLowerCase()===q);
+    if (match) { this.select(match.id); return; }
+    const partial=App.facs.find(f=>f.addr.toLowerCase().includes(q)||f.road.toLowerCase().includes(q)||f.sigungu.toLowerCase().includes(q));
+    if (partial) this.select(partial.id);
+    else UI.toast('검색 결과가 없습니다.');
+  },
+  select(id) {
+    const fac=App.facs.find(f=>f.id===id);
+    if (!fac) return;
+    UI.closeMod('modSearch');
+    kakaoMap.setCenter(new kakao.maps.LatLng(fac.lat,fac.lng));
+    kakaoMap.setLevel(3);
+    setTimeout(()=>MC.openSh(fac),300);
+  }
+};
+
+/* ============================================================
+   EXPORT
+   ============================================================ */
+const Ex = {
+  _dl(name,content,type) {
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([content],{type}));
+    a.download=name; a.click(); URL.revokeObjectURL(a.href);
+  },
+  _checkAuth() {
+    const inspector=Cfg.get().inspector.trim();
+    const ADMIN='박성문';
+    if (inspector!==ADMIN) { UI.toast('관리자만 다운로드 가능합니다.'); return false; }
+    return true;
+  },
+  json() {
+    if (!this._checkAuth()) return;
+    this._dl('dggis_survey.json',JSON.stringify(App.insp,null,2),'application/json');
+    UI.closeMod('modDL');
+  },
+  csv() {
+    if (!this._checkAuth()) return;
+    const fname=url=>{ try { return url?decodeURIComponent(url.split('/').pop()):''; } catch { return url?url.split('/').pop():''; } };
+    const hdr=['시설관리번호','도로명주소','지역','측량일자','측량자','측량상태','특이사항','원거리사진','근거리사진','GPS위도','GPS경도','GPS정확도(m)','기준점거리(m)','GPS취득시각(UTC)'];
+    const rows=[hdr,...Object.values(App.insp).map(i=>{
+      const f=App.facs.find(x=>x.id===i.id)||{};
+      return [i.id,f.addr||i.addr||'',f.region||'',
+        i.surveyDate||'',i.surveyor||'',i.surveyStatus||'',
+        (i.memo||'').replace(/\n/g,' '),
+        fname(i.farPhotoUrl),fname(i.closePhotoUrl),
+        i.gpsLat??'',i.gpsLng??'',i.gpsAccuracy??'',i.distFromPoint??'',i.gpsAt||''];
+    })];
+    this._dl('dggis_survey.csv','\uFEFF'+rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n'),'text/csv;charset=utf-8');
+    UI.closeMod('modDL');
+  },
+  github() {
+    const c=Cfg.get();
+    if (c.owner&&c.repo) window.open(`https://github.com/${c.owner}/${c.repo}/tree/${c.branch}/photos`,'_blank');
+    else UI.toast('GitHub 설정을 먼저 완료해 주세요.');
+    UI.closeMod('modDL');
+  }
+};
+
+/* ============================================================
+   UI
+   ============================================================ */
+const UI = {
+  openSh()  { g('bsheet').classList.add('open'); },
+  closeSh() { g('bsheet').classList.remove('open'); },
+  goDetail() {
+    const fac=App.cur; if (!fac) return;
+    FM.load(fac);
+    const m=g('scnMap'),d=g('scnDet');
+    m.classList.remove('s-active'); m.classList.add('s-back');
+    d.classList.remove('s-right'); d.classList.add('s-active');
+  },
+  goBack() {
+    const m=g('scnMap'),d=g('scnDet');
+    d.classList.remove('s-active'); d.classList.add('s-right');
+    m.classList.remove('s-back'); m.classList.add('s-active');
+  },
+  showCfg()    { Cfg.fill(); g('modCfg').classList.add('open'); },
+  showDL()     { g('modDL').classList.add('open'); },
+  showSearch() { g('searchInput').value=''; g('searchResults').innerHTML=''; g('modSearch').classList.add('open'); setTimeout(()=>g('searchInput').focus(),300); },
+  closeMod(id) { g(id).classList.remove('open'); },
+  toast(msg,dur=2400) {
+    const el=g('toast'); el.textContent=msg; el.classList.add('show');
+    clearTimeout(UI._t); UI._t=setTimeout(()=>el.classList.remove('show'),dur);
+  }
+};
+
+/* ============================================================
+   LOADING
+   ============================================================ */
+const Ld = {
+  show(msg='처리 중...') { g('loaderMsg').textContent=msg; g('loader').classList.add('show'); },
+  hide() { g('loader').classList.remove('show'); }
+};
+
+/* ============================================================
+   UTILS
+   ============================================================ */
+function g(id) { return document.getElementById(id); }
+function setMapH() {
+  const mc=g('mapContent'), tn=document.querySelector('#scnMap .tnav');
+  if (mc&&tn) mc.style.height=(window.innerHeight-tn.offsetHeight)+'px';
+}
+window.addEventListener('resize',setMapH);
+
+function getGPS(timeout=8000) {
+  return new Promise(res=>{
+    if (!navigator.geolocation) { res(null); return; }
+    let done=false;
+    const finish=v=>{ if (!done){done=true;res(v);} };
+    navigator.geolocation.getCurrentPosition(
+      pos=>finish({lat:pos.coords.latitude,lng:pos.coords.longitude,accuracy:Math.round(pos.coords.accuracy)}),
+      ()=>finish(null),
+      {enableHighAccuracy:true,timeout,maximumAge:0}
+    );
+    setTimeout(()=>finish(null),timeout+500);
+  });
+}
+function calcDist(lat1,lng1,lat2,lng2) {
+  const R=6371000;
+  const dLat=(lat2-lat1)*Math.PI/180;
+  const dLng=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)**2;
+  return Math.round(R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a)));
+}
+
+/* ============================================================
+   BOOT
+   ============================================================ */
+function loadKakao(key) {
+  return new Promise((res,rej)=>{
+    if (window.kakao&&window.kakao.maps) { res(); return; }
+    const s=document.createElement('script');
+    s.src=`//dapi.kakao.com/v2/maps/sdk.js?appkey=${key}&autoload=false`;
+    s.onload=()=>kakao.maps.load(res); s.onerror=rej;
+    document.head.appendChild(s);
+  });
+}
+
+/* ============================================================
+   VERSION
+   ============================================================ */
+const APP_VERSION = 'v2.0.1';
+
+async function checkVersion() {
+  try {
+    const c=Cfg.get();
+    if (!c.owner||!c.repo) return;
+    const r=await fetch(`https://raw.githubusercontent.com/${c.owner}/${c.repo}/${c.branch}/version.json?t=${Date.now()}`);
+    if (!r.ok) return;
+    const data=await r.json();
+    const latest=data.version;
+    if (latest && latest!==APP_VERSION) {
+      const banner=document.createElement('div');
+      banner.style.cssText=`position:fixed;top:0;left:0;right:0;z-index:9999;
+        background:#e65100;color:#fff;padding:10px 16px;font-size:13px;font-weight:700;
+        display:flex;align-items:center;justify-content:space-between;
+        font-family:var(--font);box-shadow:0 2px 8px rgba(0,0,0,.3);`;
+      banner.innerHTML=`<div style="flex:1;">
+        <div>🔔 새 버전(${latest})이 있습니다 — 캐시 삭제 후 재접속해 주세요.</div>
+        <div style="font-size:11px;font-weight:400;margin-top:3px;opacity:.9;">※ Token 및 측량자 이름을 다시 입력하세요.</div>
+      </div>
+      <button onclick="this.parentElement.remove()" style="
+        background:rgba(255,255,255,.25);border:none;color:#fff;
+        border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;
+        font-family:var(--font);font-weight:700;flex-shrink:0;margin-left:8px;">닫기</button>`;
+      document.body.appendChild(banner);
+    }
+  } catch(e) {}
+}
+
+(async()=>{
+  const cfg=Cfg.get();
+  try {
+    setMapH();
+    await loadKakao(cfg.kakaoKey);
+    setMapH();
+    MC.init();
+    window.addEventListener('online',()=>{
+      UI.toast('📶 네트워크 연결됨 — 대기 중인 데이터 확인 중...');
+      setTimeout(()=>Queue.process(),1500);
+    });
+    setTimeout(async()=>{
+      await Queue.updateBadge();
+      if (navigator.onLine) { Queue.process(); checkVersion(); }
+    },3000);
+  } catch(e) {
+    console.error(e);
+    g('kakaoMap').innerHTML=
+      '<div style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:16px;padding:24px;text-align:center;color:#5f6368">'+
+      '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#e5534b" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'+
+      '<div style="font-size:16px;font-weight:700;color:#202124">카카오맵 API 키 설정 필요</div>'+
+      '<div style="font-size:13px;line-height:1.6">좌측 상단 ⚙️ 설정에서<br>카카오 JavaScript API 키를 입력해 주세요.</div>'+
+      '<button onclick="UI.showCfg()" style="padding:11px 28px;background:#1a6ee0;color:#fff;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">⚙️ 설정 열기</button>'+
+      '</div>';
+    Ld.hide();
+  }
+})();
+</script>
+</body>
+</html>
