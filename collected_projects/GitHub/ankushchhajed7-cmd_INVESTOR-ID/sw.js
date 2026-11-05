@@ -1,7 +1,7 @@
 // Investor Watch service worker — network-first for the app shell only.
 // Cross-origin data (raw.githubusercontent.com) is NOT handled here, so the
 // dashboard always fetches fresh live/history data straight from the network.
-const CACHE = 'iw-shell-v6';
+const CACHE = 'iw-shell-v7';
 const SHELL = ['./', 'index.html', 'manifest.json', 'favicon.png',
   'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 

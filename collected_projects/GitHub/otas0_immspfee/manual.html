@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>manual · IMMSPFEE Lab</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root { --bg:#f2f2f2; --ink:#000; --muted:#666; --panel:#fff; --mono:"IBM Plex Mono",monospace; --sans:"Sora","Noto Sans SC",sans-serif; }
+    html.hc { --bg:#000; --ink:#fff; --muted:#aaa; --panel:#111; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:var(--sans); color:var(--ink); background:var(--bg); line-height:1.55; padding:2rem 1.25rem 3rem; font-feature-settings:"tnum" 1; }
+    main { max-width:760px; margin:0 auto; }
+    a { color:inherit; }
+    h1 { font-weight:600; letter-spacing:-0.03em; margin:0 0 0.35rem; }
+    .kicker { font-family:var(--mono); font-size:0.7rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); }
+    h2 { margin:2rem 0 0.55rem; font-size:1.02rem; font-weight:600; }
+    h3 { margin:1.1rem 0 0.4rem; font-size:0.92rem; font-weight:600; }
+    code, pre, th, td { font-family:var(--mono); font-size:0.8rem; }
+    pre { background:var(--panel); padding:0.85rem 1rem; border-radius:10px; overflow:auto; }
+    .card { background:var(--panel); border-radius:12px; padding:0.85rem 1rem; margin:0.7rem 0; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { text-align:left; padding:0.4rem 0.3rem; border-bottom:1px solid rgba(0,0,0,0.08); vertical-align:top; }
+    html.hc th, html.hc td { border-bottom-color:rgba(255,255,255,0.15); }
+    th { color:var(--muted); font-weight:500; }
+    .muted { color:var(--muted); }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="kicker">physics lab / manual</div>
+    <h1>自定义常量如何进入方程</h1>
+    <p class="muted"><a href="./index.html">← back</a> · <a href="#" id="hc">contrast</a> · <a href="./docs/schema-coverage.md">schema coverage</a> · <a href="./docs/add-factory-family.md">add factory family</a></p>
+
+    <h2>Language</h2>
+    <div class="card">
+      <p>The Lab shell supports <strong>zh / en / ja / ko / es / fr / de</strong> via the sidebar <em>language</em> select.</p>
+      <ul class="muted">
+        <li><strong>URL:</strong> <code>?lang=en</code> (etc.) wins over <code>localStorage</code> key <code>physics-lab-locale-v1</code>, then syncs both ways.</li>
+        <li><strong><code>html.lang</code>:</strong> updated on switch for assistive tech (e.g. <code>zh-CN</code>, <code>en</code>, <code>ja</code>).</li>
+        <li><strong>Focus:</strong> after a language change, focus returns to <code>#locale-select</code>.</li>
+        <li><strong>Model titles:</strong> lazy packs <code>data/locales/models-en.json</code> / <code>models-ja.json</code> (<code>npm run gen:model-locales</code>). Other locales fall back to catalog source strings.</li>
+        <li><strong>Repo policy:</strong> README / docs / new UI chrome are English-first; see <code>AGENTS.md</code>.</li>
+      </ul>
+    </div>
+
+    <h2>0. 架构原则（统一接口 · Canvas）</h2>
+    <div class="card">
+      <ul class="muted">
+        <li>对齐 <strong>scikit-complexity</strong>：catalog 分类 + 同一套 Model API；可视化层用 Web/Canvas，不依赖 Python/Rerun。</li>
+        <li>物理交互借鉴 <strong>PhET / oPhysics / SimuPhysics</strong>（拖物、读数对照、虚像虚线）。</li>
+        <li>CS 步进/高亮借鉴 <strong>Algorithm Visualizer / eigenvue</strong> 思路（图算法点选连边、网表拖线）。</li>
+        <li><strong>工业级硬规则</strong>：每个模型须有权威来源与适用假设、高自定义参数；概念不符则修或下架。保真度 <code>engineering</code>（假设内可对照文献）与 <code>principle</code>（原理示意，非工业求解器）在壳层芯片上区分。详见 <a href="./docs/model-correctness.md">model-correctness</a> · <a href="./docs/ethics-audit.md">伦理审计</a> · <a href="./docs/hand-priority.md">手写优先队列</a>。</li>
+      </ul>
+    </div>
+
+    <h2>1. Live vs Reinit（改参语义）</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>类型</th><th>判定</th><th>行为</th><th>示例</th></tr></thead>
+        <tbody>
+          <tr><td>Live（即时）</td><td><code>paramSchema.group</code> = dynamics / display / custom</td><td>写回 params，下一帧立刻用新值；高度/相位不跳回</td><td>g, k, m, μ, R, C, 学习率</td></tr>
+          <tr><td>Reinit（重置）</td><td>group = initial / numerics</td><td>保留 params 后 <code>init()</code>，仿真状态重建；toast「已重置仿真状态」</td><td>h₀, x0, v0, θ0, seed, n</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">工作台顶栏：「动力学即时生效；初值/数值会重置状态」。行标记 <code>即时</code> / <code>重置</code>。已取消硬编码 REINIT 键表，完全以 schema.group 为准。调试：<code>localStorage.physics-lab-debug-params=1</code>。</p>
+
+    <h2>1b. 「重跑」vs「恢复安全默认」</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>控件</th><th>行为</th></tr></thead>
+        <tbody>
+          <tr><td>工具栏「重跑」</td><td>保持当前参数，从 <code>t=0</code> 重新积分（tooltip 同此）</td></tr>
+          <tr><td>机箱「恢复安全默认」</td><td>宽量程 NaN / 发散后：回到模型 schema 默认参数 + 安全全局量</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>2. 现有参数</h2>
+    <p>工作台内数值可任意输入（含科学计数）。电位器仅参考调节；<strong>双击旋钮</strong>恢复默认；方向键按量级步进，Home 复位。离散 <code>algo</code> 等为下拉。</p>
+
+    <h2>3. 自定义键</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>key</th><th>effect</th></tr></thead>
+        <tbody>
+          <tr><td>a_extra / a_*</td><td>累加到加速度 / 角加速度（质点类模型）</td></tr>
+          <tr><td>k_extra</td><td>弹簧 k_eff = k + k_extra</td></tr>
+          <tr><td>expr_a</td><td>受限表达式，结果累加到加速度</td></tr>
+          <tr><td>其它</td><td>写入 params；模型读取同名键则直接生效</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>4. expr_a</h2>
+    <pre>expr_a = -0.2 * v
+expr_a = a_extra + 0.01 * t</pre>
+    <p class="muted">仅允许标识符与 + - * / % ( )。无 Math.*。场 / 冲量模型不走 expr_a，见下节。</p>
+
+    <h2>5. 各模型 locals</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>model</th><th>locals (+ params)</th></tr></thead>
+        <tbody>
+          <tr><td>free-fall</td><td>y, v, t, g, k, m</td></tr>
+          <tr><td>projectile</td><td>x, y, vx, vy, t, g, k, m</td></tr>
+          <tr><td>spring</td><td>x, v, t, m, k, c</td></tr>
+          <tr><td>pendulum</td><td>theta, omega, t, L, g, c</td></tr>
+          <tr><td>collision</td><td>无持续 a → 不用 expr_a</td></tr>
+          <tr><td>double-pendulum</td><td>改 L1/L2/m1/m2/g/theta*</td></tr>
+          <tr><td>wave</td><td>无 expr_a → 改场参数</td></tr>
+          <tr><td>heat</td><td>无 expr_a → 改扩散 / 边界</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2>6. 无 expr_a 时怎么改（collision / wave / heat）</h2>
+
+    <h3>collision · 一维碰撞</h3>
+    <p>冲量瞬时发生，没有连续加速度项；<code>expr_a</code> / <code>a_*</code> 不会接入。直接改：</p>
+    <ul class="muted">
+      <li><code>m1</code>, <code>m2</code> — 质量比决定碰后分配</li>
+      <li><code>v1</code>, <code>v2</code> — 初速（符号为方向）</li>
+      <li><code>e</code> — 恢复系数（0 完全非弹，1 完全弹性）</li>
+    </ul>
+    <pre>m1=4  m2=1  v1=2  v2=0  e=0.5</pre>
+
+    <h3>wave · 横波 / 弦</h3>
+    <p>离散弦场，步进是波动方程而非单点 a(t)。改：</p>
+    <ul class="muted">
+      <li><code>c</code> — 波速；<code>damp</code> — 阻尼</li>
+      <li><code>A1</code>… 或模型内振幅 / 初形参数</li>
+      <li>不要加 <code>expr_a</code>（不会驱动网格节点）</li>
+    </ul>
+    <pre>c=1.5  damp=0.02</pre>
+
+    <h3>heat · 热传导</h3>
+    <p>一维扩散场，边界恒温。改：</p>
+    <ul class="muted">
+      <li><code>alpha</code> — 热扩散率（过大显式格式会炸）</li>
+      <li><code>Tleft</code>, <code>Tright</code>, <code>T0</code>, <code>hotspot</code> — 边界与初温</li>
+      <li><code>N</code>, <code>L</code> — 网格分辨率与长度</li>
+    </ul>
+    <pre>alpha=0.01  Tleft=100  Tright=20  hotspot=80</pre>
+
+    <h2>7. 截图选项</h2>
+    <p><code>sys → frame shot</code> 合成机箱外框；<code>shot readouts</code> 叠加当前读数。<code>shots/</code> 纯画布基线用开发服 <code>POST /__shots/</code> 抓取。</p>
+
+    <h2>8. 模型目录（按子类）</h2>
+<p class="muted">共 219 个；侧栏可按子类全名精确搜索。</p>
+<h3>物理</h3>
+<div class="card"><strong>经典力学</strong> <span class="muted">(11)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>free-fall</td><td>自由落体</td><td>小球、地面、速度矢量；调 g、初高度、空气阻力</td></tr>
+      <tr><td>projectile</td><td>斜抛/平抛运动</td><td>抛物线轨迹、vx/vy 分解；调 v0、抛射角、g</td></tr>
+      <tr><td>inclined-plane</td><td>斜面滑动物块</td><td>斜面、物块、受力分解；调斜面角、摩擦系数、质量</td></tr>
+      <tr><td>spring</td><td>弹簧振子</td><td>弹簧、质量块、平衡位置；调 m、k、阻尼、x0</td></tr>
+      <tr><td>pendulum</td><td>单摆</td><td>摆线、摆球、轨迹；调 L、g、阻尼、θ0</td></tr>
+      <tr><td>collision</td><td>一维碰撞</td><td>两球、速度矢量、碰撞闪光；调 m1、m2、v1、v2、e</td></tr>
+      <tr><td>collision-2d</td><td>二维刚体碰撞</td><td>圆盘、碰撞线、角动量；调质量、半径、速度、e</td></tr>
+      <tr><td>circular-motion</td><td>匀速圆周运动</td><td>轨迹圆、速度/向心加速度矢量；调半径、角速度、质量</td></tr>
+      <tr><td>double-pendulum</td><td>双摆</td><td>两段摆、轨迹、混沌敏感；调 L1、L2、m1、m2、θ1、θ2</td></tr>
+      <tr><td>nbody</td><td>三体/N 体引力</td><td>多天体、轨迹、引力线；调质量、初速度、初位置</td></tr>
+      <tr><td>rigid-euler</td><td>刚体旋转（欧拉方程）</td><td>3D 刚体投影、角速度矢量；调主惯量、初始角速度</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>流体</strong> <span class="muted">(5)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>buoyancy</td><td>浮力/阿基米德原理</td><td>容器、物块、液面、力箭头；调物体密度、液体密度、体积</td></tr>
+      <tr><td>drag-fall</td><td>粘滞阻力落体</td><td>小球、速度曲线、阻力矢量；调质量、阻力系数、g</td></tr>
+      <tr><td>bernoulli</td><td>伯努利效应</td><td>管道、流速、压强色带；调管径变化、流量</td></tr>
+      <tr><td>sph-simple</td><td>简单 SPH 流体</td><td>粒子、颜色映射、交互扰动；调粘度、重力、粒子数</td></tr>
+      <tr><td>laminar-turbulent</td><td>层流/湍流切换</td><td>流线、涡旋、雷诺数；调流速、粘度、管径</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>波与振动</strong> <span class="muted">(7)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>wave</td><td>横波传播</td><td>绳子波形、质点振动；调频率、波长、振幅、波速</td></tr>
+      <tr><td>longitudinal-wave</td><td>纵波/声波</td><td>疏密粒子、压强带；调频率、振幅、介质</td></tr>
+      <tr><td>standing-wave</td><td>驻波/共振</td><td>绳上驻波、节点/腹点；调频率、绳长、张力</td></tr>
+      <tr><td>doppler</td><td>多普勒效应</td><td>运动波源、波前圆；调源速度、波速、频率</td></tr>
+      <tr><td>interference</td><td>波的干涉</td><td>两波源、干涉条纹；调频率、相位差、间距</td></tr>
+      <tr><td>diffraction</td><td>波的衍射</td><td>缝、波前、衍射图样；调缝宽、波长</td></tr>
+      <tr><td>membrane-2d</td><td>二维膜振动</td><td>网格、颜色映射、模态；调张力、密度、激励点</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>热力学</strong> <span class="muted">(6)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>heat</td><td>一维热传导</td><td>金属棒、温度色带；调导热系数、边界温度</td></tr>
+      <tr><td>ideal-gas</td><td>理想气体分子运动</td><td>粒子盒、速度分布；调温度、粒子数、体积</td></tr>
+      <tr><td>gas-law</td><td>气体定律 P-V-T</td><td>活塞、压强/体积表；调温度、体积、粒子数</td></tr>
+      <tr><td>carnot</td><td>热机循环（卡诺）</td><td>P-V 图、热/功流向；调高温/低温热源</td></tr>
+      <tr><td>heat-2d</td><td>二维热扩散</td><td>温度场、色带；调扩散系数、初始分布</td></tr>
+      <tr><td>entropy-mix</td><td>熵与混合</td><td>两种粒子混合、熵曲线；调粒子数、初始分隔</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>电磁学</strong> <span class="muted">(8)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>efield-lines</td><td>点电荷电场线</td><td>电荷、电场线、等势线；调电荷量、位置</td></tr>
+      <tr><td>e-field-particle</td><td>匀强电场中带电粒子</td><td>粒子轨迹、E 矢量；调电荷、质量、E</td></tr>
+      <tr><td>lorentz</td><td>磁场中带电粒子</td><td>圆周/螺旋轨迹、B 矢量；调电荷、速度、B</td></tr>
+      <tr><td>ohms-law</td><td>简单电路/欧姆定律</td><td>电池、电阻、电流动画；调电压、电阻、串并联</td></tr>
+      <tr><td>rc-circuit</td><td>RC 充放电</td><td>电容、电流/电压曲线；调 R、C、初始电压</td></tr>
+      <tr><td>rl-circuit</td><td>RL 电路</td><td>电感、电流曲线；调 R、L、初始电流</td></tr>
+      <tr><td>faraday</td><td>电磁感应/法拉第</td><td>磁铁运动、线圈、电流计；调磁铁速度、匝数、B</td></tr>
+      <tr><td>em-wave</td><td>电磁波传播</td><td>E/B 正交波、传播方向；调频率、振幅、偏振</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>光学</strong> <span class="muted">(6)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>reflection-refraction</td><td>反射与折射</td><td>界面、入射/反射/折射光线；调入射角、折射率</td></tr>
+      <tr><td>lens</td><td>凸透镜成像</td><td>光轴、物/像、三条特殊光线；调物距、焦距、物高</td></tr>
+      <tr><td>double-slit</td><td>双缝干涉</td><td>双缝、屏幕条纹；调缝距、波长、屏距</td></tr>
+      <tr><td>single-slit</td><td>单缝衍射</td><td>单缝、衍射包络；调缝宽、波长</td></tr>
+      <tr><td>polarization</td><td>偏振</td><td>偏振片、光强变化；调偏振角、偏振片数</td></tr>
+      <tr><td>ray-trace</td><td>简单光线追踪</td><td>光线、反射/折射、阴影；调光源、物体、材质</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>近代物理</strong> <span class="muted">(6)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>photoelectric</td><td>光电效应</td><td>光子、电子逸出、I-V 曲线；调频率、光强、逸出功</td></tr>
+      <tr><td>bohr</td><td>玻尔模型/氢原子</td><td>轨道、跃迁、光谱线；调能级、跃迁</td></tr>
+      <tr><td>wavepacket</td><td>量子波包演化</td><td>波函数、概率密度；调初始宽度、势场</td></tr>
+      <tr><td>tunneling</td><td>一维势垒隧穿</td><td>波函数、透射/反射；调势垒高度/宽度、能量</td></tr>
+      <tr><td>radioactive</td><td>放射性衰变</td><td>粒子、半衰期曲线；调半衰期、初始数量</td></tr>
+      <tr><td>time-dilation</td><td>相对论时间膨胀</td><td>双生子、时钟、速度；调速度、时间</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>天体物理</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>orbit</td><td>行星轨道/开普勒</td><td>椭圆轨道、速度矢量；调中心质量、初速度</td></tr>
+      <tr><td>binary-stars</td><td>双星系统</td><td>两星绕质心、轨迹；调质量比、间距</td></tr>
+      <tr><td>gravity-assist</td><td>引力弹弓</td><td>航天器轨迹、行星；调行星速度、接近距离</td></tr>
+    </tbody></table></div>
+<h3>计算机科学</h3>
+<div class="card"><strong>算法与数据结构</strong> <span class="muted">(8)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>sorting</td><td>排序算法对比</td><td>柱状图、交换动画；选算法、数组规模、速度</td></tr>
+      <tr><td>binary-search</td><td>二分查找</td><td>有序数组、区间收缩；调目标值、数组规模</td></tr>
+      <tr><td>bfs-grid</td><td>BFS/DFS 图遍历</td><td>图节点、边、访问顺序；调图结构、起点</td></tr>
+      <tr><td>dijkstra</td><td>Dijkstra 最短路径</td><td>带权图、路径高亮；调图结构、起点/终点</td></tr>
+      <tr><td>astar-grid</td><td>A* 寻路</td><td>网格、开放/关闭集；调启发函数、障碍</td></tr>
+      <tr><td>dp-table</td><td>动态规划（背包/LCS）</td><td>表格填充、回溯路径；调物品/序列、容量</td></tr>
+      <tr><td>hashtable</td><td>哈希表冲突处理</td><td>桶、链表/开放寻址；调哈希函数、容量、插入序列</td></tr>
+      <tr><td>avl-tree</td><td>平衡树 AVL/红黑</td><td>树结构、旋转动画；调插入/删除序列</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>计算理论</strong> <span class="muted">(5)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>dfa-nfa</td><td>有限自动机 DFA/NFA</td><td>状态图、转移、输入串；调状态/转移、输入串</td></tr>
+      <tr><td>pda</td><td>下推自动机</td><td>状态图、栈；调转移规则、输入串</td></tr>
+      <tr><td>turing</td><td>图灵机</td><td>纸带、读写头、状态；调转移表、初始纸带</td></tr>
+      <tr><td>regex-match</td><td>正则表达式匹配</td><td>输入串、高亮匹配；调正则、输入串</td></tr>
+      <tr><td>life</td><td>细胞自动机/生命游戏</td><td>网格、世代演化；调规则、初始图案、速度</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>密码学</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>caesar</td><td>凯撒/维吉尼亚密码</td><td>字母表、密文；调密钥、明文</td></tr>
+      <tr><td>rsa</td><td>RSA 加解密</td><td>公钥/私钥、模幂过程；调 p、q、e、消息</td></tr>
+      <tr><td>diffie-hellman</td><td>Diffie-Hellman 密钥交换</td><td>双方、公开值、共享密钥；调素数、生成元</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>信息论</strong> <span class="muted">(2)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>huffman</td><td>哈夫曼编码</td><td>频率表、编码树、压缩率；调输入文本/符号频率</td></tr>
+      <tr><td>channel-coding</td><td>信道编码/纠错</td><td>编码前后、错误注入；调码率、错误位置</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>机器学习</strong> <span class="muted">(7)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>linreg-gd</td><td>线性回归/梯度下降</td><td>散点、拟合线、损失曲线；调学习率、初始参数</td></tr>
+      <tr><td>kmeans</td><td>K-means 聚类</td><td>散点、聚类中心、迭代；调簇数、初始中心</td></tr>
+      <tr><td>nn-forward</td><td>神经网络前向传播</td><td>网络结构、激活值；调权重、输入</td></tr>
+      <tr><td>backprop</td><td>反向传播/训练</td><td>损失曲线、权重变化；调学习率、网络规模</td></tr>
+      <tr><td>cnn-demo</td><td>CNN/卷积演示</td><td>卷积核滑动、特征图；调核大小、步长</td></tr>
+      <tr><td>attention</td><td>Transformer 注意力</td><td>token、注意力热图；调序列、头数</td></tr>
+      <tr><td>rl-grid</td><td>强化学习网格世界</td><td>网格、策略箭头、价值色；调奖励、折扣因子</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>优化</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>genetic</td><td>遗传算法</td><td>种群、适应度、交叉/变异；调种群规模、变异率</td></tr>
+      <tr><td>ant-colony</td><td>蚁群算法</td><td>路径、信息素浓度；调蚂蚁数、挥发率</td></tr>
+      <tr><td>sim-anneal</td><td>模拟退火</td><td>状态、能量曲线、温度；调初始温度、降温速率</td></tr>
+    </tbody></table></div>
+<h3>计算机工程</h3>
+<div class="card"><strong>电路</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>rlc</td><td>RLC 振荡</td><td>串联 RLC 电流与电容电压</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>数字逻辑</strong> <span class="muted">(6)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>logic-gates</td><td>基本逻辑门</td><td>输入开关、门符号、真值表；调输入组合</td></tr>
+      <tr><td>adder</td><td>组合逻辑/加法器</td><td>半加/全加器、进位链；调输入位</td></tr>
+      <tr><td>mux-decoder</td><td>多路选择器/译码器</td><td>输入/选择端、输出高亮；调选择信号</td></tr>
+      <tr><td>flipflop</td><td>时序逻辑/触发器</td><td>D/JK 触发器、时钟波形；调输入、时钟</td></tr>
+      <tr><td>counter-reg</td><td>计数器/寄存器</td><td>状态位、时钟脉冲；调初值、计数模式</td></tr>
+      <tr><td>fsm-ce</td><td>有限状态机 FSM</td><td>状态图、转移、输入序列；调状态/转移、输入</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>计算机体系结构</strong> <span class="muted">(6)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>cpu-datapath</td><td>CPU 数据通路</td><td>寄存器、ALU、总线、控制信号；调指令</td></tr>
+      <tr><td>asm-cycle</td><td>指令周期/汇编执行</td><td>PC、寄存器、内存、指令高亮；调程序/单步</td></tr>
+      <tr><td>pipeline</td><td>流水线</td><td>流水段、指令重叠、冒险；调指令序列、停顿</td></tr>
+      <tr><td>cache-lru</td><td>缓存/内存层次</td><td>缓存行、命中/缺失、LRU；调缓存大小、访问序列</td></tr>
+      <tr><td>virtmem</td><td>虚拟内存/分页</td><td>页表、TLB、缺页；调页大小、访问序列</td></tr>
+      <tr><td>bus-arb</td><td>总线/仲裁</td><td>主从设备、总线占用；调请求序列、优先级</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>嵌入式</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>irq-dma</td><td>中断/DMA</td><td>CPU、外设、中断线、DMA 通道；调触发时序</td></tr>
+      <tr><td>adc-dac</td><td>ADC/DAC</td><td>模拟波形、采样点、量化误差；调采样率、位数</td></tr>
+      <tr><td>pwm</td><td>PWM/电机控制</td><td>占空比、波形、电机转速；调频率、占空比</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>通信</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>serdes</td><td>并串转换/编码</td><td>并行数据、串行波形、时钟；调数据、速率</td></tr>
+      <tr><td>am-fm</td><td>调制/解调 AM/FM</td><td>载波、调制信号、频谱；调载波频率、调制指数</td></tr>
+      <tr><td>crc-hamming</td><td>差错检测 CRC/汉明码</td><td>数据位、校验位、错误注入；调码字、错误位置</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>网络</strong> <span class="muted">(2)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>tcp-handshake</td><td>TCP 三次握手/四次挥手</td><td>客户端/服务端状态、报文时序；调丢包、延迟</td></tr>
+      <tr><td>routing</td><td>路由/转发</td><td>网络拓扑、路由表、路径高亮；调拓扑、链路代价</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>操作系统</strong> <span class="muted">(4)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>sched</td><td>进程调度</td><td>就绪队列、甘特图；调算法、时间片、进程列表</td></tr>
+      <tr><td>fifo</td><td>进程同步/生产者消费者</td><td>缓冲区、信号量、线程状态；调生产/消费速率</td></tr>
+      <tr><td>banker</td><td>死锁/银行家算法</td><td>资源分配图、安全序列；调进程/资源请求</td></tr>
+      <tr><td>fs-inode</td><td>文件系统/索引</td><td>inode、目录树、块映射；调文件大小、块大小</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>编译原理</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>lexer</td><td>词法分析</td><td>输入串、token 高亮；调源码</td></tr>
+      <tr><td>parser</td><td>语法分析/语法树</td><td>推导过程、语法树；调文法、输入串</td></tr>
+      <tr><td>vm-interp</td><td>解释器/虚拟机</td><td>指令流、栈/寄存器、输出；调程序、单步</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>数据库</strong> <span class="muted">(2)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>btree</td><td>B+ 树索引</td><td>树结构、范围查询高亮；调键值、查询范围</td></tr>
+      <tr><td>acid-tx</td><td>事务 ACID/并发控制</td><td>事务时间线、锁、提交/回滚；调隔离级别、冲突</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>分布式</strong> <span class="muted">(2)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>raft</td><td>Raft/Paxos 共识</td><td>节点状态、日志复制、选举；调节点数、网络分区</td></tr>
+      <tr><td>mapreduce</td><td>MapReduce</td><td>Map/Shuffle/Reduce 阶段、数据流；调分片、节点数</td></tr>
+    </tbody></table></div>
+<h3>材料力学与结构工程</h3>
+<div class="card"><strong>静力与强度</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>axial-loading</td><td>轴向拉伸与压缩</td><td>杆件伸长/缩短、应力-应变曲线、屈服点；调力、截面积、材料</td></tr>
+      <tr><td>shear-bearing</td><td>剪切与挤压</td><td>连接件剪切面、挤压面、应力分布；调力、面积</td></tr>
+      <tr><td>shaft-torsion</td><td>圆轴扭转</td><td>轴段扭转变形、切应力沿半径分布；调扭矩、直径、长度</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>梁与框架</strong> <span class="muted">(5)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>beam-sfd-bmd</td><td>梁的弯曲内力（剪力图/弯矩图）</td><td>梁、载荷、剪力图和弯矩图实时生成；调载荷位置/大小、支座条件</td></tr>
+      <tr><td>beam-bending-stress</td><td>梁的弯曲应力</td><td>横截面正应力分布、中性轴；调弯矩、截面形状</td></tr>
+      <tr><td>beam-deflection</td><td>梁的弯曲变形（挠度）</td><td>梁变形曲线、挠度/转角；调 EI、载荷、跨度</td></tr>
+      <tr><td>truss-analysis</td><td>简单桁架受力分析</td><td>桁架节点、杆件内力（拉/压）、支座反力；调载荷、桁架几何</td></tr>
+      <tr><td>frame-internal</td><td>框架结构内力</td><td>框架弯矩图/剪力图、节点位移；调跨度、层高、载荷</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>稳定与组合</strong> <span class="muted">(2)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>euler-buckling</td><td>压杆稳定（欧拉屈曲）</td><td>压杆失稳模式、临界载荷；调长度、约束、EI</td></tr>
+      <tr><td>bend-torsion</td><td>组合变形（弯扭组合）</td><td>危险点应力状态、强度校核；调弯矩/扭矩组合</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>结构动力学</strong> <span class="muted">(4)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>sdof-dynamics</td><td>单自由度结构动力学</td><td>质量-弹簧-阻尼体系的位移时程、共振；调 m、k、c、激励频率</td></tr>
+      <tr><td>mdof-modes</td><td>多自由度结构模态</td><td>多质点体系的前几阶振型、频率；调质量/刚度分布</td></tr>
+      <tr><td>seismic-response</td><td>地震响应（SDOF/MDOF）</td><td>地面加速度输入下的结构响应、层间位移；调地震波、阻尼比</td></tr>
+      <tr><td>friction-pendulum</td><td>摩擦摆/隔震支座</td><td>隔震层滞回曲线、上部结构加速度折减；调摩擦系数、曲率半径</td></tr>
+    </tbody></table></div>
+<h3>工程热力学与能源动力</h3>
+<div class="card"><strong>动力循环</strong> <span class="muted">(5)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>rankine-cycle</td><td>朗肯循环</td><td>T-s / P-h 图、各状态点、泵/涡轮/冷凝器/锅炉；调压力、温度、效率</td></tr>
+      <tr><td>vapor-compression</td><td>制冷循环（蒸气压缩）</td><td>log p-h 图、蒸发/冷凝温度、COP；调过热度、过冷度</td></tr>
+      <tr><td>heat-pump</td><td>热泵循环</td><td>与制冷循环对比的 T-s 图、性能系数；调热源/热汇温度</td></tr>
+      <tr><td>brayton-cycle</td><td>燃气轮机布雷顿循环</td><td>T-s 图、压气机/燃烧室/涡轮；调压比、涡轮入口温度</td></tr>
+      <tr><td>otto-diesel</td><td>内燃机奥托/狄塞尔循环</td><td>P-V 图、效率对比；调压缩比、吸热量</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>传热与工质</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>hx-temp-profile</td><td>换热器温度分布</td><td>冷/热流体沿程温度曲线、效能-传热单元数；调流量、入口温度、换热面积</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>流体机械</strong> <span class="muted">(4)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>pipe-pressure-drop</td><td>管道流动压降</td><td>沿程压力分布、摩擦因子；调管径、流速、粗糙度</td></tr>
+      <tr><td>pump-fan-curve</td><td>泵/风机特性曲线</td><td>流量-扬程曲线、工作点；调转速、管路阻力</td></tr>
+      <tr><td>hydro-turbine</td><td>水轮机（佩尔顿/弗朗西斯）</td><td>转轮、射流/水流、功率提取；调水头、流量</td></tr>
+      <tr><td>compressor-map</td><td>压缩机特性</td><td>压比-流量曲线、喘振边界；调转速、进口条件</td></tr>
+    </tbody></table></div>
+<h3>电子工程与信号处理</h3>
+<div class="card"><strong>模拟电路</strong> <span class="muted">(5)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>rc-rl-filter</td><td>无源 RC/RL 滤波器</td><td>电路图、幅频/相频（伯德图）、阶跃响应；调 R、C 值</td></tr>
+      <tr><td>active-filter</td><td>有源滤波器（Sallen-Key）</td><td>运放电路、伯德图、零极点图；调 R、C、增益</td></tr>
+      <tr><td>opamp-configs</td><td>运算放大器基本组态</td><td>反相/同相/差分电路、输入输出波形、增益；调电阻比</td></tr>
+      <tr><td>bjt-amplifier</td><td>晶体管共射/共集/共基放大</td><td>输入/输出波形、增益、输入输出电阻；调偏置、负载</td></tr>
+      <tr><td>rlc-resonance</td><td>RLC 谐振电路</td><td>幅频曲线、品质因数、带宽；调 R、L、C</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>电源与调制</strong> <span class="muted">(4)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>diode-rectifier</td><td>二极管整流与稳压</td><td>输入交流、输出直流波形、纹波；调滤波电容、负载</td></tr>
+      <tr><td>mixer-am-fm</td><td>混频器/调制（AM/FM）</td><td>载波、调制信号、已调波形、频谱；调调制指数、载波频率</td></tr>
+      <tr><td>adc-sampling</td><td>采样与量化（ADC）</td><td>模拟波形、采样点、量化误差、频谱混叠；调采样率、位数</td></tr>
+      <tr><td>pwm-signal</td><td>脉宽调制（PWM）</td><td>占空比、开关波形、平均电压；调频率、占空比</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>射频与微波</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>pll-lock</td><td>锁相环（PLL）</td><td>输入/输出相位、环路滤波器、锁定过程；调环路带宽、阻尼</td></tr>
+      <tr><td>transmission-line</td><td>传输线（反射/驻波）</td><td>沿线电压/电流驻波、反射系数；调负载阻抗、线长</td></tr>
+      <tr><td>antenna-pattern</td><td>天线方向图</td><td>极坐标辐射方向图、增益、波束宽度；调阵元间距、相位</td></tr>
+    </tbody></table></div>
+<h3>控制系统</h3>
+<div class="card"><strong>经典控制</strong> <span class="muted">(4)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>step-response</td><td>一阶/二阶系统阶跃响应</td><td>响应曲线、超调、调节时间、阻尼比；调 K、ζ、ωₙ</td></tr>
+      <tr><td>pid-tune</td><td>PID 参数整定（交互）</td><td>被控对象响应、Kp/Ki/Kd 滑条、性能指标；调三个参数</td></tr>
+      <tr><td>root-locus</td><td>根轨迹</td><td>开环极点/零点、闭环极点随增益移动；调零极点位置</td></tr>
+      <tr><td>bode-nyquist</td><td>伯德图/奈奎斯特图</td><td>频域响应、稳定裕度；调增益、零极点</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>被控对象</strong> <span class="muted">(5)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>inverted-pendulum</td><td>倒立摆 PID 控制</td><td>小车-摆杆动画、角度/位置响应、控制力；调 PID、初始扰动</td></tr>
+      <tr><td>dc-motor-speed</td><td>电机调速（直流电机）</td><td>转速/电流响应、电压输入；调电枢电阻、惯量、负载</td></tr>
+      <tr><td>tank-level</td><td>液位控制</td><td>水箱液位、阀门开度、扰动响应；调 PID、容器面积</td></tr>
+      <tr><td>maglev</td><td>磁悬浮</td><td>悬浮间隙、电磁力、稳定性；调电流、间隙、PID</td></tr>
+      <tr><td>flight-attitude</td><td>飞行控制（俯仰/滚转）</td><td>飞行器姿态、舵面、角速率；调气动导数、控制增益</td></tr>
+    </tbody></table></div>
+<h3>航空航天工程</h3>
+<div class="card"><strong>气动</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>vortex-lattice</td><td>机翼升力/阻力（涡格法）</td><td>机翼平面形状、展向升力分布、下洗；调展弦比、后掠角、攻角</td></tr>
+      <tr><td>airfoil-aero</td><td>翼型气动特性</td><td>翼型、压力分布、升力/阻力系数随攻角变化；调弯度、厚度、雷诺数</td></tr>
+      <tr><td>rotor-thrust</td><td>旋翼/螺旋桨拉力</td><td>桨叶、诱导速度、拉力/功率；调转速、桨距、直径</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>飞行动力学</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>phugoid-short</td><td>飞行器纵向短周期/长周期模态</td><td>攻角/俯仰角响应；调气动导数、质量分布</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>推进与返回</strong> <span class="muted">(2)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>rocket-vt</td><td>火箭垂直回收（推力矢量）</td><td>箭体姿态、推力矢量、着陆轨迹；调推力、质心、控制增益</td></tr>
+      <tr><td>reentry-trajectory</td><td>再入大气层弹道</td><td>高度-速度曲线、热流、过载；调弹道系数、进入角</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>轨道</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>hohmann-transfer</td><td>卫星轨道机动</td><td>轨道转移、霍曼转移、速度增量；调初始/目标轨道</td></tr>
+    </tbody></table></div>
+<h3>水利与土木</h3>
+<div class="card"><strong>明渠与堰闸</strong> <span class="muted">(5)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>open-channel-uniform</td><td>明渠均匀流</td><td>渠道断面、水深、流速、曼宁公式；调底坡、糙率、流量</td></tr>
+      <tr><td>gradually-varied</td><td>明渠非均匀流（水面线）</td><td>水面曲线（M/S 型）、控制断面；调流量、底坡、闸门开度</td></tr>
+      <tr><td>weir-flow</td><td>堰流（宽顶/尖顶/V 型）</td><td>堰上水头、流量系数、水舌；调堰高、水头</td></tr>
+      <tr><td>sluice-gate</td><td>闸孔出流</td><td>闸门开度、收缩断面、流量；调开度、上游水头</td></tr>
+      <tr><td>hydraulic-jump</td><td>水跃</td><td>跃前/跃后水深、能量损失；调弗劳德数</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>管网与泵站</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>pipe-network</td><td>管道网络（串联/并联）</td><td>各管段流量/压力、节点水头；调管径、长度、泵</td></tr>
+      <tr><td>pump-station</td><td>泵站（单泵/并联/串联）</td><td>泵特性曲线、工作点、管路特性；调转速、台数</td></tr>
+      <tr><td>surge-waterhammer</td><td>调压井/水锤</td><td>压力波动、水位振荡；调管道特性、阀门关闭时间</td></tr>
+    </tbody></table></div>
+<h3>交通工程</h3>
+<div class="card"><strong>交通流</strong> <span class="muted">(2)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>nasch-ca</td><td>交通流元胞自动机（NaSch）</td><td>车辆网格、速度/密度/流量基本图；调密度、随机慢化概率</td></tr>
+      <tr><td>lane-change</td><td>双车道换道模型</td><td>车辆换道决策、速度差异；调换道概率、车流密度</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>交叉口与交织</strong> <span class="muted">(2)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>signalized-intersection</td><td>信号交叉口通行能力</td><td>车辆到达/排队、信号配时、延误；调绿信比、周期、到达率</td></tr>
+      <tr><td>weaving-section</td><td>匝道交织区</td><td>主路/匝道车辆交织、通行能力；调流量比、交织长度</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>行人</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>social-force</td><td>行人流/社会力模型</td><td>行人粒子、避让、拥堵；调行人密度、出口宽度</td></tr>
+    </tbody></table></div>
+<h3>化学工程</h3>
+<div class="card"><strong>反应器</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>cstr</td><td>连续搅拌釜反应器（CSTR）</td><td>浓度/温度随时间、稳态/振荡；调停留时间、反应速率</td></tr>
+      <tr><td>pfr</td><td>平推流反应器（PFR）</td><td>沿程浓度/转化率分布；调流速、反应级数</td></tr>
+      <tr><td>fluidized-bed</td><td>流化床颗粒运动</td><td>颗粒/气泡运动、压降；调气速、颗粒粒径</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>分离</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>mccabe-thiele</td><td>精馏塔（McCabe-Thiele）</td><td>平衡曲线、操作线、理论板数；调回流比、进料组成</td></tr>
+      <tr><td>hx-network</td><td>换热器网络</td><td>多股物流换热、夹点分析；调热容流率、目标温度</td></tr>
+      <tr><td>flash-separator</td><td>简单分离器（闪蒸）</td><td>气液平衡、相分率；调 T、P、组成</td></tr>
+    </tbody></table></div>
+<h3>工业工程</h3>
+<div class="card"><strong>运筹</strong> <span class="muted">(4)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>queue-mmc</td><td>排队系统（M/M/1, M/M/c）</td><td>队列长度、等待时间、利用率；调到达率、服务率、服务器数</td></tr>
+      <tr><td>inventory-eoq</td><td>库存 EOQ / (s, S) 策略</td><td>库存水平随时间、订货点、缺货；调需求率、订货成本、提前期</td></tr>
+      <tr><td>jobshop-schedule</td><td>流水车间/作业车间调度</td><td>甘特图、机器利用率、完工时间；调工件顺序、加工时间</td></tr>
+      <tr><td>kanban-pull</td><td>看板/拉动生产</td><td>在制品、产出率、看板数量；调看板数、需求波动</td></tr>
+    </tbody></table></div>
+<h3>核工程</h3>
+<div class="card"><strong>反应堆物理</strong> <span class="muted">(2)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>neutron-diffusion</td><td>中子扩散（一维/二维）</td><td>中子通量分布、临界尺寸；调材料截面、几何</td></tr>
+      <tr><td>reactor-power</td><td>反应堆功率分布</td><td>堆芯功率密度图、控制棒价值；调控制棒位置、燃耗</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>核素</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>decay-chain</td><td>放射性衰变链</td><td>核素丰度随时间、半衰期；调初始核素、分支比</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>输运</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>mc-neutron</td><td>中子输运（蒙特卡洛示意）</td><td>粒子轨迹、散射/吸收事件；调介质、能量</td></tr>
+    </tbody></table></div>
+<h3>生物医学工程</h3>
+<div class="card"><strong>电生理</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>hodgkin-huxley</td><td>神经动作电位（Hodgkin-Huxley）</td><td>膜电位时程、离子通道电导；调刺激电流、通道参数</td></tr>
+      <tr><td>ecg-synth</td><td>心电图（ECG）合成</td><td>P-QRS-T 波形、心率变异性；调心率、各波幅</td></tr>
+      <tr><td>pacemaker</td><td>房室结/起搏器控制</td><td>起搏节律、传导延迟；调起搏频率、延迟</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>生理系统</strong> <span class="muted">(2)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>respiratory-mech</td><td>呼吸系统力学</td><td>肺容积-压力环、气道阻力；调顺应性、阻力</td></tr>
+      <tr><td>pk-compartment</td><td>药物代谢（一室/二室模型）</td><td>血药浓度-时间曲线；调剂量、消除速率、分布容积</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>生物力学</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>gait-dynamics</td><td>步态/关节动力学</td><td>关节角度、力矩、地面反力；调步速、质量</td></tr>
+    </tbody></table></div>
+<h3>环境工程</h3>
+<div class="card"><strong>水处理</strong> <span class="muted">(2)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>asm-simple</td><td>活性污泥模型（ASM 简化）</td><td>有机物/氧/生物量浓度随时间；调进水负荷、曝气量</td></tr>
+      <tr><td>do-control</td><td>曝气池溶解氧控制</td><td>DO 浓度、曝气量、PID 响应；调设定值、控制器参数</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>水环境</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>river-dispersion</td><td>污染物扩散（一维河流）</td><td>浓度沿程分布、降解；调流速、降解系数、排放点</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>给排水</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>water-network</td><td>给水管网水力</td><td>节点压力、管段流量；调管径、节点需水量、泵</td></tr>
+    </tbody></table></div>
+<h3>数学</h3>
+<div class="card"><strong>动力系统</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>lorenz</td><td>洛伦茨吸引子</td><td>三维相空间轨迹、蝴蝶效应；调 σ、ρ、β</td></tr>
+      <tr><td>rossler</td><td>Rossler 吸引子</td><td>三维轨迹、混沌；调参数 a、b、c</td></tr>
+      <tr><td>mandelbrot-julia</td><td>分形（Mandelbrot/Julia）</td><td>复平面迭代着色、缩放；调迭代次数、参数 c</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>数值方法</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>ode-solver</td><td>微分方程数值解</td><td>解曲线、相图、步长影响；调方程参数、步长</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>分析</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>fourier-series</td><td>傅里叶级数合成</td><td>谐波叠加逼近方波/锯齿波；调谐波数量、系数</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>线性代数</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>matrix-transform</td><td>线性变换（矩阵）</td><td>2D 向量/网格的拉伸/旋转/剪切；调 2×2 矩阵</td></tr>
+    </tbody></table></div>
+<h3>化学</h3>
+<div class="card"><strong>反应</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>titration-curve</td><td>酸碱滴定曲线</td><td>pH 随滴定体积、突跃；调浓度、pKa</td></tr>
+      <tr><td>le-chatelier</td><td>化学平衡（Le Chatelier）</td><td>浓度/温度/压力对平衡的影响；调条件</td></tr>
+      <tr><td>reaction-order</td><td>一级/二级反应动力学</td><td>浓度-时间曲线、半衰期；调速率常数、初始浓度</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>分子</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>normal-modes</td><td>分子振动（简正模式）</td><td>双原子/三原子分子振动动画；调质量、键力常数</td></tr>
+    </tbody></table></div>
+<h3>生物</h3>
+<div class="card"><strong>种群</strong> <span class="muted">(3)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>logistic-growth</td><td>种群增长（Logistic）</td><td>N-t 曲线、环境容量；调 r、K</td></tr>
+      <tr><td>lotka-volterra</td><td>Lotka-Volterra 捕食者-猎物</td><td>相图、周期振荡；调出生/捕食/死亡参数</td></tr>
+      <tr><td>sir-epidemic</td><td>SIR 传染病模型</td><td>S/I/R 曲线、峰值、基本再生数；调 β、γ</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>神经</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>neural-net-simple</td><td>神经元网络（简化）</td><td>放电率、连接权重、活动传播；调连接矩阵</td></tr>
+    </tbody></table></div>
+<h3>地球科学</h3>
+<div class="card"><strong>地球物理</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>seismic-waves</td><td>板块运动/地震波传播</td><td>波前、走时、震源机制；调波速、震源深度</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>气候</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>radiation-balance</td><td>大气辐射平衡</td><td>太阳/地面辐射、温室效应；调反照率、CO₂</td></tr>
+    </tbody></table></div>
+<h3>经济与管理</h3>
+<div class="card"><strong>微观</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>supply-demand</td><td>供需均衡</td><td>供给/需求曲线、均衡价格；调弹性、冲击</td></tr>
+    </tbody></table></div>
+<div class="card"><strong>金融</strong> <span class="muted">(1)</span>
+<table><thead><tr><th>id</th><th>名称</th><th>要点</th></tr></thead><tbody>
+      <tr><td>compound-growth</td><td>复利/投资增长</td><td>本金增长曲线、不同利率对比；调利率、期数</td></tr>
+    </tbody></table></div>
+
+    <h2>9. 宽屏折叠 / 窄屏抽屉</h2>
+    <div class="card">
+      <table>
+        <thead><tr><th>视口</th><th>工作台</th><th>params / close</th></tr></thead>
+        <tbody>
+          <tr><td>&gt; 1100px</td><td>三栏常驻；可用 params 折叠第三栏（<code>bench-collapsed</code>）</td><td>params 显示为 fold/bench；close 隐藏</td></tr>
+          <tr><td>≤ 1100px</td><td>右侧/底部抽屉</td><td>params 开合；close / 遮罩 / 拖拽可关</td></tr>
+          <tr><td>≤ 900px</td><td>同上 + 侧栏抽屉</td><td>menu 开侧栏；遮罩互斥关闭</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted">侧栏默认只展开「物理」；搜索命中时展开匹配域。CSS 约定：条件隐藏用 <code>.btn.&lt;role&gt;</code> 压过 <code>.btn.ghost-always</code>。校验：<code>npm run test:catalog</code>。</p>
+
+  </main>
+  <script>
+    if (localStorage.getItem('physics-lab-hc') === '1') document.documentElement.classList.add('hc');
+    document.getElementById('hc').onclick = (e) => {
+      e.preventDefault();
+      document.documentElement.classList.toggle('hc');
+      localStorage.setItem('physics-lab-hc', document.documentElement.classList.contains('hc') ? '1' : '0');
+    };
+  </script>
+</body>
+</html>

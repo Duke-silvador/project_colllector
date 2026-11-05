@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IMMSPFEE · Lab</title>
+  <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body>
+  <!-- sidebar / bench 与 stage 同级，避免 .app overflow 裁切 fixed 抽屉 -->
+  <div class="chassis" id="chassis">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-drag" id="sidebar-drag" aria-hidden="true"><span></span></div>
+      <header class="brand">
+        <a class="brand-logo" href="./index.html" aria-label="IMMSPFEE">
+          <img
+            src="./assets/immspfee-logo.svg"
+            width="454"
+            height="70"
+            alt="IMMSPFEE"
+            decoding="async"
+            fetchpriority="high"
+          />
+        </a>
+      </header>
+
+      <div class="filters">
+        <label class="field">
+          <span data-i18n="ui.search">搜索</span>
+          <input type="search" id="filter-q" data-i18n-placeholder="ui.searchPh" placeholder="子类 / CS / CE / formula" data-i18n-aria="ui.search" aria-label="搜索模型" />
+        </label>
+        <label class="field">
+          <span data-i18n="ui.tag">标签</span>
+          <select id="filter-tag" aria-label="tag">
+            <option value="" data-i18n="ui.all">全部</option>
+          </select>
+        </label>
+        <label class="field">
+          <span data-i18n="ui.form">形式</span>
+          <select id="filter-formalism" aria-label="form">
+            <option value="" data-i18n="ui.all">全部</option>
+          </select>
+        </label>
+        <label class="field field-locale">
+          <span data-i18n="ui.lang">语言</span>
+          <select id="locale-select" aria-label="language"></select>
+        </label>
+        <!-- fold-bar 挂在 filters 内，避免与 model-list 之间露底缝 -->
+        <div class="fold-bar" id="fold-bar" role="group" aria-label="fold"></div>
+        <button type="button" id="btn-user-model" class="btn user-model-btn" data-i18n="ui.userModel" title="自建工业级模型（须权威方程与假设）">＋ 自建模型</button>
+      </div>
+
+      <nav class="model-list" id="model-list" aria-label="模型列表"></nav>
+
+      <dialog id="user-model-dialog" class="user-model-dialog" aria-labelledby="user-model-title">
+        <form method="dialog" id="user-model-form" class="user-model-form">
+          <header class="user-model-head">
+            <h2 id="user-model-title" data-i18n="dialog.title">Custom model</h2>
+            <p class="user-model-lede" data-i18n="dialog.lede">Industrial-grade · rich params · verify governing equations and assumptions against authoritative sources before saving.</p>
+          </header>
+          <div class="user-model-grid">
+            <label class="field"><span data-i18n="dialog.name">Name</span><input name="name" required maxlength="64" placeholder="e.g. 2nd-order RLC state-space" /></label>
+            <label class="field"><span data-i18n="dialog.domain">Domain</span>
+              <select name="domain" required>
+                <option value="物理" data-i18n="domain.物理">Physics</option>
+                <option value="计算机科学" data-i18n="domain.计算机科学">Computer Science</option>
+                <option value="计算机工程" data-i18n="domain.计算机工程">Computer Engineering</option>
+                <option value="化学工程" data-i18n="domain.化学工程">Chemical Engineering</option>
+                <option value="其他" data-i18n="domain.其他">Other</option>
+              </select>
+            </label>
+            <label class="field"><span data-i18n="dialog.sub">Subcategory</span><input name="sub" required maxlength="48" placeholder="Classical mechanics / control / …" /></label>
+            <label class="field"><span data-i18n="dialog.family">Engine family</span>
+              <select name="family" id="user-model-family" required></select>
+            </label>
+            <label class="field span-2"><span data-i18n="dialog.formula">Governing equation / formula</span><input name="formula" required maxlength="160" placeholder="e.g. mẍ = −kx − cẋ" /></label>
+            <label class="field span-2"><span data-i18n="dialog.authority">Authority (required)</span><input name="authority" required maxlength="240" placeholder="Author · book/standard · section or DOI" /></label>
+            <label class="field span-2"><span data-i18n="dialog.assumptions">Assumptions / limits</span><textarea name="assumptions" required rows="2" maxlength="400" placeholder="Linear, small-angle, lumped…; do not claim industrial accuracy beyond this"></textarea></label>
+            <label class="field span-2"><span data-i18n="dialog.description">Description</span><textarea name="description" required rows="2" maxlength="400" placeholder="States, I/O, mapping to textbook/standard"></textarea></label>
+            <label class="field"><span data-i18n="dialog.fidelity">Fidelity</span>
+              <select name="fidelity" required>
+                <option value="engineering">engineering</option>
+                <option value="principle">principle</option>
+              </select>
+            </label>
+            <label class="field check"><span></span>
+              <label class="ethics-check"><input type="checkbox" name="ethicsOk" required /> <span data-i18n="dialog.ethics">I verified concepts/ethics against authoritative docs; not a false analogy</span></label>
+            </label>
+          </div>
+          <p class="user-model-error" id="user-model-error" hidden role="alert"></p>
+          <section class="user-model-saved" aria-label="Saved custom models">
+            <div class="user-model-saved-bar">
+              <span data-i18n="dialog.saved">Saved</span>
+              <button type="button" class="btn quiet" id="user-model-export" data-i18n="dialog.export">Export JSON</button>
+              <button type="button" class="btn quiet" id="user-model-import" data-i18n="dialog.import">Import JSON</button>
+              <input type="file" id="user-model-file" accept="application/json,.json" hidden />
+            </div>
+            <ul id="user-model-list" class="user-model-list"></ul>
+          </section>
+          <footer class="user-model-actions">
+            <button type="button" class="btn primary" id="user-model-submit" data-i18n="dialog.submit">Create &amp; load</button>
+            <button type="submit" class="btn quiet" value="cancel" formnovalidate data-i18n="dialog.cancel">Cancel</button>
+          </footer>
+        </form>
+      </dialog>
+
+      <footer class="sidebar-foot">
+        <a href="./manual.html" data-i18n="ui.manual">手册</a>
+        <a href="./docs/ethics-audit.md" data-i18n="ui.ethics">伦理</a>
+        <a href="#" id="btn-hc" data-i18n="ui.contrast">高对比</a>
+      </footer>
+    </aside>
+
+    <main class="stage">
+      <header class="toolbar">
+        <button type="button" id="btn-menu" class="icon-btn ghost" data-i18n-aria="ui.openMenu" aria-label="打开模型列表" aria-expanded="false" aria-controls="sidebar"></button>
+        <div class="toolbar-title-block">
+          <div class="toolbar-kicker" id="toolbar-sub">mechanics</div>
+          <div class="toolbar-title" id="toolbar-title">自由落体</div>
+        </div>
+        <div class="toolbar-actions">
+          <label class="speed-control">
+            <span>spd</span>
+            <input type="range" id="speed-slider" min="0.1" max="4" step="0.1" value="1" />
+            <output id="speed-label">1.0×</output>
+          </label>
+          <button type="button" id="btn-pause" class="btn primary" data-priority="high">pause</button>
+          <button type="button" id="btn-reset" class="btn" data-priority="high" data-i18n-title="ui.rerunTitle" data-i18n-aria="ui.rerun" title="保持当前参数，从 t=0 重积" aria-label="重跑"><span class="lbl" data-i18n="ui.rerun">重跑</span></button>
+          <button type="button" id="btn-shot" class="btn" data-priority="mid">png</button>
+          <button type="button" id="btn-csv" class="btn" data-priority="low">csv</button>
+          <details class="tb-more" id="tb-more">
+            <summary class="btn" aria-label="more actions">⋯</summary>
+            <div class="tb-more-menu">
+              <button type="button" id="btn-csv-more" class="btn quiet">csv</button>
+            </div>
+          </details>
+          <button type="button" id="btn-params" class="btn ghost-always params-toggle" data-priority="high" aria-expanded="false" aria-controls="bench" data-i18n-title="ui.paramsTitle" title="打开参数工作台"><span class="lbl" data-i18n="ui.params">参数</span></button>
+        </div>
+      </header>
+
+      <div class="display-bezel">
+        <div class="model-shell" id="model-shell">
+          <span class="shell-chip" id="shell-fidelity" title="保真度">principle</span>
+          <span class="shell-chip" id="shell-mode">knobs</span>
+          <span class="shell-chip shell-deprecated" id="shell-deprecated" hidden>deprecated</span>
+          <span class="shell-hint" id="shell-hint" aria-live="polite" data-i18n="ui.hintDefault">右侧调参</span>
+          <button type="button" id="btn-safe-restore" class="btn quiet shell-safe" hidden data-i18n="ui.safeRestore" title="宽量程 NaN 后一键恢复模型默认参数（与「重跑」不同：会改回 schema 默认值）">恢复安全默认</button>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="canvas"></canvas>
+        </div>
+      </div>
+
+      <footer class="hud">
+        <div class="hud-label-row">
+          <div class="hud-label" data-i18n="ui.readouts">readouts</div>
+          <div class="baseline-tools" id="baseline-tools">
+            <select id="baseline-select" class="baseline-select" aria-label="baseline" title="baseline">
+              <option value="" data-i18n="ui.baselineCurrent">当前对照</option>
+            </select>
+            <button type="button" id="btn-save-baseline" class="btn quiet" title="save"><span class="lbl" data-i18n="ui.saveSnap">存快照</span></button>
+            <button type="button" id="btn-copy-readouts" class="btn quiet" title="copy"><span class="lbl" data-i18n="ui.copyReadouts">复制读数</span></button>
+            <button type="button" id="btn-export-baseline" class="btn quiet" title="export"><span class="lbl" data-i18n="ui.export">导出</span></button>
+            <label class="pack-shots-opt" title="shots">
+              <input type="checkbox" id="chk-pack-shots" />
+              <span data-i18n="ui.withShots">含图</span>
+            </label>
+            <button type="button" id="btn-export-classpack" class="btn quiet" title="class pack"><span class="lbl" data-i18n="ui.classPack">课堂包</span></button>
+            <button type="button" id="btn-import-baseline" class="btn quiet" title="import"><span class="lbl" data-i18n="ui.import">导入</span></button>
+            <input type="file" id="baseline-file" accept="application/json,.json,application/zip,.zip" hidden />
+            <button type="button" id="btn-pin-baseline" class="btn quiet" title="pin"><span class="lbl" data-i18n="ui.pinBaseline">钉住基线</span></button>
+          </div>
+        </div>
+        <details class="hud-authority" id="hud-authority">
+          <summary data-i18n="ui.authority">权威与假设</summary>
+          <p id="hud-authority-text"></p>
+          <p id="hud-assumptions-text"></p>
+        </details>
+        <div class="readouts" id="readouts"></div>
+        <details class="sr-readouts-panel">
+          <summary data-i18n="ui.srTable">文本读数表</summary>
+          <table class="sr-readouts" id="sr-readouts" aria-live="polite" aria-label="当前读数"></table>
+        </details>
+      </footer>
+    </main>
+
+    <aside class="bench" id="bench">
+      <div class="bench-drag" id="bench-drag" aria-hidden="true"><span></span></div>
+      <div class="bench-head">
+        <div>
+          <div class="bench-kicker" data-i18n="ui.benchKicker">param module</div>
+          <h2 data-i18n="ui.bench">工作台</h2>
+        </div>
+        <button type="button" id="btn-close-bench" class="btn ghost-always bench-close" data-i18n="ui.close">close</button>
+      </div>
+
+      <details class="bench-help" id="bench-help">
+        <summary data-i18n="ui.formulaNotes">formula / notes</summary>
+        <div id="meta-formula" class="meta-formula"></div>
+      </details>
+
+      <div id="param-root" class="param-root"></div>
+    </aside>
+  </div>
+
+  <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
