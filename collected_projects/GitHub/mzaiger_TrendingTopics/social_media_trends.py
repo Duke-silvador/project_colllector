@@ -1,0 +1,318 @@
+#!/usr/bin/env python3
+"""
+Social media trends: US top 20 -> social_media_trends.json
+
+  1. Trend list from an Apify actor (one call, promoted/paid trends dropped).
+  2. Context for each topic: recent posts (Sotwe) + last-24h news headlines (Google News RSS).
+  3. ONE Gemini call (the only one per run) writes a short description for every topic and the
+     best image search words for new topics.
+  4. Rank = the platform's own rank. Rank change vs the last run, and the date it first
+     started trending, are kept in the JSON. The volume line is "hours trending", counted from when the script first saw (added) the topic.
+  5. One image per new topic from DuckDuckGo, searched with words Gemini writes from the topic
+     and its description, then the most relevant candidate is picked.
+  Each topic links to a twstalker.com search.
+
+Env vars:
+  APIFY_TOKEN          required
+  GEMINI_KEY           required (same secret name as SportsDashboard)
+  APIFY_TRENDS         optional, trends to request (default 20; you pay per trend)
+  APIFY_LOCATION       optional, default united-states (lurkapi) / US (automation-lab)
+  APIFY_ACTOR          optional, primary actor id (default lurkapi~x-twitter-trends-scraper)
+  APIFY_FALLBACK_ACTOR optional, used only if the primary fails (default automation-lab~twitter-trends-scraper)
+  APIFY_MAX_CHARGE_USD optional, hard spending cap per run (default 0.02)
+  OUT_FILE             optional, default social_media_trends.json
+  (image settings: see trend_common.ImageFinder - SKIP_IMAGES, IMAGE_MAX_LOOKUPS, DDG_PROXY ...)
+"""
+from __future__ import annotations
+
+import os
+import re
+import sys
+import time
+import xml.etree.ElementTree as ET
+from urllib.parse import quote
+
+import requests
+from bs4 import BeautifulSoup
+
+import schedule
+import trend_common as tc
+
+TWSTALKER = "https://twstalker.com"
+SOTWE = "https://www.sotwe.com"
+NEWS_RSS = "https://news.google.com/rss/search"
+
+TOP_N = 20
+MAX_CHARS = 1500          # post text sent to Gemini per topic (all topics share one prompt)
+MAX_HEADLINES = 5
+PAGE_DELAY = 2.0          # seconds between requests to the same sites (be polite)
+
+# The one place the Apify actor ids appear (the ids themselves are fixed by Apify).
+# Primary: lurkapi, $0.05 per 1,000 trends, no start fee (20 trends = $0.001 a run, about $0.72 for a
+# month of hourly runs). It is a new actor, so if it errors or returns nothing the script falls back to
+# automation-lab (Free-plan price $0.00023 per trend + $0.003 start fee = about $0.0076 a run), which
+# you only pay for on those failed runs. Set APIFY_ACTOR to switch the primary yourself.
+APIFY_ACTOR = os.environ.get("APIFY_ACTOR", "lurkapi~x-twitter-trends-scraper")
+APIFY_FALLBACK_ACTOR = os.environ.get("APIFY_FALLBACK_ACTOR", "automation-lab~twitter-trends-scraper")
+APIFY_TOKEN = os.environ.get("APIFY_TOKEN")
+# Location codes differ by actor: "united-states" for lurkapi, "US" for automation-lab.
+APIFY_LOCATION = os.environ.get("APIFY_LOCATION", "")
+APIFY_TRENDS = int(os.environ.get("APIFY_TRENDS", "20"))
+APIFY_MAX_CHARGE = os.environ.get("APIFY_MAX_CHARGE_USD", "0.02")
+REDDIT_FILE = os.environ.get("REDDIT_FILE", "reddit_trends.json")   # read only, to pick the schedule
+OUT_FILE = os.environ.get("OUT_FILE", "social_media_trends.json")
+
+# Where the posts start and stop on a Sotwe topic page
+START_MARKERS = ("Tweets including", "Top Tweets for")
+END_MARKERS = ("Last Seen Hashtags", "Trends for you", "Most Popular Users")
+NOISE_LINES = re.compile(
+    r"^(\d+(\.\d+)?[KMB]?|Share|See More|Download (Image|Video|GIF)|"
+    r"Ad-Free Browsing|Enjoy Sotwe.*|Subscribe now)$",
+    re.IGNORECASE,
+)
+
+TASK = ("explain in one or two sentences why it is trending right now on social media in the "
+        "United States, using the recent posts and news headlines shown.")
+
+
+# --------------------------------------------------------------------------- trends
+
+def _actor_input(actor: str) -> dict:
+    """Input for one actor. Only the fields every actor needs are sent, so no paid add-ons run."""
+    if "lurkapi" in actor:
+        return {"locations": [APIFY_LOCATION or "united-states"], "maxTrendsPerLocation": APIFY_TRENDS}
+    return {"locations": [APIFY_LOCATION or "US"], "maxTrendsPerLocation": APIFY_TRENDS}
+
+
+def _run_actor(actor: str) -> list:
+    url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items"
+    r = requests.post(
+        url,
+        params={"maxTotalChargeUsd": APIFY_MAX_CHARGE},   # hard cap on what one run can cost
+        headers={"Authorization": f"Bearer {APIFY_TOKEN}", "Content-Type": "application/json"},
+        json=_actor_input(actor),
+        timeout=180,
+    )
+    r.raise_for_status()
+    items = r.json()
+    if not isinstance(items, list):
+        raise ValueError(f"Unexpected Apify response: {str(items)[:200]}")
+    return items
+
+
+def _normalize(items: list) -> list[dict]:
+    """Trend rows from either actor, promoted ones removed, in rank order.
+
+    Both actors give rank + name. automation-lab also gives query/isHashtag/isPromoted; lurkapi
+    gives rowType/status/url instead, so those are worked out from the name here. Rows that are
+    not trends (post rows, notices that explain a failed lookup) are skipped."""
+    out, seen = [], set()
+    for it in sorted((x for x in items if isinstance(x, dict)), key=lambda x: x.get("rank") or 999):
+        if it.get("isPromoted"):
+            continue
+        if (it.get("rowType") or "trend") != "trend":
+            continue
+        status = str(it.get("status") or "").lower()
+        if any(w in status for w in ("error", "fail", "notice", "unresolved", "empty")):
+            continue
+        topic = (it.get("name") or "").strip()
+        query = clean_query(it.get("query") or topic)
+        key = topic.lower()
+        if not topic or not query or key in seen:
+            continue
+        seen.add(key)
+        out.append({
+            "topic": topic,
+            "query": query,
+            "is_hashtag": bool(it.get("isHashtag")) or topic.startswith("#"),
+            "url": f"{TWSTALKER}/search/{quote(query, safe='')}",
+        })
+        if len(out) == TOP_N:
+            break
+    return out
+
+
+def get_trends() -> tuple[list[dict], str]:
+    """(trends, "primary" | "fallback"). Top trends from the primary Apify actor; the fallback actor
+    is used only if it fails or comes back empty (you pay for the fallback only on those runs)."""
+    actors = [APIFY_ACTOR]
+    if APIFY_FALLBACK_ACTOR and APIFY_FALLBACK_ACTOR != APIFY_ACTOR:
+        actors.append(APIFY_FALLBACK_ACTOR)
+    last: Exception | None = None
+    for n, actor in enumerate(actors):
+        try:
+            trends = _normalize(_run_actor(actor))
+            if trends:
+                if n:
+                    tc.warn(f"  Used the fallback actor {actor} (the primary returned nothing usable).")
+                return trends, ("fallback" if n else "primary")
+            last = ValueError(f"{actor} returned no trends")
+        except (requests.RequestException, ValueError) as e:
+            last = e
+        tc.warn(f"  Apify actor {actor} failed: {last}")
+    raise last if last else ValueError("No Apify actor configured")
+
+
+# ----------------------------------------------------------------- context: posts
+
+def clean_query(q: str) -> str:
+    """Search text for the twstalker/Sotwe links: no double quotes, and '+' (how X encodes a
+    space in its query strings) turned back into a space."""
+    q = (q or "").replace('"', "").replace("\u201c", "").replace("\u201d", "").replace("+", " ")
+    return re.sub(r"\s+", " ", q).strip()
+
+
+def sotwe_url(t: dict) -> str:
+    q = t["query"].lstrip("#")
+    kind = "hashtag" if t["is_hashtag"] else "search"
+    return f"{SOTWE}/{kind}/{quote(q, safe='')}?lang=en"
+
+
+def get_post_text(t: dict) -> str:
+    """Readable text of the posts on the topic's Sotwe page, trimmed for the LLM."""
+    r = requests.get(sotwe_url(t), headers=tc.HEADERS, timeout=30)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "html.parser")
+    for tag in soup(["script", "style", "noscript", "footer"]):
+        tag.decompose()
+    text = soup.get_text("\n", strip=True)
+
+    starts = [text.find(m) for m in START_MARKERS if m in text]
+    if not starts:
+        return ""          # no posts section found - don't send page chrome to Gemini
+    text = text[min(starts):]
+    ends = [text.find(m) for m in END_MARKERS if m in text]
+    if ends:
+        text = text[:min(ends)]
+    lines = [ln for ln in text.splitlines() if ln.strip() and not NOISE_LINES.match(ln.strip())]
+    return "\n".join(lines)[:MAX_CHARS]
+
+
+# ----------------------------------------------------------------- context: news
+
+def get_headlines(t: dict) -> str:
+    """Last-24h Google News headlines for the topic, one per line."""
+    q = t["query"].lstrip("#")
+    r = requests.get(
+        NEWS_RSS,
+        params={"q": f"{q} when:1d", "hl": "en-US", "gl": "US", "ceid": "US:en"},
+        headers=tc.HEADERS,
+        timeout=30,
+    )
+    r.raise_for_status()
+    root = ET.fromstring(r.content)
+    lines = []
+    for item in root.iter("item"):
+        title = (item.findtext("title") or "").strip()   # Google appends " - Publisher"
+        if title:
+            lines.append(f"- {title}")
+        if len(lines) >= MAX_HEADLINES:
+            break
+    return "\n".join(lines)
+
+
+# ------------------------------------------------------------------------------ main
+
+def main() -> int:
+    missing = [n for n, v in (("APIFY_TOKEN", APIFY_TOKEN), ("GEMINI_KEY", os.environ.get("GEMINI_KEY")))
+               if not v]
+    if missing:
+        tc.warn(f"Missing env var(s): {', '.join(missing)}")
+        return 1
+
+    now = tc.utcnow()
+    previous = tc.load_json(OUT_FILE)
+
+    # The Apps Script wakes this every 30 minutes; schedule.py says how often it should really run
+    # (it depends on which Twitter actor and which Reddit source are in use, to stay under the $5).
+    plan = schedule.plan(previous, tc.load_json(REDDIT_FILE), now)
+    manual = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch" or os.environ.get("SOCIAL_FORCE") == "1"
+    tc.info(f"Schedule: Twitter={plan['twitter']}, Reddit={plan['reddit']} -> every {plan['interval_minutes']} min "
+            f"(about ${plan['month_cost']}/month); {plan['minutes_since_last']} min since the last run.")
+    if not plan["due"] and not manual:
+        tc.info("Not due yet - skipping (no Apify call, nothing changed).")
+        return 0
+
+    try:
+        trends, actor_used = get_trends()
+    except requests.HTTPError as e:
+        code = e.response.status_code if e.response is not None else "?"
+        hint = {401: "the Apify token looks invalid",
+                403: "the Apify token isn't allowed to run this actor",
+                402: "the Apify free credit may be used up for this month"
+                }.get(code, "see the response body below")
+        body = e.response.text[:200] if e.response is not None else ""
+        tc.warn(f"Apify returned HTTP {code} ({hint}). {body}\n{OUT_FILE} was not changed.")
+        return 1
+    except (requests.RequestException, ValueError) as e:
+        tc.warn(f"Could not get trends from Apify: {e}\n{OUT_FILE} was not changed.")
+        return 1
+    if len(trends) < 5:
+        tc.warn(f"Only got {len(trends)} trends - aborting without writing.")
+        return 1
+    tc.info(f"Got {len(trends)} trends: {', '.join(t['topic'] for t in trends)}")
+
+    # 1) Gather context for every topic
+    sotwe_blocked = False
+    raw = []
+    for pos, t in enumerate(trends):
+        tc.info(f"[{pos + 1}/{len(trends)}] {t['topic']}")
+        posts, news = "", ""
+        time.sleep(PAGE_DELAY)
+        if not sotwe_blocked:
+            try:
+                posts = get_post_text(t)
+            except requests.HTTPError as e:
+                if e.response is not None and e.response.status_code == 403:
+                    sotwe_blocked = True
+                    tc.warn("  Sotwe blocked this IP (403); using news headlines only from here on.")
+                else:
+                    tc.warn(f"  Sotwe fetch failed: {e}")
+            except requests.RequestException as e:
+                tc.warn(f"  Sotwe fetch failed: {e}")
+        try:
+            news = get_headlines(t)
+        except (requests.RequestException, ET.ParseError) as e:
+            tc.warn(f"  News fetch failed: {e}")
+
+        raw.append({
+            "id": tc.slugify(t["topic"]),
+            "topic": t["topic"],
+            "description": "",
+            "description_source": "",
+            "url": t["url"],
+            "feed_pos": pos,
+            "source_start": None,          # the platform doesn't say; first_seen is used
+            "volume_unit": "hours",        # volume line = hours trending
+            "extra": {},
+            "_has_context": len(posts) + len(news) > 40,
+            "_material": f"Recent posts:\n{posts or '(none available)'}\n\n"
+                         f"Recent news headlines:\n{news or '(none available)'}",
+        })
+    tc.unique_ids(raw)
+
+    # 2) ONE Gemini call: a description for every topic with context, plus the best image search
+    #    words (from topic + description) for every topic that still needs a picture
+    finder = tc.ImageFinder()
+    desc_targets = [r for r in raw if r["_has_context"]]
+    image_targets = tc.items_needing_images(raw, previous, finder.max_lookups) if finder.enabled else []
+    tc.gemini_enrich(desc_targets, image_targets, TASK)
+    carried = tc.reuse_previous(raw, previous)       # a failed call shouldn't blank the page
+    if carried:
+        tc.info(f"Kept {carried} description(s) from the previous run.")
+
+    # 3) Rank, history, images, write
+    items = tc.finalize(raw, previous, rank_mode="feed", now=now)
+    tc.apply_images(items, previous, finder)
+    doc = tc.build_doc("social_media", "Social Media", items, rank_basis="platform_rank",
+                       region="United States",
+                       source_url=f"Apify actor ({APIFY_LOCATION})",   # never put the actor id in the JSON
+                       models=list(tc.GEMINI_MODELS))
+    doc["actor_used"] = actor_used     # "primary" or "fallback"; schedule.py reads it (labels only, no actor ids)
+    tc.save_json(OUT_FILE, doc)
+    tc.info(f"Wrote {OUT_FILE}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
