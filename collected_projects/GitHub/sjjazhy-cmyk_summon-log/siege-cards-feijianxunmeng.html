@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>飞剑寻梦-据点战防守符文配置卡片</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: #1a1a2e; color: #e0e0e0; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; }
+#lock { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  z-index: 10; background: #1a1a2e; }
+#lock .card { max-width: 380px; width: 90%; text-align: center; padding: 40px 32px;
+  background: rgba(255,255,255,0.04); border: 1px solid rgba(255,215,0,0.25); border-radius: 12px; }
+#lock .icon { font-size: 42px; margin-bottom: 16px; }
+#lock h1 { font-size: 17px; color: #ffd700; margin-bottom: 8px; }
+#lock p { font-size: 12px; color: #888; margin-bottom: 22px; line-height: 1.7; }
+#lock input { width: 100%; padding: 12px 14px; font-size: 15px; border-radius: 8px;
+  border: 1px solid rgba(255,215,0,0.3); background: #16162a; color: #e0e0e0; outline: none;
+  text-align: center; letter-spacing: 2px; }
+#lock input:focus { border-color: #ffd700; }
+#lock button { width: 100%; margin-top: 14px; padding: 12px; font-size: 15px; border: none;
+  border-radius: 8px; background: rgba(255,215,0,0.15); color: #ffd700; cursor: pointer;
+  border: 1px solid rgba(255,215,0,0.4); }
+#lock button:hover { background: rgba(255,215,0,0.25); }
+#lock .err { color: #ef5350; font-size: 12px; margin-top: 10px; min-height: 16px; }
+#lock .dl { color: #7d8dff; font-size: 11px; margin-top: 10px; min-height: 14px; }
+#lock .hint { font-size: 11px; color: #555; margin-top: 16px; }
+#frame { position: fixed; inset: 0; width: 100%; height: 100%; border: none; display: none; z-index: 5; }
+#topbar { position: fixed; top: 18px; right: 20px; z-index: 20; display: none;
+  align-items: center; gap: 10px; }
+#refreshBtn { background: rgba(20,26,46,0.88); color: #ffd700; border: 1px solid rgba(255,215,0,0.4);
+  border-radius: 8px; padding: 7px 15px; font-size: 13px; cursor: pointer; font-family: inherit;
+  display: flex; align-items: center; gap: 6px; backdrop-filter: blur(3px); }
+#refreshBtn:hover { background: rgba(255,215,0,0.2); }
+#refreshBtn .ico { display: inline-block; font-size: 15px; }
+#refreshBtn.loading .ico { animation: rspin 0.8s linear infinite; }
+@keyframes rspin { to { transform: rotate(360deg); } }
+#tip { max-width: 340px; font-size: 12px; color: #ffab40; background: rgba(0,0,0,0.66);
+  border: 1px solid rgba(255,171,64,0.35); border-radius: 8px; padding: 5px 11px;
+  text-align: right; display: none; }
+#tip.err { color: #ff8a80; border-color: rgba(255,138,128,0.4); }
+#tip.ok { color: #9be29b; border-color: rgba(155,226,155,0.35); }
+</style>
+</head>
+<body>
+<div id="lock">
+  <div class="card">
+    <div class="icon">&#128274;</div>
+    <h1>该页面已加密</h1>
+    <p>请输入访问密码解锁内容<br>内容在您的浏览器本地解密, 不会上传到任何服务器</p>
+    <input type="password" id="pw" placeholder="输入密码" autocomplete="off">
+    <button onclick="unlock()">解锁</button>
+    <div class="dl" id="dl"></div>
+    <div class="err" id="err"></div>
+    <div class="hint">密码错误时不会显示任何内容提示以外的信息</div>
+  </div>
+</div>
+<div id="topbar">
+  <div id="tip"></div>
+  <button id="refreshBtn" onclick="doRefresh()" title="拉取最新发布的据点战数据并解密 (无需重输密码)">
+    <span class="ico">&#8635;</span> 刷新数据
+  </button>
+</div>
+<iframe id="frame" title="content"></iframe>
+<script>
+var _DATA_URL = './SIEGE_DATA_FEIJIANXUNMENG.bin';
+var _VER_URL = './SIEGE_VERSION_FEIJIANXUNMENG.json';
+var _CACHE_KEY = 'pSIEGE_DATA_FEIJIANXUNMENG.bin';
+var _PBKDF_ROUNDS = 150000;
+var _pwKeep = null;      // 仅存窗口内存变量, 不落盘
+function $(id) { return document.getElementById(id); }
+function b64s(b) { return atob(b).split('').map(function(c){return c.charCodeAt(0);}); }
+
+// ---------- v3.1: 本地缓存 (IndexedDB 存密文, 两公会页面同源共用库不同 key) ----------
+var _db = null;
+function idbOpen() {
+  if (_db) return Promise.resolve(_db);
+  return new Promise(function(resolve, reject) {
+    try {
+      var rq = indexedDB.open('siege_cache', 1);
+      rq.onupgradeneeded = function(e) { e.target.result.createObjectStore('kv'); };
+      rq.onsuccess = function(e) { _db = e.target.result; resolve(_db); };
+      rq.onerror = function() { reject(new Error('IDB_OPEN_FAILED')); };
+    } catch (e) { reject(e); }
+  });
+}
+function idbGet(k) {
+  return idbOpen().then(function(db) {
+    return new Promise(function(resolve) {
+      try {
+        var rq = db.transaction('kv', 'readonly').objectStore('kv').get(k);
+        rq.onsuccess = function(e) { resolve(e.target.result || null); };
+        rq.onerror = function() { resolve(null); };
+      } catch (e) { resolve(null); }
+    });
+  }).catch(function() { return null; });
+}
+function idbSet(k, v) {
+  return idbOpen().then(function(db) {
+    return new Promise(function(resolve) {
+      try {
+        var tx = db.transaction('kv', 'readwrite');
+        tx.objectStore('kv').put(v, k);
+        tx.oncomplete = function() { resolve(true); };
+        tx.onerror = function() { resolve(false); };
+        tx.onabort = function() { resolve(false); };
+      } catch (e) { resolve(false); }
+    });
+  }).catch(function() { return false; });
+}
+
+function tip(msg, cls, show) {
+  var t = $('tip');
+  if (show === false) { t.style.display = 'none'; return; }
+  t.textContent = msg || '';
+  t.className = cls || '';
+  t.style.display = 'block';
+}
+
+function fmtBytes(loaded) { return (loaded / 1048576).toFixed(1) + ' MB'; }
+function fmtPct(loaded, total) {
+  var s = '正在下载数据 ' + fmtBytes(loaded);
+  if (total) s += ' / ' + fmtBytes(total) + ' (' + Math.round(loaded / total * 100) + '%)';
+  return s;
+}
+
+async function fetchPayload(onProgress, onRetry) {
+  // 2026-10-15: 网络中断自动重试 (最多 3 次, 间隔 1s/2s/4s); HTTP 错误码不重试
+  var lastErr = null;
+  for (var attempt = 1; attempt <= 3; attempt++) {
+    try {
+      var r = await fetch(_DATA_URL + '?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      var total = parseInt(r.headers.get('Content-Length') || '0', 10);
+      var chunks = [];
+      var loaded = 0;
+      var reader = r.body.getReader();
+      while (true) {
+        var res = await reader.read();
+        if (res.done) break;
+        if (res.value) {
+          chunks.push(res.value);
+          loaded += res.value.length;
+          if (onProgress) onProgress(loaded, total);
+        }
+      }
+      var all = new Uint8Array(loaded);
+      var o = 0;
+      for (var i = 0; i < chunks.length; i++) { all.set(chunks[i], o); o += chunks[i].length; }
+      return new TextDecoder().decode(all);   // v3.1: 返回密文原文, 由 loadPayload 统一解析与缓存
+    } catch (e) {
+      lastErr = e;
+      if (String(e).indexOf('HTTP') === 0) throw e;
+      if (attempt < 3) {
+        if (onRetry) onRetry(attempt);
+        await new Promise(function(res) { setTimeout(res, 1000 * attempt); });
+      }
+    }
+  }
+  throw new Error('NETWORK_FAILED');
+}
+
+async function fetchVersion() {
+  // v3.1: 版本文件百字节级, 弱网也快; 失败自动重试, 仍失败返回 null 走降级
+  for (var attempt = 1; attempt <= 3; attempt++) {
+    try {
+      var r = await fetch(_VER_URL + '?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return await r.json();
+    } catch (e) {
+      if (attempt >= 3) return null;
+      await new Promise(function(res) { setTimeout(res, 800 * attempt); });
+    }
+  }
+  return null;
+}
+
+function _parseCache(cached) {
+  if (!cached || !cached.data) return null;
+  try { return { sig: cached.sig, D: JSON.parse(cached.data) }; }
+  catch (e) { return null; }
+}
+
+async function loadPayload(onProgress, onRetry, onStage) {
+  // v3.1: 版本检查 → 命中缓存免下载; 返回 {D, fromCache, ver}
+  var ver = await fetchVersion();
+  var pc = _parseCache(await idbGet(_CACHE_KEY));
+  if (pc && pc.sig && ver && pc.sig === ver.sig) {
+    if (onStage) onStage('版本一致, 使用本地缓存, 免下载...');
+    return { D: pc.D, fromCache: true, ver: ver };
+  }
+  if (!ver && pc) {
+    // 降级: 版本文件拉不到但有缓存 → 直接用缓存 (可能非最新, 可稍后点“刷新数据”重试)
+    if (onStage) onStage('版本检查失败, 使用本地缓存...');
+    return { D: pc.D, fromCache: true, ver: null };
+  }
+  if (onStage) onStage('正在下载数据...');
+  var text = await fetchPayload(onProgress, onRetry);
+  if (ver && ver.sig) idbSet(_CACHE_KEY, { sig: ver.sig, data: text, ts: Date.now() });
+  return { D: JSON.parse(text), fromCache: false, ver: ver };
+}
+
+async function deriveKey(pw, saltB64) {
+  var enc = new TextEncoder();
+  var km = await crypto.subtle.importKey('raw', enc.encode(pw), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    {name: 'PBKDF2', salt: new Uint8Array(b64s(saltB64)), iterations: _PBKDF_ROUNDS, hash: 'SHA-256'},
+    km, {name: 'AES-GCM', length: 256}, false, ['decrypt']);
+}
+
+async function gunzip(buf) {
+  // 2026-10-14: 数据包已先 gzip 压缩再加密, 解密后需解压还原 (DecompressionStream)
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('当前浏览器不支持 gzip 解压, 请使用新版浏览器');
+  }
+  var ds = new DecompressionStream('gzip');
+  var reader = new Blob([buf]).stream().pipeThrough(ds).getReader();
+  var chunks = [];
+  var total = 0;
+  while (true) {
+    var res = await reader.read();
+    if (res.done) break;
+    chunks.push(res.value);
+    total += res.value.length;
+  }
+  var out = new Uint8Array(total);
+  var o = 0;
+  for (var i = 0; i < chunks.length; i++) { out.set(chunks[i], o); o += chunks[i].length; }
+  return out;
+}
+
+async function decryptPayload(D, pw) {
+  var key = await deriveKey(pw, D.s);
+  var pt = await crypto.subtle.decrypt(
+    {name: 'AES-GCM', iv: new Uint8Array(b64s(D.n)), tagLength: 128},
+    key, new Uint8Array(b64s(D.c).concat(b64s(D.t))));
+  var bytes = new Uint8Array(pt);
+  if (D.g) bytes = await gunzip(bytes);
+  return new TextDecoder().decode(bytes);
+}
+
+function showContent(html) {
+  var f = $('frame');
+  f.style.display = 'block';
+  $('lock').style.display = 'none';
+  $('topbar').style.display = 'flex';
+  var doc = f.contentDocument || f.contentWindow.document;
+  doc.open(); doc.write(html); doc.close();
+}
+
+async function unlock() {
+  var pw = $('pw').value;
+  var err = $('err');
+  err.textContent = '';
+  if (!pw) { err.textContent = '请输入密码'; return; }
+  try {
+    var dl = $('dl');
+    dl.textContent = '检查数据版本...';
+    var r = await loadPayload(
+      function(loaded, total) { dl.textContent = fmtPct(loaded, total); },
+      function(n) { dl.textContent = '网络中断, 自动重试 ' + n + '/2 ...'; },
+      function(s) { dl.textContent = s; });
+    dl.textContent = (r.fromCache ? '使用本地缓存' : '数据下载完成') + ', 正在解密...';
+    var html = await decryptPayload(r.D, pw);
+    _pwKeep = pw;      // 解锁成功后暂存, 供后续刷新 (仅本窗口存活)
+    showContent(html);
+  } catch (e) {
+    _pwKeep = null;
+    var m = String(e);
+    if (m.indexOf('HTTP') === 0) err.textContent = '数据拉取失败: ' + e + ' (请稍后重试)';
+    else if (m.indexOf('NETWORK_FAILED') >= 0) err.textContent = '数据下载失败: 网络连接不稳定, 已自动重试仍失败, 请再次点击解锁';
+    else err.textContent = '密码错误或解密失败';
+  }
+}
+
+async function doRefresh() {
+  if (!_pwKeep) return;
+  var btn = $('refreshBtn');
+  btn.classList.add('loading');
+  tip('检查数据更新...', '');
+  try {
+    var r = await loadPayload(function(loaded, total) { tip(fmtPct(loaded, total)); },
+      null,
+      function(s) { tip(s, ''); });
+    tip('正在解密...', '');
+    var html = await decryptPayload(r.D, _pwKeep);
+    // 记滚动位置 (页面在 iframe 内)
+    var f = $('frame');
+    var sy = 0;
+    try { sy = (f.contentWindow && f.contentWindow.scrollY) || 0; } catch (e) {}
+    showContent(html);
+    try { if (sy) f.contentWindow.scrollTo(0, sy); } catch (e) {}
+    var st = f.contentDocument ? (f.contentDocument.title || '') : '';
+    tip(r.fromCache
+        ? ('已使用本地缓存 (数据发布于 ' + ((r.ver && r.ver.ts) || '未知时间') + ')')
+        : ('已更新到最新数据 (' + new Date().toLocaleTimeString() + ')'), 'ok');
+    setTimeout(function() { tip('', '', false); }, 4000);
+  } catch (e) {
+    var m = String(e);
+    if (m.indexOf('HTTP') === 0) tip('刷新失败: 数据拉取失败(稍后再试)', 'err');
+    else if (m.indexOf('NETWORK_FAILED') >= 0) tip('刷新失败: 网络连接不稳定, 已自动重试仍失败, 请稍后再试', 'err');
+    else tip('刷新失败: 解密失败(请重新解锁)', 'err');
+  }
+  btn.classList.remove('loading');
+}
+
+// v3.3 (2026-11-03): 静默版本检查 — 供 iframe 内页的开战倒计时监控在结束后调用。
+// 只拉百字节级版本文件: 与本地缓存 sig 一致 → 'SAME' (不动正文, 零打扰);
+// 不一致 → doRefresh() 热更新 iframe → 'NEW'; 失败 → 'ERR' (调用方可稍后重试)。
+// 数据链路: 插件(倒计时结束采集) → 计划任务(发布上传) → 此处检出新版自动更新。
+var _quietBusy = false;
+async function quietCheck() {
+  if (!_pwKeep) return 'LOCKED';
+  if (_quietBusy) return 'BUSY';
+  _quietBusy = true;
+  try {
+    var ver = await fetchVersion();
+    if (!ver || !ver.sig) return 'ERR';
+    var pc = _parseCache(await idbGet(_CACHE_KEY));
+    if (pc && pc.sig === ver.sig) return 'SAME';
+    await doRefresh();
+    return 'NEW';
+  } catch (e) {
+    return 'ERR';
+  } finally {
+    _quietBusy = false;
+  }
+}
+
+$('pw').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') unlock();
+});
+</script>
+</body>
+</html>

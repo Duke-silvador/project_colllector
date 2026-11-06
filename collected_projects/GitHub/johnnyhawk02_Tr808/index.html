@@ -1,0 +1,212 @@
+<meta charset="utf-8">
+<title>808 Voice Bench</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@500;700&family=IBM+Plex+Sans:wght@400;500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one dark instrument panel. Top strip = transport + scope, then the
+   16 voice cards in panel order, then the step grid. Committed dark look. */
+:root {
+  color-scheme: dark;
+  --panel: #1d1c1b;
+  --panel-2: #262422;
+  --panel-3: #33302d;
+  --ink: #ece6dc;
+  --ink-dim: #a39b8f;
+  --line: #3d3935;
+  --fam-a: #d8432c;  /* BD SD */
+  --fam-b: #ec7b2c;  /* toms / congas */
+  --fam-c: #f2bd3a;  /* RS CL CP MA */
+  --fam-d: #ede3c8;  /* CB CY OH CH */
+  --trace: #7fe0a8;
+  --scope-bg: #10130f;
+  --grid: #1f2a20;
+  --focus: #f2bd3a;
+  --f-display: "Saira Condensed", "Arial Narrow", "Roboto Condensed", sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--panel); color: var(--ink);
+  font: 14px/1.45 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 40px;
+}
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 22px; }
+h1, h2 { font-family: var(--f-display); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin: 0; text-wrap: balance; }
+h1 { font-size: 2rem; line-height: 1; }
+h2 { font-size: 1.15rem; color: var(--ink-dim); }
+.lede { margin: 6px 0 0; color: var(--ink-dim); max-width: 64ch; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* sticky bar: title + transport, always reachable */
+.bar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; justify-content: space-between;
+  margin: -20px calc(-1 * max(16px, env(safe-area-inset-left, 0px))) 0;
+  padding: 12px max(16px, env(safe-area-inset-left, 0px));
+  background: var(--panel); border-bottom: 1px solid var(--line);
+}
+.bar-ctl { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; }
+.bar #play { min-width: 92px; }
+.lede { margin-top: 0; }
+
+/* top strip */
+.top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 22px; align-items: stretch; }
+.intro { display: grid; gap: 14px; align-content: start; min-width: 0; }
+.transport { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; }
+.ctl { display: grid; gap: 4px; font: 500 11px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-dim); }
+.ctl input[type=range] { width: 130px; }
+.btn {
+  background: var(--panel-3); border: 1px solid var(--line); border-radius: 4px;
+  padding: 9px 16px; cursor: pointer; font: 600 13px/1 var(--f-mono); letter-spacing: .06em; text-transform: uppercase;
+}
+.btn:hover { border-color: var(--ink-dim); }
+.btn.primary { background: var(--fam-a); border-color: var(--fam-a); color: #fff; }
+.btn[aria-pressed=true] { background: var(--fam-c); border-color: var(--fam-c); color: #1d1c1b; }
+.status { font: 12px/1.3 var(--f-mono); color: var(--ink-dim); }
+body:not(.live) #engine::before { content: "Audio off. Press any pad or Start audio."; }
+.scope-box { display: grid; gap: 6px; min-width: 0; }
+#scope { width: 100%; height: 170px; border-radius: 4px; border: 1px solid var(--line); display: block; }
+.scope-cap { display: flex; justify-content: space-between; font: 11px/1 var(--f-mono); color: var(--ink-dim); letter-spacing: .04em; }
+
+/* voice cards */
+#voices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1000px) { #voices { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { #voices { grid-template-columns: minmax(0, 1fr); } }
+.card {
+  --fam: var(--fam-a);
+  background: var(--panel-2); border-radius: 5px; padding: 12px 12px 12px;
+  border-top: 4px solid var(--fam); display: grid; gap: 10px; align-content: start;
+  transition: background .25s ease;
+}
+.fam-a { --fam: var(--fam-a); } .fam-b { --fam: var(--fam-b); } .fam-c { --fam: var(--fam-c); } .fam-d { --fam: var(--fam-d); }
+.card header { display: flex; align-items: baseline; gap: 8px; }
+.abbr { font: 700 1.6rem/1 var(--f-display); color: var(--fam); letter-spacing: .03em; }
+.name { font: 500 .8rem/1.2 var(--f-mono); text-transform: uppercase; letter-spacing: .07em; color: var(--ink); flex: 1; }
+kbd { font: 11px/1 var(--f-mono); border: 1px solid var(--line); border-radius: 3px; padding: 3px 5px; color: var(--ink-dim); }
+.ref { margin: 0; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; font: 11px/1.3 var(--f-mono); color: var(--ink-dim); font-variant-numeric: tabular-nums; }
+.model { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.model button { background: transparent; border: 0; padding: 7px 0; cursor: pointer; font: 500 11px/1 var(--f-mono); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-dim); }
+.model button[aria-pressed=true] { background: var(--fam); color: #fff; }
+.card .model button[aria-pressed=true] { color: #1d1c1b; }
+.model.wide { --fam: var(--fam-c); min-width: 280px; }
+.model.wide button { padding: 9px 12px; }
+.model.wide button[aria-pressed=true] { color: #1d1c1b; }
+.warn { margin: 0; padding: 8px 10px; border-left: 3px solid var(--fam-a); background: var(--panel-2); font-size: 13px; max-width: 62ch; }
+.warn[hidden] { display: none; }
+.knobs { display: grid; gap: 6px; min-height: 22px; }
+.knob { display: grid; grid-template-columns: 52px 1fr 22px; align-items: center; gap: 8px; font: 11px/1 var(--f-mono); text-transform: uppercase; letter-spacing: .05em; color: var(--ink-dim); }
+.knob output { text-align: right; color: var(--ink); font-variant-numeric: tabular-nums; }
+input[type=range] { accent-color: var(--fam, var(--fam-c)); width: 100%; margin: 0; }
+.pads { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pad {
+  border: 1px solid var(--line); background: var(--panel-3); border-radius: 4px; padding: 14px 0;
+  font: 600 12px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; cursor: pointer; touch-action: manipulation;
+}
+.pad:hover { border-color: var(--fam); }
+.pad.acc { background: var(--fam); color: #1d1c1b; border-color: var(--fam); }
+.cachebar { display: flex; align-items: center; gap: 8px; min-height: 26px; }
+.cachebar[hidden] { display: none; }
+.cachebar button { background: var(--panel-3); border: 1px solid var(--line); border-radius: 4px; padding: 6px 10px; cursor: pointer; font: 600 11px/1 var(--f-mono); letter-spacing: .07em; text-transform: uppercase; color: var(--ink); }
+.cachebar button:hover:not(:disabled) { border-color: var(--fam); }
+.cachebar button:disabled { opacity: .5; cursor: progress; }
+.cachebar .cache-revert { color: var(--ink-dim); }
+.cache-status { flex: 1; min-width: 0; font: 11px/1.2 var(--f-mono); color: var(--ink-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card.custom .cache-status { color: var(--fam); }
+.card.custom .model button[data-m=cached]::after { content: "*"; }
+.card.loading .model button[data-m=sample] { opacity: .5; }
+.card.nosample .model button[data-m=sample] { text-decoration: line-through; }
+.card.hit { animation: hit .35s ease-out; }
+.card.hit-acc { animation: hitacc .45s ease-out; }
+@keyframes hit { from { background: var(--panel-3); } to { background: var(--panel-2); } }
+@keyframes hitacc { from { background: #4a3b2c; } to { background: var(--panel-2); } }
+
+/* sequencer */
+.seq-head { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; justify-content: space-between; }
+.seq-ctl { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; }
+.seq-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 5px; background: var(--panel-2); padding: 10px; }
+#seq { display: grid; gap: 4px; min-width: 620px; }
+.row { display: grid; grid-template-columns: 38px repeat(16, minmax(0, 1fr)); gap: 4px; align-items: center; }
+.row .lab { font: 700 14px/1 var(--f-display); color: var(--fam, var(--ink-dim)); letter-spacing: .04em; }
+.row.head .num { font: 10px/1 var(--f-mono); color: var(--ink-dim); text-align: center; }
+.step { height: 22px; border-radius: 3px; border: 1px solid var(--line); background: var(--panel); cursor: pointer; padding: 0; }
+.step.beat { background: var(--panel-3); }
+.step[data-v="1"] { background: color-mix(in srgb, var(--fam) 55%, var(--panel)); border-color: var(--fam); }
+.step[data-v="2"] { background: var(--fam); border-color: var(--ink); }
+.step.now { box-shadow: inset 0 0 0 2px var(--trace); }
+.legend { font: 11px/1.4 var(--f-mono); color: var(--ink-dim); }
+
+.notes { color: var(--ink-dim); font-size: 13px; max-width: 80ch; display: grid; gap: 6px; }
+.notes p { margin: 0; }
+@media (max-width: 760px) {
+  .top { grid-template-columns: minmax(0, 1fr); }
+  h1 { font-size: 1.6rem; }
+  .bar { padding-block: 8px; gap: 8px; }
+  .bar h1 { font-size: 1.3rem; }
+  .bar-ctl { gap: 8px 12px; flex-wrap: nowrap; }
+  .bar .ctl input[type=range] { width: 90px; }
+  .bar #start { display: none; } /* Play starts audio too */
+}
+@media (prefers-reduced-motion: reduce) { .card.hit, .card.hit-acc { animation: none; } }
+</style>
+
+<div class="wrap">
+  <div class="bar">
+    <h1>808 Voice Bench</h1>
+    <div class="bar-ctl">
+      <button type="button" class="btn primary" id="play" aria-pressed="false">Play</button>
+      <label class="ctl" for="tempo">Tempo <output id="tempo-out">118</output><input type="range" id="tempo" min="60" max="200" step="1" value="118"></label>
+      <button type="button" class="btn" id="start">Start audio</button>
+    </div>
+  </div>
+  <div class="top">
+    <div class="intro">
+      <div>
+        <p class="lede">All sixteen TR-808 voices from the 1981 service notes, each in four versions. <b>Circuit</b> simulates every resistor, capacitor, diode, transistor and op-amp on the schematic, sample by sample. <b>Cached</b> plays hits the circuit rendered in advance, at almost no CPU (level and decay work, pitch and tone don't). To cache your own sound, set a voice's knobs and press its <b>Cache</b> button: the circuit renders fresh hits at those settings and Cached plays them from then on (kept in this browser; Revert goes back). <b>Synth</b> rebuilds the same sound from a few oscillators, filters and envelopes fitted to the circuit model, at a fraction of the CPU. <b>808</b> plays recordings of a real TR-808 at the nearest knob setting.</p>
+      </div>
+      <div class="transport">
+        <label class="ctl" for="master">Master<input type="range" id="master" min="0" max="1.5" step="0.01" value="0.8"></label>
+        <label class="ctl" for="accent">Accent level<input type="range" id="accent" min="0" max="1" step="0.01" value="1"></label>
+      </div>
+      <div class="transport">
+        <div class="model wide" role="group" aria-label="Model for all voices" id="all-models">
+          <button type="button" data-m="circuit" aria-pressed="false">All circuit</button>
+          <button type="button" data-m="cached" aria-pressed="false">All cached</button>
+          <button type="button" data-m="behavioural" aria-pressed="false">All synth</button>
+          <button type="button" data-m="sample" aria-pressed="false">All 808</button>
+        </div>
+      </div>
+      <p class="status"><span id="engine"></span> <span id="load"></span></p>
+      <p class="warn" id="overload" hidden>This computer can't run all the circuit models in real time, so you may hear dropouts. Switch some voices to Synth or 808; CY, MA, CP, SD and CB cost the most.</p>
+    </div>
+    <div class="scope-box">
+      <canvas id="scope" aria-label="Oscilloscope of the master output"></canvas>
+      <div class="scope-cap"><span>MULTI OUT · 4 ms/div</span><span>Keys 1–0, Q–Y · Shift = accent · Space = play</span></div>
+    </div>
+  </div>
+
+  <div id="voices"></div>
+
+  <section class="seq-box" aria-labelledby="seq-title" style="display:grid;gap:10px">
+    <div class="seq-head">
+      <h2 id="seq-title">Pattern</h2>
+      <div class="seq-ctl">
+        <button type="button" class="btn" id="clear">Clear</button>
+      </div>
+    </div>
+    <div class="seq-scroll"><div id="seq"></div></div>
+    <p class="legend">Click a step to cycle off → on → accent. The loaded pattern is an example.</p>
+  </section>
+
+  <div class="notes">
+    <p>Each voice lives in its own files under <code>voices/</code>: <code>sd.js</code> is the synth snare, <code>sd-circuit.js</code> the circuit one, with the schematic references and part values in its header comment. The circuit solver (modified nodal analysis with Newton iteration) is <code>dsp/mna.js</code>.</p>
+    <p>The 808 recordings are Michael Fischer's TR-808 sample set (1994, serial no. 103852): dry, from each voice's own output, LEVEL full, every other knob at 0, 2.5, 5, 7.5 and 10. The set has no accented hits, so Accent scales the recording by the circuit model's accent ratio. See <code>cache/808/SOURCE.md</code>.</p>
+    <p>The circuit models are heavy: a busy pattern can need more than one CPU core. The DSP load readout shows how close you are.</p>
+    <p>Closed hi-hat chokes the open hi-hat, as Q23 does on the voicing board. CB, CY, OH and CH share the same free-running oscillators, so no two metal hits start in the same phase.</p>
+  </div>
+</div>
+<script type="module" src="app.js"></script>
