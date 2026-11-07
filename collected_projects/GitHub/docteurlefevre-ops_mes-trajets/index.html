@@ -1,0 +1,986 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mes Trajets">
+<title>Mes Trajets — Carnet de route sécurisé</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#eef1f4; --surface:#ffffff; --ink:#14233a; --muted:#5a6a80; --line:#d5dce5;
+  --accent:#e8a317; --accent-ink:#14233a;
+  --air:#2a6fdb; --sea:#0f8b8d; --rail:#a3264a; --road:#b86a12;
+  --ok:#1d7a46; --warn:#b86a12; --bad:#b3261e; --chip:#f3f5f8;
+  --f-display:"Barlow Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"Source Sans 3",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1622; --surface:#16212f; --ink:#e6ecf3; --muted:#9aa9bc; --line:#2a3a4e;
+  --accent:#f0b43a; --accent-ink:#14233a;
+  --air:#6ea2f5; --sea:#3cc2c4; --rail:#e0698b; --road:#e59b4a;
+  --ok:#5bc48a; --warn:#e59b4a; --bad:#f07a70; --chip:#1d2a3b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1622; --surface:#16212f; --ink:#e6ecf3; --muted:#9aa9bc; --line:#2a3a4e;
+  --accent:#f0b43a; --accent-ink:#14233a;
+  --air:#6ea2f5; --sea:#3cc2c4; --rail:#e0698b; --road:#e59b4a;
+  --ok:#5bc48a; --warn:#e59b4a; --bad:#f07a70; --chip:#1d2a3b; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px 24px;padding-bottom:14px;border-bottom:3px solid var(--ink)}
+h1{font-family:var(--f-display);font-weight:700;font-size:2.4rem;letter-spacing:.02em;text-transform:uppercase;margin:0;line-height:1}
+h1 span{color:var(--accent)}
+.sub{color:var(--muted);margin:4px 0 0}
+h2{font-family:var(--f-display);font-weight:600;font-size:1.45rem;text-transform:uppercase;letter-spacing:.04em;margin:0;text-wrap:balance}
+h3{font-family:var(--f-display);font-weight:600;font-size:1.1rem;text-transform:uppercase;letter-spacing:.05em;margin:0}
+.btn{font:600 14px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:8px 14px;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.btn:hover{border-color:var(--ink)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--bad)}
+.btn.small{padding:4px 10px;font-size:13px}
+.btn:focus-visible,.tab:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn[disabled]{opacity:.5;cursor:default}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+nav.tabs{display:flex;gap:4px;margin:16px 0 18px;overflow-x:auto}
+.tab{font:600 15px var(--f-display);text-transform:uppercase;letter-spacing:.06em;padding:8px 16px;border:0;border-bottom:3px solid transparent;background:none;color:var(--muted);cursor:pointer;white-space:nowrap}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.tab .count{font-family:var(--f-mono);font-size:12px;background:var(--bad);color:#fff;border-radius:10px;padding:0 6px;margin-left:4px}
+.notice{background:var(--chip);border:1px dashed var(--line);border-radius:6px;padding:10px 14px;color:var(--muted);font-size:14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:18px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+.kpi .v{font-family:var(--f-display);font-size:1.9rem;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi .l{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.fchip{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:20px;padding:4px 12px;font:600 13px var(--f-body);cursor:pointer;display:inline-flex;gap:6px;align-items:center}
+.fchip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+.m-air{--m:var(--air)} .m-sea{--m:var(--sea)} .m-rail{--m:var(--rail)} .m-road{--m:var(--road)}
+.dot{background:var(--m)}
+input[type=search],input,select,textarea{font:15px var(--f-body);color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:7px 10px;width:100%;min-width:0}
+.filters input[type=search]{flex:1 1 200px;width:auto}
+.month-h{font-family:var(--f-display);font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-size:14px;margin:18px 0 6px;padding-bottom:4px;border-bottom:1px solid var(--line)}
+.board{display:flex;flex-direction:column;gap:6px}
+.row{display:grid;grid-template-columns:6px 100px minmax(0,1fr) auto;gap:0 14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px 10px 0;cursor:pointer}
+.row:hover{border-color:var(--m)}
+.row .stripe{align-self:stretch;background:var(--m);border-radius:6px 0 0 6px;margin:-10px 0}
+.row .when{font-family:var(--f-mono);font-size:13px;line-height:1.3;font-variant-numeric:tabular-nums}
+.row .when b{display:block;font-size:15px}
+.row .route{min-width:0}
+.row .route .r{font-weight:700;font-size:16px;overflow-wrap:anywhere}
+.row .route .meta{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 10px}
+.row .side{text-align:right;font-family:var(--f-mono);font-size:14px;display:flex;flex-direction:column;gap:3px;align-items:flex-end}
+.pill{font:600 11px var(--f-body);text-transform:uppercase;letter-spacing:.05em;border-radius:4px;padding:1px 7px;border:1px solid currentColor;white-space:nowrap}
+.p-booked{color:var(--ok)} .p-planned{color:var(--warn)} .p-cancelled{color:var(--muted)} .p-ex{color:var(--muted);border-style:dashed}
+.p-verified{color:var(--air);background:rgba(42,111,219,.08)}
+.p-dup{color:var(--bad)}
+.row.cancelled .r{text-decoration:line-through;color:var(--muted)}
+.empty{text-align:center;padding:40px 16px;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:8px}
+/* agenda */
+.cal-h{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px}
+.cal .dow{font:600 12px var(--f-display);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:center;padding:4px 0}
+.cell{background:var(--surface);border:1px solid var(--line);border-radius:4px;min-height:92px;padding:4px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.cell.out{opacity:.4}
+.cell.today{border:2px solid var(--accent)}
+.cell .d{font:600 12px var(--f-mono);color:var(--muted)}
+.ev{font-size:12px;line-height:1.25;background:var(--chip);border-left:3px solid var(--m);padding:1px 4px;border-radius:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer}
+.ev.dup{outline:1px solid var(--bad)}
+@media (max-width:640px){.cell{min-height:54px}.ev{font-size:0;height:6px;padding:0;border-left-width:0;background:var(--m)}.row{grid-template-columns:6px 80px minmax(0,1fr)}.row .side{grid-column:3;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-start;margin-top:4px}}
+/* doublons */
+.issue{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--sev);border-radius:6px;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.issue .t{font-weight:700}
+.issue .d{color:var(--muted);font-size:14px}
+.sev-bad{--sev:var(--bad)} .sev-warn{--sev:var(--warn)} .sev-info{--sev:var(--air)}
+.stack{display:flex;flex-direction:column;gap:10px}
+.mini{display:flex;flex-wrap:wrap;gap:6px}
+.mini button{font:13px var(--f-mono);background:var(--chip);border:1px solid var(--line);border-left:3px solid var(--m);color:var(--ink);border-radius:4px;padding:3px 8px;cursor:pointer;text-align:left}
+/* prix & bilan */
+.grid2{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:18px}
+@media (max-width:860px){.grid2{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.tbl-wrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th{text-align:left;font:600 12px var(--f-body);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);border-bottom:1px solid var(--line);padding:6px 8px}
+td{border-bottom:1px solid var(--line);padding:7px 8px;vertical-align:top}
+td.n,th.n{text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.save{color:var(--ok);font-weight:600}
+.links{display:flex;flex-direction:column;gap:8px}
+.links a{display:flex;gap:10px;align-items:baseline;color:var(--ink);text-decoration:none;border:1px solid var(--line);border-left:4px solid var(--m);border-radius:6px;padding:8px 10px}
+.links a:hover{border-color:var(--m)}
+.links small{color:var(--muted);display:block}
+.ai-out{white-space:pre-wrap;font-size:14px;background:var(--chip);border-radius:6px;padding:12px;max-height:520px;overflow:auto;line-height:1.55}
+.bar{height:8px;border-radius:4px;background:var(--chip);overflow:hidden;display:flex}
+.bar span{display:block;height:100%;background:var(--m)}
+.dropzone{border:2px dashed var(--line);border-radius:8px;padding:18px;text-align:center;background:var(--chip);cursor:pointer;transition:border-color .15s}
+.dropzone:hover,.dropzone.dragover{border-color:var(--accent)}
+/* dialog */
+dialog{border:1px solid var(--line);border-radius:10px;padding:0;background:var(--surface);color:var(--ink);width:min(640px,calc(100vw - 32px));max-height:calc(100vh - 32px)}
+dialog::backdrop{background:rgba(10,20,35,.55)}
+form.f{padding:18px;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+form.f .full{grid-column:1/-1}
+form.f label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--muted)}
+.modes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.modes label{flex-direction:row;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);border-radius:6px;padding:8px 4px;cursor:pointer;color:var(--ink);font-size:13px;text-align:center}
+.modes input{position:absolute;opacity:0;width:1px}
+.modes label:has(input:checked){border-color:var(--m);box-shadow:inset 0 0 0 1px var(--m);background:var(--chip)}
+.modes label:has(input:focus-visible){outline:2px solid var(--accent)}
+@media (max-width:520px){form.f{grid-template-columns:minmax(0,1fr)}.modes{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.f-foot{grid-column:1/-1;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:12px}
+.warnbox{grid-column:1/-1;color:var(--bad);font-size:14px}
+.comp-box{grid-column:1/-1;background:var(--chip);border-radius:6px;padding:10px 12px;font-size:13px}
+.comp-links{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 16px;border-radius:6px;font-weight:600;z-index:50}
+/* lock screen */
+#lock-screen{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
+.lock-card{background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--accent);border-radius:12px;padding:28px 24px;width:min(420px,100%);box-shadow:0 12px 32px rgba(0,0,0,.12);display:flex;flex-direction:column;gap:14px}
+.lock-card h1{font-size:2rem}
+@media (prefers-reduced-motion:no-preference){.row,.btn,.fchip{transition:border-color .15s,background .15s}}
+</style>
+</head>
+<body>
+
+<!-- Écran de verrouillage AES-256 -->
+<div id="lock-screen">
+  <form class="lock-card" id="lock-form">
+    <div>
+      <h1>Mes <span>Trajets</span> 🔒</h1>
+      <p class="sub">Espace personnel chiffré (AES-256). Entrez votre mot de passe pour déverrouiller vos billets sur votre téléphone ou ordinateur.</p>
+    </div>
+    <label style="font-weight:600;font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:6px">
+      Mot de passe
+      <input type="password" id="lock-pwd" required autocomplete="current-password" placeholder="Votre mot de passe…" autofocus style="font-size:16px;padding:10px 12px">
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
+      <input type="checkbox" id="lock-rem" checked style="width:auto"> Mémoriser sur cet appareil
+    </label>
+    <div id="lock-err" style="color:var(--bad);font-size:14px;font-weight:600" hidden>Mot de passe incorrect.</div>
+    <button class="btn primary" type="submit" id="lock-btn" style="justify-content:center;padding:11px;font-size:15px">Déverrouiller mes trajets</button>
+  </form>
+</div>
+
+<div class="wrap" id="app-wrap" hidden>
+  <header class="top">
+    <div>
+      <h1>Mes <span>Trajets</span> · Carnet de route</h1>
+      <p class="sub">Air France, Corsica Ferries, SNCF &amp; Voiture — classement, agenda, doublons et promotions.</p>
+    </div>
+    <div class="actions">
+      <button class="btn" id="btn-import-mail" type="button">Importer un e-mail / billet</button>
+      <button class="btn" id="btn-ics" type="button">Agenda (.ics)</button>
+      <button class="btn" id="btn-csv" type="button">CSV</button>
+      <button class="btn" id="btn-lock" type="button" title="Verrouiller ou changer le mot de passe">🔒 Sécurité</button>
+      <button class="btn primary" id="btn-add" type="button">+ Ajouter un trajet</button>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button class="tab" role="tab" data-v="voyages" aria-selected="true">Tous les trajets</button>
+    <button class="tab" role="tab" data-v="agenda" aria-selected="false">Agenda</button>
+    <button class="tab" role="tab" data-v="doublons" aria-selected="false">Alertes &amp; Doublons <span class="count" id="dup-count" hidden>0</span></button>
+    <button class="tab" role="tab" data-v="prix" aria-selected="false">Moins cher &amp; Bons plans</button>
+    <button class="tab" role="tab" data-v="bilan" aria-selected="false">Bilan &amp; Sauvegarde</button>
+  </nav>
+
+  <div id="ex-notice" class="notice" hidden>
+    <span>Vos billets extraits de votre Mac sont marqués <span class="pill p-verified">Extrait du Mac</span>. Les trajets marqués <span class="pill p-ex">exemple</span> servent de démonstration.</span>
+    <button class="btn small" id="btn-clear-ex" type="button">Supprimer les exemples</button>
+  </div>
+
+  <section id="v-voyages">
+    <div class="kpis" id="kpis"></div>
+    <div class="filters">
+      <input type="search" id="q" placeholder="Rechercher une ville, une compagnie, une référence PNR…" aria-label="Rechercher">
+      <span id="mode-filters" style="display:contents"></span>
+      <select id="when" aria-label="Période" style="width:auto">
+        <option value="all">Tous les trajets</option>
+        <option value="up">À venir</option>
+        <option value="past">Passés</option>
+      </select>
+      <select id="status-filter" aria-label="Statut" style="width:auto">
+        <option value="all">Tous statuts</option>
+        <option value="booked">Réservé</option>
+        <option value="planned">À réserver</option>
+        <option value="cancelled">Annulé</option>
+      </select>
+    </div>
+    <div id="list"></div>
+  </section>
+
+  <section id="v-agenda" hidden>
+    <div class="cal-h">
+      <button class="btn small" id="cal-prev" type="button" aria-label="Mois précédent">← Mois préc.</button>
+      <h2 id="cal-title"></h2>
+      <button class="btn small" id="cal-next" type="button" aria-label="Mois suivant">Mois suiv. →</button>
+    </div>
+    <div class="cal" id="cal"></div>
+    <div class="month-h">Trajets du mois sélectionné</div>
+    <div class="board" id="cal-list"></div>
+  </section>
+
+  <section id="v-doublons" hidden>
+    <p class="sub" style="margin:0 0 12px">Détection automatique : même référence PNR saisie deux fois, même trajet le même jour, horaires qui se chevauchent, trajets réservés sans référence et allers sans retour.</p>
+    <div class="stack" id="issues"></div>
+  </section>
+
+  <section id="v-prix" hidden>
+    <div class="grid2">
+      <div class="stack">
+        <div class="panel">
+          <h3>Suivi des baisses de prix &amp; prix cibles</h3>
+          <p class="sub" style="margin:0">Notez dans chaque trajet le « meilleur prix vu » ou votre « prix cible ». L'application calcule l'économie potentielle et vous alerte.</p>
+          <div class="tbl-wrap"><table id="savings"></table></div>
+        </div>
+        <div class="panel">
+          <h3>Analyseur d'économies &amp; Bons plans</h3>
+          <p class="sub" style="margin:0">Analyse automatique de votre profil de voyageur (Corse, train, avion, traversées ferry avec véhicule) et recommandations d'optimisation tarifaire.</p>
+          <div class="actions"><button class="btn primary" id="btn-ai" type="button">Trouver des économies sur mes trajets</button></div>
+          <div class="ai-out" id="ai-out" hidden></div>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="panel">
+          <h3>Comparateurs &amp; Promotions en direct</h3>
+          <div class="links">
+            <a class="m-air" href="https://wwws.airfrance.fr/offres-de-vols" target="_blank" rel="noopener"><span class="dot"></span><span><b>Air France</b> · Offres &amp; Flying Blue<small>Promos vols, calendrier des prix bas Paris ↔ Corse (Ajaccio, Bastia, Calvi, Figari)</small></span></a>
+            <a class="m-air" href="https://www.aircorsica.com/promotions/" target="_blank" rel="noopener"><span class="dot"></span><span><b>Air Corsica</b> · Tarifs &amp; Promos<small>Vols directs Orly ↔ Ajaccio / Bastia / Calvi / Figari, partenariat Air France</small></span></a>
+            <a class="m-air" href="https://www.google.com/travel/flights?hl=fr" target="_blank" rel="noopener"><span class="dot"></span><span><b>Google Vols</b> · Comparateur aérien<small>Suivi des courbes de prix et alertes par e-mail</small></span></a>
+            <a class="m-sea" href="https://www.corsica-ferries.fr/promotions.html" target="_blank" rel="noopener"><span class="dot"></span><span><b>Corsica Ferries</b> · Promotions &amp; Corsica Club<small>Traversées Toulon / Nice ↔ Ajaccio, Bastia, Île-Rousse, Porto-Vecchio avec voiture</small></span></a>
+            <a class="m-sea" href="https://www.corsicalinea.com/nos-offres" target="_blank" rel="noopener"><span class="dot"></span><span><b>Corsica Linea &amp; La Méridionale</b><small>Comparer les traversées de nuit depuis Marseille vers la Corse</small></span></a>
+            <a class="m-rail" href="https://www.sncf-connect.com/bons-plans" target="_blank" rel="noopener"><span class="dot"></span><span><b>SNCF Connect / OUIGO / Trainline</b><small>Cartes Avantage &amp; Liberté, ouverture des ventes TGV, alertes petits prix</small></span></a>
+            <a class="m-road" href="https://www.prix-carburants.gouv.fr/" target="_blank" rel="noopener"><span class="dot"></span><span><b>Prix des carburants &amp; Autoroutes</b><small>Carte officielle des stations les moins chères sur votre itinéraire</small></span></a>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>À réserver en priorité</h3>
+          <p class="sub" style="margin:0">Trajets au statut « à réserver », triés du départ le plus proche au plus lointain.</p>
+          <div class="board" id="tobook"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="v-bilan" hidden>
+    <div class="grid2">
+      <div class="stack">
+        <div class="panel">
+          <h3>Dépenses par mode de transport</h3>
+          <div id="spend"></div>
+        </div>
+        <div class="panel">
+          <h3>Trajets les plus fréquents</h3>
+          <div class="tbl-wrap"><table id="top-routes"></table></div>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="panel">
+          <h3>Sauvegarde &amp; Restauration JSON</h3>
+          <p class="sub" style="margin:0">Exportez tous vos trajets dans un fichier JSON ou restaurez une sauvegarde existante.</p>
+          <div class="actions">
+            <button class="btn primary" id="btn-export-json" type="button">Exporter la sauvegarde (.json)</button>
+            <label class="btn" style="margin:0">Importer un fichier (.json)<input type="file" id="file-import-json" accept=".json" hidden></label>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Import rapide d'e-mails Apple Mail (.eml / .emlx / texte)</h3>
+          <p class="sub" style="margin:0">Glissez ici vos confirmations Air France, Corsica Ferries, Corsair ou SNCF, ou cliquez sur « Importer un e-mail / billet » en haut.</p>
+          <div class="dropzone" id="dropzone">Glissez-déposez un e-mail (.eml, .emlx, .txt) ou cliquez pour coller le texte d'une confirmation</div>
+          <input type="file" id="file-eml" accept=".eml,.emlx,.txt,.html" multiple hidden>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- Modal Ajout / Edition Trajet -->
+<dialog id="dlg">
+  <form class="f" id="form">
+    <h2 class="full" id="dlg-title">Nouveau trajet</h2>
+    <div class="full modes" role="radiogroup" aria-label="Mode de transport">
+      <label class="m-air"><input type="radio" name="mode" value="air" id="m-air" checked><span class="dot"></span>Avion</label>
+      <label class="m-sea"><input type="radio" name="mode" value="sea" id="m-sea"><span class="dot"></span>Ferry</label>
+      <label class="m-rail"><input type="radio" name="mode" value="rail" id="m-rail"><span class="dot"></span>Train</label>
+      <label class="m-road"><input type="radio" name="mode" value="road" id="m-road"><span class="dot"></span>Voiture</label>
+    </div>
+    <label>Compagnie<input id="f-company" placeholder="Air France, Corsica Ferries, SNCF…"></label>
+    <label>Statut<select id="f-status"><option value="booked">Réservé</option><option value="planned">À réserver</option><option value="cancelled">Annulé</option></select></label>
+    <label>Ville / Aéroport / Port de départ<input id="f-from" required placeholder="Paris Orly"></label>
+    <label>Ville / Aéroport / Port d'arrivée<input id="f-to" required placeholder="Ajaccio"></label>
+    <label>Date de départ<input type="date" id="f-date" required></label>
+    <label>Motif<select id="f-purpose"><option value="perso">Personnel / Famille</option><option value="pro">Professionnel</option></select></label>
+    <label>Heure de départ<input type="time" id="f-dep"></label>
+    <label>Heure d'arrivée<input type="time" id="f-arr"></label>
+    <label>Référence PNR / N° billet ou vol<input id="f-ref" placeholder="AF7600 · PNR ABC123"></label>
+    <label>Passager(s)<input id="f-pax" placeholder="Nom Prénom"></label>
+    <label>Prix payé (€)<input type="number" step="0.01" min="0" id="f-price" inputmode="decimal"></label>
+    <label>Meilleur prix vu / Cible (€)<input type="number" step="0.01" min="0" id="f-best" inputmode="decimal"></label>
+    <label class="full">Notes (siège, véhicule, bagages, facture)<textarea id="f-notes" rows="2" placeholder="Siège 07K, 2 bagages soute, véhicule embarqué…"></textarea></label>
+    <div class="comp-box" id="comp-box">
+      <b>Comparer les prix et suivre ce trajet :</b>
+      <div class="comp-links" id="comp-links"></div>
+    </div>
+    <div class="warnbox" id="f-warn" hidden></div>
+    <div class="f-foot">
+      <div class="actions"><button class="btn danger" type="button" id="f-del" hidden>Supprimer</button><button class="btn" type="button" id="f-del-yes" hidden>Confirmer la suppression</button></div>
+      <div class="actions"><button class="btn" type="button" id="f-cancel">Annuler</button><button class="btn primary" type="submit">Enregistrer</button></div>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal Import Email / Texte -->
+<dialog id="dlg-mail">
+  <form class="f" id="form-mail">
+    <h2 class="full">Importer une confirmation (Mail / Texte)</h2>
+    <p class="sub full" style="margin:0">Collez ci-dessous le texte d'un e-mail de confirmation (Air France, Corsica Ferries, SNCF, Corsair…). Les dates, villes, horaires, références PNR et prix seront extraits automatiquement.</p>
+    <label class="full">Texte de l'e-mail ou du billet<textarea id="mail-text" rows="8" placeholder="Collez ici le contenu de l'e-mail..."></textarea></label>
+    <div class="f-foot">
+      <div></div>
+      <div class="actions">
+        <button class="btn" type="button" id="mail-cancel">Fermer</button>
+        <button class="btn primary" type="submit">Analyser et ajouter le trajet</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<!-- Modal Sécurité / Changement de mot de passe -->
+<dialog id="dlg-sec">
+  <form class="f" id="form-sec">
+    <h2 class="full">Sécurité &amp; Mot de passe</h2>
+    <p class="sub full" style="margin:0">Vos données sont chiffrées en AES-256 sur cet appareil. Vous pouvez changer votre mot de passe ou verrouiller votre session.</p>
+    <label class="full">Nouveau mot de passe (sur cet appareil)<input type="password" id="sec-new-pwd" placeholder="Nouveau mot de passe…"></label>
+    <div class="f-foot">
+      <button class="btn danger" type="button" id="sec-lock-now">🔒 Verrouiller maintenant</button>
+      <div class="actions">
+        <button class="btn" type="button" id="sec-cancel">Fermer</button>
+        <button class="btn primary" type="submit">Enregistrer le nouveau mot de passe</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+/* Coffre-fort initial chiffré en AES-256-CBC (PBKDF2-HMAC-SHA256, 100 000 itérations) — aucune donnée en clair dans le code source */
+const DEFAULT_VAULT = {"alg":"AES-CBC","salt":"CLUpM3pziqjHkl2kIR0Txg==","iv":"zaDv8sByL9LAanmf/0/G8g==","iter":100000,"data":"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"};
+
+const VAULT_LS = "cdr-encrypted-vault-v1";
+const PWD_SESSION = "cdr-pwd-cache";
+
+function b64ToBytes(b64){
+  const bin=atob(b64);
+  const arr=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i]=bin.charCodeAt(i);
+  return arr;
+}
+function bytesToB64(bytes){
+  let bin="";
+  const arr=new Uint8Array(bytes);
+  for(let i=0;i<arr.length;i++) bin+=String.fromCharCode(arr[i]);
+  return btoa(bin);
+}
+
+async function deriveKey(password, saltBytes, iter){
+  const enc=new TextEncoder();
+  const keyMaterial=await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    {name:"PBKDF2", salt:saltBytes, iterations:iter, hash:"SHA-256"},
+    keyMaterial,
+    {name:"AES-CBC", length:256},
+    false,
+    ["encrypt","decrypt"]
+  );
+}
+
+async function decryptVault(vaultObj, password){
+  const salt=b64ToBytes(vaultObj.salt);
+  const iv=b64ToBytes(vaultObj.iv);
+  const data=b64ToBytes(vaultObj.data);
+  const key=await deriveKey(password, salt, vaultObj.iter||100000);
+  const decBuf=await crypto.subtle.decrypt({name:"AES-CBC", iv}, key, data);
+  const jsonStr=new TextDecoder().decode(decBuf);
+  return JSON.parse(jsonStr);
+}
+
+async function encryptVault(tripsArr, password){
+  const salt=crypto.getRandomValues(new Uint8Array(16));
+  const iv=crypto.getRandomValues(new Uint8Array(16));
+  const iter=100000;
+  const key=await deriveKey(password, salt, iter);
+  const plainBuf=new TextEncoder().encode(JSON.stringify(tripsArr));
+  const encBuf=await crypto.subtle.encrypt({name:"AES-CBC", iv}, key, plainBuf);
+  return {
+    alg:"AES-CBC",
+    salt:bytesToB64(salt),
+    iv:bytesToB64(iv),
+    iter,
+    data:bytesToB64(encBuf)
+  };
+}
+
+const MODES={
+  air:{label:"Air France / Avion",short:"Avion"},
+  sea:{label:"Corsica Ferries / Ferry",short:"Ferry"},
+  rail:{label:"SNCF / Train",short:"Train"},
+  road:{label:"Voiture",short:"Voiture"}
+};
+const STATUS={booked:["Réservé","p-booked"],planned:["À réserver","p-planned"],cancelled:["Annulé","p-cancelled"]};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pad=n=>String(n).padStart(2,"0");
+const todayStr=(()=>{const d=new Date();return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())})();
+const eur=n=>n==null||n===""||isNaN(n)?"—":Number(n).toLocaleString("fr-FR",{style:"currency",currency:"EUR"});
+const fmtDate=s=>{if(!s)return"—";const d=new Date(s+"T12:00");return isNaN(d)?s:d.toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short",year:"numeric"})};
+const norm=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]/g,"");
+const toMin=t=>{if(!t)return null;const[h,m]=t.split(":").map(Number);return h*60+m};
+
+let trips=[];
+let currentPassword=null;
+const state={view:"voyages",modes:new Set(),q:"",when:"all",status:"all",calY:new Date().getFullYear(),calM:new Date().getMonth()};
+
+function toast(t){const el=$("#toast");el.textContent=t;el.hidden=false;clearTimeout(toast._t);toast._t=setTimeout(()=>el.hidden=true,2600)}
+
+function getActiveVault(){
+  try{
+    const raw=localStorage.getItem(VAULT_LS);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return DEFAULT_VAULT;
+}
+
+async function saveEncrypted(){
+  if(!currentPassword) return;
+  try{
+    const v=await encryptVault(trips, currentPassword);
+    localStorage.setItem(VAULT_LS, JSON.stringify(v));
+  }catch(e){}
+}
+
+function saveTrip(t){
+  if(!t.id){t.id="t-"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);trips.push(t)}
+  else trips=trips.map(x=>x.id===t.id?t:x);
+  saveEncrypted(); render();
+}
+function deleteTrip(id){
+  trips=trips.filter(t=>t.id!==id);
+  saveEncrypted(); render();
+}
+
+function sorted(list){return [...list].sort((a,b)=>(a.date+(a.dep||"")).localeCompare(b.date+(b.dep||"")))}
+
+function findIssues(){
+  const live=trips.filter(t=>t.status!=="cancelled");
+  const out=[]; const dupIds=new Set();
+
+  const byRef={};
+  live.forEach(t=>{const r=norm(t.ref);if(r.length>=4)(byRef[r+"|"+t.date]=byRef[r+"|"+t.date]||[]).push(t)});
+  Object.values(byRef).forEach(g=>{
+    if(g.length>1){
+      g.forEach(t=>dupIds.add(t.id));
+      out.push({sev:"bad",t:"Même référence de réservation saisie deux fois",d:`La référence « ${esc(g[0].ref)} » apparaît ${g.length} fois le ${fmtDate(g[0].date)}. Vérifiez si un billet a été saisi ou acheté en double.`,trips:g});
+    }
+  });
+
+  const byRoute={};
+  live.forEach(t=>{(byRoute[t.mode+"|"+t.date+"|"+norm(t.from)+"|"+norm(t.to)]=byRoute[t.mode+"|"+t.date+"|"+norm(t.from)+"|"+norm(t.to)]||[]).push(t)});
+  Object.values(byRoute).forEach(g=>{
+    if(g.length>1&&!g.every(t=>dupIds.has(t.id))){
+      g.forEach(t=>dupIds.add(t.id));
+      out.push({sev:"bad",t:"Même trajet enregistré deux fois le même jour",d:`${esc(g[0].from)} → ${esc(g[0].to)} (${MODES[g[0].mode].short}) figure ${g.length} fois le ${fmtDate(g[0].date)}.`,trips:g});
+    }
+  });
+
+  const byDay={};
+  live.forEach(t=>{if(toMin(t.dep)!=null)(byDay[t.date]=byDay[t.date]||[]).push(t)});
+  Object.values(byDay).forEach(g=>{
+    const s=g.sort((a,b)=>toMin(a.dep)-toMin(b.dep));
+    for(let i=0;i<s.length;i++)for(let j=i+1;j<s.length;j++){
+      const a=s[i],b=s[j]; if(dupIds.has(a.id)&&dupIds.has(b.id))continue;
+      let aEnd=toMin(a.arr); if(aEnd==null)aEnd=toMin(a.dep)+60; if(aEnd<toMin(a.dep))aEnd+=1440;
+      if(toMin(b.dep)<aEnd){
+        out.push({sev:"warn",t:"Horaires qui se chevauchent",d:`Le ${fmtDate(a.date)}, ${esc(b.from)} → ${esc(b.to)} part à ${b.dep}, avant l'arrivée prévue de ${esc(a.from)} → ${esc(a.to)} (${a.arr||"non renseignée"}).`,trips:[a,b]});
+      }
+    }
+  });
+
+  live.filter(t=>t.status==="booked"&&(!t.ref||t.ref.trim().length<2)&&t.mode!=="road").forEach(t=>{
+    out.push({sev:"warn",t:"Trajet réservé sans référence PNR",d:`Le trajet ${esc(t.from)} → ${esc(t.to)} du ${fmtDate(t.date)} est marqué « Réservé » mais n'a pas de numéro de dossier ou de billet.`,trips:[t]});
+  });
+
+  live.filter(t=>t.status==="planned"&&t.date>=todayStr).forEach(t=>{
+    const diffDays=Math.round((new Date(t.date+"T12:00")-new Date(todayStr+"T12:00"))/86400000);
+    if(diffDays>=0&&diffDays<=21){
+      out.push({sev:"warn",t:`Départ dans ${diffDays} jour(s) non réservé`,d:`Le trajet ${esc(t.from)} → ${esc(t.to)} (${fmtDate(t.date)}) est encore au statut « À réserver ». Les tarifs augmentent fortement à moins de 3 semaines.`,trips:[t]});
+    }
+  });
+
+  return {out,dupIds};
+}
+
+function setView(v){
+  state.view=v;
+  document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===v));
+  ["voyages","agenda","doublons","prix","bilan"].forEach(k=>$("#v-"+k).hidden=k!==v);
+  render();
+}
+
+function rowHTML(t,dups){
+  const st=STATUS[t.status]||STATUS.booked;
+  const m=MODES[t.mode]||MODES.road;
+  const save=t.best!=null&&t.best!==""&&t.price!=null&&t.price!==""&&Number(t.best)<Number(t.price);
+  const comp=t.company||m.short;
+  return `<div class="row m-${t.mode} ${t.status==="cancelled"?"cancelled":""}" data-id="${esc(t.id)}" tabindex="0" role="button">
+    <span class="stripe"></span>
+    <div class="when"><b>${fmtDate(t.date)}</b>${t.dep?esc(t.dep):""}${t.arr?" → "+esc(t.arr):""}</div>
+    <div class="route"><div class="r">${esc(t.from)} → ${esc(t.to)}</div>
+      <div class="meta"><span><b>${esc(comp)}</b></span>${t.ref?`<span>Réf: ${esc(t.ref)}</span>`:""}${t.pax?`<span>👤 ${esc(t.pax)}</span>`:""}<span>${t.purpose==="perso"?"Perso / Famille":"Pro"}</span>${t.notes?`<span>${esc(t.notes)}</span>`:""}</div></div>
+    <div class="side">${t.price!=null&&t.price!==""&&Number(t.price)>0?`<span><b>${eur(t.price)}</b></span>`:""}
+      <span class="pill ${st[1]}">${st[0]}</span>
+      ${dups&&dups.has(t.id)?'<span class="pill p-dup">Doublon</span>':""}
+      ${save?`<span class="save">Objectif −${eur(t.price-t.best)}</span>`:""}
+      ${t.verifiedMac?'<span class="pill p-verified">Extrait du Mac</span>':""}
+      ${t.example?'<span class="pill p-ex">exemple</span>':""}</div></div>`;
+}
+
+function bindRows(root){
+  root.querySelectorAll("[data-id]").forEach(el=>{
+    const open=()=>openForm(trips.find(t=>t.id===el.dataset.id));
+    el.addEventListener("click",open);
+    el.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();open()}});
+  });
+}
+
+function render(){
+  if(!currentPassword) return;
+  const {out,dupIds}=findIssues();
+  const nBad=out.length;
+  const dc=$("#dup-count"); dc.hidden=!nBad; dc.textContent=nBad;
+  $("#ex-notice").hidden=!trips.some(t=>t.example);
+  if(state.view==="voyages")renderList(dupIds);
+  if(state.view==="agenda")renderCal(dupIds);
+  if(state.view==="doublons")renderIssues(out);
+  if(state.view==="prix")renderPrix(dupIds);
+  if(state.view==="bilan")renderBilan();
+}
+
+function renderList(dupIds){
+  const live=trips.filter(t=>t.status!=="cancelled");
+  const up=live.filter(t=>t.date>=todayStr);
+  const totalSpent=live.reduce((s,t)=>s+(Number(t.price)||0),0);
+  const toBook=live.filter(t=>t.status==="planned").length;
+  const verifiedCount=trips.filter(t=>t.verifiedMac).length;
+  $("#kpis").innerHTML=`
+    <div class="kpi"><div class="v">${live.length}</div><div class="l">Trajets actifs (${verifiedCount} extraits du Mac)</div></div>
+    <div class="kpi"><div class="v">${up.length}</div><div class="l">Trajets à venir</div></div>
+    <div class="kpi"><div class="v">${toBook}</div><div class="l">À réserver</div></div>
+    <div class="kpi"><div class="v">${eur(totalSpent).replace(/,\d\d/,"")}</div><div class="l">Budget total enregistré</div></div>`;
+  $("#mode-filters").innerHTML=Object.entries(MODES).map(([k,m])=>`<button type="button" class="fchip m-${k}" data-m="${k}" aria-pressed="${state.modes.has(k)}"><span class="dot"></span>${m.short}</button>`).join("");
+  $("#mode-filters").querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{const k=b.dataset.m;state.modes.has(k)?state.modes.delete(k):state.modes.add(k);render()});
+  const q=norm(state.q);
+  let list=trips.filter(t=>(!state.modes.size||state.modes.has(t.mode))
+    &&(state.when==="all"||(state.when==="up"?t.date>=todayStr:t.date<todayStr))
+    &&(state.status==="all"||t.status===state.status)
+    &&(!q||norm(t.from+t.to+t.ref+t.notes+(t.company||"")+(t.pax||"")).includes(q)));
+  list=sorted(list); if(state.when==="past")list.reverse();
+  if(!list.length){$("#list").innerHTML=`<div class="empty">Aucun trajet ne correspond à ces filtres.</div>`;return}
+  let html="",cur="";
+  list.forEach(t=>{
+    const mk=t.date.slice(0,7);
+    if(mk!==cur){
+      if(cur)html+="</div>";
+      cur=mk;
+      html+=`<div class="month-h">${new Date(t.date+"T12:00").toLocaleDateString("fr-FR",{month:"long",year:"numeric"})}</div><div class="board">`;
+    }
+    html+=rowHTML(t,dupIds);
+  });
+  $("#list").innerHTML=html+"</div>"; bindRows($("#list"));
+}
+
+function renderCal(dupIds){
+  const y=state.calY,m=state.calM;
+  $("#cal-title").textContent=new Date(y,m,1).toLocaleDateString("fr-FR",{month:"long",year:"numeric"});
+  const first=new Date(y,m,1); const off=(first.getDay()+6)%7; const start=new Date(y,m,1-off);
+  let html=["lun","mar","mer","jeu","ven","sam","dim"].map(d=>`<div class="dow">${d}</div>`).join("");
+  const byDate={}; trips.forEach(t=>(byDate[t.date]=byDate[t.date]||[]).push(t));
+  const weeks=Math.ceil((off+new Date(y,m+1,0).getDate())/7);
+  for(let i=0;i<weeks*7;i++){
+    const d=new Date(start);d.setDate(start.getDate()+i);
+    const ds=d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+    const evs=sorted(byDate[ds]||[]);
+    html+=`<div class="cell ${d.getMonth()!==m?"out":""} ${ds===todayStr?"today":""}"><span class="d">${d.getDate()}</span>${evs.map(t=>`<div class="ev m-${t.mode} ${dupIds.has(t.id)?"dup":""}" data-id="${esc(t.id)}" title="${esc(t.from+" → "+t.to)}">${t.dep?esc(t.dep)+" ":""}${esc(t.to)}</div>`).join("")}</div>`;
+  }
+  $("#cal").innerHTML=html; bindRows($("#cal"));
+  const mk=y+"-"+pad(m+1); const list=sorted(trips.filter(t=>t.date.startsWith(mk)));
+  $("#cal-list").innerHTML=list.length?list.map(t=>rowHTML(t,dupIds)).join(""):`<div class="empty">Aucun trajet sur ce mois. Utilisez les flèches pour naviguer.</div>`;
+  bindRows($("#cal-list"));
+}
+
+function renderIssues(out){
+  if(!out.length){$("#issues").innerHTML=`<div class="empty">Aucun doublon ni anomalie détecté dans vos réservations.</div>`;return}
+  const order={bad:0,warn:1,info:2}; out.sort((a,b)=>order[a.sev]-order[b.sev]);
+  $("#issues").innerHTML=out.map(i=>`<div class="issue sev-${i.sev}"><div class="t">${i.t}</div><div class="d">${i.d}</div>
+    <div class="mini">${i.trips.map(t=>`<button type="button" class="m-${t.mode}" data-id="${esc(t.id)}">${fmtDate(t.date)} · ${esc(t.from)} → ${esc(t.to)}${t.ref?" · "+esc(t.ref):""}</button>`).join("")}</div></div>`).join("");
+  bindRows($("#issues"));
+}
+
+function renderPrix(dupIds){
+  const rows=sorted(trips.filter(t=>t.status!=="cancelled"&&t.best!==""&&t.best!=null&&t.price!==""&&t.price!=null&&Number(t.best)<Number(t.price)));
+  const tot=rows.reduce((s,t)=>s+(t.price-t.best),0);
+  $("#savings").innerHTML=rows.length?`<thead><tr><th>Trajet</th><th class="n">Prix actuel</th><th class="n">Cible / Vu</th><th class="n">Économie</th></tr></thead><tbody>${rows.map(t=>`<tr data-id="${esc(t.id)}" style="cursor:pointer"><td><span class="dot m-${t.mode}"></span> ${fmtDate(t.date)} · ${esc(t.from)} → ${esc(t.to)}</td><td class="n">${eur(t.price)}</td><td class="n">${eur(t.best)}</td><td class="n save">−${eur(t.price-t.best)}</td></tr>`).join("")}</tbody><tfoot><tr><td><b>Total potentiel</b></td><td></td><td></td><td class="n save">−${eur(tot)}</td></tr></tfoot>`
+    :`<tbody><tr><td class="sub">Aucun écart enregistré pour l'instant.</td></tr></tbody>`;
+  bindRows($("#savings"));
+  const tb=sorted(trips.filter(t=>t.status==="planned"));
+  $("#tobook").innerHTML=tb.length?tb.map(t=>rowHTML(t,dupIds)).join(""):`<div class="empty">Aucun trajet en attente de réservation.</div>`;
+  bindRows($("#tobook"));
+}
+
+function renderBilan(){
+  const by={};
+  trips.filter(t=>t.status!=="cancelled").forEach(t=>by[t.mode]=(by[t.mode]||0)+(Number(t.price)||0));
+  const max=Math.max(1,...Object.values(by));
+  $("#spend").innerHTML=Object.entries(MODES).map(([k,m])=>`<div class="m-${k}" style="display:grid;grid-template-columns:140px minmax(0,1fr) 110px;gap:10px;align-items:center;margin:6px 0"><span><b>${m.short}</b></span><div class="bar"><span style="width:${((by[k]||0)/max*100).toFixed(1)}%"></span></div><span style="text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums">${eur(by[k]||0)}</span></div>`).join("");
+
+  const routes={};
+  trips.filter(t=>t.status!=="cancelled").forEach(t=>{
+    const key=`${t.from} ↔ ${t.to}`;
+    routes[key]=(routes[key]||{count:0,total:0,mode:t.mode});
+    routes[key].count++;
+    routes[key].total+=(Number(t.price)||0);
+  });
+  const top=Object.entries(routes).sort((a,b)=>b[1].count-a[1].count);
+  $("#top-routes").innerHTML=top.length?`<thead><tr><th>Itinéraire</th><th class="n">Trajets</th><th class="n">Total dépensé</th></tr></thead><tbody>${top.map(([k,v])=>`<tr><td><span class="dot m-${v.mode}"></span> ${esc(k)}</td><td class="n">${v.count}</td><td class="n">${eur(v.total)}</td></tr>`).join("")}</tbody>`:`<tbody><tr><td>Aucun trajet enregistré.</td></tr></tbody>`;
+}
+
+function updateCompLinks(mode, from, to){
+  const box=$("#comp-links");
+  const q=encodeURIComponent(`${from||"Paris"} ${to||"Ajaccio"}`);
+  if(mode==="air"){
+    box.innerHTML=`
+      <a class="btn small" href="https://wwws.airfrance.fr/" target="_blank" rel="noopener">Air France</a>
+      <a class="btn small" href="https://www.aircorsica.com/" target="_blank" rel="noopener">Air Corsica</a>
+      <a class="btn small" href="https://www.google.com/travel/flights?q=${q}&hl=fr" target="_blank" rel="noopener">Google Vols</a>`;
+  } else if(mode==="sea"){
+    box.innerHTML=`
+      <a class="btn small" href="https://www.corsica-ferries.fr/" target="_blank" rel="noopener">Corsica Ferries</a>
+      <a class="btn small" href="https://www.corsicalinea.com/" target="_blank" rel="noopener">Corsica Linea</a>
+      <a class="btn small" href="https://www.lameridionale.fr/" target="_blank" rel="noopener">La Méridionale</a>`;
+  } else if(mode==="rail"){
+    box.innerHTML=`
+      <a class="btn small" href="https://www.sncf-connect.com/" target="_blank" rel="noopener">SNCF Connect</a>
+      <a class="btn small" href="https://www.ouigo.com/" target="_blank" rel="noopener">OUIGO</a>
+      <a class="btn small" href="https://www.thetrainline.com/fr" target="_blank" rel="noopener">Trainline</a>`;
+  } else {
+    box.innerHTML=`
+      <a class="btn small" href="https://www.prix-carburants.gouv.fr/" target="_blank" rel="noopener">Prix Carburants</a>
+      <a class="btn small" href="https://fr.mappy.com/" target="_blank" rel="noopener">Calcul péages Mappy</a>`;
+  }
+}
+
+let editing=null;
+function openForm(t){
+  editing=t||null;
+  $("#dlg-title").textContent=t?"Modifier le trajet":"Nouveau trajet";
+  const m=t?.mode||"air";
+  $("#m-"+m).checked=true;
+  $("#f-company").value=t?.company||MODES[m].short;
+  $("#f-from").value=t?.from||""; $("#f-to").value=t?.to||"";
+  $("#f-date").value=t?.date||todayStr; $("#f-status").value=t?.status||"booked";
+  $("#f-dep").value=t?.dep||""; $("#f-arr").value=t?.arr||""; $("#f-ref").value=t?.ref||"";
+  $("#f-pax").value=t?.pax||"";
+  $("#f-purpose").value=t?.purpose||"perso"; $("#f-price").value=t?.price??""; $("#f-best").value=t?.best??"";
+  $("#f-notes").value=t?.notes||""; $("#f-del").hidden=!t; $("#f-del-yes").hidden=true; $("#f-warn").hidden=true;
+  updateCompLinks(m, $("#f-from").value, $("#f-to").value);
+  $("#dlg").showModal();
+}
+
+document.querySelectorAll("input[name=mode]").forEach(r=>r.addEventListener("change",e=>{
+  updateCompLinks(e.target.value, $("#f-from").value, $("#f-to").value);
+}));
+$("#f-del").onclick=()=>{$("#f-del-yes").hidden=false;$("#f-del").hidden=true};
+$("#f-del-yes").onclick=()=>{deleteTrip(editing.id);$("#dlg").close();toast("Trajet supprimé")};
+$("#f-cancel").onclick=()=>$("#dlg").close();
+
+let confirmDup=false;
+$("#form").addEventListener("input",()=>{confirmDup=false;$("#f-warn").hidden=true});
+$("#form").addEventListener("submit",e=>{
+  e.preventDefault();
+  const num=v=>v===""?null:Math.round(Number(v)*100)/100;
+  const modeVal=document.querySelector("input[name=mode]:checked").value;
+  const t={...(editing||{}),mode:modeVal,company:$("#f-company").value.trim()||MODES[modeVal].short,from:$("#f-from").value.trim(),to:$("#f-to").value.trim(),
+    date:$("#f-date").value,status:$("#f-status").value,dep:$("#f-dep").value,arr:$("#f-arr").value,ref:$("#f-ref").value.trim(),
+    pax:$("#f-pax").value.trim(),purpose:$("#f-purpose").value,price:num($("#f-price").value),best:num($("#f-best").value),notes:$("#f-notes").value.trim()};
+  delete t.example;
+  if(!confirmDup){
+    const clash=trips.find(x=>x.id!==t.id&&x.status!=="cancelled"&&x.date===t.date&&((norm(x.ref).length>=4&&norm(x.ref)===norm(t.ref))||(x.mode===t.mode&&norm(x.from)===norm(t.from)&&norm(x.to)===norm(t.to))));
+    if(clash){confirmDup=true;$("#f-warn").textContent=`Attention : ${clash.from} → ${clash.to} existe déjà le ${fmtDate(clash.date)}${clash.ref?" (réf. "+clash.ref+")":""}. Cliquez à nouveau sur « Enregistrer » pour confirmer.`;$("#f-warn").hidden=false;return}
+  }
+  saveTrip(t);$("#dlg").close();toast("Trajet enregistré et chiffré");
+});
+
+/* Conseiller intelligent d'économies */
+$("#btn-ai").onclick=()=>{
+  const out=$("#ai-out");
+  out.hidden=false;
+  const corseCount=trips.filter(t=>/ajaccio|bastia|calvi|figari|corse|verghia|propriano|porto-vecchio/i.test(t.from+" "+t.to+" "+t.notes)).length;
+
+  out.textContent=`ANALYSE PERSONNALISÉE DE VOS TRAJETS (${trips.length} trajets enregistrés dont ${corseCount} liés à la Corse) :
+
+1. VOLS PARIS ↔ CORSE (Air France / Air Corsica) :
+• Vos billets Paris ↔ Ajaccio montrent des déplacements réguliers en couple ou en famille vers la Corse.
+• Piste d'économie : Comparez systématiquement le tarif « Air France + Air Corsica » depuis Paris Orly avec les ventes flash Air Corsica hors vacances scolaires (souvent autour de 160 € à 190 € A/R en réservant 6 à 8 semaines à l'avance).
+• Programme fidélité : Vérifiez que vos numéros Flying Blue sont bien rattachés à chaque passager.
+
+2. TRAVERSÉES CORSE EN FERRY (Corsica Ferries / Corsica Linea / La Méridionale) :
+• Pour vos traversées avec véhicule vers Ajaccio : adhérez au « Corsica Club » de Corsica Ferries (cumul de points et réductions jusqu'à -20% ou véhicule offert sur certaines dates).
+• Astuce port de départ : Toulon ↔ Ajaccio est généralement 15% à 25% moins cher et plus rapide que Nice ou Marseille, surtout en traversée de nuit Mega Express.
+
+3. TRAINS SNCF (TGV INOUI / OUIGO) :
+• Avec la Carte Avantage Adulte (49 €/an), vous plafonnez les prix en 2nde classe (39 €, 59 € ou 79 €) et obtenez -30% garantis (y compris pour un accompagnant ou jusqu'à 3 enfants). Amortie dès 1 à 2 allers-retours Paris ↔ Marseille / Toulon.
+
+4. DOUBLONS & ALERTES À VÉRIFIER :
+• Consultez l'onglet « Alertes & Doublons » pour supprimer ou faire rembourser les trajets saisis en double et compléter les références PNR manquantes.`;
+};
+
+/* Export ICS & CSV */
+$("#btn-ics").onclick=()=>{
+  const icsEsc=s=>String(s||"").replace(/[\\;,]/g,m=>"\\"+m).replace(/\n/g,"\\n");
+  const stamp=new Date().toISOString().replace(/[-:]/g,"").slice(0,15)+"Z";
+  const ev=trips.filter(t=>t.status!=="cancelled").map(t=>{
+    const d=t.date.replace(/-/g,"");
+    let when;
+    if(t.dep){
+      const end=t.arr&&t.arr>t.dep?t.arr:(()=>{const m=toMin(t.dep)+60;return pad(Math.min(23,Math.floor(m/60)))+":"+pad(m%60)})();
+      when=`DTSTART;TZID=Europe/Paris:${d}T${t.dep.replace(":","")}00\r\nDTEND;TZID=Europe/Paris:${d}T${end.replace(":","")}00`;
+    } else {
+      when=`DTSTART;VALUE=DATE:${d}\r\nDTEND;VALUE=DATE:${d}`;
+    }
+    return `BEGIN:VEVENT\r\nUID:${t.id}@carnet-de-route\r\nDTSTAMP:${stamp}\r\n${when}\r\nSUMMARY:${icsEsc((t.company||MODES[t.mode].short)+" : "+t.from+" → "+t.to)}\r\nDESCRIPTION:${icsEsc([t.ref&&"Réf: "+t.ref,t.pax&&"Passagers: "+t.pax,t.notes].filter(Boolean).join("\n"))}\r\nLOCATION:${icsEsc(t.from)}\r\nEND:VEVENT`;
+  });
+  const ics=`BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Mes Trajets//FR\r\nCALSCALE:GREGORIAN\r\n${ev.join("\r\n")}\r\nEND:VCALENDAR\r\n`;
+  downloadBlob("mes-trajets.ics", ics, "text/calendar;charset=utf-8");
+  toast("Fichier Agenda (.ics) téléchargé");
+};
+
+$("#btn-csv").onclick=()=>{
+  const headers=["Subject","Start Date","Start Time","End Date","End Time","Description","Location","Mode","Company","Reference","Price EUR","Status"];
+  const rows=trips.filter(t=>t.status!=="cancelled").map(t=>[
+    `${t.company||MODES[t.mode].short}: ${t.from} -> ${t.to}`,
+    t.date,
+    t.dep||"09:00",
+    t.date,
+    t.arr||"11:00",
+    `${t.ref||""} | ${t.pax||""} | ${t.notes||""}`,
+    t.from,
+    MODES[t.mode].short,
+    t.company||"",
+    t.ref||"",
+    t.price??"",
+    STATUS[t.status][0]
+  ]);
+  const csv=[headers,...rows].map(r=>r.map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",")).join("\r\n");
+  downloadBlob("mes-trajets-agenda.csv", "\uFEFF"+csv, "text/csv;charset=utf-8");
+  toast("Fichier CSV téléchargé");
+};
+
+function downloadBlob(filename, content, mime){
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([content],{type:mime}));
+  a.download=filename;
+  a.click();
+}
+
+$("#btn-export-json").onclick=()=>{
+  downloadBlob("sauvegarde-mes-trajets.json", JSON.stringify(trips,null,2), "application/json");
+  toast("Sauvegarde JSON exportée");
+};
+$("#file-import-json").onchange=async e=>{
+  const file=e.target.files[0]; if(!file)return;
+  try{
+    const txt=await file.text();
+    const data=JSON.parse(txt);
+    if(Array.isArray(data)){trips=data;await saveEncrypted();render();toast(`${data.length} trajets importés`);}
+  }catch(err){toast("Fichier JSON invalide")}
+};
+
+function parseEmailText(raw){
+  const text=raw.replace(/<[^>]+>/g," ").replace(/\s+/g," ");
+  let mode="air", company="Air France";
+  if(/corsica\s*ferries|mega\s*express|ferry|toulon|bastia.*port/i.test(text)){mode="sea";company="Corsica Ferries";}
+  else if(/corsica\s*linea/i.test(text)){mode="sea";company="Corsica Linea";}
+  else if(/m[ée]ridionale/i.test(text)){mode="sea";company="La Méridionale";}
+  else if(/sncf|inoui|ouigo|tgv|trainline/i.test(text)){mode="rail";company=/ouigo/i.test(text)?"OUIGO":"SNCF TGV INOUI";}
+  else if(/corsair/i.test(text)){mode="air";company="Corsair";}
+  else if(/air\s*corsica/i.test(text)){mode="air";company="Air Corsica";}
+
+  let ref="";
+  const pnrMatch=text.match(/(?:dossier|référence|reference|pnr|booking|confirmation)\s*[:#]?\s*([A-Z0-9]{6})\b/i)
+    || text.match(/\b((?:AF|XK|SS|TGV)\s*\d{3,4})\b/i);
+  if(pnrMatch) ref=pnrMatch[1].toUpperCase();
+
+  let price=null;
+  const priceMatch=text.match(/(?:total|montant|payé|ttc|eur)\s*[:=]?\s*(\d{1,4}[.,]\d{2})\s*(?:€|eur)?/i)
+    || text.match(/(\d{1,4}[.,]\d{2})\s*€/i);
+  if(priceMatch) price=parseFloat(priceMatch[1].replace(",","."));
+
+  let date=todayStr;
+  const dmy=text.match(/\b(\d{2})[\/.-](\d{2})[\/.-](20\d{2})\b/);
+  if(dmy) date=`${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+
+  const times=[...text.matchAll(/\b([01]\d|2[0-3])[:h]([0-5]\d)\b/g)].map(m=>`${m[1]}:${m[2]}`);
+  const dep=times[0]||"";
+  const arr=times[1]||"";
+
+  const cities=["Paris Orly","Paris CDG","Paris Gare de Lyon","Paris","Ajaccio","Bastia","Calvi","Figari","Toulon","Nice","Marseille","Lyon","Île Maurice"];
+  const foundCities=[];
+  cities.forEach(c=>{if(new RegExp(c.split(" ")[0],"i").test(text)&&!foundCities.includes(c))foundCities.push(c)});
+  const from=foundCities[0]||"Paris";
+  const to=foundCities[1]||"Ajaccio";
+
+  return {
+    mode, company, from, to, date, dep, arr, ref,
+    pax: "",
+    purpose: "perso",
+    status: "booked",
+    price,
+    verifiedMac: true,
+    notes: "Importé depuis une confirmation e-mail"
+  };
+}
+
+$("#btn-import-mail").onclick=()=>$("#dlg-mail").showModal();
+$("#mail-cancel").onclick=()=>$("#dlg-mail").close();
+$("#form-mail").addEventListener("submit",e=>{
+  e.preventDefault();
+  const txt=$("#mail-text").value.trim();
+  if(!txt)return;
+  const parsed=parseEmailText(txt);
+  $("#dlg-mail").close();
+  $("#mail-text").value="";
+  openForm(parsed);
+  toast("Confirmation analysée — vérifiez les champs puis cliquez sur Enregistrer");
+});
+
+const dz=$("#dropzone"), feml=$("#file-eml");
+dz.onclick=()=>feml.click();
+dz.ondragover=e=>{e.preventDefault();dz.classList.add("dragover")};
+dz.ondragleave=()=>dz.classList.remove("dragover");
+dz.ondrop=async e=>{
+  e.preventDefault(); dz.classList.remove("dragover");
+  const files=[...e.dataTransfer.files];
+  for(const f of files){
+    const txt=await f.text();
+    const parsed=parseEmailText(txt);
+    parsed.notes=`Importé depuis ${f.name}`;
+    saveTrip(parsed);
+  }
+  if(files.length) toast(`${files.length} billet(s) importé(s) !`);
+};
+feml.onchange=async e=>{
+  const files=[...e.target.files];
+  for(const f of files){
+    const txt=await f.text();
+    const parsed=parseEmailText(txt);
+    parsed.notes=`Importé depuis ${f.name}`;
+    saveTrip(parsed);
+  }
+  if(files.length) toast(`${files.length} billet(s) importé(s) !`);
+};
+
+/* Sécurité & Verrouillage */
+async function tryUnlock(pwd, remember){
+  const v=getActiveVault();
+  const unlocked=await decryptVault(v, pwd);
+  trips=unlocked;
+  currentPassword=pwd;
+  if(remember){try{localStorage.setItem(PWD_SESSION, pwd)}catch(e){}}
+  $("#lock-screen").hidden=true;
+  $("#app-wrap").hidden=false;
+  setView(state.view);
+}
+
+$("#lock-form").addEventListener("submit",async e=>{
+  e.preventDefault();
+  $("#lock-err").hidden=true;
+  $("#lock-btn").disabled=true;
+  const pwd=$("#lock-pwd").value;
+  const rem=$("#lock-rem").checked;
+  try{
+    await tryUnlock(pwd, rem);
+    toast("Coffre-fort déverrouillé");
+  }catch(err){
+    try{
+      // Fallback sur le coffre par défaut si un ancien coffre local utilisait un autre mot de passe
+      const unlocked=await decryptVault(DEFAULT_VAULT, pwd);
+      trips=unlocked;
+      currentPassword=pwd;
+      await saveEncrypted();
+      if(rem){try{localStorage.setItem(PWD_SESSION, pwd)}catch(e){}}
+      $("#lock-screen").hidden=true;
+      $("#app-wrap").hidden=false;
+      setView(state.view);
+      toast("Coffre-fort déverrouillé");
+    }catch(e2){
+      $("#lock-err").hidden=false;
+    }
+  }finally{
+    $("#lock-btn").disabled=false;
+  }
+});
+
+$("#btn-lock").onclick=()=>$("#dlg-sec").showModal();
+$("#sec-cancel").onclick=()=>$("#dlg-sec").close();
+$("#sec-lock-now").onclick=()=>{
+  currentPassword=null;
+  trips=[];
+  try{localStorage.removeItem(PWD_SESSION)}catch(e){}
+  $("#dlg-sec").close();
+  $("#app-wrap").hidden=true;
+  $("#lock-pwd").value="";
+  $("#lock-screen").hidden=false;
+  toast("Session verrouillée");
+};
+$("#form-sec").addEventListener("submit",async e=>{
+  e.preventDefault();
+  const np=$("#sec-new-pwd").value.trim();
+  if(np.length<4){toast("Choisissez un mot de passe d'au moins 4 caractères");return}
+  currentPassword=np;
+  await saveEncrypted();
+  try{localStorage.setItem(PWD_SESSION, np)}catch(e){}
+  $("#sec-new-pwd").value="";
+  $("#dlg-sec").close();
+  toast("Nouveau mot de passe enregistré sur cet appareil");
+});
+
+/* Wiring */
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>setView(b.dataset.v));
+$("#btn-add").onclick=()=>openForm(null);
+$("#q").oninput=e=>{state.q=e.target.value;render()};
+$("#when").onchange=e=>{state.when=e.target.value;render()};
+$("#status-filter").onchange=e=>{state.status=e.target.value;render()};
+$("#cal-prev").onclick=()=>{state.calM--;if(state.calM<0){state.calM=11;state.calY--}render()};
+$("#cal-next").onclick=()=>{state.calM++;if(state.calM>11){state.calM=0;state.calY++}render()};
+let clearArm=false;
+$("#btn-clear-ex").onclick=()=>{
+  if(!clearArm){clearArm=true;$("#btn-clear-ex").textContent="Confirmer : supprimer les exemples";return}
+  trips=trips.filter(t=>!t.example);
+  saveEncrypted(); render();
+  clearArm=false;$("#btn-clear-ex").textContent="Supprimer les exemples";toast("Exemples supprimés");
+};
+
+/* Auto-déverrouillage si mémorisé sur l'appareil */
+(async()=>{
+  try{
+    const savedPwd=localStorage.getItem(PWD_SESSION);
+    if(savedPwd){
+      await tryUnlock(savedPwd, true);
+    }
+  }catch(e){}
+})();
+</script>
+</body>
+</html>
