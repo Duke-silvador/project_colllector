@@ -1,0 +1,3398 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta name="viewport"}
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Popy Asia Store</title>
+
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+<div id="login-admin" style="max-width:400px;margin:80px auto;padding:24px;border:1px solid #ddd;border-radius:12px;">
+    <h2>Login Admin Popy Asia Store</h2>
+
+    <form id="form-login-admin">
+        <label for="email-admin">Email</label>
+        <input
+            id="email-admin"
+            type="email"
+            required
+            autocomplete="username"
+            style="display:block;width:100%;padding:10px;margin:8px 0 16px;box-sizing:border-box;"
+        >
+
+        <label for="password-admin">Password</label>
+        <input
+            id="password-admin"
+            type="password"
+            required
+            autocomplete="current-password"
+            style="display:block;width:100%;padding:10px;margin:8px 0 16px;box-sizing:border-box;"
+        >
+
+        <button type="submit" class="btn">Masuk</button>
+        <p id="pesan-login-admin" role="status"></p>
+    </form>
+</div>
+<div id="konten-admin" style="display:none;">
+    <div class="container" style="max-width:1100px;margin:30px auto;padding:20px;">
+    <h1>🛒 Popy Asia Store</h1>
+    <h2>Dashboard Admin</h2>
+
+    <p>Selamat datang di panel admin!</p>
+
+    <div class="admin-nav">
+    <button type="button" class="btn admin-nav-btn active"
+        data-menu="dashboard"
+        onclick="tampilkanMenuAdmin('dashboard')">
+        🏠 Dashboard
+    </button>
+
+    <button type="button" class="btn admin-nav-btn"
+        data-menu="pesanan"
+        onclick="tampilkanMenuAdmin('pesanan')">
+        📦 Pesanan
+    </button>
+
+    <button type="button" class="btn admin-nav-btn"
+        data-menu="produk"
+        onclick="tampilkanMenuAdmin('produk')">
+        🛍️ Produk
+    </button>
+
+    <button type="button" class="btn admin-nav-btn"
+        data-menu="kategori"
+        onclick="tampilkanMenuAdmin('kategori')">
+        🏷️ Kategori
+    </button>
+
+    <button type="button" class="btn admin-nav-btn"
+        data-menu="pelanggan"
+        onclick="tampilkanMenuAdmin('pelanggan')">
+        👥 Pelanggan
+    </button>
+
+    <button type="button" class="btn admin-nav-btn"
+        data-menu="nota"
+        onclick="tampilkanMenuAdmin('nota')">
+        📄 Nota
+    </button>
+
+    <button type="button" class="btn admin-nav-btn"
+    data-menu="rekap"
+    onclick="tampilkanMenuAdmin('rekap')">
+    📊 Rekap Penjualan
+</button>
+        <button type="button" class="btn admin-nav-btn"
+    data-menu="kasir"
+    onclick="tampilkanMenuAdmin('kasir')">
+    💴 Kasir
+</button>
+
+<button type="button" class="btn" onclick="logoutAdmin()">
+    Keluar
+</button>
+</div>
+
+    <hr>
+
+    <div id="isi-menu-admin">
+        <h2>🏠 Dashboard</h2>
+        <p>Dashboard admin berhasil dibuka.</p>
+        <p>Pilih menu di atas untuk melanjutkan.</p>
+    </div>
+
+    </div>
+    
+ </div>
+    
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+    const SUPABASE_URL = "https://rsmfdhktujpbbyprailw.supabase.co";
+    const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_oMPqtBesRyC02GSRAYrHUg_bKOjzoax";
+
+    const supabaseClient = window.supabase.createClient(
+        SUPABASE_URL,
+        SUPABASE_PUBLISHABLE_KEY
+    );
+
+    console.log("Supabase website berhasil terhubung!");
+    
+const loginAdmin = document.querySelector("#form-login-admin");
+const pesanLoginAdmin = document.querySelector("#pesan-login-admin");
+
+loginAdmin.addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const email = document.querySelector("#email-admin").value.trim();
+    const password = document.querySelector("#password-admin").value;
+
+    pesanLoginAdmin.textContent = "Sedang memeriksa akun...";
+
+    const { data, error } = await supabaseClient.auth.signInWithPassword({
+        email: email,
+        password: password
+    });
+
+    if (error) {
+        pesanLoginAdmin.textContent = "Login gagal. Periksa email dan password.";
+        return;
+    }
+
+ pesanLoginAdmin.textContent = "Login berhasil!";
+
+document.querySelector("#login-admin").style.display = "none";
+document.querySelector("#konten-admin").style.display = "block";
+
+console.log("Admin berhasil login:", data.user.id);
+});
+
+    
+function tampilkanMenuAdmin(menu) {
+    document.querySelectorAll(".admin-nav-btn").forEach(tombol => {
+        tombol.classList.remove("active");
+    });
+
+    const tombolAktif = document.querySelector(
+        `.admin-nav-btn[data-menu="${menu}"]`
+    );
+
+    if (tombolAktif) {
+        tombolAktif.classList.add("active");
+    }
+
+    const isi = document.querySelector("#isi-menu-admin");
+
+    if (menu === "dashboard") {
+    isi.innerHTML = `
+        <h2>🏠 Dashboard</h2>
+        <p>Selamat datang di Popy Asia Store!</p>
+
+        <div id="statistik-dashboard" style="
+            display:grid;
+            grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+            gap:15px;
+            margin:20px 0;
+        ">
+            <div style="padding:20px;background:#fff;border-radius:12px;border-left:5px solid #ff9800;">
+                <h3>📦 Pesanan Baru</h3>
+                <p id="stat-pesanan-baru" style="font-size:28px;font-weight:bold;">...</p>
+            </div>
+
+            <div style="padding:20px;background:#fff;border-radius:12px;border-left:5px solid #2196f3;">
+                <h3>🔄 Diproses</h3>
+                <p id="stat-pesanan-proses" style="font-size:28px;font-weight:bold;">...</p>
+            </div>
+
+            <div style="padding:20px;background:#fff;border-radius:12px;border-left:5px solid #16a34a;">
+                <h3>✅ Selesai</h3>
+                <p id="stat-pesanan-selesai" style="font-size:28px;font-weight:bold;">...</p>
+            </div>
+
+            <div style="padding:20px;background:#fff;border-radius:12px;border-left:5px solid #8b5cf6;">
+                <h3>💴 Total Penjualan</h3>
+                <p id="stat-total-penjualan" style="font-size:24px;font-weight:bold;">...</p>
+            </div>
+        </div>
+
+        <h3>🛍️ Ringkasan Produk</h3>
+
+        <div style="display:flex;gap:15px;flex-wrap:wrap;margin:15px 0;">
+            <div style="padding:18px;background:#fff;border-radius:10px;flex:1;min-width:150px;">
+                Produk Aktif
+                <p id="stat-produk-aktif" style="font-size:24px;font-weight:bold;">...</p>
+            </div>
+
+            <div style="padding:18px;background:#fff;border-radius:10px;flex:1;min-width:150px;">
+                Stok Habis
+                <p id="stat-stok-habis" style="font-size:24px;font-weight:bold;">...</p>
+            </div>
+
+            <div
+    onclick="tampilkanMenuAdmin('promo')"
+    role="button"
+    tabindex="0"
+    onkeydown="if(event.key === 'Enter' || event.key === ' ') tampilkanMenuAdmin('promo')"
+    style="
+        padding:18px;
+        background:#fff;
+        border-radius:10px;
+        flex:1;
+        min-width:150px;
+        cursor:pointer;
+        border:1px solid #e5e7eb;
+    "
+>
+    <strong>🏷️ Produk Promo</strong>
+    <p id="stat-produk-promo" style="font-size:24px;font-weight:bold;">...</p>
+    <small style="color:#16a34a;">Klik untuk melihat daftar promo →</small>
+</div>
+        </div>
+
+        <h3>🧾 Pesanan Terbaru</h3>
+        <div id="pesanan-terbaru-dashboard">Memuat pesanan...</div>
+
+        <p id="pesan-dashboard" role="status"></p>
+    `;
+
+    muatDashboardAdmin();
+
+    }
+    else if (menu === "pesanan") {
+        isi.innerHTML = `
+            <h2>📦 Daftar Pesanan</h2>
+            <p id="status-pesanan">Memuat pesanan...</p>
+
+<div style="margin:15px 0;">
+    <label for="filter-status-pesanan"><strong>Filter Status:</strong></label>
+
+    <select id="filter-status-pesanan"
+        onchange="muatPesananAdmin()"
+        style="padding:8px;margin-left:8px;border:1px solid #ccc;border-radius:6px;">
+
+        <option value="semua">📋 Semua Pesanan</option>
+        <option value="Pesanan Baru">🆕 Pesanan Baru</option>
+        <option value="Diproses">🔄 Sedang Diproses</option>
+        <option value="Selesai">✅ Selesai</option>
+        <option value="Dibatalkan">❌ Dibatalkan</option>
+
+    </select>
+</div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th style="padding:10px;border-bottom:1px solid #ddd;">Nomor Pesanan</th>
+                            <th style="padding:10px;border-bottom:1px solid #ddd;">Tanggal</th>
+                            <th style="padding:10px;border-bottom:1px solid #ddd;">Total</th>
+                            <th style="padding:10px;border-bottom:1px solid #ddd;">Status</th>
+                            <th style="padding:10px;border-bottom:1px solid #ddd;">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="daftar-pesanan"></tbody>
+                </table>
+            </div>
+        `;
+
+        aktifkanRealtimePesananAdmin();
+        muatPesananAdmin();
+
+        
+} else if (menu === "produk") {
+    isi.innerHTML = `
+        <h2>🛍️ Kelola Produk</h2>
+        <p>Tambahkan produk baru ke Popy Asia Store.</p>
+
+        <form id="form-produk-admin">
+            <label>Nama Produk</label>
+            <input id="nama-produk-admin" type="text" required
+                   style="display:block;width:100%;padding:10px;margin:8px 0 16px;">
+
+            <label>Kategori</label>
+<select id="kategori-produk-admin" required
+        style="display:block;width:100%;padding:10px;margin:8px 0 16px;">
+    <option value="">Memuat kategori...</option>
+</select>
+
+
+<div style="margin:-8px 0 16px;">
+    <button type="button" id="btn-kelola-kategori" class="btn">
+        ✏️ Edit Nama Kategori
+    </button>
+</div>
+
+            <label>Harga Normal (¥)</label>
+            <input id="harga-produk-admin" type="number" min="0" required
+                   style="display:block;width:100%;padding:10px;margin:8px 0 16px;">
+
+            <label>Harga Lama (¥), jika ada</label>
+            <input id="harga-lama-admin" type="number" min="0"
+                   style="display:block;width:100%;padding:10px;margin:8px 0 16px;">
+
+            <label>Harga Promo (¥), jika ada</label>
+            <input id="harga-promo-admin" type="number" min="0"
+                   style="display:block;width:100%;padding:10px;margin:8px 0 16px;">
+
+            <label>Deskripsi</label>
+            <textarea id="deskripsi-produk-admin"
+                      style="display:block;width:100%;padding:10px;margin:8px 0 16px;"></textarea>
+
+            
+            <label>Foto Produk</label>
+            <input
+                      id="gambar-produk-admin"
+                      type="file"
+                      accept="image/*"
+                      required
+                      style="display:block;width:100%;padding:10px;margin:8px 0 16px;"
+                           >
+            <p style="font-size:13px;color:#666;">
+                      Pilih foto produk dari komputer kamu.
+            </p>
+
+
+            <label>Stok</label>
+            <input id="stok-produk-admin" type="number" min="0" value="0" required
+                   style="display:block;width:100%;padding:10px;margin:8px 0 16px;">
+
+            <label>
+                <input id="aktif-produk-admin" type="checkbox" checked>
+                Produk aktif
+            </label>
+
+            <p id="pesan-produk-admin" role="status"></p>
+
+            <button class="btn" type="submit">Simpan Produk</button>
+        </form>
+
+        
+<hr style="margin:30px 0;">
+
+<h2>📦 Daftar Produk</h2>
+<p>Edit atau hapus produk yang sudah tersimpan.</p>
+
+<div id="daftar-produk-admin">
+    Memuat daftar produk...
+</div>
+
+<div id="form-edit-produk-admin" style="display:none; margin-top:25px;">
+</div>
+    `;
+
+    document.querySelector("#form-produk-admin")
+        .addEventListener("submit", simpanProdukAdmin);
+
+        muatKategoriAdmin();
+        muatDaftarProdukAdmin();
+
+            } else if (menu === "kategori") {
+        isi.innerHTML = `
+            <h2>🏷️ Kelola Kategori</h2>
+            <p>Tambahkan kategori produk baru ke Popy Asia Store.</p>
+
+            <form id="form-kategori-admin">
+                <label>Nama Kategori</label>
+                <input
+                    id="nama-kategori-admin"
+                    type="text"
+                    placeholder="Contoh: Minuman"
+                    required
+                    style="display:block;width:100%;padding:10px;margin:8px 0 16px;"
+                >
+
+                <label>Nilai Kategori</label>
+                <input
+                    id="nilai-kategori-admin"
+                    type="text"
+                    placeholder="Contoh: minuman"
+                    required
+                    style="display:block;width:100%;padding:10px;margin:8px 0 16px;"
+                >
+
+                <p style="font-size:13px;color:#666;">
+                    Gunakan nilai kategori dengan huruf kecil.
+                    Contoh: minuman, bumbu dapur, atau mie instan.
+                </p>
+
+                <p id="pesan-kategori-admin" role="status"></p>
+
+                <button class="btn" type="submit">
+                    Simpan Kategori
+                </button>
+            </form>
+
+            <hr style="margin:30px 0;">
+
+            <h3>Daftar Kategori</h3>
+            <div id="daftar-kategori-admin">
+                Memuat kategori...
+            </div>
+        `;
+
+        document.getElementById("form-kategori-admin")
+            .addEventListener("submit", simpanKategoriAdmin);
+        
+        muatDaftarKategoriAdmin();
+
+    } else if (menu === "pelanggan") {
+    isi.innerHTML = `
+        <h2>👥 Daftar Pelanggan</h2>
+        <p>Data pelanggan Popy Asia Store.</p>
+
+        <input
+            type="text"
+            id="cari-pelanggan-admin"
+            placeholder="🔍 Cari nama atau nomor WhatsApp..."
+            oninput="cariPelangganAdmin(this.value)"
+            style="
+                width:100%;
+                max-width:500px;
+                padding:12px;
+                margin:15px 0;
+                border:1px solid #ccc;
+                border-radius:8px;
+                box-sizing:border-box;
+            "
+        >
+
+        <div id="daftar-pelanggan-admin">
+            Memuat data pelanggan...
+        </div>
+    `;
+
+    muatDaftarPelangganAdmin();
+
+        
+} else if (menu === "nota") {
+    isi.innerHTML = `
+        <h2>📄 Daftar Nota</h2>
+        <p>Daftar nota dari pesanan pelanggan.</p>
+
+        <input
+            type="text"
+            id="cari-nota-admin"
+            placeholder="🔎 Cari nomor pesanan..."
+            oninput="cariNotaAdmin(this.value)"
+            style="
+                width:100%;
+                max-width:500px;
+                padding:12px;
+                margin:15px 0;
+                border:1px solid #ccc;
+                border-radius:8px;
+                box-sizing:border-box;
+            "
+        >
+
+        <div id="daftar-nota-admin">
+            Memuat daftar nota...
+        </div>
+    `;
+
+    muatDaftarNotaAdmin();
+
+        } else if (menu === "rekap") {
+    isi.innerHTML = `
+        <h2>📊 Rekap Penjualan</h2>
+
+        <div style="margin:20px 0;display:flex;gap:10px;flex-wrap:wrap;">
+            <div style="flex:1;min-width:130px;">
+                <label for="rekap-bulan"><strong>Pilih Bulan</strong></label>
+                <select id="rekap-bulan"
+                    onchange="muatRekapPenjualanAdmin()"
+                    style="width:100%;padding:10px;margin-top:6px;">
+                    <option value="1">Januari</option>
+                    <option value="2">Februari</option>
+                    <option value="3">Maret</option>
+                    <option value="4">April</option>
+                    <option value="5">Mei</option>
+                    <option value="6">Juni</option>
+                    <option value="7">Juli</option>
+                    <option value="8">Agustus</option>
+                    <option value="9">September</option>
+                    <option value="10">Oktober</option>
+                    <option value="11">November</option>
+                    <option value="12">Desember</option>
+                </select>
+            </div>
+
+            <div style="flex:1;min-width:130px;">
+                <label for="rekap-tahun"><strong>Pilih Tahun</strong></label>
+                <select id="rekap-tahun"
+                    onchange="muatRekapPenjualanAdmin()"
+                    style="width:100%;padding:10px;margin-top:6px;">
+                </select>
+            </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:15px;margin:20px 0;">
+            <div style="background:#fff;padding:20px;border-radius:12px;border-left:5px solid #16a34a;">
+                <h3>💴 Total Omzet</h3>
+                <p id="rekap-total-omzet" style="font-size:25px;font-weight:bold;">¥0</p>
+            </div>
+
+            <div style="background:#fff;padding:20px;border-radius:12px;border-left:5px solid #2196f3;">
+                <h3>📦 Jumlah Pesanan</h3>
+                <p id="rekap-jumlah-pesanan" style="font-size:25px;font-weight:bold;">0</p>
+            </div>
+        </div>
+
+        <h3>📈 Grafik Penjualan Bulanan</h3>
+        <div id="grafik-rekap-penjualan"
+            style="background:#fff;padding:15px;border-radius:12px;margin:15px 0;">
+            Memuat grafik...
+        </div>
+
+        <h3>🧾 Daftar Transaksi Bulanan</h3>
+        <div id="daftar-transaksi-rekap">
+            Memuat transaksi...
+        </div>
+    `;
+
+    muatRekapPenjualanAdmin();
+
+        } else if (menu === "kasir") {
+    isi.innerHTML = `
+        <h2>💴 Kasir Popy Asia Store</h2>
+        <p>Pilih produk untuk memulai transaksi.</p>
+
+        <div style="
+            display:grid;
+            grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+            gap:20px;
+            margin-top:20px;
+        ">
+
+            <div style="
+                background:#fff;
+                padding:18px;
+                border-radius:12px;
+            ">
+                <h3>🛍️ Daftar Produk</h3>
+
+                <input
+                    type="text"
+                    id="pencarian-produk-kasir"
+                    placeholder="Cari nama produk..."
+                    style="width:100%;padding:12px;margin:10px 0;"
+                >
+
+                <div id="daftar-produk-kasir">
+                    Memuat produk...
+                </div>
+            </div>
+
+            <div style="
+                background:#fff;
+                padding:18px;
+                border-radius:12px;
+            ">
+                <h3>🛒 Keranjang Kasir</h3>
+
+                <div id="keranjang-kasir">
+                    Belum ada produk dipilih.
+                </div>
+
+                <hr style="margin:15px 0;">
+
+                <h3>Total Belanja</h3>
+                <p id="total-kasir"
+                   style="font-size:26px;font-weight:bold;">
+                    ¥0
+                </p>
+
+                <label for="uang-bayar-kasir">
+                    <strong>Uang Pembayaran</strong>
+                </label>
+
+                <input
+                    type="number"
+                    id="uang-bayar-kasir"
+                    min="0"
+                    placeholder="Masukkan jumlah uang"
+                    style="width:100%;padding:12px;margin:10px 0;"
+                >
+
+                <h3>Kembalian</h3>
+                <p id="kembalian-kasir"
+                   style="font-size:22px;font-weight:bold;">
+                    ¥0
+                </p>
+
+                <button
+                    type="button"
+                    class="btn"
+                    id="tombol-selesaikan-kasir"
+                    style="width:100%;margin-top:15px;"
+                    disabled
+                >
+                    Selesaikan Transaksi
+                </button>
+
+                <p id="pesan-kasir"
+                   style="margin-top:12px;">
+                </p>
+            </div>
+
+        </div>
+    `;
+            muatProdukKasirAdmin();
+
+    document.querySelector("#pencarian-produk-kasir")
+        .addEventListener("input", tampilkanProdukKasir);
+    document.querySelector("#uang-bayar-kasir")
+    .addEventListener("input", () => {
+        hitungKembalianKasir();
+        perbaruiTombolSelesaikanKasir();
+    });
+
+document.querySelector("#tombol-selesaikan-kasir")
+    .addEventListener("click", selesaikanTransaksiKasir);
+
+    } else if (menu === "promo") {
+        isi.innerHTML = `
+            <h2>🏷️ Daftar Produk Promo</h2>
+            <p>Kelola produk yang sedang mendapatkan harga promo.</p>
+
+            <div id="daftar-produk-promo">
+                Memuat daftar produk promo...
+            </div>
+
+            <div id="form-edit-produk-admin"
+                 style="display:none;margin-top:25px;">
+            </div>
+
+            <button type="button" class="btn"
+                onclick="tampilkanMenuAdmin('dashboard')">
+                ← Kembali ke Dashboard
+            </button>
+        `;
+
+        muatDaftarProdukPromoAdmin();
+    }
+}
+
+    async function muatDaftarProdukPromoAdmin() {
+    const daftar = document.getElementById("daftar-produk-promo");
+
+    if (!daftar) return;
+
+    daftar.textContent = "Memuat daftar produk promo...";
+
+    const { data: produk, error } = await supabaseClient
+        .from("produk")
+        .select("id, nama_produk, kategori, harga, harga_lama, harga_promo, stok, aktif, gambar_url")
+        .eq("aktif", true)
+        .gt("harga_promo", 0)
+        .order("nama_produk", { ascending: true });
+
+    if (error) {
+        console.error(error);
+        daftar.textContent = "Gagal memuat produk promo: " + error.message;
+        return;
+    }
+
+    if (!produk || produk.length === 0) {
+        daftar.innerHTML = "<p>Belum ada produk yang sedang promo.</p>";
+        return;
+    }
+
+    daftar.innerHTML = produk.map(item => `
+        <div style="
+            display:flex;
+            align-items:center;
+            gap:15px;
+            flex-wrap:wrap;
+            padding:15px;
+            margin:12px 0;
+            background:white;
+            border-radius:10px;
+            border:1px solid #ddd;
+        ">
+            <img
+                src="${escapeHTML(item.gambar_url || "")}"
+                alt="${escapeHTML(item.nama_produk)}"
+                style="width:75px;height:75px;object-fit:contain;border-radius:8px;"
+            >
+
+            <div style="flex:1;min-width:160px;">
+                <strong>${escapeHTML(item.nama_produk)}</strong>
+                <p style="margin:5px 0;">
+                    Harga normal: ¥${Number(item.harga).toLocaleString("ja-JP")}
+                </p>
+                <p style="margin:5px 0;color:#16a34a;font-weight:bold;">
+                    Harga promo: ¥${Number(item.harga_promo).toLocaleString("ja-JP")}
+                </p>
+                <small>Stok: ${Number(item.stok || 0)}</small>
+            </div>
+
+            <button type="button" class="btn"
+                onclick="editProdukAdmin(${Number(item.id)})">
+                ✏️ Edit Promo
+            </button>
+
+            <button type="button" class="btn"
+                onclick="hentikanPromoAdmin(${Number(item.id)})">
+                🚫 Hentikan Promo
+            </button>
+        </div>
+    `).join("");
+}
+
+
+async function hentikanPromoAdmin(id) {
+    const yakin = confirm(
+        "Yakin ingin menghentikan promo produk ini?"
+    );
+
+    if (!yakin) return;
+
+    const { error } = await supabaseClient
+        .from("produk")
+        .update({
+            harga_promo: null,
+            promo_persen: 0
+        })
+        .eq("id", id);
+
+    if (error) {
+        alert("Gagal menghentikan promo: " + error.message);
+        console.error(error);
+        return;
+    }
+
+    alert("Promo berhasil dihentikan!");
+
+    await muatDaftarProdukPromoAdmin();
+}
+
+    async function muatDaftarProdukPromoAdmin() {
+    const daftar = document.getElementById("daftar-produk-promo");
+
+    if (!daftar) return;
+
+    daftar.textContent = "Memuat daftar produk promo...";
+
+    const { data: produk, error } = await supabaseClient
+        .from("produk")
+        .select("id, nama_produk, harga, harga_promo, stok, aktif, gambar_url")
+        .eq("aktif", true)
+        .gt("harga_promo", 0)
+        .order("nama_produk", { ascending: true });
+
+    if (error) {
+        daftar.textContent = "Gagal memuat produk promo: " + error.message;
+        return;
+    }
+
+    if (!produk || produk.length === 0) {
+        daftar.innerHTML = "<p>Belum ada produk yang sedang promo.</p>";
+        return;
+    }
+
+    daftar.innerHTML = produk.map(item => `
+        <div style="
+            display:flex;
+            align-items:center;
+            gap:15px;
+            flex-wrap:wrap;
+            padding:15px;
+            margin:12px 0;
+            background:white;
+            border-radius:10px;
+            border:1px solid #ddd;
+        ">
+            <img
+                src="${escapeHTML(item.gambar_url || "")}"
+                alt="${escapeHTML(item.nama_produk)}"
+                style="width:75px;height:75px;object-fit:contain;"
+            >
+
+            <div style="flex:1;min-width:160px;">
+                <strong>${escapeHTML(item.nama_produk)}</strong>
+                <p>Harga normal: ¥${Number(item.harga).toLocaleString("ja-JP")}</p>
+                <p style="color:#16a34a;font-weight:bold;">
+                    Harga promo: ¥${Number(item.harga_promo).toLocaleString("ja-JP")}
+                </p>
+                <small>Stok: ${Number(item.stok || 0)}</small>
+            </div>
+
+            <button type="button" class="btn"
+                onclick="editProdukAdmin(${Number(item.id)})">
+                ✏️ Edit Promo
+            </button>
+
+            <button type="button" class="btn"
+                onclick="hentikanPromoAdmin(${Number(item.id)})">
+                🚫 Hentikan Promo
+            </button>
+        </div>
+    `).join("");
+}
+
+
+async function hentikanPromoAdmin(id) {
+    if (!confirm("Yakin ingin menghentikan promo produk ini?")) {
+        return;
+    }
+
+    const { error } = await supabaseClient
+        .from("produk")
+        .update({
+            harga_promo: null,
+            promo_persen: 0
+        })
+        .eq("id", id);
+
+    if (error) {
+        alert("Gagal menghentikan promo: " + error.message);
+        return;
+    }
+
+    alert("Promo berhasil dihentikan!");
+
+    await muatDaftarProdukPromoAdmin();
+    await muatDashboardAdmin();
+}
+    
+async function logoutAdmin() {
+    const { error } = await supabaseClient.auth.signOut();
+
+    if (error) {
+        alert("Gagal keluar. Silakan coba lagi.");
+        return;
+    }
+
+    document.querySelector("#konten-admin").style.display = "none";
+    document.querySelector("#login-admin").style.display = "block";
+}
+// KOMPRESI FOTO PRODUK OTOMATIS
+async function kompresFotoProduk(file) {
+    const gambar = await createImageBitmap(file);
+
+    const ukuranMaksimal = 1200;
+
+    const skala = Math.min(
+        1,
+        ukuranMaksimal / Math.max(gambar.width, gambar.height)
+    );
+
+    const canvas = document.createElement("canvas");
+
+    canvas.width = Math.round(gambar.width * skala);
+    canvas.height = Math.round(gambar.height * skala);
+
+    const context = canvas.getContext("2d");
+
+    context.drawImage(
+        gambar,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    gambar.close();
+
+    // Coba WebP terlebih dahulu
+    let blob = await new Promise(resolve => {
+        canvas.toBlob(resolve, "image/webp", 0.82);
+    });
+
+    // Jika WebP tidak didukung, gunakan JPEG
+    if (!blob || blob.type !== "image/webp") {
+        blob = await new Promise(resolve => {
+            canvas.toBlob(resolve, "image/jpeg", 0.82);
+        });
+    }
+
+    if (!blob) {
+        throw new Error("Gagal mengompres foto.");
+    }
+
+    // Turunkan kualitas jika ukuran masih lebih dari 300 KB
+    const format = blob.type;
+
+    for (const kualitas of [0.72, 0.62, 0.52]) {
+        if (blob.size <= 300 * 1024) break;
+
+        blob = await new Promise(resolve => {
+            canvas.toBlob(resolve, format, kualitas);
+        });
+
+        if (!blob) {
+            throw new Error("Gagal mengompres foto.");
+        }
+    }
+
+    const ekstensi = blob.type === "image/webp"
+        ? "webp"
+        : "jpg";
+
+    const fotoBaru = new File(
+        [blob],
+        `produk-${Date.now()}.${ekstensi}`,
+        { type: blob.type }
+    );
+
+    console.log("Ukuran foto asli:", file.size);
+    console.log("Ukuran foto setelah kompresi:", fotoBaru.size);
+
+    return fotoBaru;
+}
+
+async function simpanProdukAdmin(event) {
+    event.preventDefault();
+
+    const form = document.querySelector("#form-produk-admin");
+    const pesan = document.querySelector("#pesan-produk-admin");
+    const tombol = form.querySelector('button[type="submit"]');
+
+    const nama = document.querySelector("#nama-produk-admin").value.trim();
+    const kategori = document.querySelector("#kategori-produk-admin").value;
+    const harga = Number(document.querySelector("#harga-produk-admin").value);
+    const hargaLamaInput = document.querySelector("#harga-lama-admin").value;
+    const hargaPromoInput = document.querySelector("#harga-promo-admin").value;
+    const deskripsi = document.querySelector("#deskripsi-produk-admin").value.trim();
+    const fileFoto = document.querySelector("#gambar-produk-admin").files[0];
+    const stok = Number(document.querySelector("#stok-produk-admin").value);
+    const aktif = document.querySelector("#aktif-produk-admin").checked;
+
+    const hargaLama = hargaLamaInput === "" ? null : Number(hargaLamaInput);
+    const hargaPromo = hargaPromoInput === "" ? null : Number(hargaPromoInput);
+
+    if (!nama || !kategori || !fileFoto || harga < 0 || stok < 0) {
+        pesan.textContent = "Lengkapi data produk dan pilih foto.";
+        return;
+    }
+
+    if (!fileFoto.type.startsWith("image/")) {
+        pesan.textContent = "File harus berupa gambar.";
+        return;
+    }
+
+    if (fileFoto.size > 5 * 1024 * 1024) {
+        pesan.textContent = "Ukuran foto asli maksimal 5 MB.";
+        return;
+    }
+
+    if (hargaPromo !== null && hargaPromo >= harga) {
+        pesan.textContent = "Harga promo harus lebih rendah dari harga normal.";
+        return;
+    }
+
+    const hargaAcuan = hargaLama !== null && hargaLama > 0
+        ? hargaLama
+        : harga;
+
+    const promoPersen = hargaPromo !== null && hargaAcuan > hargaPromo
+        ? Math.round((hargaAcuan - hargaPromo) / hargaAcuan * 100)
+        : 0;
+
+    try {
+        tombol.disabled = true;
+
+        // KOMPRESI FOTO
+        pesan.textContent = "Sedang mengompres foto...";
+
+        const fotoKompres = await kompresFotoProduk(fileFoto);
+
+        const ukuranKB = (fotoKompres.size / 1024).toFixed(0);
+
+        pesan.textContent = `Foto berhasil dikompres (${ukuranKB} KB). Sedang mengunggah...`;
+
+        // UPLOAD FOTO KE SUPABASE
+        const ekstensi = fotoKompres.type === "image/webp"
+            ? "webp"
+            : "jpg";
+
+        const namaFile = `${crypto.randomUUID()}.${ekstensi}`;
+
+        const { data: hasilUpload, error: errorUpload } = await supabaseClient
+            .storage
+            .from("produk")
+            .upload(namaFile, fotoKompres, {
+                cacheControl: "3600",
+                upsert: false,
+                contentType: fotoKompres.type
+            });
+
+        if (errorUpload) {
+            console.error("Gagal upload foto:", errorUpload);
+            pesan.textContent = "Upload foto gagal. Periksa izin Storage.";
+            return;
+        }
+
+        // AMBIL URL FOTO
+        const { data: urlFoto } = supabaseClient
+            .storage
+            .from("produk")
+            .getPublicUrl(hasilUpload.path);
+
+        pesan.textContent = "Foto berhasil diunggah. Menyimpan produk...";
+
+        // SIMPAN DATA PRODUK
+        const { error } = await supabaseClient
+            .from("produk")
+            .insert([{
+                nama_produk: nama,
+                kategori: kategori,
+                harga: harga,
+                harga_lama: hargaLama,
+                harga_promo: hargaPromo,
+                promo_persen: promoPersen,
+                deskripsi: deskripsi,
+                gambar_url: urlFoto.publicUrl,
+                stok: stok,
+                aktif: aktif
+            }]);
+
+        if (error) {
+            console.error("Gagal menyimpan produk:", error);
+            pesan.textContent = "Foto sudah diunggah, tetapi data produk gagal disimpan. Periksa izin database.";
+            return;
+        }
+
+        pesan.textContent = `Produk berhasil disimpan! Ukuran foto: ${ukuranKB} KB.`;
+
+        form.reset();
+
+        document.querySelector("#stok-produk-admin").value = "0";
+        document.querySelector("#aktif-produk-admin").checked = true;
+
+        muatDaftarProdukAdmin();
+        
+        window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+});
+
+    } catch (error) {
+        console.error("Kesalahan menyimpan produk:", error);
+        pesan.textContent = "Terjadi kesalahan saat memproses foto. Silakan coba lagi.";
+
+    } finally {
+        tombol.disabled = false;
+    }
+}
+    
+
+async function muatDaftarProdukAdmin() {
+    const daftar = document.querySelector("#daftar-produk-admin");
+    if (!daftar) return;
+
+    daftar.textContent = "Memuat daftar produk...";
+
+    const { data: produk, error } = await supabaseClient
+        .from("produk")
+        .select("id, nama_produk, kategori, harga, harga_lama, harga_promo, stok, aktif, gambar_url, tampilkan_di_pilihan")
+        .order("id", { ascending: false });
+
+    if (error) {
+        console.error("Gagal memuat produk:", error);
+        daftar.textContent = "Gagal memuat produk. Periksa izin SELECT.";
+        return;
+    }
+
+    if (!produk || produk.length === 0) {
+        daftar.textContent = "Belum ada produk.";
+        return;
+    }
+
+    daftar.innerHTML = `
+        <h3>🔎 Cari Produk</h3>
+
+        <p style="font-size:14px;color:#666;">
+            Pilih maksimal 8 produk untuk ditampilkan di Produk Pilihan pada halaman Home.
+        </p>
+
+        <input
+            type="text"
+            id="cari-produk-admin"
+            placeholder="Masukkan nama produk..."
+            style="
+                width:100%;
+                padding:12px;
+                margin:10px 0 20px;
+                border:1px solid #ccc;
+                border-radius:8px;
+                box-sizing:border-box;
+                font-size:16px;
+            "
+        >
+
+        <div id="hasil-cari-produk-admin"></div>
+    `;
+
+    const kolomCari = document.querySelector("#cari-produk-admin");
+    const hasil = document.querySelector("#hasil-cari-produk-admin");
+
+    function tampilkanHasilProduk(kataKunci = "") {
+        const hasilFilter = produk.filter(item =>
+            (item.nama_produk || "")
+                .toLowerCase()
+                .includes(kataKunci.toLowerCase().trim())
+        );
+
+        if (hasilFilter.length === 0) {
+            hasil.innerHTML = "<p>Produk tidak ditemukan.</p>";
+            return;
+        }
+
+        hasil.innerHTML = hasilFilter.map(item => `
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 0;border-bottom:1px solid #ddd;">
+
+                <img
+                    src="${escapeHTML(item.gambar_url || "")}"
+                    alt="${escapeHTML(item.nama_produk || "Produk")}"
+                    style="width:65px;height:65px;object-fit:cover;border-radius:8px;"
+                >
+
+                <div style="flex:1;min-width:150px;">
+                    <strong>${escapeHTML(item.nama_produk || "")}</strong>
+                    <div>Harga: ¥${Number(item.harga || 0).toLocaleString("ja-JP")}</div>
+                    <div>Stok: ${Number(item.stok || 0)}</div>
+                    <div>Status: ${item.aktif ? "Aktif" : "Nonaktif"}</div>
+                    <div>Kategori: ${escapeHTML(item.kategori || "Belum ada kategori")}</div>
+
+                    <label style="display:block;margin-top:8px;font-size:14px;">
+                        <input
+                            type="checkbox"
+                            class="pilihan-produk-home-admin"
+                            data-id="${Number(item.id)}"
+                            ${item.tampilkan_di_pilihan ? "checked" : ""}
+                            ${!item.aktif ? "disabled" : ""}
+                        >
+                        ⭐ Tampilkan di Produk Pilihan
+                    </label>
+
+                    ${!item.aktif ? `
+                        <small style="color:#999;">
+                            Aktifkan produk terlebih dahulu.
+                        </small>
+                    ` : ""}
+                </div>
+
+                <button type="button" class="btn"
+                    onclick="editProdukAdmin(${Number(item.id)})">
+                    ✏️ Edit
+                </button>
+
+                <button type="button" class="btn"
+                    onclick="hapusProdukAdmin(${Number(item.id)})">
+                    🗑️ Hapus
+                </button>
+            </div>
+        `).join("");
+    }
+
+    kolomCari.addEventListener("input", function () {
+        tampilkanHasilProduk(this.value);
+    });
+
+    hasil.addEventListener("change", async function (event) {
+        const checkbox = event.target.closest(".pilihan-produk-home-admin");
+        if (!checkbox) return;
+
+        const id = Number(checkbox.dataset.id);
+        const dipilih = checkbox.checked;
+        const jumlahTerpilih = produk.filter(item =>
+            item.tampilkan_di_pilihan === true && item.aktif
+        ).length;
+
+        if (dipilih && jumlahTerpilih >= 8) {
+            alert("Maksimal hanya 8 produk yang bisa dipilih.");
+            checkbox.checked = false;
+            return;
+        }
+
+        checkbox.disabled = true;
+
+        const { error: errorUpdate } = await supabaseClient
+            .from("produk")
+            .update({ tampilkan_di_pilihan: dipilih })
+            .eq("id", id);
+
+        if (errorUpdate) {
+            console.error("Gagal mengubah Produk Pilihan:", errorUpdate);
+            alert("Gagal menyimpan pilihan produk. Silakan coba lagi.");
+            checkbox.checked = !dipilih;
+            checkbox.disabled = false;
+            return;
+        }
+
+        const item = produk.find(item => Number(item.id) === id);
+        if (item) {
+            item.tampilkan_di_pilihan = dipilih;
+        }
+
+        tampilkanHasilProduk(kolomCari.value);
+
+        console.log("Pilihan Produk Home berhasil diperbarui.");
+    });
+
+    tampilkanHasilProduk();
+}
+
+    let dataNotaAdmin = [];
+
+    let grafikRekapPenjualan = null;
+
+async function muatRekapPenjualanAdmin() {
+    const bulanInput = document.querySelector("#rekap-bulan");
+    const tahunInput = document.querySelector("#rekap-tahun");
+
+    if (!bulanInput || !tahunInput) return;
+
+    const bulanSekarang = new Date().getMonth() + 1;
+    const tahunSekarang = new Date().getFullYear();
+
+    // Isi pilihan tahun
+    if (tahunInput.options.length === 0) {
+        for (let tahun = tahunSekarang; tahun >= tahunSekarang - 5; tahun--) {
+            tahunInput.add(new Option(tahun, tahun));
+        }
+    }
+
+    if (!bulanInput.dataset.diatur) {
+        bulanInput.value = String(bulanSekarang);
+        tahunInput.value = String(tahunSekarang);
+        bulanInput.dataset.diatur = "ya";
+    }
+
+    const bulan = Number(bulanInput.value);
+    const tahun = Number(tahunInput.value);
+
+    const awalBulan = new Date(tahun, bulan - 1, 1);
+    const awalBulanBerikutnya = new Date(tahun, bulan, 1);
+
+    const awalISO = awalBulan.toISOString();
+    const akhirISO = awalBulanBerikutnya.toISOString();
+
+    const omzetEl = document.querySelector("#rekap-total-omzet");
+    const jumlahEl = document.querySelector("#rekap-jumlah-pesanan");
+    const daftarEl = document.querySelector("#daftar-transaksi-rekap");
+    const grafikEl = document.querySelector("#grafik-rekap-penjualan");
+
+    omzetEl.textContent = "Memuat...";
+    jumlahEl.textContent = "Memuat...";
+    daftarEl.textContent = "Memuat transaksi...";
+
+    const { data: pesanan, error } = await supabaseClient
+        .from("pesanan")
+        .select("id, nomor_pesanan, total, status, created_at, pelanggan_id")
+        .eq("status", "Selesai")
+        .gte("created_at", awalISO)
+        .lt("created_at", akhirISO)
+        .order("created_at", { ascending: false });
+
+    if (error) {
+        console.error("Gagal memuat rekap:", error);
+        omzetEl.textContent = "-";
+        jumlahEl.textContent = "-";
+        daftarEl.textContent = "Gagal memuat data: " + error.message;
+        return;
+    }
+
+    const dataPesanan = pesanan || [];
+
+    const totalOmzet = dataPesanan.reduce(
+        (jumlah, item) => jumlah + Number(item.total || 0),
+        0
+    );
+
+    omzetEl.textContent =
+        "¥" + totalOmzet.toLocaleString("ja-JP");
+
+    jumlahEl.textContent = dataPesanan.length;
+
+    // Ambil nama pelanggan
+    const idPelanggan = [
+        ...new Set(dataPesanan.map(item => item.pelanggan_id).filter(Boolean))
+    ];
+
+    let pelanggan = [];
+
+    if (idPelanggan.length > 0) {
+        const { data, error: errorPelanggan } = await supabaseClient
+            .from("pelanggan")
+            .select("id, nama")
+            .in("id", idPelanggan);
+
+        if (errorPelanggan) {
+            console.error("Gagal memuat pelanggan:", errorPelanggan);
+        } else {
+            pelanggan = data || [];
+        }
+    }
+
+    if (dataPesanan.length === 0) {
+        daftarEl.innerHTML = "<p>Tidak ada transaksi selesai pada bulan ini.</p>";
+    } else {
+        daftarEl.innerHTML = `
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;min-width:550px;">
+                    <thead>
+                        <tr>
+                            <th style="padding:10px;text-align:left;border-bottom:1px solid #ddd;">Nomor Pesanan</th>
+                            <th style="padding:10px;text-align:left;border-bottom:1px solid #ddd;">Tanggal</th>
+                            <th style="padding:10px;text-align:left;border-bottom:1px solid #ddd;">Pelanggan</th>
+                            <th style="padding:10px;text-align:right;border-bottom:1px solid #ddd;">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${dataPesanan.map(item => {
+                            const orang = pelanggan.find(
+                                p => p.id === item.pelanggan_id
+                            );
+
+                            return `
+                                <tr>
+                                    <td style="padding:10px;border-bottom:1px solid #eee;">
+                                        ${escapeHTML(item.nomor_pesanan || "-")}
+                                    </td>
+                                    <td style="padding:10px;border-bottom:1px solid #eee;">
+                                        ${escapeHTML(new Date(item.created_at).toLocaleDateString("id-ID"))}
+                                    </td>
+                                    <td style="padding:10px;border-bottom:1px solid #eee;">
+                                        ${escapeHTML(orang?.nama || "-")}
+                                    </td>
+                                    <td style="padding:10px;text-align:right;border-bottom:1px solid #eee;">
+                                        ¥${Number(item.total || 0).toLocaleString("ja-JP")}
+                                    </td>
+                                </tr>
+                            `;
+                        }).join("")}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    // Ambil omzet setiap bulan pada tahun terpilih
+    const awalTahun = new Date(tahun, 0, 1).toISOString();
+    const akhirTahun = new Date(tahun + 1, 0, 1).toISOString();
+
+    const { data: semuaPesanan, error: errorGrafik } = await supabaseClient
+        .from("pesanan")
+        .select("total, created_at")
+        .eq("status", "Selesai")
+        .gte("created_at", awalTahun)
+        .lt("created_at", akhirTahun);
+
+    if (errorGrafik) {
+        console.error("Gagal memuat grafik:", errorGrafik);
+        grafikEl.textContent = "Gagal memuat grafik penjualan.";
+        return;
+    }
+
+    const omzetBulanan = Array(12).fill(0);
+
+    (semuaPesanan || []).forEach(item => {
+        const bulanPesanan = new Date(item.created_at).getMonth();
+        omzetBulanan[bulanPesanan] += Number(item.total || 0);
+    });
+
+    const namaBulan = [
+        "Jan", "Feb", "Mar", "Apr", "Mei", "Jun",
+        "Jul", "Agu", "Sep", "Okt", "Nov", "Des"
+    ];
+
+    grafikEl.innerHTML = `
+        <canvas id="canvas-rekap-penjualan"
+            style="width:100%;max-height:350px;"></canvas>
+    `;
+
+    if (grafikRekapPenjualan) {
+        grafikRekapPenjualan.destroy();
+    }
+
+    const canvas = document.querySelector("#canvas-rekap-penjualan");
+    const nilaiMaksimum = Math.max(...omzetBulanan);
+
+const intervalGrafik = Math.max(
+    1000,
+    Math.ceil(nilaiMaksimum / 5 / 1000) * 1000
+);
+
+    grafikRekapPenjualan = new Chart(canvas, {
+        type: "bar",
+        data: {
+            labels: namaBulan,
+            datasets: [{
+                label: "Omzet Penjualan (¥)",
+                data: omzetBulanan,
+                backgroundColor: "#16a34a",
+                borderRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true
+                },
+                tooltip: {
+                    callbacks: {
+                        label: context =>
+                            "¥" + Number(context.raw).toLocaleString("ja-JP")
+                    }
+                }
+            },
+            scales: {
+                y: {
+    beginAtZero: true,
+    suggestedMax: intervalGrafik * 5,
+    ticks: {
+        stepSize: intervalGrafik,
+        callback: value =>
+            "¥" + Number(value).toLocaleString("ja-JP")
+    }
+}
+            }
+        }
+    });
+
+    canvas.parentElement.style.height = "350px";
+}
+
+async function muatDaftarNotaAdmin() {
+    const daftar = document.querySelector("#daftar-nota-admin");
+    if (!daftar) return;
+
+    daftar.textContent = "Memuat daftar nota...";
+
+    const { data: pesanan, error } = await supabaseClient
+        .from("pesanan")
+        .select("id, nomor_pesanan, subtotal, ongkir, total, status, created_at, pelanggan_id")
+        .order("created_at", { ascending: false });
+
+    if (error) {
+        console.error("Gagal memuat nota:", error);
+        daftar.textContent = "Gagal memuat daftar nota: " + error.message;
+        return;
+    }
+
+    if (!pesanan || pesanan.length === 0) {
+        dataNotaAdmin = [];
+        daftar.innerHTML = "<p>Belum ada nota.</p>";
+        return;
+    }
+
+    const idPelanggan = [
+        ...new Set(pesanan.map(item => item.pelanggan_id).filter(Boolean))
+    ];
+
+    let daftarPelanggan = [];
+
+    if (idPelanggan.length > 0) {
+        const { data, error: errorPelanggan } = await supabaseClient
+            .from("pelanggan")
+            .select("id, nama")
+            .in("id", idPelanggan);
+
+        if (errorPelanggan) {
+            console.error("Gagal memuat nama pelanggan:", errorPelanggan);
+        } else {
+            daftarPelanggan = data || [];
+        }
+    }
+
+    dataNotaAdmin = pesanan.map(item => {
+        const pelanggan = daftarPelanggan.find(
+            orang => orang.id === item.pelanggan_id
+        );
+
+        return {
+            ...item,
+            nama_pelanggan: pelanggan?.nama || "-"
+        };
+    });
+
+    tampilkanDaftarNotaAdmin(dataNotaAdmin);
+}
+    
+    let dataPelangganAdmin = [];
+
+    function tampilkanDaftarNotaAdmin(data) {
+    const daftar = document.querySelector("#daftar-nota-admin");
+    if (!daftar) return;
+
+    if (!data || data.length === 0) {
+        daftar.innerHTML = "<p>Nota tidak ditemukan.</p>";
+        return;
+    }
+
+    const uang = nilai =>
+        "¥" + Number(nilai || 0).toLocaleString("ja-JP");
+
+    daftar.innerHTML = `
+        <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;min-width:650px;">
+                <thead>
+                    <tr style="background:#f3f4f6;">
+                        <th style="padding:12px;text-align:left;">Nomor Pesanan</th>
+                        <th style="padding:12px;text-align:left;">Tanggal</th>
+                        <th style="padding:12px;text-align:left;">Pelanggan</th>
+                        <th style="padding:12px;text-align:right;">Total</th>
+                        <th style="padding:12px;text-align:center;">Status</th>
+                        <th style="padding:12px;text-align:center;">Nota</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${data.map(item => `
+                        <tr>
+                            <td style="padding:10px;border-bottom:1px solid #ddd;">
+                                ${escapeHTML(item.nomor_pesanan || "-")}
+                            </td>
+                            <td style="padding:10px;border-bottom:1px solid #ddd;">
+                                ${escapeHTML(
+                                    item.created_at
+                                        ? new Date(item.created_at).toLocaleString("id-ID")
+                                        : "-"
+                                )}
+                            </td>
+                            <td style="padding:10px;border-bottom:1px solid #ddd;">
+                                ${escapeHTML(item.nama_pelanggan)}
+                            </td>
+                            <td style="padding:10px;text-align:right;border-bottom:1px solid #ddd;">
+                                ${uang(item.total)}
+                            </td>
+                            <td style="padding:10px;text-align:center;border-bottom:1px solid #ddd;">
+                                ${escapeHTML(item.status || "-")}
+                            </td>
+                            <td style="padding:10px;text-align:center;border-bottom:1px solid #ddd;">
+                                <button
+                                    type="button"
+                                    class="btn"
+                                    onclick="lihatDetailPesanan('${escapeHTML(item.nomor_pesanan || "")}')">
+                                    📄 Lihat Nota
+                                </button>
+                            </td>
+                        </tr>
+                    `).join("")}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+    function cariNotaAdmin(kataKunci) {
+    const kata = kataKunci.toLowerCase().trim();
+
+    const hasil = dataNotaAdmin.filter(item =>
+        (item.nomor_pesanan || "").toLowerCase().includes(kata) ||
+        (item.nama_pelanggan || "").toLowerCase().includes(kata)
+    );
+
+    tampilkanDaftarNotaAdmin(hasil);
+}
+
+async function muatDaftarPelangganAdmin() {
+    const daftar = document.querySelector("#daftar-pelanggan-admin");
+    if (!daftar) return;
+
+    daftar.textContent = "Memuat data pelanggan...";
+
+    const { data, error } = await supabaseClient
+        .from("pelanggan")
+        .select("id, nama, whatsapp, alamat")
+        .order("id", { ascending: false });
+
+    if (error) {
+        console.error("Gagal memuat pelanggan:", error);
+        daftar.textContent = "Gagal memuat data pelanggan.";
+        return;
+    }
+
+    dataPelangganAdmin = data || [];
+    tampilkanDaftarPelangganAdmin(dataPelangganAdmin);
+}
+
+function tampilkanDaftarPelangganAdmin(data) {
+    const daftar = document.querySelector("#daftar-pelanggan-admin");
+    if (!daftar) return;
+
+    if (!data.length) {
+        daftar.innerHTML = "<p>Belum ada pelanggan.</p>";
+        return;
+    }
+
+    daftar.innerHTML = data.map(item => `
+        <div style="
+            background:#fff;
+            padding:15px;
+            margin:10px 0;
+            border-radius:10px;
+            border:1px solid #ddd;
+        ">
+            <strong>👤 ${escapeHTML(item.nama || "Tanpa nama")}</strong>
+            <p>📱 WhatsApp: ${escapeHTML(item.whatsapp || "-")}</p>
+            <p>📍 Alamat: ${escapeHTML(item.alamat || "-")}</p>
+        </div>
+    `).join("");
+}
+
+function cariPelangganAdmin(kataKunci) {
+    const kata = kataKunci.toLowerCase().trim();
+
+    const hasil = dataPelangganAdmin.filter(item =>
+        (item.nama || "").toLowerCase().includes(kata) ||
+        (item.whatsapp || "").toLowerCase().includes(kata)
+    );
+
+    tampilkanDaftarPelangganAdmin(hasil);
+}
+    
+let fotoEditProdukBaru = null;
+let dataEditProdukAktif = null;
+
+// Membuka form edit produk
+async function editProdukAdmin(id) {
+    const { data: produk, error } = await supabaseClient
+        .from("produk")
+        .select("*")
+        .eq("id", id)
+        .single();
+
+    if (error || !produk) {
+        alert("Gagal mengambil data produk.");
+        console.error(error);
+        return;
+    }
+
+    dataEditProdukAktif = produk;
+    fotoEditProdukBaru = null;
+
+    const formEdit = document.getElementById("form-edit-produk-admin");
+
+    if (!formEdit) {
+        alert("Form edit produk tidak ditemukan.");
+        return;
+    }
+
+    formEdit.style.display = "block";
+
+    formEdit.innerHTML = `
+        <div style="
+            padding:20px;
+            border:1px solid #ddd;
+            border-radius:12px;
+            background:#fff;
+        ">
+            <h2>✏️ Edit Produk</h2>
+
+            <form id="form-simpan-edit-produk">
+                <label>Nama Produk</label>
+                <input
+                    id="edit-nama-produk"
+                    type="text"
+                    value="${escapeHTML(produk.nama_produk || "")}"
+                    required
+                    style="width:100%;padding:10px;margin:8px 0 16px;box-sizing:border-box;"
+                >
+
+                <label>Kategori</label>
+                <select
+                    id="edit-kategori-produk"
+                    required
+                    style="width:100%;padding:10px;margin:8px 0 16px;box-sizing:border-box;"
+                    > 
+                    <option value="">Memuat kategori...</option>
+                </select>
+
+                <label>Harga Normal (¥)</label>
+                <input
+                    id="edit-harga-produk"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value="${Number(produk.harga) || 0}"
+                    required
+                    style="width:100%;padding:10px;margin:8px 0 16px;box-sizing:border-box;"
+                >
+
+                <label>Harga Lama (¥), jika ada</label>
+                <input
+                    id="edit-harga-lama"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value="${produk.harga_lama ?? ""}"
+                    style="width:100%;padding:10px;margin:8px 0 16px;box-sizing:border-box;"
+                >
+
+                <label>Harga Promo (¥), jika ada</label>
+                <input
+                    id="edit-harga-promo"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value="${produk.harga_promo ?? ""}"
+                    style="width:100%;padding:10px;margin:8px 0 16px;box-sizing:border-box;"
+                >
+
+                <label>Deskripsi</label>
+                <textarea
+                    id="edit-deskripsi-produk"
+                    rows="4"
+                    style="width:100%;padding:10px;margin:8px 0 16px;box-sizing:border-box;"
+                >${escapeHTML(produk.deskripsi || "")}</textarea>
+
+                <label>Stok</label>
+                <input
+                    id="edit-stok-produk"
+                    type="number"
+                    min="0"
+                    step="1"
+                    value="${Number(produk.stok) || 0}"
+                    required
+                    style="width:100%;padding:10px;margin:8px 0 16px;box-sizing:border-box;"
+                >
+
+                <div style="margin:8px 0 16px;">
+                    <label>
+                        <input
+                            id="edit-aktif-produk"
+                            type="checkbox"
+                            ${produk.aktif ? "checked" : ""}
+                        >
+                        Produk aktif
+                    </label>
+                </div>
+
+                <label>Foto Produk Saat Ini</label>
+                <div style="margin:10px 0 16px;">
+                    ${
+                        produk.gambar_url
+                            ? `<img
+                                src="${escapeHTML(produk.gambar_url)}"
+                                alt="Foto produk"
+                                style="width:150px;height:150px;object-fit:contain;border:1px solid #ddd;border-radius:8px;"
+                            >`
+                            : "<p>Belum ada foto produk.</p>"
+                    }
+                </div>
+
+                <label>Pilih Foto Baru (opsional)</label>
+                <input
+                    id="edit-foto-produk"
+                    type="file"
+                    accept="image/*"
+                    style="display:block;margin:10px 0;"
+                >
+
+                <p id="edit-pesan-produk" style="margin:10px 0;"></p>
+
+                <button
+                    type="submit"
+                    id="tombol-simpan-edit"
+                    style="padding:12px 18px;margin:8px 5px 8px 0;cursor:pointer;"
+                >
+                    💾 Simpan Perubahan
+                </button>
+
+                <button
+                    type="button"
+                    id="tombol-batal-edit"
+                    style="padding:12px 18px;margin:8px 0;cursor:pointer;"
+                >
+                    Batal
+                </button>
+            </form>
+        </div>
+    `;
+
+    // Muat kategori dari Supabase untuk dropdown edit produk.
+    const dropdownKategori = document.getElementById("edit-kategori-produk");
+
+    const { data: daftarKategori, error: errorKategori } = await supabaseClient
+        .from("kategori_produk")
+        .select("nama_kategori, nilai_kategori")
+        .order("nama_kategori", { ascending: true });
+
+    if (errorKategori) {
+        console.error("Gagal memuat kategori:", errorKategori);
+        dropdownKategori.innerHTML =
+            '<option value="">Gagal memuat kategori</option>';
+    } else {
+        dropdownKategori.innerHTML = "";
+
+        (daftarKategori || []).forEach(function (item) {
+            const opsi = document.createElement("option");
+            opsi.value = item.nilai_kategori;
+            opsi.textContent = item.nama_kategori;
+
+            dropdownKategori.appendChild(opsi);
+        });
+
+        // Pilih kategori yang saat ini digunakan oleh produk.
+        dropdownKategori.value = produk.kategori || "";
+
+        // Jika kategori lama tidak ditemukan, tampilkan sebagai pilihan.
+        if (
+            produk.kategori &&
+            dropdownKategori.value !== produk.kategori
+        ) {
+            const opsiLama = document.createElement("option");
+            opsiLama.value = produk.kategori;
+            opsiLama.textContent = produk.kategori;
+            opsiLama.selected = true;
+
+            dropdownKategori.appendChild(opsiLama);
+        }
+    }
+    
+    // Pilihan foto dilakukan langsung oleh pengguna.
+    document
+        .getElementById("edit-foto-produk")
+        .addEventListener("change", function () {
+            fotoEditProdukBaru = this.files[0] || null;
+
+            const pesan = document.getElementById("edit-pesan-produk");
+
+            if (fotoEditProdukBaru) {
+                pesan.textContent = "Foto baru dipilih: " + fotoEditProdukBaru.name;
+            } else {
+                pesan.textContent = "";
+            }
+        });
+
+    document
+        .getElementById("form-simpan-edit-produk")
+        .addEventListener("submit", simpanPerubahanProdukAdmin);
+
+    document
+        .getElementById("tombol-batal-edit")
+        .addEventListener("click", function () {
+            formEdit.style.display = "none";
+            formEdit.innerHTML = "";
+            fotoEditProdukBaru = null;
+            dataEditProdukAktif = null;
+        });
+
+    formEdit.scrollIntoView({
+        behavior: "smooth",
+        block: "start"
+    });
+}
+
+
+// Menyimpan perubahan produk
+async function simpanPerubahanProdukAdmin(event) {
+    event.preventDefault();
+
+    const produkLama = dataEditProdukAktif;
+
+    if (!produkLama) {
+        alert("Data produk tidak ditemukan. Silakan buka form edit kembali.");
+        return;
+    }
+
+    const pesan = document.getElementById("edit-pesan-produk");
+    const tombol = document.getElementById("tombol-simpan-edit");
+
+    const nama = document.getElementById("edit-nama-produk").value.trim();
+    const kategori = document.getElementById("edit-kategori-produk").value.trim();
+
+    const hargaInput = document.getElementById("edit-harga-produk").value;
+    const hargaLamaInput = document.getElementById("edit-harga-lama").value.trim();
+    const hargaPromoInput = document.getElementById("edit-harga-promo").value.trim();
+    const deskripsi = document.getElementById("edit-deskripsi-produk").value.trim();
+    const stokInput = document.getElementById("edit-stok-produk").value;
+    const aktif = document.getElementById("edit-aktif-produk").checked;
+
+    const harga = Number(hargaInput);
+    const hargaLama = hargaLamaInput === "" ? null : Number(hargaLamaInput);
+    const hargaPromo = hargaPromoInput === "" ? null : Number(hargaPromoInput);
+    const stok = Number(stokInput);
+
+    if (
+        !nama ||
+        !kategori ||
+        hargaInput.trim() === "" ||
+        !Number.isFinite(harga) ||
+        harga < 0 ||
+        (hargaLama !== null &&
+            (!Number.isFinite(hargaLama) || hargaLama < 0)) ||
+        (hargaPromo !== null &&
+            (!Number.isFinite(hargaPromo) ||
+                hargaPromo < 0 ||
+                hargaPromo >= harga)) ||
+        stokInput.trim() === "" ||
+        !Number.isInteger(stok) ||
+        stok < 0
+    ) {
+        alert("Periksa kembali nama, kategori, harga, harga promo, dan stok.");
+        return;
+    }
+
+    if (fotoEditProdukBaru) {
+        if (!fotoEditProdukBaru.type.startsWith("image/")) {
+            alert("File yang dipilih harus berupa gambar.");
+            return;
+        }
+
+        if (fotoEditProdukBaru.size > 5 * 1024 * 1024) {
+            alert("Ukuran foto maksimal 5 MB.");
+            return;
+        }
+    }
+
+    tombol.disabled = true;
+    pesan.textContent = "Sedang menyimpan perubahan...";
+
+    let pathFotoBaru = null;
+    let urlFoto = produkLama.gambar_url || null;
+    let pathFotoLama = null;
+
+    try {
+        // Upload foto baru jika pengguna memilihnya.
+        if (fotoEditProdukBaru) {
+            const ekstensi = fotoEditProdukBaru.name.includes(".")
+                ? fotoEditProdukBaru.name.split(".").pop().toLowerCase()
+                : "jpg";
+
+            const namaFile = `${crypto.randomUUID()}.${ekstensi}`;
+
+            const { data: hasilUpload, error: errorUpload } =
+                await supabaseClient
+                    .storage
+                    .from("produk")
+                    .upload(namaFile, fotoEditProdukBaru, {
+                        cacheControl: "3600",
+                        upsert: false
+                    });
+
+            if (errorUpload) {
+                throw new Error("Upload foto gagal: " + errorUpload.message);
+            }
+
+            pathFotoBaru = hasilUpload.path;
+
+            const { data: hasilURL } = supabaseClient
+                .storage
+                .from("produk")
+                .getPublicUrl(pathFotoBaru);
+
+            urlFoto = hasilURL.publicUrl;
+        }
+
+        const hargaAcuan = hargaLama !== null && hargaLama > 0
+            ? hargaLama
+            : harga;
+
+        const promoPersen = hargaPromo !== null && hargaAcuan > hargaPromo
+            ? Math.round(((hargaAcuan - hargaPromo) / hargaAcuan) * 100)
+            : 0;
+
+        const { error: errorUpdate } = await supabaseClient
+            .from("produk")
+            .update({
+                nama_produk: nama,
+                kategori: kategori,
+                harga: harga,
+                harga_lama: hargaLama,
+                harga_promo: hargaPromo,
+                promo_persen: promoPersen,
+                deskripsi: deskripsi,
+                stok: stok,
+                aktif: aktif,
+                gambar_url: urlFoto
+            })
+            .eq("id", produkLama.id);
+
+        if (errorUpdate) {
+            throw new Error("Gagal menyimpan ke database: " + errorUpdate.message);
+        }
+
+        // Hapus foto lama hanya setelah database berhasil diperbarui.
+        if (pathFotoBaru && produkLama.gambar_url) {
+            try {
+                const urlLama = new URL(produkLama.gambar_url);
+                const bagianPath = "/storage/v1/object/public/produk/";
+
+                if (urlLama.pathname.includes(bagianPath)) {
+                    pathFotoLama = decodeURIComponent(
+                        urlLama.pathname.split(bagianPath)[1]
+                    );
+                }
+            } catch (e) {
+                console.warn("URL foto lama tidak dapat diperiksa.");
+            }
+
+            if (pathFotoLama && pathFotoLama !== pathFotoBaru) {
+                const { error: errorHapus } = await supabaseClient
+                    .storage
+                    .from("produk")
+                    .remove([pathFotoLama]);
+
+                if (errorHapus) {
+                    console.warn("Foto lama belum terhapus:", errorHapus);
+                }
+            }
+        }
+
+        alert("Produk berhasil diperbarui!");
+
+                const formEditSelesai = document.getElementById("form-edit-produk-admin");
+
+        if (formEditSelesai) {
+            formEditSelesai.style.display = "none";
+            formEditSelesai.innerHTML = "";
+        }
+        fotoEditProdukBaru = null;
+        dataEditProdukAktif = null;
+
+                if (document.getElementById("daftar-produk-promo")) {
+    await muatDaftarProdukPromoAdmin();
+} else if (document.getElementById("daftar-produk-admin")) {
+    await muatDaftarProdukAdmin();
+}
+
+        if (document.getElementById("daftar-produk-promo")) {
+            await muatDaftarProdukPromoAdmin();
+            await muatDashboardAdmin();
+
+            window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+});
+        }
+    } catch (error) {
+        console.error(error);
+
+        // Jika update database gagal, bersihkan foto baru yang belum digunakan.
+        if (pathFotoBaru) {
+            const { error: errorHapusBaru } = await supabaseClient
+                .storage
+                .from("produk")
+                .remove([pathFotoBaru]);
+
+            if (errorHapusBaru) {
+                console.warn("Foto baru belum terhapus:", errorHapusBaru);
+            }
+        }
+
+        pesan.textContent = error.message || "Terjadi kesalahan.";
+        alert(error.message || "Gagal memperbarui produk.");
+
+    } finally {
+        const tombolAkhir = document.getElementById("tombol-simpan-edit");
+
+        if (tombolAkhir) {
+            tombolAkhir.disabled = false;
+        }
+    }
+}
+    
+async function hapusProdukAdmin(id) {
+    const yakin = confirm(
+        "Yakin ingin menghapus produk ini? Tindakan ini tidak bisa dibatalkan."
+    );
+
+    if (!yakin) return;
+
+    const { error } = await supabaseClient
+        .from("produk")
+        .delete()
+        .eq("id", id);
+
+    if (error) {
+        console.error("Gagal menghapus produk:", error);
+        alert("Gagal menghapus produk. Periksa izin Supabase.");
+        return;
+    }
+
+    alert("Produk berhasil dihapus!");
+
+    await muatDaftarProdukAdmin();
+}
+
+    async function muatDashboardAdmin() {
+    const pesan = document.querySelector("#pesan-dashboard");
+
+    try {
+        // 1. Ambil data pesanan
+        const { data: pesanan, error: errorPesanan } =
+            await supabaseClient
+                .from("pesanan")
+                .select("nomor_pesanan, total, status, created_at")
+                .order("created_at", { ascending: false });
+
+        if (errorPesanan) throw errorPesanan;
+
+        const daftarPesanan = pesanan || [];
+
+        // 2. Hitung statistik berdasarkan status
+        const statusNormal = status =>
+            String(status || "").trim().toLowerCase();
+
+        const jumlahBaru = daftarPesanan.filter(p =>
+    ["baru", "pesanan baru", "menunggu", "pending"]
+        .includes(statusNormal(p.status))
+).length;
+
+        const jumlahProses = daftarPesanan.filter(p =>
+            statusNormal(p.status) === "diproses"
+        ).length;
+
+        const jumlahSelesai = daftarPesanan.filter(p =>
+            statusNormal(p.status) === "selesai"
+        ).length;
+
+        // Total penjualan dihitung dari pesanan selesai
+        const totalPenjualan = daftarPesanan
+            .filter(p => statusNormal(p.status) === "selesai")
+            .reduce((total, p) => total + Number(p.total || 0), 0);
+
+        document.querySelector("#stat-pesanan-baru").textContent = jumlahBaru;
+        document.querySelector("#stat-pesanan-proses").textContent = jumlahProses;
+        document.querySelector("#stat-pesanan-selesai").textContent = jumlahSelesai;
+        document.querySelector("#stat-total-penjualan").textContent =
+            "¥" + totalPenjualan.toLocaleString("ja-JP");
+
+        // 3. Ambil data produk
+        const { data: produk, error: errorProduk } =
+            await supabaseClient
+                .from("produk")
+                .select("stok, aktif, harga_promo");
+
+        if (errorProduk) throw errorProduk;
+
+        const daftarProduk = produk || [];
+
+        const produkAktif = daftarProduk.filter(p => p.aktif === true).length;
+
+        const stokHabis = daftarProduk.filter(
+            p => p.aktif === true && Number(p.stok || 0) <= 0
+        ).length;
+
+        const produkPromo = daftarProduk.filter(p =>
+            p.aktif === true &&
+            Number(p.harga_promo || 0) > 0
+        ).length;
+
+        document.querySelector("#stat-produk-aktif").textContent = produkAktif;
+        document.querySelector("#stat-stok-habis").textContent = stokHabis;
+        document.querySelector("#stat-produk-promo").textContent = produkPromo;
+
+        // 4. Tampilkan lima pesanan terbaru
+        const areaTerbaru = document.querySelector(
+            "#pesanan-terbaru-dashboard"
+        );
+
+        if (daftarPesanan.length === 0) {
+            areaTerbaru.innerHTML = "<p>Belum ada pesanan.</p>";
+        } else {
+            const limaTerbaru = daftarPesanan.slice(0, 5);
+
+            areaTerbaru.innerHTML = `
+                <div style="overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;background:white;">
+                        <thead>
+                            <tr>
+                                <th style="padding:10px;text-align:left;border-bottom:1px solid #ddd;">Nomor Pesanan</th>
+                                <th style="padding:10px;text-align:left;border-bottom:1px solid #ddd;">Tanggal</th>
+                                <th style="padding:10px;text-align:left;border-bottom:1px solid #ddd;">Waktu</th>
+                                <th style="padding:10px;text-align:right;border-bottom:1px solid #ddd;">Total</th>
+                                <th style="padding:10px;text-align:left;border-bottom:1px solid #ddd;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${limaTerbaru.map(p => `
+                                <tr>
+                                    <td style="padding:10px;border-bottom:1px solid #eee;">
+                                        ${escapeHTML(p.nomor_pesanan || "-")}
+                                    </td>
+                                    <td style="padding:10px;border-bottom:1px solid #eee;">
+                                        ${p.created_at
+                                            ? new Date(p.created_at).toLocaleDateString("id-ID")
+                                            : "-"}
+                                    </td>
+                                    <td style="padding:10px;border-bottom:1px solid #eee;">
+                                        ${p.created_at
+                                            ? new Date(p.created_at).toLocaleTimeString("ja-JP", {
+                                            hour: "2-digit",
+                                            minute: "2-digit",
+                                            hour12: false,
+                                            timeZone: "Asia/Tokyo"
+                                                })
+                                            : "-"}
+                                    </td>
+                                    <td style="padding:10px;text-align:right;border-bottom:1px solid #eee;">
+                                        ¥${Number(p.total || 0).toLocaleString("ja-JP")}
+                                    </td>
+                                    <td style="padding:10px;border-bottom:1px solid #eee;">
+                                        ${escapeHTML(p.status || "-")}
+                                    </td>
+                                </tr>
+                            `).join("")}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        if (pesan) pesan.textContent = "";
+
+    } catch (error) {
+        console.error("Gagal memuat dashboard:", error);
+
+        if (pesan) {
+            pesan.textContent =
+                "Sebagian data dashboard gagal dimuat. Periksa koneksi atau izin Supabase.";
+            pesan.style.color = "red";
+        }
+    }
+}
+
+    // REALTIME PESANAN ADMIN
+let channelPesananAdmin = null;
+
+function aktifkanRealtimePesananAdmin() {
+
+    // Mencegah subscription ganda
+    if (channelPesananAdmin) {
+        return;
+    }
+
+    channelPesananAdmin = supabaseClient
+        .channel("realtime-pesanan-admin")
+        .on(
+            "postgres_changes",
+            {
+                event: "*",
+                schema: "public",
+                table: "pesanan"
+            },
+            (payload) => {
+    console.log(
+        "Ada perubahan pesanan:",
+        payload
+    );
+
+    const menuAktif = document.querySelector(
+        ".admin-nav-btn.active"
+    )?.dataset.menu;
+
+    if (menuAktif === "pesanan") {
+        muatPesananAdmin();
+    }
+
+    if (menuAktif === "dashboard") {
+        muatDashboardAdmin();
+    }
+}
+        )
+        .subscribe((status) => {
+            console.log(
+                "Status Realtime Pesanan:",
+                status
+            );
+        });
+}
+
+async function muatPesananAdmin() {
+    const status = document.querySelector("#status-pesanan");
+    const daftar = document.querySelector("#daftar-pesanan");
+    const filterStatus = document.querySelector("#filter-status-pesanan");
+
+    status.textContent = "Memuat pesanan...";
+
+    const pilihanStatus = filterStatus?.value || "semua";
+
+    let queryPesanan = supabaseClient
+        .from("pesanan")
+        .select("nomor_pesanan, subtotal, ongkir, total, status, created_at")
+        .order("created_at", { ascending: false });
+
+    if (pilihanStatus !== "semua") {
+        queryPesanan = queryPesanan.eq("status", pilihanStatus);
+    }
+
+    const { data, error } = await queryPesanan;
+
+    if (error) {
+        status.textContent = "Gagal memuat pesanan: " + error.message;
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        status.textContent = "Belum ada pesanan.";
+        daftar.innerHTML = "";
+        return;
+    }
+
+    status.textContent = "Jumlah pesanan: " + data.length;
+
+    daftar.innerHTML = data.map(pesanan => {
+        const nomor = String(pesanan.nomor_pesanan || "");
+        const nomorAman = escapeHTML(nomor);
+        const statusSaatIni = pesanan.status || "Pesanan Baru";
+        const statusLamaAman = escapeHTML(statusSaatIni);
+
+        return `
+            <tr>
+                <td style="padding:10px;border-bottom:1px solid #ddd;">
+                    ${nomorAman || "-"}
+                </td>
+
+                <td style="padding:10px;border-bottom:1px solid #ddd;">
+                    ${escapeHTML(
+                        pesanan.created_at
+                            ? new Date(pesanan.created_at).toLocaleString("id-ID")
+                            : "-"
+                    )}
+                </td>
+
+                <td style="padding:10px;border-bottom:1px solid #ddd;">
+                    ¥${Number(pesanan.total || 0).toLocaleString("ja-JP")}
+                </td>
+
+                <td style="padding:10px;border-bottom:1px solid #ddd;">
+                    <select
+                        class="pilihan-status-admin"
+                        data-nomor="${nomorAman}"
+                        data-status-lama="${statusLamaAman}"
+                        aria-label="Status pesanan ${nomorAman}"
+                        style="padding:8px;border:1px solid #ccc;border-radius:6px;max-width:180px;">
+                        <option value="Pesanan Baru"
+                            ${statusSaatIni === "Pesanan Baru" ? "selected" : ""}>
+                            🆕 Pesanan Baru
+                        </option>
+                        <option value="Diproses"
+                            ${statusSaatIni === "Diproses" ? "selected" : ""}>
+                            🔄 Diproses
+                        </option>
+                        <option value="Selesai"
+                            ${statusSaatIni === "Selesai" ? "selected" : ""}>
+                            ✅ Selesai
+                        </option>
+                        <option value="Dibatalkan"
+                            ${statusSaatIni === "Dibatalkan" ? "selected" : ""}>
+                            ❌ Dibatalkan
+                        </option>
+                    </select>
+
+                    <button
+                        type="button"
+                        class="btn"
+                        style="margin-top:5px;"
+                        onclick="simpanStatusPesananAdmin(this, '${nomorAman}')">
+                        Simpan
+                    </button>
+                </td>
+
+                <td style="padding:10px;border-bottom:1px solid #ddd;">
+                    <button
+                        type="button"
+                        class="btn"
+                        onclick="lihatDetailPesanan('${nomorAman}')">
+                        Lihat Detail
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join("");
+}
+
+    
+async function simpanStatusPesananAdmin(tombol, nomorPesanan) {
+    const baris = tombol.closest("tr");
+    const pilihan = baris?.querySelector(".pilihan-status-admin");
+
+    if (!pilihan || !nomorPesanan) {
+        alert("Pilihan status atau nomor pesanan tidak ditemukan.");
+        return;
+    }
+
+    const statusBaru = pilihan.value;
+    const statusLama = pilihan.dataset.statusLama || pilihan.value;
+
+    if (!confirm(
+        `Ubah status pesanan ${nomorPesanan} menjadi "${statusBaru}"?`
+    )) {
+        pilihan.value = statusLama;
+        return;
+    }
+
+    tombol.disabled = true;
+    tombol.textContent = "Menyimpan...";
+
+    const { data, error } = await supabaseClient
+        .from("pesanan")
+        .update({ status: statusBaru })
+        .eq("nomor_pesanan", nomorPesanan)
+        .select("nomor_pesanan, status");
+
+    tombol.disabled = false;
+    tombol.textContent = "Simpan";
+
+    if (error) {
+        alert("Gagal menyimpan status: " + error.message);
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        alert(
+            "Status belum berubah. Pesanan tidak ditemukan atau akses database ditolak."
+        );
+        return;
+    }
+
+    alert(`Status pesanan ${nomorPesanan} berhasil diubah menjadi ${statusBaru}.`);
+
+    muatPesananAdmin();
+}
+
+function escapeHTML(nilai) {
+    return String(nilai).replace(/[&<>"']/g, karakter => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+    })[karakter]);
+}
+
+    
+async function lihatDetailPesanan(nomorPesanan) {
+    const isi = document.querySelector("#isi-menu-admin");
+
+    isi.innerHTML = `
+        <h2>📄 Detail Pesanan ${escapeHTML(nomorPesanan)}</h2>
+        <p id="status-detail">Memuat detail pesanan...</p>
+        <div id="konten-detail"></div>
+        <button type="button" class="btn" onclick="tampilkanMenuAdmin('pesanan')">
+            ← Kembali ke Pesanan
+        </button>
+    `;
+
+    const status = document.querySelector("#status-detail");
+    const konten = document.querySelector("#konten-detail");
+
+    const { data: pesanan, error: errorPesanan } = await supabaseClient
+        .from("pesanan")
+        .select("id, nomor_pesanan, subtotal, ongkir, total, status, created_at, pelanggan_id")
+        .eq("nomor_pesanan", nomorPesanan)
+        .single();
+
+    if (errorPesanan || !pesanan) {
+        status.textContent = "Gagal memuat pesanan: " +
+            (errorPesanan?.message || "Pesanan tidak ditemukan.");
+        return;
+    }
+
+    const { data: produk, error: errorProduk } = await supabaseClient
+        .from("detail_pesanan")
+        .select("nama_produk, harga, jumlah, subtotal")
+        .eq("pesanan_id", pesanan.id);
+
+    if (errorProduk) {
+        status.textContent = "Gagal memuat produk: " + errorProduk.message;
+        return;
+    }
+
+    const { data: pelanggan, error: errorPelanggan } = await supabaseClient
+        .from("pelanggan")
+        .select("nama, whatsapp, alamat")
+        .eq("id", pesanan.pelanggan_id)
+        .maybeSingle();
+    // Ambil riwayat perubahan status pesanan
+const { data: riwayat, error: errorRiwayat } = await supabaseClient
+    .from("riwayat_status_pesanan")
+    .select("status_lama, status_baru, diubah_pada")
+    .eq("pesanan_id", pesanan.id)
+    .order("diubah_pada", { ascending: true });
+
+    status.textContent = "";
+
+    const aman = escapeHTML;
+    const uang = nilai => "¥" + Number(nilai || 0).toLocaleString("ja-JP");
+
+    konten.innerHTML = `
+        <div id="nota-pesanan" style="background:white;color:black;padding:24px;max-width:800px;">
+            <h2>Popy Asia Store</h2>
+            <h3>NOTA PESANAN</h3>
+            <p>Nomor: ${aman(pesanan.nomor_pesanan)}</p>
+            <p>Tanggal: ${aman(new Date(pesanan.created_at).toLocaleString("id-ID"))}</p>
+            <p>
+    Status:
+    <strong>${aman(pesanan.status || "-")}</strong>
+</p>
+
+<p id="pesan-status-pesanan"></p>
+
+
+            <hr>
+
+            <h3>Data Pelanggan</h3>
+            <p>Nama: ${aman(pelanggan?.nama || "-")}</p>
+            <p>WhatsApp: ${aman(pelanggan?.whatsapp || "-")}</p>
+            <p>Alamat: ${aman(pelanggan?.alamat || "-")}</p>
+
+            <hr>
+
+            <h3>Daftar Produk</h3>
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;">
+                    <thead>
+                        <tr>
+                            <th style="text-align:left;padding:8px;border-bottom:1px solid #ccc;">Produk</th>
+                            <th style="text-align:right;padding:8px;border-bottom:1px solid #ccc;">Harga</th>
+                            <th style="text-align:right;padding:8px;border-bottom:1px solid #ccc;">Jumlah</th>
+                            <th style="text-align:right;padding:8px;border-bottom:1px solid #ccc;">Subtotal</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${(produk || []).map(item => `
+                            <tr>
+                                <td style="padding:8px;border-bottom:1px solid #eee;">${aman(item.nama_produk)}</td>
+                                <td style="text-align:right;padding:8px;border-bottom:1px solid #eee;">${uang(item.harga)}</td>
+                                <td style="text-align:right;padding:8px;border-bottom:1px solid #eee;">${Number(item.jumlah || 0)}</td>
+                                <td style="text-align:right;padding:8px;border-bottom:1px solid #eee;">${uang(item.subtotal)}</td>
+                            </tr>
+                        `).join("")}
+                    </tbody>
+                </table>
+            </div>
+
+            <p style="text-align:right;">Subtotal: ${uang(pesanan.subtotal)}</p>
+            <p style="text-align:right;">Ongkir: ${uang(pesanan.ongkir)}</p>
+            <h3 style="text-align:right;">Total: ${uang(pesanan.total)}</h3>
+               </div>
+
+        <!-- RIWAYAT STATUS DI LUAR NOTA -->
+        <div style="margin:20px 0;padding:16px;background:#f8fafc;border-radius:10px;max-width:800px;">
+            <h3>🕒 Riwayat Status Pesanan</h3>
+
+            ${
+                errorRiwayat
+                ? `<p>Gagal memuat riwayat: ${aman(errorRiwayat.message)}</p>`
+                : (riwayat || []).length === 0
+                    ? `<p>Belum ada riwayat status.</p>`
+                    : `
+                        <div style="border-left:3px solid #16a34a;padding-left:15px;">
+                            ${(riwayat || []).map(item => `
+                                <div style="margin-bottom:16px;">
+                                    <strong>${aman(item.status_baru)}</strong>
+                                    <p style="margin:4px 0;color:#666;">
+                                        ${
+                                            item.status_lama
+                                            ? aman(item.status_lama) + " → " + aman(item.status_baru)
+                                            : "Pesanan dibuat"
+                                        }
+                                    </p>
+                                    <small style="color:#777;">
+                                        ${aman(new Date(item.diubah_pada).toLocaleString("id-ID"))}
+                                    </small>
+                                </div>
+                            `).join("")}
+                        </div>
+                    `
+            }
+        </div>
+
+        <button type="button" class="btn" onclick="cetakNotaPesanan()">
+            🖨️ Cetak / Simpan PDF
+        </button>
+    `;
+}
+
+function cetakNotaPesanan() {
+    const nota = document.querySelector("#nota-pesanan");
+
+    if (!nota) {
+        alert("Nota belum tersedia.");
+        return;
+    }
+
+    const jendela = window.open("", "_blank");
+
+    if (!jendela) {
+        alert("Pop-up diblokir browser. Izinkan pop-up untuk mencetak nota.");
+        return;
+    }
+
+    jendela.document.write(`
+        <!DOCTYPE html>
+        <html lang="id">
+        <head>
+            <meta charset="UTF-8">
+            <title>Nota Pesanan</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 24px; }
+                table { border-collapse: collapse; }
+                @media print {
+                    body { margin: 0; }
+                    button { display: none; }
+                }
+            </style>
+        </head>
+        <body>${nota.outerHTML}</body>
+        </html>
+    `);
+
+    jendela.document.close();
+    jendela.focus();
+    jendela.print();
+}
+
+async function simpanStatusPesanan(nomorPesanan) {
+    const pilihan = document.querySelector("#status-pesanan-baru");
+    const pesan = document.querySelector("#pesan-status-pesanan");
+
+    if (!pilihan || !pesan) return;
+
+    const statusBaru = pilihan.value;
+    pesan.textContent = "Menyimpan status...";
+
+    const { data: pesanan, error: errorCari } = await supabaseClient
+        .from("pesanan")
+        .select("id")
+        .eq("nomor_pesanan", nomorPesanan)
+        .single();
+
+    if (errorCari || !pesanan) {
+        pesan.textContent = "Gagal menemukan pesanan.";
+        return;
+    }
+
+    const { error } = await supabaseClient
+        .from("pesanan")
+        .update({ status: statusBaru })
+        .eq("id", pesanan.id);
+
+    if (error) {
+        pesan.textContent = "Gagal menyimpan status: " + error.message;
+        return;
+    }
+
+    pesan.textContent = "Status berhasil disimpan!";
+
+    await lihatDetailPesanan(nomorPesanan);
+}
+
+    async function muatKategoriAdmin() {
+    const selectKategori = document.getElementById("kategori-produk-admin");
+
+    if (!selectKategori) return;
+
+    const { data, error } = await supabaseClient
+        .from("kategori_produk")
+        .select("nama_kategori, nilai_kategori")
+        .order("nama_kategori", { ascending: true });
+
+    if (error) {
+        console.error("Gagal memuat kategori:", error);
+        selectKategori.innerHTML =
+            '<option value="">Gagal memuat kategori</option>';
+        return;
+    }
+
+    selectKategori.innerHTML =
+        '<option value="">Pilih kategori</option>';
+
+    data.forEach(function(kategori) {
+        const option = document.createElement("option");
+
+        option.value = kategori.nilai_kategori;
+        option.textContent = kategori.nama_kategori;
+
+        selectKategori.appendChild(option);
+    });
+}
+
+    
+async function muatDaftarKategoriAdmin() {
+    const area = document.getElementById("daftar-kategori-admin");
+
+    if (!area) return;
+
+    area.textContent = "Memuat kategori...";
+
+    const { data, error } = await supabaseClient
+        .from("kategori_produk")
+        .select("id, nama_kategori, nilai_kategori")
+        .order("nama_kategori", { ascending: true });
+
+    if (error) {
+        console.error("Gagal memuat daftar kategori:", error);
+        area.textContent = "Gagal memuat kategori.";
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        area.textContent = "Belum ada kategori.";
+        return;
+    }
+
+    const daftar = document.createElement("div");
+
+    data.forEach(function(kategori) {
+        const baris = document.createElement("div");
+
+        baris.style.cssText =
+            "padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:8px;";
+
+        const nama = document.createElement("strong");
+        nama.textContent = kategori.nama_kategori;
+
+        const nilai = document.createElement("div");
+        nilai.textContent = "Nilai: " + kategori.nilai_kategori;
+        nilai.style.cssText =
+            "font-size:13px;color:#666;margin-top:4px;";
+
+        const tombolEdit = document.createElement("button");
+        tombolEdit.type = "button";
+        tombolEdit.textContent = "✏️ Edit";
+        tombolEdit.style.cssText =
+            "margin-top:8px;padding:6px 12px;cursor:pointer;";
+
+                const tombolHapus = document.createElement("button");
+        tombolHapus.type = "button";
+        tombolHapus.textContent = "🗑️ Hapus";
+        tombolHapus.style.cssText =
+            "margin-top:8px;margin-left:8px;padding:6px 12px;cursor:pointer;background:#dc2626;color:white;border:none;border-radius:4px;";
+
+        tombolHapus.addEventListener("click", async function() {
+            const konfirmasi = confirm(
+                "Apakah kamu yakin ingin menghapus kategori '" +
+                kategori.nama_kategori + "'?"
+            );
+
+            if (!konfirmasi) return;
+
+            // Periksa apakah kategori masih digunakan oleh produk.
+            const { data: produkTerkait, error: errorProduk } =
+                await supabaseClient
+                    .from("produk")
+                    .select("id")
+                    .eq("kategori", kategori.nilai_kategori)
+                    .limit(1);
+
+            if (errorProduk) {
+                console.error("Gagal memeriksa produk:", errorProduk);
+                alert("Tidak dapat memeriksa produk. Kategori tidak jadi dihapus.");
+                return;
+            }
+
+            if (produkTerkait && produkTerkait.length > 0) {
+                alert(
+                    "Kategori ini masih digunakan oleh produk. " +
+                    "Ubah kategori produk tersebut terlebih dahulu."
+                );
+                return;
+            }
+
+            const { error: errorHapus } = await supabaseClient
+                .from("kategori_produk")
+                .delete()
+                .eq("id", kategori.id);
+
+            if (errorHapus) {
+                console.error("Gagal menghapus kategori:", errorHapus);
+                alert("Gagal menghapus kategori. Periksa izin Supabase.");
+                return;
+            }
+
+            alert("Kategori berhasil dihapus!");
+
+            await muatDaftarKategoriAdmin();
+            await muatKategoriAdmin();
+        });
+
+        
+tombolEdit.addEventListener("click", async function() {
+    const namaBaru = prompt(
+        "Masukkan nama baru untuk kategori:",
+        kategori.nama_kategori
+    );
+
+    if (namaBaru === null) return;
+
+    const namaBersih = namaBaru.trim();
+
+    if (!namaBersih) {
+        alert("Nama kategori tidak boleh kosong.");
+        return;
+    }
+
+    if (namaBersih === kategori.nama_kategori) {
+        return;
+    }
+
+    const konfirmasi = confirm(
+        "Ubah nama kategori '" + kategori.nama_kategori +
+        "' menjadi '" + namaBersih + "'?"
+    );
+
+    if (!konfirmasi) return;
+
+    const { error } = await supabaseClient
+        .from("kategori_produk")
+        .update({ nama_kategori: namaBersih })
+        .eq("id", kategori.id);
+
+    if (error) {
+        console.error("Gagal mengubah kategori:", error);
+        alert("Gagal mengubah kategori. Periksa izin Supabase.");
+        return;
+    }
+
+    alert("Nama kategori berhasil diperbarui!");
+
+    await muatDaftarKategoriAdmin();
+    await muatKategoriAdmin();
+});
+
+
+        baris.appendChild(nama);
+        baris.appendChild(nilai);
+        baris.appendChild(tombolEdit);
+        baris.appendChild(tombolHapus);
+        daftar.appendChild(baris);
+    });
+
+    area.replaceChildren(daftar);
+}
+
+    async function simpanKategoriAdmin(event) {
+    event.preventDefault();
+
+    const namaInput = document.getElementById("nama-kategori-admin");
+    const nilaiInput = document.getElementById("nilai-kategori-admin");
+    const pesan = document.getElementById("pesan-kategori-admin");
+
+    const namaKategori = namaInput.value.trim();
+    const nilaiKategori = nilaiInput.value.trim().toLowerCase();
+
+    if (!namaKategori || !nilaiKategori) {
+        pesan.textContent = "Nama dan nilai kategori wajib diisi.";
+        return;
+    }
+
+    pesan.textContent = "Menyimpan kategori...";
+
+    const { error } = await supabaseClient
+        .from("kategori_produk")
+        .insert([{
+            nama_kategori: namaKategori,
+            nilai_kategori: nilaiKategori
+        }]);
+
+    if (error) {
+        console.error("Gagal menyimpan kategori:", error);
+
+        if (error.code === "23505") {
+            pesan.textContent = "Kategori tersebut sudah ada.";
+        } else {
+            pesan.textContent = "Gagal menyimpan kategori. Periksa izin Supabase.";
+        }
+
+        return;
+    }
+
+    pesan.textContent = "Kategori berhasil disimpan!";
+
+    document.getElementById("form-kategori-admin").reset();
+
+    await muatDaftarKategoriAdmin();
+}
+    
+let daftarProdukKasir = [];
+
+async function muatProdukKasirAdmin() {
+    const daftar = document.querySelector("#daftar-produk-kasir");
+
+    if (!daftar) return;
+
+    daftar.textContent = "Memuat produk...";
+
+    const { data, error } = await supabaseClient
+        .from("produk")
+        .select("id, nama_produk, kategori, harga, harga_promo, stok, aktif, gambar_url")
+        .eq("aktif", true)
+        .order("nama_produk", { ascending: true });
+
+    if (error) {
+        console.error("Gagal memuat produk kasir:", error);
+        daftar.textContent = "Gagal memuat produk: " + error.message;
+        return;
+    }
+
+    daftarProdukKasir = data || [];
+    tampilkanProdukKasir();
+}
+
+function tampilkanProdukKasir() {
+    const daftar = document.querySelector("#daftar-produk-kasir");
+    const pencarian = document.querySelector("#pencarian-produk-kasir");
+
+    if (!daftar || !pencarian) return;
+
+    const kataKunci = pencarian.value.toLowerCase().trim();
+
+    const hasil = daftarProdukKasir.filter(produk =>
+        produk.nama_produk.toLowerCase().includes(kataKunci)
+    );
+
+    if (hasil.length === 0) {
+        daftar.innerHTML = "<p>Produk tidak ditemukan.</p>";
+        return;
+    }
+
+    daftar.innerHTML = hasil.map(produk => {
+        const hargaPromo = Number(produk.harga_promo || 0);
+        const hargaNormal = Number(produk.harga || 0);
+
+        const harga =
+            hargaPromo > 0 && hargaPromo < hargaNormal
+                ? hargaPromo
+                : hargaNormal;
+
+        const stok = Number(produk.stok || 0);
+
+        return `
+            <div style="
+                display:flex;
+                align-items:center;
+                gap:12px;
+                padding:12px 0;
+                border-bottom:1px solid #ddd;
+            ">
+                ${
+                    produk.gambar_url
+                    ? `<img src="${produk.gambar_url}"
+                        alt="${produk.nama_produk}"
+                        style="width:60px;height:60px;object-fit:cover;border-radius:8px;">`
+                    : ""
+                }
+
+                <div style="flex:1;min-width:0;">
+                    <strong>${escapeHTML(produk.nama_produk)}</strong>
+
+                    <p style="margin:5px 0;font-weight:bold;">
+                        ¥${harga.toLocaleString("ja-JP")}
+                    </p>
+
+                    <small>Stok: ${stok}</small>
+                </div>
+
+                <button
+                    type="button"
+                    class="btn"
+                    onclick="tambahProdukKasir(${produk.id})"
+                    ${stok <= 0 ? "disabled" : ""}
+                >
+                    ${stok <= 0 ? "Habis" : "Tambah"}
+                </button>
+            </div>
+        `;
+    }).join("");
+}
+
+    let keranjangKasir = [];
+    let notaKasirTerakhir = null;
+
+function tambahProdukKasir(id) {
+    const produk = daftarProdukKasir.find(
+        item => String(item.id) === String(id)
+    );
+
+    if (!produk) return;
+
+    const stok = Number(produk.stok || 0);
+
+    if (stok <= 0) {
+        alert("Stok produk habis.");
+        return;
+    }
+
+    const itemAda = keranjangKasir.find(
+        item => String(item.id) === String(id)
+    );
+
+    if (itemAda) {
+        if (itemAda.jumlah >= stok) {
+            alert("Jumlah melebihi stok tersedia.");
+            return;
+        }
+
+        itemAda.jumlah++;
+    } else {
+        const harga = Number(
+            produk.harga_promo > 0
+                ? produk.harga_promo
+                : produk.harga
+        );
+
+        keranjangKasir.push({
+            id: produk.id,
+            nama_produk: produk.nama_produk,
+            harga: harga,
+            gambar_url: produk.gambar_url,
+            stok: stok,
+            jumlah: 1
+        });
+    }
+
+    tampilkanKeranjangKasir();
+}
+
+function tampilkanKeranjangKasir() {
+    const keranjang = document.querySelector("#keranjang-kasir");
+    const totalElement = document.querySelector("#total-kasir");
+
+    if (!keranjang || !totalElement) return;
+
+    if (keranjangKasir.length === 0) {
+        keranjang.textContent = "Belum ada produk dipilih.";
+        totalElement.textContent = "¥0";
+
+        hitungKembalianKasir();
+        perbaruiTombolSelesaikanKasir();
+        return;
+    }
+
+    let total = 0;
+
+    keranjang.innerHTML = keranjangKasir.map(item => {
+        const subtotal = item.harga * item.jumlah;
+        total += subtotal;
+
+        return `
+            <div style="
+                display:flex;
+                align-items:center;
+                gap:10px;
+                padding:12px 0;
+                border-bottom:1px solid #eee;
+            ">
+                <img src="${escapeHTML(item.gambar_url || "")}"
+                    alt=""
+                    style="
+                        width:55px;
+                        height:55px;
+                        object-fit:cover;
+                        border-radius:8px;
+                    "
+                    onerror="this.style.display='none'">
+
+                <div style="flex:1;min-width:0;">
+                    <strong>${escapeHTML(item.nama_produk)}</strong>
+                    <div>¥${item.harga.toLocaleString("ja-JP")}</div>
+                    <div>
+                        Subtotal: ¥${subtotal.toLocaleString("ja-JP")}
+                    </div>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:5px;">
+                    <button type="button"
+                        onclick="ubahJumlahKasir('${item.id}', -1)">−</button>
+
+                    <strong>${item.jumlah}</strong>
+
+                    <button type="button"
+                        onclick="ubahJumlahKasir('${item.id}', 1)">+</button>
+
+                    <button type="button"
+                        onclick="hapusProdukKasir('${item.id}')"
+                        style="color:red;">✕</button>
+                </div>
+            </div>
+        `;
+    }).join("");
+
+    totalElement.textContent =
+        "¥" + total.toLocaleString("ja-JP");
+
+    hitungKembalianKasir();
+    perbaruiTombolSelesaikanKasir();
+}
+
+function ubahJumlahKasir(id, perubahan) {
+    const item = keranjangKasir.find(
+        produk => String(produk.id) === String(id)
+    );
+
+    if (!item) return;
+
+    const jumlahBaru = item.jumlah + perubahan;
+
+    if (jumlahBaru <= 0) {
+        hapusProdukKasir(id);
+        return;
+    }
+
+    if (jumlahBaru > item.stok) {
+        alert("Jumlah melebihi stok tersedia.");
+        return;
+    }
+
+    item.jumlah = jumlahBaru;
+    tampilkanKeranjangKasir();
+}
+
+function hapusProdukKasir(id) {
+    keranjangKasir = keranjangKasir.filter(
+        item => String(item.id) !== String(id)
+    );
+
+    tampilkanKeranjangKasir();
+}
+
+function hitungKembalianKasir() {
+    const inputBayar = document.querySelector("#uang-bayar-kasir");
+    const hasilKembalian = document.querySelector("#kembalian-kasir");
+
+    if (!inputBayar || !hasilKembalian) return;
+
+    const total = keranjangKasir.reduce(
+        (jumlah, item) => jumlah + item.harga * item.jumlah,
+        0
+    );
+
+    const uangBayar = Number(inputBayar.value || 0);
+    const kembalian = Math.max(0, uangBayar - total);
+
+    hasilKembalian.textContent =
+        "¥" + kembalian.toLocaleString("ja-JP");
+}
+
+function perbaruiTombolSelesaikanKasir() {
+    const tombol = document.querySelector("#tombol-selesaikan-kasir");
+    const inputBayar = document.querySelector("#uang-bayar-kasir");
+
+    if (!tombol || !inputBayar) return;
+
+    const total = keranjangKasir.reduce(
+        (jumlah, item) => jumlah + item.harga * item.jumlah,
+        0
+    );
+
+    const uangBayar = Number(inputBayar.value || 0);
+
+    tombol.disabled =
+        keranjangKasir.length === 0 ||
+        uangBayar < total ||
+        total <= 0;
+}
+
+async function selesaikanTransaksiKasir() {
+    if (keranjangKasir.length === 0) {
+        alert("Keranjang masih kosong.");
+        return;
+    }
+
+    const total = keranjangKasir.reduce(
+        (jumlah, item) => jumlah + item.harga * item.jumlah,
+        0
+    );
+
+    const inputBayar = document.querySelector("#uang-bayar-kasir");
+    const tombol = document.querySelector("#tombol-selesaikan-kasir");
+    const pesan = document.querySelector("#pesan-kasir");
+
+    const uangBayar = Number(inputBayar.value || 0);
+
+    if (uangBayar < total) {
+        alert("Uang pembayaran masih kurang.");
+        return;
+    }
+
+    if (!confirm("Selesaikan transaksi ini?")) return;
+
+    tombol.disabled = true;
+    tombol.textContent = "Memproses...";
+
+    try {
+        const items = keranjangKasir.map(item => ({
+            produk_id: item.id,
+            jumlah: item.jumlah
+        }));
+
+        const { data, error } = await supabaseClient.rpc(
+            "buat_transaksi_kasir",
+            { p_items: items }
+        );
+
+        if (error) throw error;
+
+        const kembalian = uangBayar - total;
+         notaKasirTerakhir = {
+    nomor_pesanan: data,
+    tanggal: new Date(),
+    items: keranjangKasir.map(item => ({
+        nama_produk: item.nama_produk,
+        harga: item.harga,
+        jumlah: item.jumlah,
+        subtotal: item.harga * item.jumlah
+    })),
+    total: total,
+    uang_bayar: uangBayar,
+    kembalian: kembalian
+};
+
+        keranjangKasir = [];
+        inputBayar.value = "";
+
+        tampilkanKeranjangKasir();
+
+        pesan.style.color = "green";
+        pesan.textContent =
+            "Transaksi berhasil! Kembalian: ¥" +
+            kembalian.toLocaleString("ja-JP");
+        pesan.innerHTML += `
+    <br><br>
+    <button type="button"
+        class="btn"
+        onclick="cetakNotaKasir()">
+        🧾 Cetak Nota
+    </button>
+`;
+
+        await muatProdukKasirAdmin();
+
+    } catch (error) {
+        console.error("Gagal transaksi kasir:", error);
+
+        pesan.style.color = "red";
+        pesan.textContent =
+            "Transaksi gagal: " + error.message;
+
+    } finally {
+        tombol.textContent = "Selesaikan Transaksi";
+        perbaruiTombolSelesaikanKasir();
+    }
+}
+
+    function cetakNotaKasir() {
+    if (!notaKasirTerakhir) {
+        alert("Belum ada transaksi untuk dicetak.");
+        return;
+    }
+
+    const nota = notaKasirTerakhir;
+    const tanggal = new Date(nota.tanggal);
+
+    const formatYen = angka =>
+        "¥" + Number(angka).toLocaleString("ja-JP");
+
+    const isiProduk = nota.items.map(item => `
+        <tr>
+            <td>${escapeHTML(item.nama_produk)}</td>
+            <td class="angka">${item.jumlah}</td>
+            <td class="angka">${formatYen(item.harga)}</td>
+            <td class="angka">${formatYen(item.subtotal)}</td>
+        </tr>
+    `).join("");
+
+    const jendela = window.open("", "_blank", "width=400,height=650");
+
+    if (!jendela) {
+        alert("Izinkan pop-up browser untuk mencetak nota.");
+        return;
+    }
+
+    jendela.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Nota ${escapeHTML(nota.nomor_pesanan)}</title>
+            <style>
+                body {
+                    font-family: Arial, sans-serif;
+                    width: 300px;
+                    margin: 20px auto;
+                    color: #222;
+                    font-size: 12px;
+                }
+                h2, p {
+                    text-align: center;
+                    margin: 5px 0;
+                }
+                hr {
+                    border: none;
+                    border-top: 1px dashed #555;
+                    margin: 12px 0;
+                }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    font-size: 11px;
+                }
+                th, td {
+                    padding: 6px 2px;
+                    border-bottom: 1px dashed #ccc;
+                }
+                .angka {
+                    text-align: right;
+                    white-space: nowrap;
+                }
+                .ringkasan {
+                    display: flex;
+                    justify-content: space-between;
+                    margin: 7px 0;
+                }
+                .total {
+                    font-size: 16px;
+                    font-weight: bold;
+                }
+                @media print {
+                    body {
+                        margin: 0 auto;
+                        width: 100%;
+                    }
+                }
+            </style>
+        </head>
+        <body>
+            <h2>POPY ASIA STORE</h2>
+            <p>NOTA TRANSAKSI KASIR</p>
+            <hr>
+
+            <p style="text-align:left">
+                No: ${escapeHTML(nota.nomor_pesanan)}<br>
+                Tanggal: ${tanggal.toLocaleString("ja-JP")}
+            </p>
+
+            <hr>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>Produk</th>
+                        <th class="angka">Qty</th>
+                        <th class="angka">Harga</th>
+                        <th class="angka">Subtotal</th>
+                    </tr>
+                </thead>
+                <tbody>${isiProduk}</tbody>
+            </table>
+
+            <hr>
+
+            <div class="ringkasan total">
+                <span>Total</span>
+                <span>${formatYen(nota.total)}</span>
+            </div>
+
+            <div class="ringkasan">
+                <span>Uang Bayar</span>
+                <span>${formatYen(nota.uang_bayar)}</span>
+            </div>
+
+            <div class="ringkasan">
+                <span>Kembalian</span>
+                <span>${formatYen(nota.kembalian)}</span>
+            </div>
+
+            <hr>
+            <p>Terima kasih telah berbelanja!</p>
+
+            <script>
+                window.onload = function() {
+                    window.print();
+                };
+            <\/script>
+        </body>
+        </html>
+    `);
+
+    jendela.document.close();
+}
+</script>
+
+</body>
+</html>
