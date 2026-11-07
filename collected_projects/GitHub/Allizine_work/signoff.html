@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<!--
+  Copyright (c) 2026 Herorical. All rights reserved.
+  This source code is proprietary. Copying, modifying, or redistributing it
+  without prior written permission is prohibited. See LICENSE.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07080C">
+<title>Weekly Sign Off · Herorical</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :root {
+    --night: #07080C; --surface: #0F121B; --steel: #252A35; --fog: #A5ABBA; --white: #F8F8F6; --lime: #C8FD0E; --short: #FF6B6B;
+    --display: 'Syne', system-ui, sans-serif; --body: 'Manrope', system-ui, sans-serif; --mono: 'DM Mono', ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--night); color: var(--white); font: 400 16px/1.5 var(--body); padding-bottom: env(safe-area-inset-bottom); }
+  button, input, textarea { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px; }
+  .home { display: inline-block; margin: 22px 0 0; color: var(--fog); font: 500 13px var(--mono); text-decoration: none; }
+  .home:hover { color: var(--lime); }
+  h1 { margin: 10px 0 6px; font: 800 clamp(28px, 5vw, 40px)/1.1 var(--display); }
+  .sub { margin: 0 0 20px; color: var(--fog); }
+
+  .weeknav { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .weeknav .label { flex: 1; text-align: center; font: 800 18px var(--body); }
+  .weeknav .label small { display: block; font: 500 12px var(--mono); color: var(--fog); }
+  .nav { width: 46px; height: 46px; border: 1px solid var(--steel); border-radius: 8px; background: var(--surface); font-size: 20px; cursor: pointer; }
+  .nav:hover:not(:disabled) { border-color: var(--fog); }
+  .nav:disabled { opacity: .35; cursor: default; }
+
+  .status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--steel); border-radius: 12px; }
+  .status.signed { border-color: var(--lime); }
+  .status b { font: 800 22px var(--body); font-variant-numeric: tabular-nums; }
+  .status .msg { color: var(--fog); flex: 1; min-width: 160px; }
+  .bar { position: sticky; top: 0; z-index: 4; background: var(--night); padding: 10px 0; margin-top: 4px; }
+
+  .list { display: grid; gap: 8px; padding: 12px 0 18px; }
+  .item { display: grid; grid-template-columns: 46px 1fr; gap: 4px 12px; padding: 12px; background: var(--surface); border: 1px solid var(--steel); border-radius: 12px; }
+  .item.done { border-color: rgba(200,253,14,.45); }
+  .chk { grid-row: span 2; width: 46px; height: 46px; border: 2px solid var(--fog); border-radius: 10px; background: transparent; cursor: pointer; display: grid; place-items: center; }
+  .chk[aria-pressed=true] { background: var(--lime); border-color: var(--lime); }
+  .chk[aria-pressed=true]::after { content: ''; width: 18px; height: 10px; border: solid var(--night); border-width: 0 0 4px 4px; transform: rotate(-45deg) translate(2px, -2px); }
+  .name { align-self: center; font-weight: 700; overflow-wrap: anywhere; }
+  .code { display: block; font: 400 12px var(--mono); color: var(--fog); }
+  .note { grid-column: 2; width: 100%; height: 38px; padding: 0 10px; background: var(--night); border: 1px solid var(--steel); border-radius: 8px; }
+  .note:focus { border-color: var(--lime); outline: none; }
+  .rm { grid-column: 2; justify-self: start; display: none; }
+  .editing .rm { display: block; }
+  .editing .item { grid-template-columns: 1fr; }
+  .editing .chk, .editing .note { display: none; }
+  .editing .rm { grid-column: 1; justify-self: end; grid-row: 1; }
+  .rm { height: 34px; padding: 0 12px; background: transparent; border: 1px solid var(--steel); border-radius: 7px; color: var(--short); cursor: pointer; }
+
+  .btn { height: 46px; padding: 0 18px; border: 1px solid var(--steel); border-radius: 8px; background: var(--surface); font-weight: 700; cursor: pointer; }
+  .btn:hover { border-color: var(--fog); }
+  .btn.primary { background: var(--lime); border-color: var(--lime); color: var(--night); }
+  .btn.small { height: 38px; padding: 0 14px; font-size: 14px; }
+  input.t { height: 46px; padding: 0 12px; background: var(--surface); border: 1px solid var(--steel); border-radius: 8px; }
+  input.t:focus, textarea.t:focus { border-color: var(--lime); outline: none; }
+  textarea.t { width: 100%; height: 130px; padding: 12px; background: var(--surface); border: 1px solid var(--steel); border-radius: 8px; font: 400 14px/1.4 var(--mono); resize: vertical; }
+
+  .sign { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; padding: 16px; background: var(--surface); border: 1px solid var(--steel); border-radius: 12px; margin-bottom: 16px; }
+  .sign h2, .panel h2 { grid-column: 1 / -1; margin: 0; font: 800 16px var(--body); }
+  .sign .hint { grid-column: 1 / -1; margin: 0; font-size: 13px; color: var(--fog); }
+  .panel { margin: 0 0 16px; padding: 16px; background: var(--surface); border: 1px solid var(--steel); border-radius: 12px; display: grid; gap: 10px; }
+  .panel .hint { margin: 0; font-size: 13px; color: var(--fog); }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .hist { display: flex; flex-wrap: wrap; gap: 6px; }
+  .hist button { height: 34px; padding: 0 12px; border: 1px solid var(--steel); border-radius: 999px; background: transparent; font: 500 12px var(--mono); color: var(--fog); cursor: pointer; }
+  .hist button[aria-pressed=true] { background: var(--white); color: var(--night); border-color: var(--white); }
+  .hist button.ok { border-color: var(--lime); }
+  .foot { padding: 6px 0 36px; text-align: center; color: var(--fog); opacity: .6; font-size: 12px; }
+  .empty { padding: 28px 0; text-align: center; color: var(--fog); }
+
+  #toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: var(--white); color: var(--night); border-radius: 10px; font-weight: 600; max-width: calc(100vw - 32px); }
+  #toast[hidden] { display: none; }
+  #toast button { height: 34px; padding: 0 14px; background: var(--night); color: var(--white); border: 0; border-radius: 7px; font-weight: 700; cursor: pointer; }
+
+  @media (max-width: 560px) { .sign { grid-template-columns: 1fr; } }
+
+  #print { display: none; }
+  @media print {
+    html, body { background: #fff !important; }
+    body > *:not(#print) { display: none !important; }
+    #print { display: block; padding: 0 14mm; color: #0b0d12; font: 500 10pt/1.35 var(--body); }
+    #print .p-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 16pt; padding: 10mm 0 10pt; border-bottom: 2pt solid #07080C; }
+    #print h1 { margin: 0; font: 800 20pt/1.15 var(--display); letter-spacing: 0; }
+    #print .p-meta { margin: 3pt 0 0; color: #555; font-size: 9pt; }
+    #print .p-brand { font: 800 11pt/1 var(--display); text-align: right; white-space: nowrap; }
+    #print .p-brand span { display: block; margin-top: 4pt; font: 500 8pt var(--body); color: #777; }
+    #print .p-sum { display: flex; gap: 22pt; padding: 10pt 0 0; font-size: 9.5pt; color: #444; }
+    #print .p-sum b { margin-right: 4pt; font: 800 12pt var(--body); color: #07080C; }
+    #print table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    #print thead { display: table-header-group; }
+    #print tfoot { display: table-footer-group; }
+    #print .sp td { height: 9mm; padding: 0; border: 0; background: none !important; }
+    #print th { padding: 5pt 8pt; text-align: left; vertical-align: bottom; font: 700 8pt/1.2 var(--body); color: #333; border-bottom: 1.25pt solid #07080C; }
+    #print td { padding: 7pt 8pt; vertical-align: middle; font: 600 10.5pt/1.3 var(--body); border-bottom: 0.5pt solid #d4d4d0; overflow-wrap: anywhere; }
+    #print tbody tr:nth-child(even) td { background: #f5f5f2; }
+    #print th.box, #print td.box { width: 30pt; padding-right: 0; }
+    #print td.box i { display: block; width: 15pt; height: 15pt; border: 1.5pt solid #07080C; border-radius: 3pt; background: #fff; }
+    #print td.box i.on::after { content: ''; display: block; width: 7pt; height: 4pt; margin: 3pt 0 0 3pt; border: solid #07080C; border-width: 0 0 2pt 2pt; transform: rotate(-45deg); }
+    #print td.code { font: 500 9pt var(--mono); color: #555; }
+    #print td.nt { color: #555; font-weight: 500; font-size: 9.5pt; }
+    #print tr { break-inside: avoid; }
+    #print tr.sg td { padding: 0; border: 0; background: none !important; }
+    #print .signoff { margin-top: 18pt; display: flex; gap: 18pt; break-inside: avoid; }
+    #print .signoff div { flex: 1; padding-top: 22pt; border-bottom: 1pt solid #07080C; font: 700 8pt var(--body); color: #333; }
+    #print .signoff div span { display: block; margin-bottom: 2pt; font: 600 10.5pt var(--body); color: #0b0d12; min-height: 13pt; }
+    #print .signoff div i { font-style: normal; display: block; margin-top: 3pt; }
+    #print tr.ft td { height: 14mm; vertical-align: top; padding: 10pt 0 0; border: 0; background: none !important; font: 500 8pt var(--body); color: #777; text-align: center; }
+  }
+</style>
+<style id="page-style">@page { size: portrait; margin: 0; }</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="home" href="index.html">Herorical Counts</a>
+  <h1>Weekly Sign Off</h1>
+  <p class="sub">Single stock check, once a week. Tick each item, then sign off.</p>
+
+  <div class="weeknav">
+    <button class="nav" type="button" id="prev" aria-label="Previous week">&lsaquo;</button>
+    <div class="label" id="wlabel"></div>
+    <button class="nav" type="button" id="next" aria-label="Next week">&rsaquo;</button>
+  </div>
+
+  <div class="bar"><div class="status" id="status"></div></div>
+
+  <div class="list" id="list"></div>
+
+  <div class="sign" id="sign">
+    <h2>Sign off this week</h2>
+    <input class="t" id="s-name" maxlength="20" placeholder="Your name or initials" aria-label="Your name or initials" autocomplete="off">
+    <input class="t" id="s-mgr" maxlength="20" placeholder="Manager (optional)" aria-label="Manager" autocomplete="off">
+    <button class="btn primary" type="button" id="s-btn">Sign off</button>
+    <p class="hint" id="s-hint"></p>
+  </div>
+
+  <div class="panel">
+    <h2>Items</h2>
+    <p class="hint">Your single stock list. Add one per line, like <code>636760 Chicken thighs</code>. The list stays the same every week.</p>
+    <textarea class="t" id="bulk" placeholder="636760 Chicken thighs&#10;412893 Ground beef 80/20" aria-label="Items to add"></textarea>
+    <div class="row">
+      <button class="btn small primary" type="button" id="add">Add items</button>
+      <button class="btn small" type="button" id="edit">Edit list</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Past weeks</h2>
+    <div class="hist" id="hist"></div>
+    <div class="row">
+      <button class="btn small" type="button" id="print-btn">Print this week</button>
+      <button class="btn small" type="button" id="copy">Copy as text</button>
+    </div>
+  </div>
+
+  <div class="foot">&copy; 2026 Herorical. All rights reserved.</div>
+</div>
+
+<div id="print"></div>
+<div id="toast" role="status" hidden><span id="toast-msg"></span><button type="button" id="toast-undo">Undo</button></div>
+
+<script>
+  /* Copyright (c) 2026 Herorical. All rights reserved. See LICENSE. */
+  const KEY = 'so1_state';
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  let S = { items: [], weeks: {}, who: '', mgr: '' };
+  try { const v = JSON.parse(localStorage.getItem(KEY) || 'null'); if (v && Array.isArray(v.items)) S = Object.assign(S, v); } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+
+  /* weeks run Monday to Sunday and are keyed by their Monday (local date) */
+  const pad = n => String(n).padStart(2, '0');
+  const keyOf = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const parse = k => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); };
+  function mondayOf(d) { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+  const thisWeek = keyOf(mondayOf(new Date()));
+  let cur = thisWeek, editing = false;
+  const shift = (k, n) => { const d = parse(k); d.setDate(d.getDate() + n * 7); return keyOf(d); };
+  const fmt = d => d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  const range = k => { const a = parse(k), b = parse(k); b.setDate(b.getDate() + 6); return `${fmt(a)} to ${fmt(b)}`; };
+  const wk = k => S.weeks[k] || (S.weeks[k] = { checks: {}, signed: null });
+  const doneCount = k => S.items.filter(i => (wk(k).checks[i.id] || {}).done).length;
+
+  function render() {
+    const w = wk(cur), total = S.items.length, done = doneCount(cur);
+    $('#wlabel').innerHTML = `${range(cur)}<small>${cur === thisWeek ? 'This week' : cur > thisWeek ? 'Future week' : 'Past week'}</small>`;
+    $('#next').disabled = cur >= thisWeek;
+    const signed = !!w.signed;
+    $('#status').className = 'status' + (signed ? ' signed' : '');
+    $('#status').innerHTML = signed
+      ? `<b>Signed</b><span class="msg">${esc(w.signed.name)}${w.signed.mgr ? ' and ' + esc(w.signed.mgr) : ''}, ${new Date(w.signed.at).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span><button class="btn small" type="button" id="unsign">Reopen</button>`
+      : `<b>${done} of ${total}</b><span class="msg">${total ? (done === total ? 'All checked. Ready to sign off.' : `${total - done} left to check`) : 'Add your items below to start.'}</span>`;
+    $('#list').className = 'list' + (editing ? ' editing' : '');
+    $('#list').innerHTML = total ? S.items.map(i => {
+      const c = w.checks[i.id] || {};
+      return `<div class="item${c.done ? ' done' : ''}" data-id="${i.id}">
+        <button class="chk" type="button" aria-pressed="${!!c.done}" aria-label="Checked: ${esc(i.name)}"></button>
+        <div class="name">${esc(i.name)}${i.code ? `<span class="code">${esc(i.code)}</span>` : ''}</div>
+        <input class="note" placeholder="Note" value="${esc(c.note || '')}" maxlength="80" aria-label="Note for ${esc(i.name)}">
+        <button class="rm" type="button">Remove</button>
+      </div>`;
+    }).join('') : '<div class="empty">No items yet. Add them below.</div>';
+    $('#s-name').value = S.who || ''; $('#s-mgr').value = S.mgr || '';
+    $('#sign').style.display = signed ? 'none' : '';
+    $('#s-hint').textContent = total && done < total ? `${total - done} item${total - done === 1 ? ' is' : 's are'} not checked yet. You can still sign off.` : '';
+    $('#edit').textContent = editing ? 'Done editing' : 'Edit list';
+    const keys = Object.keys(S.weeks).concat(thisWeek).filter((k, i, a) => a.indexOf(k) === i && (k === thisWeek || S.weeks[k].signed || doneCount(k))).sort().reverse().slice(0, 12);
+    $('#hist').innerHTML = keys.map(k => `<button type="button" data-k="${k}" class="${(S.weeks[k] || {}).signed ? 'ok' : ''}" aria-pressed="${k === cur}">${fmt(parse(k))}${(S.weeks[k] || {}).signed ? ' ✓' : ''}</button>`).join('');
+  }
+
+  /* toast */
+  let tt, undo = null;
+  function toast(msg, fn) { $('#toast-msg').textContent = msg; undo = fn; $('#toast-undo').hidden = !fn; $('#toast').hidden = false; clearTimeout(tt); tt = setTimeout(() => { $('#toast').hidden = true; undo = null; }, 7000); }
+  $('#toast-undo').addEventListener('click', () => { if (undo) undo(); $('#toast').hidden = true; undo = null; });
+
+  $('#prev').addEventListener('click', () => { cur = shift(cur, -1); render(); });
+  $('#next').addEventListener('click', () => { if (cur < thisWeek) { cur = shift(cur, 1); render(); } });
+  $('#hist').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (b) { cur = b.dataset.k; render(); } });
+
+  $('#list').addEventListener('click', e => {
+    const row = e.target.closest('.item'); if (!row) return;
+    const id = row.dataset.id;
+    if (e.target.closest('.chk')) {
+      const c = wk(cur).checks[id] || (wk(cur).checks[id] = {});
+      c.done = !c.done; save(); render();
+    } else if (e.target.closest('.rm')) {
+      const idx = S.items.findIndex(i => String(i.id) === id), it = S.items[idx];
+      S.items.splice(idx, 1); save(); render();
+      toast(`Removed ${it.name}.`, () => { S.items.splice(Math.min(idx, S.items.length), 0, it); save(); render(); });
+    }
+  });
+  $('#list').addEventListener('input', e => {
+    if (!e.target.classList.contains('note')) return;
+    const id = e.target.closest('.item').dataset.id;
+    (wk(cur).checks[id] || (wk(cur).checks[id] = {})).note = e.target.value; save();
+  });
+
+  $('#add').addEventListener('click', () => {
+    const lines = $('#bulk').value.split('\n').map(l => l.trim()).filter(Boolean);
+    if (!lines.length) { $('#bulk').focus(); return; }
+    lines.forEach(l => {
+      const m = l.match(/^(\d[\d-]*)\s+(.+)$/);
+      S.items.push({ id: Date.now() + Math.random(), code: m ? m[1] : '', name: m ? m[2] : l });
+    });
+    $('#bulk').value = ''; save(); render(); toast(`Added ${lines.length} item${lines.length === 1 ? '' : 's'}.`);
+  });
+  $('#edit').addEventListener('click', () => { editing = !editing; render(); });
+
+  $('#s-btn').addEventListener('click', () => {
+    const name = $('#s-name').value.trim();
+    if (!name) { $('#s-name').focus(); return; }
+    S.who = name; S.mgr = $('#s-mgr').value.trim();
+    wk(cur).signed = { name, mgr: S.mgr, at: Date.now() }; save(); render();
+  });
+  $('#status').addEventListener('click', e => {
+    if (!e.target.closest('#unsign')) return;
+    const prev = wk(cur).signed; wk(cur).signed = null; save(); render();
+    toast('Week reopened.', () => { wk(cur).signed = prev; save(); render(); });
+  });
+
+  function textSheet() {
+    const w = wk(cur);
+    return `Weekly Sign Off, ${range(cur)}\n` + S.items.map(i => { const c = w.checks[i.id] || {}; return `[${c.done ? 'x' : ' '}] ${i.code ? i.code + ' ' : ''}${i.name}${c.note ? ' (' + c.note + ')' : ''}`; }).join('\n')
+      + (w.signed ? `\nSigned: ${w.signed.name}${w.signed.mgr ? ', manager ' + w.signed.mgr : ''}` : '\nNot signed');
+  }
+  $('#copy').addEventListener('click', async () => { try { await navigator.clipboard.writeText(textSheet()); toast('Copied.'); } catch (e) { toast('Copy is not allowed here.'); } });
+
+  function buildPrint() {
+    const w = wk(cur), total = S.items.length, done = doneCount(cur);
+    const rows = S.items.map(i => { const c = w.checks[i.id] || {}; return `<tr><td class="box"><i class="${c.done ? 'on' : ''}"></i></td><td class="code">${esc(i.code)}</td><td>${esc(i.name)}</td><td class="nt">${esc(c.note || '')}</td></tr>`; }).join('');
+    const sp = '<tr class="sp"><td colspan="4"></td></tr>';
+    const sg = w.signed;
+    const signBlock = `<div class="signoff"><div><span>${sg ? esc(sg.name) : ''}</span>Signed by</div><div><span>${sg ? esc(sg.mgr || '') : ''}</span>Manager</div><div><span>${sg ? new Date(sg.at).toLocaleDateString() : ''}</span>Date</div></div>`;
+    $('#print').innerHTML = `<div class="p-top"><div><h1>Weekly Sign Off</h1><p class="p-meta">Single stock &middot; ${esc(range(cur))}</p></div><div class="p-brand">Herorical<span>Sign off</span></div></div>
+      <div class="p-sum"><span><b>${total}</b>items</span><span><b>${done}</b>checked</span><span><b>${total - done}</b>left</span></div>`
+      + (total ? `<table><colgroup><col style="width:30pt"><col style="width:62pt"><col><col style="width:30%"></colgroup>
+        <thead>${sp}<tr><th class="box"></th><th>Code</th><th>Item</th><th>Note</th></tr></thead>
+        <tfoot><tr class="ft"><td colspan="4">&copy; 2026 Herorical. All rights reserved.</td></tr></tfoot><tbody>${rows}<tr class="sg"><td colspan="4">${signBlock}</td></tr></tbody></table>` : signBlock);
+  }
+  window.addEventListener('beforeprint', buildPrint);
+  $('#print-btn').addEventListener('click', () => window.print());
+
+  render();
+</script>
+</body>
+</html>

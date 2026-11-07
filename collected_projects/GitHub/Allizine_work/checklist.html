@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<!--
+  Copyright (c) 2026 Herorical. All rights reserved.
+  This source code is proprietary. Copying, modifying, or redistributing it
+  without prior written permission is prohibited. See LICENSE.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07080C">
+<title>Print Checklist · Herorical</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :root {
+    --night: #07080C; --surface: #0F121B; --steel: #252A35; --fog: #A5ABBA; --white: #F8F8F6; --lime: #C8FD0E;
+    --display: 'Syne', system-ui, sans-serif; --body: 'Manrope', system-ui, sans-serif; --mono: 'DM Mono', ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--night); color: var(--white); font: 400 16px/1.5 var(--body); padding-bottom: env(safe-area-inset-bottom); }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+  .home { display: inline-block; margin: 22px 0 0; color: var(--fog); font: 500 13px var(--mono); text-decoration: none; }
+  .home:hover { color: var(--lime); }
+  h1 { margin: 10px 0 6px; font: 800 clamp(28px, 5vw, 40px)/1.1 var(--display); }
+  .sub { margin: 0 0 24px; color: var(--fog); }
+
+  .layout { display: grid; grid-template-columns: 360px 1fr; gap: 28px; align-items: start; padding-bottom: 40px; }
+  .editor { display: grid; gap: 16px; }
+  .field span, .lab { display: block; margin-bottom: 6px; font-size: 13px; color: var(--fog); }
+  select, input[type=text], textarea { width: 100%; padding: 0 12px; background: var(--surface); border: 1px solid var(--steel); border-radius: 8px; height: 46px; }
+  textarea { height: 300px; padding: 12px; resize: vertical; line-height: 1.45; font-family: var(--mono); font-size: 14px; }
+  select:focus, input:focus, textarea:focus { border-color: var(--lime); outline: none; }
+  .hint { margin: 6px 0 0; font-size: 12.5px; color: var(--fog); }
+  .opts { display: grid; gap: 10px; }
+  .opts label { display: flex; align-items: center; gap: 10px; min-height: 32px; cursor: pointer; }
+  .opts input { width: 20px; height: 20px; accent-color: var(--lime); }
+  .btn { height: 48px; border: 1px solid var(--steel); border-radius: 8px; background: var(--surface); font-weight: 700; cursor: pointer; }
+  .btn:hover { border-color: var(--fog); }
+  .btn.primary { background: var(--lime); border-color: var(--lime); color: var(--night); }
+
+  /* the sheet: always a white page, styled like the count sheets */
+  .paper { background: #fff; color: #0b0d12; border-radius: 6px; padding: 10mm 12mm 8mm; min-height: 420px; font: 500 10pt/1.35 var(--body); }
+  .p-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 16pt; padding-bottom: 10pt; border-bottom: 2pt solid #07080C; }
+  .paper h2 { margin: 0; font: 800 20pt/1.15 var(--display); letter-spacing: 0; overflow-wrap: anywhere; }
+  .p-meta { margin: 3pt 0 0; color: #555; font-size: 9pt; }
+  .p-brand { font: 800 11pt/1 var(--display); text-align: right; white-space: nowrap; }
+  .p-brand span { display: block; margin-top: 4pt; font: 500 8pt var(--body); color: #777; }
+  .p-who { display: flex; flex-wrap: wrap; gap: 8pt 18pt; padding: 12pt 0 0; }
+  .p-who div { flex: 1 1 110px; display: flex; align-items: flex-end; gap: 6pt; font-size: 10pt; font-weight: 700; color: #333; }
+  .p-who i { flex: 1; height: 15pt; border-bottom: 1pt solid #07080C; }
+  .p-sum { display: flex; gap: 22pt; padding: 10pt 0 0; font-size: 9.5pt; color: #444; }
+  .p-sum b { margin-right: 4pt; font: 800 12pt var(--body); color: #07080C; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  tr.ft td { height: 0; padding: 10pt 0 0; border: 0 !important; background: none !important; font: 500 8pt var(--body); color: #777; text-align: center; }
+  .sp td { height: 0; padding: 0; border: 0 !important; background: none !important; }
+  th { padding: 5pt 8pt; text-align: left; vertical-align: bottom; font: 700 8pt/1.2 var(--body); color: #333; border-bottom: 1.25pt solid #07080C; }
+  td { padding: 7pt 8pt; vertical-align: middle; font: 600 10.5pt/1.3 var(--body); border-bottom: 0.5pt solid #d4d4d0; overflow-wrap: anywhere; }
+  tbody tr.t:nth-of-type(even) td { background: #f5f5f2; }
+  th.box, td.box { width: 30pt; padding-right: 0; }
+  td.box i { display: block; width: 15pt; height: 15pt; border: 1.5pt solid #07080C; border-radius: 3pt; background: #fff; }
+  th.ini, td.ini { width: 62pt; border-left: 0.5pt solid #d4d4d0; }
+  tr.sec td { padding: 14pt 8pt 5pt 0; border-bottom: 1.25pt solid #07080C; background: none !important; font: 800 9pt var(--body); text-transform: uppercase; letter-spacing: .08em; color: #07080C; }
+  tr { break-inside: avoid; }
+  tr.nt td { padding: 14pt 0 0; border: 0; background: none !important; font: 700 8pt var(--body); color: #333; }
+  .notes div { height: 22pt; border-bottom: 0.5pt solid #bbb; }
+  .empty { color: #666; padding: 30px 0; }
+  .p-foot { margin: 14pt 0 0; font-size: 8pt; color: #777; text-align: center; }
+
+  .foot { padding: 0 0 36px; text-align: center; color: var(--fog); opacity: .6; font-size: 12px; }
+
+  @media (max-width: 860px) { .layout { grid-template-columns: 1fr; } .paper { padding: 20px 16px; } textarea { height: 240px; } }
+
+  @media print {
+    html, body { background: #fff !important; }
+    body > .wrap > :not(.layout), .editor, .foot { display: none !important; }
+    .wrap { max-width: none; padding: 0; }
+    .layout { display: block; padding: 0; }
+    .paper { padding: 0 14mm; border-radius: 0; min-height: 0; }
+    .p-top { padding-top: 10mm; }
+    tr.ft td { height: 14mm; vertical-align: top; }
+    .sp td { height: 8mm; }
+  }
+</style>
+<style id="page-style">@page { size: portrait; margin: 0; }</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="home" href="index.html">Herorical Counts</a>
+  <h1>Print Checklist</h1>
+  <p class="sub">Pick a list, change it to fit your department, and print it.</p>
+
+  <div class="layout">
+    <div class="editor">
+      <label class="field"><span>Start from</span>
+        <select id="tpl"></select>
+      </label>
+      <label class="field"><span>Title</span>
+        <input id="title" type="text" maxlength="60">
+      </label>
+      <div>
+        <label class="lab" for="items">Items, one per line</label>
+        <textarea id="items" spellcheck="true"></textarea>
+        <p class="hint">Start a line with # to make a section heading.</p>
+      </div>
+      <div class="opts">
+        <label><input type="checkbox" id="o-head" checked> Date, name and shift lines</label>
+        <label><input type="checkbox" id="o-ini" checked> Initials column</label>
+        <label><input type="checkbox" id="o-notes" checked> Notes lines at the bottom</label>
+      </div>
+      <button class="btn primary" type="button" id="print">Print</button>
+    </div>
+
+    <div class="paper" id="paper" aria-label="Checklist preview"></div>
+  </div>
+
+  <div class="foot">&copy; 2026 Herorical. All rights reserved.</div>
+</div>
+
+<script>
+  /* Copyright (c) 2026 Herorical. All rights reserved. See LICENSE. */
+  const KEY = 'cl1_state';
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  const TEMPLATES = {
+    'Opening': { title: 'Opening Checklist', items: `# Before you start
+Wash hands, apron and gloves on
+Check cooler and freezer temperatures
+Check case temperatures
+# The case
+Pull anything past its date
+Rotate product, oldest to the front
+Fill gaps from backstock
+Check each price tag against its label
+Wipe down case glass and shelves
+# Prep area
+Sanitize cutting boards, knives and counters
+Check the scale reads zero
+Stock labels, paper and gloves
+Read the notes from the last shift` },
+    'Closing': { title: 'Closing Checklist', items: `# Case
+Pull anything expiring tonight and mark down
+Straighten and face the case
+Check case temperatures
+# Backroom
+Put away all product, nothing left out
+Check cooler and freezer temperatures
+Date and label anything opened
+# Clean up
+Wash, rinse and sanitize knives, boards and tables
+Clean slicer and grinder
+Empty trash and scrap bins
+Sweep and mop the floor
+# Last
+Write the notes for tomorrow
+Turn off equipment and lights` },
+    'Receiving': { title: 'Receiving Checklist', items: `# On arrival
+Check the truck and product temperature
+Match cases to the order
+Check date codes on every case
+# Inspect
+Look for damage, leaks and open cases
+Spot check a few case weights
+Note any shorts or damaged cases
+# Put away
+Move product to the cooler or freezer right away
+Rotate: new behind old
+Sign the paperwork and keep a copy` },
+    'Weekly deep clean': { title: 'Weekly Deep Clean', items: `# Equipment
+Break down and clean the grinder
+Break down and clean the slicer
+Clean and sharpen knives
+Clean the band saw
+# Cooler and freezer
+Wipe shelves and walls
+Check floor drains
+Clear out old product
+# Case and floor
+Deep clean the case, remove and wash pans
+Scrub floors and drains
+Wipe down walls, doors and handles` },
+    'Blank': { title: 'Checklist', items: '' }
+  };
+
+  $('#tpl').innerHTML = Object.keys(TEMPLATES).map(k => `<option>${k}</option>`).join('');
+
+  let state = { tpl: 'Opening', title: TEMPLATES['Opening'].title, items: TEMPLATES['Opening'].items, head: true, ini: true, notes: true };
+  try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && typeof s.items === 'string') state = Object.assign(state, s); } catch (e) {}
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} };
+
+  function syncInputs() {
+    $('#tpl').value = TEMPLATES[state.tpl] ? state.tpl : 'Blank';
+    $('#title').value = state.title; $('#items').value = state.items;
+    $('#o-head').checked = state.head; $('#o-ini').checked = state.ini; $('#o-notes').checked = state.notes;
+  }
+
+  function render() {
+    const lines = state.items.split('\n').map(l => l.trim()).filter(Boolean);
+    const cols = state.ini ? 3 : 2;
+    let rows = '', tasks = 0, secs = 0;
+    lines.forEach(l => {
+      if (l.startsWith('#')) { secs++; rows += `<tr class="sec"><td colspan="${cols}">${esc(l.replace(/^#+\s*/, ''))}</td></tr>`; }
+      else { tasks++; rows += `<tr class="t"><td class="box"><i></i></td><td>${esc(l)}</td>${state.ini ? '<td class="ini"></td>' : ''}</tr>`; }
+    });
+    const who = state.head ? '<div class="p-who"><div>Date <i></i></div><div>Name <i></i></div><div>Shift <i></i></div></div>' : '';
+    const sum = tasks ? `<div class="p-sum"><span><b>${tasks}</b>task${tasks === 1 ? '' : 's'}</span>${secs ? `<span><b>${secs}</b>section${secs === 1 ? '' : 's'}</span>` : ''}</div>` : '';
+    const notes = state.notes ? `<tr class="nt"><td colspan="${cols}"><div class="notes">Notes${'<div></div>'.repeat(3)}</div></td></tr>` : '';
+    const sp = `<tr class="sp"><td colspan="${cols}"></td></tr>`;
+    $('#paper').innerHTML = `<div class="p-top"><div><h2>${esc(state.title || 'Checklist')}</h2><p class="p-meta">Tick each task when it is done.</p></div><div class="p-brand">Herorical<span>Checklist</span></div></div>${who}${sum}`
+      + (rows ? `<table><colgroup><col style="width:30pt"><col>${state.ini ? '<col style="width:62pt">' : ''}</colgroup><thead>${sp}<tr><th class="box"></th><th>Task</th>${state.ini ? '<th class="ini">Initials</th>' : ''}</tr></thead><tfoot><tr class="ft"><td colspan="${cols}">&copy; 2026 Herorical. All rights reserved.</td></tr></tfoot><tbody>${rows}${notes}</tbody></table>` : '<p class="empty">Add items on the left.</p>');
+  }
+
+  $('#tpl').addEventListener('change', e => {
+    const t = TEMPLATES[e.target.value];
+    state.tpl = e.target.value; state.title = t.title; state.items = t.items;
+    syncInputs(); save(); render();
+  });
+  $('#title').addEventListener('input', e => { state.title = e.target.value; save(); render(); });
+  $('#items').addEventListener('input', e => { state.items = e.target.value; save(); render(); });
+  [['#o-head', 'head'], ['#o-ini', 'ini'], ['#o-notes', 'notes']].forEach(([s, k]) => $(s).addEventListener('change', e => { state[k] = e.target.checked; save(); render(); }));
+  $('#print').addEventListener('click', () => window.print());
+
+  syncInputs(); render();
+</script>
+</body>
+</html>

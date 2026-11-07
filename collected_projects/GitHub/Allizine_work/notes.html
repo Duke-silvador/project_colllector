@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<!--
+  Copyright (c) 2026 Herorical. All rights reserved.
+  This source code is proprietary. Copying, modifying, or redistributing it
+  without prior written permission is prohibited. See LICENSE.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07080C">
+<title>Notes Board · Herorical</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  :root {
+    --night: #07080C; --surface: #0F121B; --steel: #252A35; --fog: #A5ABBA; --white: #F8F8F6; --lime: #C8FD0E; --short: #FF6B6B;
+    --display: 'Syne', system-ui, sans-serif; --body: 'Manrope', system-ui, sans-serif; --mono: 'DM Mono', ui-monospace, monospace;
+    color-scheme: dark;
+  }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--night); color: var(--white); font: 400 16px/1.5 var(--body); padding-bottom: env(safe-area-inset-bottom); }
+  button, input, textarea, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+
+  .home { display: inline-block; margin: 22px 0 0; color: var(--fog); font: 500 13px var(--mono); text-decoration: none; }
+  .home:hover { color: var(--lime); }
+  h1 { margin: 10px 0 6px; font: 800 clamp(28px, 5vw, 40px)/1.1 var(--display); }
+  .sub { margin: 0 0 22px; color: var(--fog); }
+
+  /* composer */
+  .bar { position: sticky; top: 0; z-index: 5; background: var(--night); padding: 10px 0 12px; border-bottom: 1px solid var(--steel); }
+  .compose { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+  .compose textarea { grid-column: 1 / -1; width: 100%; min-height: 64px; padding: 12px; resize: vertical; background: var(--surface); border: 1px solid var(--steel); border-radius: 10px; }
+  .compose textarea:focus { border-color: var(--lime); outline: none; }
+  .opts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  select, .who { height: 42px; padding: 0 12px; background: var(--surface); border: 1px solid var(--steel); border-radius: 8px; }
+  .who { width: 92px; font-family: var(--mono); text-transform: uppercase; }
+  .btn { height: 42px; padding: 0 18px; border: 1px solid var(--steel); border-radius: 8px; background: var(--surface); font-weight: 700; cursor: pointer; }
+  .btn:hover { border-color: var(--fog); }
+  .btn.primary { background: var(--lime); border-color: var(--lime); color: var(--night); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 6px; align-items: center; }
+  .chip { height: 34px; padding: 0 14px; border: 1px solid var(--steel); border-radius: 999px; background: transparent; font: 500 13px var(--mono); color: var(--fog); cursor: pointer; }
+  .chip[aria-pressed=true] { background: var(--white); border-color: var(--white); color: var(--night); }
+  .search { flex: 1; min-width: 140px; max-width: 260px; height: 34px; margin-left: auto; padding: 0 12px; background: var(--surface); border: 1px solid var(--steel); border-radius: 999px; }
+  .search:focus { border-color: var(--lime); outline: none; }
+
+  /* board */
+  .board { columns: 3 260px; column-gap: 14px; padding: 14px 0 40px; }
+  .note { break-inside: avoid; margin: 0 0 14px; padding: 14px; background: var(--surface); border: 1px solid var(--steel); border-radius: 12px; }
+  .note.pinned { border-color: var(--lime); }
+  .note.done { opacity: .55; }
+  .note.done textarea { text-decoration: line-through; }
+  .note textarea { display: block; width: 100%; min-height: 54px; padding: 0; background: transparent; border: 0; resize: none; overflow: hidden; line-height: 1.5; }
+  .note textarea:focus { outline: none; }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: 10px; font: 400 12px var(--mono); color: var(--fog); }
+  .tag { padding: 1px 9px; border: 1px solid var(--steel); border-radius: 999px; color: var(--white); }
+  .acts { display: flex; gap: 6px; margin-top: 10px; }
+  .acts button { height: 34px; padding: 0 12px; background: transparent; border: 1px solid var(--steel); border-radius: 7px; font: 500 13px var(--body); color: var(--fog); cursor: pointer; }
+  .acts button:hover { color: var(--white); border-color: var(--fog); }
+  .acts .on { color: var(--night); background: var(--lime); border-color: var(--lime); }
+  .acts .del { margin-left: auto; }
+  .empty { padding: 48px 0; text-align: center; color: var(--fog); }
+
+  .foot { padding: 0 0 36px; text-align: center; color: var(--fog); opacity: .6; font-size: 12px; }
+  .small { color: var(--fog); font-size: 13px; margin: 0 0 14px; }
+
+  #toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 14px; padding: 12px 16px; background: var(--white); color: var(--night); border-radius: 10px; font-weight: 600; max-width: calc(100vw - 32px); }
+  #toast[hidden] { display: none; }
+  #toast button { height: 34px; padding: 0 14px; background: var(--night); color: var(--white); border: 0; border-radius: 7px; font-weight: 700; cursor: pointer; }
+
+  @media (max-width: 600px) { .compose { grid-template-columns: 1fr; } .compose .btn.primary { width: 100%; } }
+
+  #print { display: none; }
+  @media print {
+    html, body { background: #fff !important; }
+    body > *:not(#print) { display: none !important; }
+    #print { display: block; padding: 0 14mm; color: #0b0d12; font: 500 10pt/1.35 var(--body); }
+    #print .p-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 16pt; padding: 10mm 0 10pt; border-bottom: 2pt solid #07080C; }
+    #print h1 { margin: 0; font: 800 20pt/1.15 var(--display); letter-spacing: 0; }
+    #print .p-meta { margin: 3pt 0 0; color: #555; font-size: 9pt; }
+    #print .p-brand { font: 800 11pt/1 var(--display); text-align: right; white-space: nowrap; }
+    #print .p-brand span { display: block; margin-top: 4pt; font: 500 8pt var(--body); color: #777; }
+    #print .p-sum { display: flex; gap: 22pt; padding: 10pt 0 0; font-size: 9.5pt; color: #444; }
+    #print .p-sum b { margin-right: 4pt; font: 800 12pt var(--body); color: #07080C; }
+    #print table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    #print thead { display: table-header-group; }
+    #print tfoot { display: table-footer-group; }
+    #print .sp td { height: 9mm; padding: 0; border: 0; background: none !important; }
+    #print th { padding: 5pt 8pt; text-align: left; vertical-align: bottom; font: 700 8pt/1.2 var(--body); color: #333; border-bottom: 1.25pt solid #07080C; }
+    #print td { padding: 8pt 8pt; vertical-align: top; font: 600 10.5pt/1.35 var(--body); border-bottom: 0.5pt solid #d4d4d0; overflow-wrap: anywhere; white-space: pre-wrap; }
+    #print tbody tr:nth-child(even) td { background: #f5f5f2; }
+    #print th.box, #print td.box { width: 30pt; padding-right: 0; }
+    #print td.box i { display: block; width: 15pt; height: 15pt; border: 1.5pt solid #07080C; border-radius: 3pt; background: #fff; }
+    #print td.box i.on::after { content: ''; display: block; width: 7pt; height: 4pt; margin: 3pt 0 0 3pt; border: solid #07080C; border-width: 0 0 2pt 2pt; transform: rotate(-45deg); }
+    #print td.mute, #print td.by, #print td.when { font: 500 9pt/1.35 var(--body); color: #555; white-space: normal; }
+    #print td.done { color: #777; text-decoration: line-through; }
+    #print .res { display: inline-block; padding: 1pt 8pt; border: 0.75pt solid currentColor; border-radius: 999px; font: 700 8.5pt var(--body); white-space: nowrap; }
+    #print .pin { display: inline-block; margin-bottom: 3pt; padding: 1pt 7pt; border: 0.75pt solid #07080C; border-radius: 999px; background: #eaf9b8; font: 800 7.5pt var(--body); letter-spacing: .06em; white-space: nowrap; }
+    #print tr { break-inside: avoid; }
+    #print .p-foot { margin: 0; padding: 8pt 0 12mm; font-size: 8pt; color: #777; text-align: center; }
+  }
+</style>
+<style id="page-style">@page { size: portrait; margin: 0; }</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="home" href="index.html">Herorical Counts</a>
+  <h1>Notes Board</h1>
+  <p class="sub">Leave notes for the store: what needs doing, what to watch, what to tell the next shift.</p>
+
+  <div class="bar">
+    <form class="compose" id="form" autocomplete="off">
+      <textarea id="text" placeholder="Write a note" maxlength="600" aria-label="Note text"></textarea>
+      <div class="opts">
+        <select id="tag" aria-label="Area"></select>
+        <input class="who" id="who" maxlength="4" placeholder="Init." aria-label="Your initials">
+      </div>
+      <button class="btn primary" type="submit">Post note</button>
+    </form>
+  </div>
+
+  <div class="chips" id="chips"></div>
+  <p class="small">Notes are saved on this device only, so they will not show up on other phones or computers.</p>
+  <div class="board" id="board"></div>
+
+  <div class="chips" style="margin:0 0 24px">
+    <button class="chip" type="button" id="clear-done">Clear done notes</button>
+    <button class="chip" type="button" id="copy">Copy as text</button>
+    <button class="chip" type="button" id="print-btn">Print</button>
+  </div>
+
+  <div class="foot">&copy; 2026 Herorical. All rights reserved.</div>
+</div>
+
+<div id="print"></div>
+
+<div id="toast" role="status" hidden><span id="toast-msg"></span><button type="button" id="toast-undo">Undo</button></div>
+
+<script>
+  /* Copyright (c) 2026 Herorical. All rights reserved. See LICENSE. */
+  const KEY = 'nb1_notes', WHO = 'nb1_who';
+  const TAGS = ['Store', 'Meat', 'Receiving', 'Front end', 'Other'];
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+  let notes = [];
+  try { const v = JSON.parse(localStorage.getItem(KEY) || '[]'); if (Array.isArray(v)) notes = v; } catch (e) {}
+  let filter = 'All', query = '';
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(notes)); } catch (e) {} };
+
+  $('#tag').innerHTML = TAGS.map(t => `<option>${t}</option>`).join('');
+  try { $('#who').value = localStorage.getItem(WHO) || ''; } catch (e) {}
+
+  function when(ts) {
+    const d = new Date(ts), today = new Date();
+    const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    if (d.toDateString() === today.toDateString()) return 'Today ' + time;
+    const y = new Date(today); y.setDate(y.getDate() - 1);
+    if (d.toDateString() === y.toDateString()) return 'Yesterday ' + time;
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + time;
+  }
+
+  function renderChips() {
+    const count = t => notes.filter(n => t === 'All' || n.tag === t).length;
+    $('#chips').innerHTML = ['All', ...TAGS].map(t => `<button class="chip" type="button" data-f="${t}" aria-pressed="${t === filter}">${t} ${count(t)}</button>`).join('')
+      + '<input class="search" id="q" type="search" placeholder="Search notes" aria-label="Search notes">';
+    $('#q').value = query;
+    $('#q').addEventListener('input', e => { query = e.target.value; renderBoard(); });
+  }
+
+  function visible() {
+    const q = query.trim().toLowerCase();
+    return notes
+      .filter(n => (filter === 'All' || n.tag === filter) && (!q || (n.text + ' ' + n.who + ' ' + n.tag).toLowerCase().includes(q)))
+      .sort((a, b) => (b.pinned - a.pinned) || (a.done - b.done) || (b.ts - a.ts));
+  }
+
+  function grow(t) { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }
+
+  function renderBoard() {
+    const list = visible();
+    $('#board').innerHTML = list.length ? list.map(n => `
+      <article class="note${n.pinned ? ' pinned' : ''}${n.done ? ' done' : ''}" data-id="${n.id}">
+        <textarea aria-label="Note" maxlength="600">${esc(n.text)}</textarea>
+        <div class="meta"><span class="tag">${esc(n.tag)}</span>${n.who ? `<span>${esc(n.who)}</span>` : ''}<span>${when(n.ts)}</span></div>
+        <div class="acts">
+          <button type="button" data-a="pin" class="${n.pinned ? 'on' : ''}" aria-pressed="${!!n.pinned}">${n.pinned ? 'Pinned' : 'Pin'}</button>
+          <button type="button" data-a="done" class="${n.done ? 'on' : ''}" aria-pressed="${!!n.done}">${n.done ? 'Done' : 'Mark done'}</button>
+          <button type="button" data-a="del" class="del" aria-label="Delete note">Delete</button>
+        </div>
+      </article>`).join('') : `<div class="empty">${notes.length ? 'No notes match.' : 'No notes yet. Post the first one above.'}</div>`;
+    document.querySelectorAll('.note textarea').forEach(grow);
+  }
+
+  function render() { renderChips(); renderBoard(); }
+
+  /* toast */
+  let tt, undo = null;
+  function toast(msg, fn) { $('#toast-msg').textContent = msg; undo = fn; $('#toast-undo').hidden = !fn; $('#toast').hidden = false; clearTimeout(tt); tt = setTimeout(() => { $('#toast').hidden = true; undo = null; }, 8000); }
+  $('#toast-undo').addEventListener('click', () => { if (undo) undo(); $('#toast').hidden = true; undo = null; });
+
+  /* post */
+  $('#form').addEventListener('submit', e => {
+    e.preventDefault();
+    const text = $('#text').value.trim();
+    if (!text) { $('#text').focus(); return; }
+    const who = $('#who').value.trim().toUpperCase();
+    try { localStorage.setItem(WHO, who); } catch (e2) {}
+    notes.push({ id: Date.now() + Math.random(), text, tag: $('#tag').value, who, ts: Date.now(), pinned: false, done: false });
+    save(); $('#text').value = ''; filter = 'All'; query = ''; render();
+  });
+  $('#text').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) $('#form').requestSubmit(); });
+
+  /* edit in place */
+  $('#board').addEventListener('input', e => {
+    const ta = e.target.closest('textarea'); if (!ta) return;
+    const n = notes.find(x => String(x.id) === ta.closest('.note').dataset.id);
+    if (n) { n.text = ta.value; save(); grow(ta); }
+  });
+
+  /* actions */
+  $('#board').addEventListener('click', e => {
+    const b = e.target.closest('[data-a]'); if (!b) return;
+    const idx = notes.findIndex(x => String(x.id) === b.closest('.note').dataset.id);
+    if (idx < 0) return;
+    const n = notes[idx], a = b.dataset.a;
+    if (a === 'pin') n.pinned = !n.pinned;
+    else if (a === 'done') n.done = !n.done;
+    else if (a === 'del') {
+      notes.splice(idx, 1); save(); render();
+      toast('Note deleted.', () => { notes.splice(Math.min(idx, notes.length), 0, n); save(); render(); });
+      return;
+    }
+    save(); render();
+  });
+
+  $('#chips').addEventListener('click', e => {
+    const c = e.target.closest('[data-f]'); if (!c) return;
+    filter = c.dataset.f; render();
+  });
+
+  $('#clear-done').addEventListener('click', () => {
+    const gone = notes.filter(n => n.done);
+    if (!gone.length) { toast('No done notes to clear.'); return; }
+    notes = notes.filter(n => !n.done); save(); render();
+    toast(`Cleared ${gone.length} done note${gone.length > 1 ? 's' : ''}.`, () => { notes = notes.concat(gone); save(); render(); });
+  });
+
+  $('#copy').addEventListener('click', async () => {
+    const text = visible().map(n => `${n.pinned ? '[PINNED] ' : ''}${n.done ? '[DONE] ' : ''}${n.tag}${n.who ? ' (' + n.who + ')' : ''}, ${when(n.ts)}\n${n.text}`).join('\n\n');
+    try { await navigator.clipboard.writeText(text || 'No notes.'); toast('Copied.'); } catch (err) { toast('Copy is not allowed here.'); }
+  });
+  function buildPrint() {
+    const list = visible();
+    const open = list.filter(n => !n.done).length, pins = list.filter(n => n.pinned).length;
+    const rows = list.map(n => `<tr>
+      <td class="box"><i class="${n.done ? 'on' : ''}"></i></td>
+      <td class="${n.done ? 'done' : ''}">${n.pinned ? '<span class="pin">PINNED</span><br>' : ''}${esc(n.text)}</td>
+      <td class="mute">${esc(n.tag)}</td><td class="by">${esc(n.who)}</td><td class="when">${esc(when(n.ts))}</td></tr>`).join('');
+    const sp = '<tr class="sp"><td colspan="5"></td></tr>';
+    const today = new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+    $('#print').innerHTML = `<div class="p-top"><div><h1>Notes Board</h1><p class="p-meta">${esc(today)}${filter !== 'All' ? ' &middot; ' + esc(filter) : ''}</p></div><div class="p-brand">Herorical<span>Notes</span></div></div>
+      <div class="p-sum"><span><b>${open}</b>open</span><span><b>${list.length - open}</b>done</span><span><b>${pins}</b>pinned</span></div>`
+      + (list.length ? `<table><colgroup><col style="width:30pt"><col><col style="width:62pt"><col style="width:34pt"><col style="width:92pt"></colgroup>
+        <thead>${sp}<tr><th class="box"></th><th>Note</th><th>Area</th><th>By</th><th>When</th></tr></thead><tfoot>${sp}</tfoot><tbody>${rows}</tbody></table>` : '<p class="p-meta" style="padding:14pt 0">No notes.</p>')
+      + '<p class="p-foot">&copy; 2026 Herorical. All rights reserved.</p>';
+  }
+  window.addEventListener('beforeprint', buildPrint);
+  $('#print-btn').addEventListener('click', () => window.print());
+
+  render();
+</script>
+</body>
+</html>

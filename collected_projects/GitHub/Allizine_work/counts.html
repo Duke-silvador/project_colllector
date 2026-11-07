@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<!--
+  Copyright (c) 2026 Herorical. All rights reserved.
+  This source code is proprietary. Copying, modifying, or redistributing it
+  without prior written permission is prohibited. See LICENSE.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#07080C">
+<title>Herorical Counts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style id="page-style"></style>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+
+  :root {
+    --night:   #07080C;
+    --surface: #0F121B;
+    --steel:   #252A35;
+    --fog:     #A5ABBA;
+    --white:   #F8F8F6;
+    --lime:    #C8FD0E;
+    --cyan:    #66E6FF;
+    --short:   #FF6B6B;
+    --display: 'Syne', system-ui, sans-serif;
+    --body:    'Manrope', system-ui, sans-serif;
+    --mono:    'DM Mono', ui-monospace, monospace;
+    color-scheme: dark;
+  }
+
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--night);
+    color: var(--white);
+    font: 400 15px/1.5 var(--body);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  button, input { font: inherit; color: inherit; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  :focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+
+  /* ── Header + tabs ─────────────────────────── */
+  .top { display: flex; align-items: center; justify-content: space-between; padding: 18px 0 14px; gap: 12px; }
+  .brand { font: 800 20px/1 var(--display); letter-spacing: -0.02em; }
+  .top-actions { display: flex; gap: 8px; }
+
+  .tabs-bar { position: sticky; top: 0; z-index: 5; background: rgba(7,8,12,0.92); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--steel); }
+  .tabs { display: flex; gap: 28px; }
+  .tab { background: none; border: 0; padding: 14px 0 12px; font: 700 16px/1 var(--body); color: var(--fog); cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px; }
+  .tab[aria-selected="true"] { color: var(--white); border-bottom-color: var(--lime); }
+  .tab:hover { color: var(--white); }
+
+
+  /* ── Controls ──────────────────────────────── */
+  .bar { display: flex; gap: 10px; }
+  #q { flex: 1; min-width: 0; height: 46px; padding: 0 14px; background: var(--surface); border: 1px solid var(--steel); border-radius: 8px; font-size: 16px; }
+  #q::placeholder { color: var(--fog); opacity: 0.7; }
+  #q:focus { border-color: var(--lime); outline: none; }
+
+  .btn { min-height: 44px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--steel); background: transparent; font-weight: 600; font-size: 14px; cursor: pointer; white-space: nowrap; transition: border-color .15s, color .15s, background .15s; }
+  .btn:hover { border-color: var(--fog); }
+  .btn.primary { background: var(--lime); border-color: var(--lime); color: var(--night); font-weight: 700; }
+  .btn.primary:hover { background: #d6ff3f; border-color: #d6ff3f; }
+  .btn.small { min-height: 38px; padding: 0 12px; font-size: 13px; }
+  .btn.quiet { color: var(--fog); }
+  .btn.danger:hover { color: var(--short); border-color: var(--short); }
+
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 14px 0 6px; }
+  .chip { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--steel); background: transparent; color: var(--fog); font-size: 13px; font-weight: 600; cursor: pointer; }
+  .chip:hover { color: var(--white); border-color: var(--fog); }
+  .chip[aria-pressed="true"] { background: var(--white); border-color: var(--white); color: var(--night); }
+  .chip b { font: 500 12px var(--mono); margin-left: 4px; opacity: .75; }
+
+  /* ── Rows ──────────────────────────────────── */
+  .cols { display: none; }
+  .list { list-style: none; margin: 0; padding: 0; }
+
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 10px;
+    padding: 18px 12px 18px 14px;
+    border-top: 1px solid var(--steel);
+    position: relative;
+  }
+  .row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: transparent; }
+  .row.short { background: rgba(255,107,107,0.06); }
+  .row.short::before { background: var(--short); }
+  .row.over  { background: rgba(200,253,14,0.05); }
+  .row.over::before  { background: var(--lime); }
+
+  .r-name { grid-column: 1 / -1; display: flex; gap: 6px; align-items: center; }
+  .name { flex: 1; min-width: 0; height: 44px; background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 0 8px; margin-left: -8px; font: 600 17px var(--body); }
+  .name:hover { border-color: var(--steel); }
+  .name:focus { border-color: var(--lime); outline: none; background: var(--surface); }
+  .del { flex: none; width: 44px; height: 44px; border: 0; background: transparent; border-radius: 8px; color: var(--fog); font-size: 22px; line-height: 1; cursor: pointer; }
+  .del:hover { color: var(--short); background: rgba(255,107,107,0.1); }
+
+  .f { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+  .f span { font-size: 12.5px; color: var(--fog); }
+  .f input { width: 100%; height: 46px; padding: 0 12px; background: var(--surface); border: 1px solid var(--steel); border-radius: 8px; font: 500 16px var(--mono); -moz-appearance: textfield; }
+  .f input::-webkit-outer-spin-button, .f input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .f input::placeholder { color: var(--steel); }
+  .f input:focus { border-color: var(--lime); outline: none; }
+  .f.mine input { border-color: rgba(200,253,14,0.38); background: rgba(200,253,14,0.045); }
+  .f.mine input:focus { border-color: var(--lime); }
+  .f.mine { position: relative; }
+  .f.mine input { padding-right: 46px; }
+  .plus { position: absolute; right: 5px; bottom: 5px; width: 36px; height: 36px; display: grid; place-items: center; padding: 0; border: 1px solid rgba(200,253,14,0.38); border-radius: 7px; background: var(--night); color: var(--lime); font: 700 22px/1 var(--body); cursor: pointer; }
+  .plus:hover, .plus:focus-visible { background: var(--lime); color: var(--night); }
+
+  .r-out { grid-column: 1 / -1; padding-top: 4px; }
+  .diff { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; }
+  .diff strong { font: 800 34px/1 var(--body); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .diff span { font-size: 14px; font-weight: 600; color: var(--fog); }
+  .row.short .diff strong { color: var(--short); }
+  .row.over  .diff strong { color: var(--lime); }
+  .row.none  .diff strong { color: var(--steel); }
+  .detail { margin: 6px 0 0; font: 400 12.5px/1.5 var(--mono); color: var(--fog); }
+
+  @media (min-width: 860px) {
+    .cols, .row { display: grid; align-items: center; gap: 12px; }
+    .cols { padding: 10px 12px 10px 14px; color: var(--fog); font-size: 13px; border-bottom: 0; }
+    .cols.cases, .list.cases .row { grid-template-columns: minmax(200px, 1.6fr) 96px 112px 112px 112px minmax(220px, 1.4fr); }
+    .cols.weight, .list.weight .row { grid-template-columns: minmax(220px, 1.6fr) 140px 140px minmax(220px, 1.4fr); }
+    .row { padding-top: 14px; padding-bottom: 14px; }
+    .r-name, .r-out { grid-column: auto; }
+    .r-out { padding-top: 0; }
+    .f span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .diff strong { font-size: 30px; }
+  }
+
+  .empty { padding: 44px 0; color: var(--fog); max-width: 46ch; }
+  .empty strong { display: block; color: var(--white); font: 700 20px/1.2 var(--display); margin-bottom: 8px; }
+
+  .reset { display: flex; gap: 8px; flex-wrap: wrap; padding: 28px 0 8px; border-top: 1px solid var(--steel); }
+
+  footer { padding: 28px 0 40px; color: var(--fog); opacity: .6; font-size: 12px; text-align: center; }
+
+  /* ── Toast ─────────────────────────────────── */
+  #toast { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); display: flex; align-items: center; gap: 14px; background: var(--white); color: var(--night); padding: 8px 8px 8px 16px; border-radius: 10px; font-weight: 600; font-size: 14px; box-shadow: 0 10px 40px rgba(0,0,0,.6); z-index: 20; max-width: calc(100vw - 32px); }
+  #toast button { background: var(--night); color: var(--white); border: 0; border-radius: 7px; min-height: 36px; padding: 0 14px; font-weight: 700; cursor: pointer; }
+
+  /* ── Dialog ────────────────────────────────── */
+  dialog { width: min(380px, calc(100vw - 32px)); padding: 24px; background: var(--surface); color: var(--white); border: 1px solid var(--steel); border-radius: 14px; }
+  dialog::backdrop { background: rgba(0,0,0,.72); }
+  dialog h2 { margin: 0 0 18px; font: 800 22px/1.1 var(--display); letter-spacing: -0.02em; }
+  .field { display: block; margin-bottom: 16px; }
+  .field span { display: block; font-size: 13px; color: var(--fog); margin-bottom: 6px; }
+  .field input { width: 100%; height: 46px; padding: 0 12px; background: var(--night); border: 1px solid var(--steel); border-radius: 8px; font-size: 16px; }
+  .field input:focus { border-color: var(--lime); outline: none; }
+  .dlg-actions { display: flex; gap: 10px; margin-top: 22px; }
+  .dlg-actions .btn { flex: 1; }
+
+
+  /* ── Stockcount look: headline, stat cards, pills ── */
+  .top { align-items: flex-end; padding-top: 22px; }
+  .home { display: inline-block; margin-bottom: 12px; color: var(--fog); font: 600 13px var(--body); text-decoration: none; }
+  .home:hover { color: var(--white); }
+  .title { margin: 0 0 8px; font: 800 clamp(28px, 6.5vw, 44px)/1.05 var(--display); letter-spacing: -0.02em; }
+  .title span { color: var(--lime); }
+  .subtitle { margin: 0; color: var(--fog); font-size: 13.5px; max-width: 46ch; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr) 1.7fr; gap: 12px; padding: 26px 0 24px; }
+  .stat { background: var(--surface); border: 1px solid var(--steel); border-radius: 10px; padding: 14px 18px; min-width: 0; }
+  .stat-label { font: 400 12px var(--mono); color: var(--fog); margin-bottom: 4px; }
+  .stat-value { font: 700 24px/1.1 var(--mono); }
+  .stat-value.over { color: var(--lime); }
+  .stat-value.short { color: var(--short); }
+  .stat-value.none { color: var(--steel); }
+  .stat.net { border-color: #3a4150; }
+  .stat.net .stat-value { font: 800 40px/1 var(--body); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  @media (max-width: 760px) {
+    .stats { grid-template-columns: 1fr 1fr; }
+    .stat.net { order: -1; grid-column: 1 / -1; }
+    .stat.net .stat-value { font-size: 54px; }
+  }
+  .diff .unit { font: 500 13px var(--mono); color: var(--fog); }
+  .diff .alt { font: 700 18px/1 var(--body); color: var(--fog); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .row.short .diff .alt { color: var(--short); }
+  .row.over  .diff .alt { color: var(--lime); }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font: 500 11px/1.6 var(--mono); border: 1px solid; }
+  .pill.short { color: var(--short); background: rgba(255,107,107,0.10); border-color: rgba(255,107,107,0.3); }
+  .pill.over  { color: var(--lime);  background: rgba(200,253,14,0.10);  border-color: rgba(200,253,14,0.3); }
+  .pill.even  { color: #ffc84a;      background: rgba(255,200,74,0.12);  border-color: rgba(255,200,74,0.3); }
+
+  @media (max-width: 560px) { .top { flex-wrap: wrap; } .top-actions { width: 100%; } .top-actions .btn { flex: 1; } }
+
+  /* Search + add stay pinned under the tabs while scrolling */
+  .bar { position: sticky; top: var(--tabs-h, 50px); z-index: 4; padding: 10px 0; background: rgba(7,8,12,0.96); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }
+
+  /* ── Print ─────────────────────────────────── */
+  #print { display: none; }
+  @media print {
+    :root { color-scheme: light; }
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    html, body { background: #fff !important; margin: 0 !important; padding: 0 !important; }
+    body > *:not(#print) { display: none !important; }
+    #print { display: block; padding: 0 14mm; color: #0b0d12; font: 500 10pt/1.35 var(--body); }
+
+    #print .p-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 16pt; padding: 12mm 0 10pt; border-bottom: 2pt solid #07080C; }
+    #print h1 { margin: 0; font: 800 20pt/1.15 var(--display); letter-spacing: 0; }
+    #print .p-meta { margin: 3pt 0 0; color: #555; font-size: 9pt; }
+    #print .p-aisle { flex: 1; max-width: 80mm; display: flex; align-items: flex-end; gap: 6pt; padding-bottom: 2pt; font-size: 10pt; font-weight: 700; color: #333; }
+    #print .p-aisle i { flex: 1; height: 15pt; border-bottom: 1pt solid #07080C; }
+    #print .p-net { text-align: right; }
+    #print .p-net span { display: block; font-size: 8.5pt; color: #555; }
+    #print .p-net strong { font: 800 24pt/1.1 var(--body); font-variant-numeric: tabular-nums; }
+    #print .short { color: #B3261E; }
+    #print .over  { color: #1E7A34; }
+    #print .even  { color: #8A5A00; }
+    #print .none  { color: #777; }
+
+    #print .p-sum { display: flex; gap: 22pt; padding: 9pt 0 0; font-size: 9.5pt; color: #444; }
+    #print .p-sum b { margin-right: 4pt; font: 800 12pt var(--body); color: #07080C; }
+
+    #print table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    #print thead { display: table-header-group; }
+    #print tfoot { display: table-footer-group; }
+    #print .sp td { height: 9mm; padding: 0; border: 0; background: none !important; }
+    #print th { padding: 5pt 8pt; text-align: left; vertical-align: bottom; font: 700 8pt/1.2 var(--body); color: #333; border-bottom: 1.25pt solid #07080C; }
+    #print td { padding: 6pt 8pt; vertical-align: middle; font: 600 10pt/1.25 var(--body); font-variant-numeric: tabular-nums; border-bottom: 0.5pt solid #d4d4d0; }
+    #print tbody tr:nth-child(even) td { background: #f5f5f2; }
+    #print th.r, #print td.r { text-align: right; }
+    #print td.p-name { font-weight: 700; font-size: 10.5pt; overflow-wrap: anywhere; }
+    #print td.mute { color: #666; font-weight: 500; }
+    #print td.gap { font-weight: 800; }
+    #print tr { break-inside: avoid; }
+    #print .res { display: inline-block; padding: 1pt 8pt; border: 0.75pt solid currentColor; border-radius: 999px; font-size: 8.5pt; font-weight: 700; white-space: nowrap; }
+    #print .res.short { background: #fdecea; }
+    #print .res.over  { background: #e8f5ec; }
+    #print .res.even  { background: #fff4de; }
+    #print .res.none  { border-style: dashed; }
+    #print .p-foot { margin: 0; padding: 8pt 0 12mm; font-size: 8pt; color: #777; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <a class="home" href="index.html">Herorical Counts</a>
+        <h1 class="title" id="title">Case <span>Count</span></h1>
+        <p class="subtitle" id="subtitle"></p>
+      </div>
+      <div class="top-actions">
+        <button class="btn small" id="btn-print" type="button">Print</button>
+        <button class="btn small" id="btn-csv" type="button">Export CSV</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabs-bar">
+    <div class="wrap">
+      <div class="tabs" role="tablist" aria-label="Count type">
+        <button class="tab" role="tab" id="tab-cases"  data-tab="cases"  type="button">Case Count</button>
+        <button class="tab" role="tab" id="tab-weight" data-tab="weight" type="button">Weight Count</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="wrap">
+    <section class="stats" aria-live="polite">
+      <div class="stat"><div class="stat-label" id="l-total">Products</div><div class="stat-value" id="s-total">0</div></div>
+      <div class="stat"><div class="stat-label">Counted</div><div class="stat-value" id="s-counted">0</div></div>
+      <div class="stat"><div class="stat-label">Over</div><div class="stat-value over" id="s-over">0</div></div>
+      <div class="stat"><div class="stat-label">Short</div><div class="stat-value short" id="s-short">0</div></div>
+      <div class="stat net"><div class="stat-label" id="l-net">Net variance (ea)</div><div class="stat-value none" id="s-net">&mdash;</div></div>
+    </section>
+
+    <div class="bar">
+      <input id="q" type="search" aria-label="Search" autocomplete="off">
+      <button class="btn primary" id="add-btn" type="button"></button>
+    </div>
+
+    <div class="chips" role="group" aria-label="Filter by result">
+      <button class="chip" type="button" data-filter="all"   aria-pressed="true">All <b></b></button>
+      <button class="chip" type="button" data-filter="short" aria-pressed="false">Short <b></b></button>
+      <button class="chip" type="button" data-filter="over"  aria-pressed="false">Over <b></b></button>
+      <button class="chip" type="button" data-filter="even"  aria-pressed="false">Exact <b></b></button>
+      <button class="chip" type="button" data-filter="none"  aria-pressed="false">Not counted <b></b></button>
+    </div>
+
+    <div class="cols" id="cols" aria-hidden="true"></div>
+    <ul class="list" id="list"></ul>
+    <div class="empty" id="empty" hidden></div>
+
+    <div class="reset">
+      <button class="btn small quiet" id="clear-counts" type="button">Clear counts</button>
+      <button class="btn small quiet danger" id="remove-all" type="button">Remove all</button>
+    </div>
+  </main>
+
+  <footer class="wrap">© 2026 Herorical. All rights reserved.</footer>
+</div>
+
+<div id="print"></div>
+
+<div id="toast" role="status" hidden>
+  <span id="toast-msg"></span>
+  <button type="button" id="toast-undo">Undo</button>
+</div>
+
+<dialog id="add-dlg" aria-labelledby="add-title">
+  <form id="add-form" autocomplete="off">
+    <h2 id="add-title">Add product</h2>
+    <label class="field"><span>Product name</span><input id="a-name" required maxlength="80" placeholder="Ribeye, bone-in"></label>
+    <label class="field" id="a-upc-wrap"><span>Units per case</span><input id="a-upc" type="number" inputmode="numeric" min="1" step="1" placeholder="9"></label>
+    <label class="field" data-w="cases"><span>System cases</span><input id="a-sys" type="number" inputmode="decimal" min="0" step="any"></label>
+    <label class="field" data-w="cases"><span>Counted cases</span><input id="a-cc" type="number" inputmode="numeric" min="0" step="1"></label>
+    <label class="field" data-w="cases"><span>Counted eaches</span><input id="a-ce" type="number" inputmode="numeric" min="0" step="1"></label>
+    <label class="field" data-w="weight"><span>On hand (lbs)</span><input id="a-oh" type="number" inputmode="decimal" min="0" step="any"></label>
+    <label class="field" data-w="weight"><span>Counted (lbs)</span><input id="a-ct" type="number" inputmode="decimal" min="0" step="any"></label>
+    <p class="field" style="color:var(--fog);font-size:13px;margin-top:-4px">Add the same name again and the numbers are added to the existing row.</p>
+    <div class="dlg-actions">
+      <button class="btn" type="button" id="a-cancel">Cancel</button>
+      <button class="btn primary" type="submit" id="a-submit">Add product</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="plus-dlg" aria-labelledby="plus-title">
+  <form id="plus-form" autocomplete="off">
+    <h2 id="plus-title">Add to count</h2>
+    <p id="plus-now" style="color:var(--fog);margin:0 0 14px"></p>
+    <label class="field"><span id="plus-lbl">Add</span><input id="plus-in" type="number" inputmode="decimal" min="0" step="any" required></label>
+    <div class="dlg-actions">
+      <button class="btn" type="button" id="plus-cancel">Cancel</button>
+      <button class="btn primary" type="submit">Add</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+  /* Copyright (c) 2026 Herorical. All rights reserved. See LICENSE. */
+  /* ── Storage (same keys as before, so saved counts carry over) ── */
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  };
+
+  /* ── Helpers ── */
+  const $ = (s, el = document) => el.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const isNum = v => v !== null && v !== undefined && v !== '' && !isNaN(v);
+  const r2 = n => Math.round(n * 100) / 100;
+  const r4 = n => Math.round(n * 10000) / 10000;
+  const MINUS = '−';
+  const num = (n, d = 2) => (Math.round(n * 10 ** d) / 10 ** d).toLocaleString(undefined, { maximumFractionDigits: d });
+  const signed = (n, d = 2) => n > 0 ? '+' + num(n, d) : n < 0 ? MINUS + num(Math.abs(n), d) : '0';
+  const WORD = { short: 'short', over: 'over', even: 'exact' };
+  const LABEL = { short: 'Short', over: 'Over', even: 'Exact' };
+
+  /* ── The math ── */
+  function calcCase(s) {
+    const sysEa = r2(s.sysCases * s.upc);
+    if (!isNum(s.cntCases) && !isNum(s.cntEaches)) return { counted: false, sysEa };
+    const cntEa = r2((+s.cntCases || 0) * s.upc + (+s.cntEaches || 0));
+    const rawEa = r2(cntEa - sysEa);
+    // A case of 1 is counted in cases, so keep its gap exact. Otherwise round to whole eaches.
+    const diffEa = s.upc === 1 ? (rawEa || 0) : ((Math.sign(rawEa) * Math.round(Math.abs(rawEa))) || 0);
+    const diffCases = r4(cntEa / s.upc - s.sysCases);
+    return { counted: true, sysEa, cntEa, rawEa, diffEa, diffCases, status: diffEa < 0 ? 'short' : diffEa > 0 ? 'over' : 'even' };
+  }
+
+  function calcWeight(i) {
+    const hasOn = isNum(i.onHand), hasCnt = isNum(i.count);
+    if (!hasOn || !hasCnt) return { counted: false, hasOn, hasCnt };
+    const raw = r2(i.count - i.onHand);
+    const diff = raw || 0;
+    return { counted: true, raw, diff, status: diff < 0 ? 'short' : diff > 0 ? 'over' : 'even' };
+  }
+
+  /* ── State ── */
+  const CFG = {
+    cases:  { key: 'sc3_skus',  calc: calcCase,   noun: 'product', title: 'Case Count' },
+    weight: { key: 'wc1_items', calc: calcWeight, noun: 'item',    title: 'Weight Count' }
+  };
+  const data = {
+    cases:  [].concat(store.get(CFG.cases.key, [])),
+    weight: [].concat(store.get(CFG.weight.key, []))
+  };
+  let tab = location.hash === '#weight' ? 'weight' : 'cases';
+  let filter = 'all', query = '';
+  let idSeed = Date.now();
+  const save = (t = tab) => store.set(CFG[t].key, data[t]);
+  const diffOf = c => tab === 'cases' ? c.diffEa : c.diff;
+
+  /* ── Rendering ── */
+  function rowHTML(it) {
+    const v = x => isNum(x) ? x : '';
+    const head = `<div class="r-name"><input class="name" data-f="name" value="${esc(it.name)}" aria-label="Name" autocomplete="off"><button class="del" type="button" data-del aria-label="Remove ${esc(it.name)}">&times;</button></div>`;
+    if (tab === 'cases') {
+      return `<li class="row" data-id="${it.id}">${head}
+        <label class="f"><span>Units per case</span><input data-f="upc" type="number" inputmode="numeric" min="1" step="1" value="${v(it.upc)}"></label>
+        <label class="f"><span>System cases</span><input data-f="sysCases" type="number" inputmode="decimal" min="0" step="any" value="${v(it.sysCases)}"></label>
+        <label class="f mine"><span>Counted cases</span><input data-f="cntCases" type="number" inputmode="numeric" min="0" step="1" placeholder="0" value="${v(it.cntCases)}"><button class="plus" type="button" data-plus="cntCases" data-lbl="Counted cases" aria-label="Add to Counted cases">+</button></label>
+        <label class="f mine"><span>Counted eaches</span><input data-f="cntEaches" type="number" inputmode="numeric" min="0" step="1" placeholder="0" value="${v(it.cntEaches)}"><button class="plus" type="button" data-plus="cntEaches" data-lbl="Counted eaches" aria-label="Add to Counted eaches">+</button></label>
+        <div class="r-out"></div></li>`;
+    }
+    return `<li class="row" data-id="${it.id}">${head}
+      <label class="f"><span>On hand (lbs)</span><input data-f="onHand" type="number" inputmode="decimal" min="0" step="any" value="${v(it.onHand)}"></label>
+      <label class="f mine"><span>Counted (lbs)</span><input data-f="count" type="number" inputmode="decimal" min="0" step="any" value="${v(it.count)}"><button class="plus" type="button" data-plus="count" data-lbl="Counted (lbs)" aria-label="Add to Counted (lbs)">+</button></label>
+      <div class="r-out"></div></li>`;
+  }
+
+  function outFor(it) {
+    const c = CFG[tab].calc(it);
+    if (tab === 'cases') {
+      const single = it.upc === 1;
+      if (!c.counted) return { cls: 'none', html: `<div class="diff"><strong>&mdash;</strong></div><p class="detail">System shows ${num(it.sysCases, 4)} cs${single ? '' : ' (' + num(c.sysEa) + ' ea)'}. Enter your count.</p>` };
+      const alt = single ? '' : `<span class="alt">${signed(c.diffEa, 0)} ea</span>`;
+      const detail = single
+        ? `Counted ${num(c.cntEa)} of ${num(c.sysEa)} cs.`
+        : `Counted ${num(c.cntEa)} of ${num(c.sysEa)} ea. Exact gap ${signed(c.rawEa)} ea.`;
+      return {
+        cls: c.status,
+        html: `<div class="diff"><strong>${signed(c.diffCases, 2)}</strong><span class="unit">cs</span>${alt}<span class="pill ${c.status}">${LABEL[c.status]}</span></div>
+               <p class="detail">${detail}</p>`
+      };
+    }
+    if (!c.counted) {
+      const msg = !c.hasOn && !c.hasCnt ? 'Enter the on-hand and counted weight.' : !c.hasOn ? 'Enter the on-hand weight.' : 'Enter the counted weight.';
+      return { cls: 'none', html: `<div class="diff"><strong>&mdash;</strong></div><p class="detail">${msg}</p>` };
+    }
+    return {
+      cls: c.status,
+      html: `<div class="diff"><strong>${signed(c.diff, 2)}</strong><span class="unit">lbs</span><span class="pill ${c.status}">${LABEL[c.status]}</span></div>
+             <p class="detail">Counted ${num(+it.count)} of ${num(+it.onHand)} lbs.</p>`
+    };
+  }
+
+  function fillOut(li, it) {
+    const o = outFor(it);
+    $('.r-out', li).innerHTML = o.html;
+    li.classList.remove('short', 'over', 'even', 'none');
+    li.classList.add(o.cls);
+  }
+
+  function stats() {
+    const list = data[tab], calc = CFG[tab].calc;
+    const s = { total: list.length, counted: 0, short: 0, over: 0, even: 0, net: 0 };
+    list.forEach(it => {
+      const c = calc(it);
+      if (!c.counted) return;
+      s.counted++; s[c.status]++; s.net += diffOf(c);
+    });
+    s.none = s.total - s.counted;
+    s.net = Math.round(s.net * 100) / 100;
+    return s;
+  }
+
+  function renderHero() {
+    const s = stats(), cases = tab === 'cases';
+    $('#s-total').textContent = s.total;
+    $('#s-counted').textContent = s.counted;
+    $('#s-over').textContent = s.over;
+    $('#s-short').textContent = s.short;
+    const n = $('#s-net');
+    if (!s.counted) { n.textContent = '\u2014'; n.className = 'stat-value none'; }
+    else { n.textContent = signed(s.net, 2) + (cases ? ' ea' : ' lbs'); n.className = 'stat-value ' + (s.net < 0 ? 'short' : s.net > 0 ? 'over' : ''); }
+    document.querySelectorAll('.chip').forEach(ch => { ch.querySelector('b').textContent = s[ch.dataset.filter === 'all' ? 'total' : ch.dataset.filter]; });
+  }
+
+  function renderList() {
+    const list = data[tab], calc = CFG[tab].calc;
+    const q = query.trim().toLowerCase();
+    const rows = list.filter(it => {
+      if (q && !String(it.name).toLowerCase().includes(q)) return false;
+      if (filter === 'all') return true;
+      const c = calc(it);
+      return filter === 'none' ? !c.counted : (c.counted && c.status === filter);
+    });
+    const ul = $('#list');
+    ul.className = 'list ' + tab;
+    ul.innerHTML = rows.map(rowHTML).join('');
+    rows.forEach(it => fillOut($(`[data-id="${it.id}"]`, ul), it));
+
+    $('#cols').hidden = !rows.length;
+    const empty = $('#empty');
+    empty.hidden = rows.length > 0;
+    if (!rows.length) {
+      empty.innerHTML = !list.length
+        ? (tab === 'cases'
+            ? '<strong>No products yet</strong>Add a product with its units per case. Then enter the case quantity your system shows and what you counted.'
+            : '<strong>No items yet</strong>Add an item, then enter the on-hand weight from your system and the weight your morning count found.')
+        : '<strong>Nothing matches</strong>Change the search or the filter above.';
+    }
+    renderHero();
+  }
+
+  function renderTab() {
+    const cases = tab === 'cases';
+    document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
+    $('#cols').className = 'cols ' + tab;
+    $('#cols').innerHTML = cases
+      ? '<span>Product</span><span>Units per case</span><span>System cases</span><span>Counted cases</span><span>Counted eaches</span><span>Result</span>'
+      : '<span>Item</span><span>On hand (lbs)</span><span>Counted (lbs)</span><span>Result</span>';
+    $('#title').innerHTML = cases ? 'Case <span>Count</span>' : 'Weight <span>Count</span>';
+    $('#subtitle').textContent = cases ? 'System quantity in cases against your count in cases and loose eaches.' : 'System on-hand pounds against the morning count.';
+    $('#l-total').textContent = cases ? 'Products' : 'Items';
+    $('#l-net').textContent = cases ? 'Net variance (ea)' : 'Net variance (lbs)';
+    document.title = cases ? 'Case Count \u00b7 Herorical' : 'Weight Count \u00b7 Herorical';
+    $('#q').placeholder = cases ? 'Search products' : 'Search items';
+    $('#add-btn').textContent = cases ? 'Add product' : 'Add item';
+    $('#add-title').textContent = cases ? 'Add product' : 'Add item';
+    $('#a-submit').textContent = cases ? 'Add product' : 'Add item';
+    $('#a-upc-wrap').hidden = !cases;
+    document.querySelectorAll('#add-form [data-w]').forEach(el => el.hidden = el.dataset.w !== tab);
+    document.querySelectorAll('.chip').forEach(ch => ch.setAttribute('aria-pressed', ch.dataset.filter === filter));
+    renderList();
+  }
+
+  function setTab(t, updateHash = true) {
+    tab = t; filter = 'all'; query = ''; $('#q').value = '';
+    hideToast();
+    if (updateHash) { try { history.replaceState(null, '', t === 'weight' ? '#weight' : '#cases'); } catch (e) {} }
+    renderTab();
+    window.scrollTo(0, 0);
+  }
+
+  /* ── Events ── */
+  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+  window.addEventListener('hashchange', () => setTab(location.hash === '#weight' ? 'weight' : 'cases', false));
+
+  $('#q').addEventListener('input', e => { query = e.target.value; renderList(); });
+  document.querySelectorAll('.chip').forEach(ch => ch.addEventListener('click', () => {
+    filter = ch.dataset.filter;
+    document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c === ch));
+    renderList();
+  }));
+
+  const ul = $('#list');
+  ul.addEventListener('input', e => {
+    const inp = e.target.closest('input[data-f]');
+    if (!inp) return;
+    const li = inp.closest('.row');
+    const it = data[tab].find(x => String(x.id) === li.dataset.id);
+    if (!it) return;
+    const f = inp.dataset.f, val = inp.value;
+    if (f === 'name') it.name = val;
+    else if (f === 'upc') it.upc = Math.max(1, parseInt(val) || 1);
+    else if (f === 'sysCases') it.sysCases = parseFloat(val) || 0;
+    else it[f] = (val === '' || isNaN(parseFloat(val))) ? null : parseFloat(val);
+    save();
+    fillOut(li, it);
+    renderHero();
+  });
+
+  ul.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || !e.target.matches('input')) return;
+    e.preventDefault();
+    const all = [...ul.querySelectorAll('input')];
+    const next = all[all.indexOf(e.target) + 1];
+    if (next) { next.focus(); next.select && next.select(); } else e.target.blur();
+  });
+
+  ul.addEventListener('click', e => {
+    const b = e.target.closest('[data-del]');
+    if (!b) return;
+    const t = tab, list = data[t];
+    const idx = list.findIndex(x => String(x.id) === b.closest('.row').dataset.id);
+    if (idx < 0) return;
+    const [it] = list.splice(idx, 1);
+    save(); renderList();
+    toast(`Removed ${it.name || 'row'}.`, () => { list.splice(Math.min(idx, list.length), 0, it); save(t); if (tab === t) renderList(); });
+  });
+
+  /* Toast with undo */
+  let toastTimer, undoFn = null;
+  function toast(msg, fn) {
+    $('#toast-msg').textContent = msg; undoFn = fn;
+    $('#toast-undo').hidden = !fn; $('#toast').hidden = false;
+    clearTimeout(toastTimer); toastTimer = setTimeout(hideToast, 8000);
+  }
+  function hideToast() { $('#toast').hidden = true; undoFn = null; clearTimeout(toastTimer); }
+  $('#toast-undo').addEventListener('click', () => { if (undoFn) undoFn(); hideToast(); });
+
+  $('#clear-counts').addEventListener('click', () => {
+    const t = tab, list = data[t];
+    if (!list.some(it => CFG[t].calc(it).counted || isNum(it.cntCases) || isNum(it.cntEaches) || isNum(it.count))) return;
+    const snap = list.map(it => t === 'cases' ? [it.cntCases, it.cntEaches] : [it.count]);
+    list.forEach(it => { if (t === 'cases') { it.cntCases = null; it.cntEaches = null; } else it.count = null; });
+    save(); renderList();
+    toast('Counts cleared.', () => {
+      list.forEach((it, i) => { if (!snap[i]) return; if (t === 'cases') { it.cntCases = snap[i][0]; it.cntEaches = snap[i][1]; } else it.count = snap[i][0]; });
+      save(t); if (tab === t) renderList();
+    });
+  });
+
+  $('#remove-all').addEventListener('click', () => {
+    if (!data[tab].length) return;
+    if (!confirm(`Remove all ${CFG[tab].noun}s from the ${CFG[tab].title.toLowerCase()}? This can't be undone.`)) return;
+    data[tab].length = 0; save(); renderList();
+  });
+
+  /* Add to a counted number */
+  const pdlg = $('#plus-dlg');
+  let plusTarget = null;
+  ul.addEventListener('click', e => {
+    const b = e.target.closest('[data-plus]');
+    if (!b) return;
+    const it = data[tab].find(x => String(x.id) === b.closest('.row').dataset.id);
+    if (!it) return;
+    plusTarget = { it, f: b.dataset.plus, lbl: b.dataset.lbl, t: tab };
+    $('#plus-title').textContent = it.name || 'Add to count';
+    $('#plus-lbl').textContent = 'Add to ' + b.dataset.lbl;
+    $('#plus-now').textContent = 'Now: ' + (isNum(it[b.dataset.f]) ? it[b.dataset.f] : 0);
+    $('#plus-in').value = '';
+    pdlg.showModal(); $('#plus-in').focus();
+  });
+  $('#plus-cancel').addEventListener('click', () => pdlg.close());
+  pdlg.addEventListener('click', e => { if (e.target === pdlg) pdlg.close(); });
+  $('#plus-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const add = parseFloat($('#plus-in').value);
+    if (isNaN(add) || !plusTarget) return;
+    const { it, f, lbl, t: t0 } = plusTarget;
+    const before = isNum(it[f]) ? it[f] : null;
+    it[f] = r2((before || 0) + add);
+    save(t0); pdlg.close();
+    if (tab === t0) renderList();
+    toast(`${it.name || 'Row'}: ${lbl} now ${it[f]}.`, () => { it[f] = before; save(t0); if (tab === t0) renderList(); });
+  });
+
+  /* Add dialog */
+  const dlg = $('#add-dlg');
+  $('#add-btn').addEventListener('click', () => {
+    document.querySelectorAll('#add-form input').forEach(i => i.value = '');
+    dlg.showModal(); $('#a-name').focus();
+  });
+  $('#a-cancel').addEventListener('click', () => dlg.close());
+  dlg.addEventListener('click', e => { if (e.target === dlg) dlg.close(); });
+  $('#add-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const name = $('#a-name').value.trim();
+    const upc = parseInt($('#a-upc').value) || 0;
+    if (!name) { $('#a-name').focus(); return; }
+    const num = id => { const v = parseFloat($(id).value); return isNaN(v) ? null : v; };
+    const plus = (a, b) => (a === null && b === null) ? null : r2((a || 0) + (b || 0));
+    const fields = tab === 'cases' ? { sysCases: num('#a-sys'), cntCases: num('#a-cc'), cntEaches: num('#a-ce') } : { onHand: num('#a-oh'), count: num('#a-ct') };
+    const dup = data[tab].find(x => String(x.name).trim().toLowerCase() === name.toLowerCase());
+    let id;
+    if (dup) {
+      id = dup.id;
+      const before = {}; Object.keys(fields).forEach(k => { before[k] = dup[k]; dup[k] = plus(dup[k] ?? null, fields[k]); });
+      if (tab === 'cases') dup.sysCases = dup.sysCases || 0;
+      const t0 = tab;
+      save(); dlg.close();
+      toast(`Added to ${dup.name}.`, () => { Object.assign(dup, before); save(t0); if (tab === t0) renderTab(); });
+    } else {
+      if (tab === 'cases' && upc < 1) { $('#a-upc').focus(); return; }
+      id = ++idSeed;
+      data[tab].push(tab === 'cases'
+        ? { id, name, upc, sysCases: fields.sysCases || 0, cntCases: fields.cntCases, cntEaches: fields.cntEaches }
+        : { id, name, onHand: fields.onHand, count: fields.count });
+      save(); dlg.close();
+    }
+    filter = 'all'; query = ''; $('#q').value = '';
+    renderTab();
+    const li = $(`[data-id="${id}"]`);
+    if (li) li.scrollIntoView({ block: 'center' });
+  });
+
+  /* ── CSV ── */
+  function exportCSV() {
+    const cell = v => '"' + String(v ?? '').replace(/"/g, '""') + '"';
+    let rows;
+    if (tab === 'cases') {
+      rows = [['Product', 'Units per case', 'System cases', 'System (ea)', 'Counted cases', 'Counted eaches', 'Counted total (ea)', 'Exact gap (ea)', 'Gap rounded (ea)', 'Gap (cases)', 'Result']];
+      data.cases.forEach(s => {
+        const c = calcCase(s);
+        rows.push([s.name, s.upc, s.sysCases, c.sysEa, s.cntCases ?? '', s.cntEaches ?? '', c.counted ? c.cntEa : '', c.counted ? c.rawEa : '', c.counted ? c.diffEa : '', c.counted ? c.diffCases : '', c.counted ? LABEL[c.status] : 'Not counted']);
+      });
+    } else {
+      rows = [['Item', 'On hand (lbs)', 'Counted (lbs)', 'Gap (lbs)', 'Result']];
+      data.weight.forEach(i => {
+        const c = calcWeight(i);
+        rows.push([i.name, i.onHand ?? '', i.count ?? '', c.counted ? c.diff : '', c.counted ? LABEL[c.status] : 'Not counted']);
+      });
+    }
+    const csv = '﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = `${tab}-count_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  $('#btn-csv').addEventListener('click', exportCSV);
+
+  /* ── Print: a static sheet built from the data, so every value shows ── */
+  function buildPrint() {
+    const s = stats(), cases = tab === 'cases';
+    const when = new Date().toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+    const unit = cases ? 'ea' : 'lbs';
+    const res = c => c.counted ? `<span class="res ${c.status}">${LABEL[c.status]}</span>` : '<span class="res none">Not counted</span>';
+    let widths, head, body;
+    if (cases) {
+      widths = [17, 7, 10, 9, 15, 9, 10, 8, 15];
+      head = '<th>Product</th><th class="r">Per case</th><th class="r">System cases</th><th class="r">System ea</th><th class="r">Counted (cs + ea)</th><th class="r">Counted ea</th><th class="r">Gap cases</th><th class="r">Gap ea</th><th>Result</th>';
+      body = data.cases.map(it => {
+        const c = calcCase(it);
+        const counted = (isNum(it.cntCases) || isNum(it.cntEaches)) ? `${num(it.cntCases || 0)} + ${num(it.cntEaches || 0)}` : '';
+        const g = c.status || 'none';
+        return `<tr><td class="p-name">${esc(it.name)}</td><td class="r mute">${num(it.upc)}</td><td class="r mute">${num(it.sysCases, 4)}</td><td class="r mute">${num(c.sysEa)}</td>
+          <td class="r">${counted}</td><td class="r">${c.counted ? num(c.cntEa) : ''}</td>
+          <td class="r ${g}">${c.counted ? signed(c.diffCases, 4) : ''}</td><td class="r gap ${g}">${c.counted ? signed(c.diffEa, 2) : ''}</td><td>${res(c)}</td></tr>`;
+      }).join('');
+    } else {
+      widths = [34, 18, 18, 14, 16];
+      head = '<th>Item</th><th class="r">On hand (lbs)</th><th class="r">Counted (lbs)</th><th class="r">Gap (lbs)</th><th>Result</th>';
+      body = data.weight.map(it => {
+        const c = calcWeight(it), g = c.status || 'none';
+        return `<tr><td class="p-name">${esc(it.name)}</td><td class="r mute">${isNum(it.onHand) ? num(it.onHand) : ''}</td><td class="r">${isNum(it.count) ? num(it.count) : ''}</td>
+          <td class="r gap ${g}">${c.counted ? signed(c.diff, 2) : ''}</td><td>${res(c)}</td></tr>`;
+      }).join('');
+    }
+    const span = widths.length;
+    const netCls = !s.counted ? 'none' : s.net < 0 ? 'short' : s.net > 0 ? 'over' : '';
+    const net = s.counted ? `${signed(s.net, 2)} ${unit}` : '\u2014';
+    const noun = CFG[tab].noun + 's';
+    $('#print').innerHTML = `
+      <div class="p-top">
+        <div><h1>${CFG[tab].title}</h1><p class="p-meta">Printed ${esc(when)}</p></div>
+        <div class="p-aisle"><span>Aisle</span><i></i></div>
+        <div class="p-net"><span>Net variance</span><strong class="${netCls}">${net}</strong></div>
+      </div>
+      <div class="p-sum">
+        <span><b>${s.total}</b>${noun}</span><span><b>${s.counted}</b>counted</span>
+        <span><b class="short">${s.short}</b>short</span><span><b class="over">${s.over}</b>over</span><span><b>${s.even}</b>exact</span>
+      </div>
+      <table>
+        <colgroup>${widths.map(w => `<col style="width:${w}%">`).join('')}</colgroup>
+        <thead><tr class="sp"><td colspan="${span}"></td></tr><tr>${head}</tr></thead>
+        <tbody>${body}</tbody>
+        <tfoot><tr class="sp"><td colspan="${span}"></td></tr></tfoot>
+      </table>
+      <p class="p-foot">&copy; 2026 Herorical. All rights reserved.</p>`;
+    // Zero page margin removes the browser's own date, title, URL and page-number lines.
+    $('#page-style').textContent = `@page { size: ${cases ? 'landscape' : 'portrait'}; margin: 0; }`;
+  }
+  window.addEventListener('beforeprint', buildPrint);
+  $('#btn-print').addEventListener('click', () => { buildPrint(); window.print(); });
+
+  /* Keep the pinned search bar directly under the pinned tabs */
+  const setTabsH = () => document.documentElement.style.setProperty('--tabs-h', $('.tabs-bar').offsetHeight + 'px');
+  setTabsH();
+  window.addEventListener('resize', setTabsH);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(setTabsH);
+
+  renderTab();
+</script>
+</body>
+</html>
