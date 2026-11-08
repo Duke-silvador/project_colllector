@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pl" data-title="title.timer">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Timer – Janek</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>「<span data-i18n="h.timer">TIMER</span>」</h1>
+
+    <p class="muted"><span data-i18n="clock.label">czas w warszawie</span> – <span id="clock">--:--:--</span></p>
+
+    <div class="topbar">
+      <nav>
+        <a href="index.html" data-i18n="nav.start">start</a> //
+        <a href="timer.html" data-i18n="nav.timer">timer</a>
+      </nav>
+      <div class="lang" role="group" data-i18n-aria="lang.aria" aria-label="język">
+        <button type="button" data-lang="pl" aria-pressed="true" data-i18n="lang.pl">pol</button> //
+        <button type="button" data-lang="en" aria-pressed="false" data-i18n="lang.en">ang</button>
+      </div>
+    </div>
+
+    <section class="now">
+      <div class="muted small" id="now-label">gotowy</div>
+      <div class="now-time" id="now-time">00:00</div>
+    </section>
+
+    <div class="row">
+      <button class="btn" id="start-btn" type="button">Start</button>
+      <button class="btn ghost" id="skip-btn" type="button" data-i18n="btn.skip">Pomiń</button>
+      <button class="btn ghost" id="reset-btn" type="button" data-i18n="btn.reset">Reset</button>
+      <button class="btn ghost" id="fs-btn" type="button" data-i18n="btn.fullscreen">Pełny ekran</button>
+    </div>
+
+    <h2 data-i18n="timer.add.h">dodaj timer</h2>
+    <form id="add-form" class="row">
+      <label class="field">
+        <span class="small muted" data-i18n="timer.sec">sekundy (1–10)</span>
+        <input id="in-sec" type="number" min="1" max="10" step="1" value="5" required inputmode="numeric">
+      </label>
+      <label class="field grow">
+        <span class="small muted" data-i18n="timer.desc">opis (opcjonalnie)</span>
+        <input id="in-desc" type="text" maxlength="80" placeholder="np. nauka, przerwa"
+               data-i18n-placeholder="timer.desc.ph" autocomplete="off">
+      </label>
+      <button class="btn" type="submit" data-i18n="btn.add">Dodaj</button>
+    </form>
+    <p id="form-msg" class="small warn-text" role="status"></p>
+
+    <h2 data-i18n="presets.h">gotowe zestawy</h2>
+    <div class="row presets">
+      <button class="btn ghost" id="preset-s25" type="button" data-i18n="preset.s25">+ nauka 10 s i przerwa 5 s</button>
+      <button class="btn ghost" id="preset-s50" type="button" data-i18n="preset.s50">+ nauka 8 s i przerwa 2 s</button>
+      <button class="btn ghost" id="preset-ex" type="button" data-i18n="preset.ex">+ ćwiczenia 10 s i przerwa 1 s</button>
+    </div>
+
+    <h2 data-i18n="queue.h">kolejka</h2>
+    <p id="queue-empty" class="muted small" data-i18n="queue.empty">Brak timerów. Dodaj pierwszy powyżej.</p>
+    <ol id="queue" class="queue"></ol>
+    <div class="row">
+      <button class="btn ghost" id="clear-btn" type="button" data-i18n="queue.clear">Wyczyść listę</button>
+    </div>
+
+    <section class="history-section">
+      <h2 data-i18n="history.title">Historia czasu</h2>
+      <p class="muted small" data-i18n="history.note">Zapisują się tylko timery, które dobiegły końca. Pominięte i zresetowane odliczania nie są liczone.</p>
+      <p><strong data-i18n="history.total">Łącznie zapisano</strong>: <span id="history-total">0:00</span></p>
+      <div id="history-chart" class="history-chart" aria-label="Suma czasu według aktywności"></div>
+      <h3 data-i18n="history.recent">Ostatnio ukończone</h3>
+      <p id="history-empty" class="muted small" data-i18n="history.empty">Historia jest pusta. Ukończ timer, aby zacząć zbierać czas.</p>
+      <ol id="history-list" class="history-list"></ol>
+      <button class="btn ghost" id="history-clear" type="button" data-i18n="history.clear">Wyczyść historię</button>
+    </section>
+    <h2 data-i18n="sound.h">dźwięk sygnału</h2>
+    <div class="row">
+      <label class="field grow">
+        <span class="small muted" data-i18n="sound.select">dźwięk (po wybraniu gra od razu)</span>
+        <select id="sound-select"></select>
+      </label>
+      <button class="btn ghost" id="sound-play" type="button">Odtwórz</button>
+    </div>
+    <div class="row">
+      <label class="field grow">
+        <span class="small muted"><span data-i18n="sound.length">długość</span>: <span id="len-label">10 s</span></span>
+        <input id="len-range" type="range" min="1" max="30" step="1" value="10">
+      </label>
+      <label class="field grow">
+        <span class="small muted"><span data-i18n="sound.volume">głośność</span>: <span id="vol-label">80%</span></span>
+        <input id="vol-range" type="range" min="0" max="100" step="1" value="80">
+      </label>
+      <button class="btn ghost" id="mute-btn" type="button" aria-pressed="false">Wycisz</button>
+    </div>
+    <div class="bar sound-bar" aria-hidden="true"><div class="bar-fill" id="sound-fill"></div></div>
+
+    <p class="muted small" data-i18n="timer.note">
+      Timery uruchamiają się jeden po drugim, a po każdym gra wybrany sygnał.
+      Zostaw kartę ze stroną otwartą (może być w tle) – po zamknięciu karty lub uśpieniu telefonu
+      odliczanie się zatrzyma. Lista i ustawienia dźwięku zapisują się w przeglądarce.
+    </p>
+
+    <footer class="muted">© <span id="year"></span> Janek</footer>
+  </main>
+
+  <!-- Pełny ekran: tylko czas i kręcące się kółko -->
+  <div id="fs-timer" class="fs-overlay" hidden>
+    <div class="fs-controls">
+      <button class="btn ghost" id="fs-toggle" type="button">Start</button>
+      <button class="fs-exit" type="button" data-i18n-aria="fs.exit" aria-label="Zamknij pełny ekran">×</button>
+    </div>
+    <div class="fs-clock">
+      <svg class="fs-ring" viewBox="0 0 100 100" aria-hidden="true">
+        <circle class="ring-track" cx="50" cy="50" r="46"></circle>
+        <g id="ring-rot">
+          <circle class="ring-arc" cx="50" cy="50" r="46" pathLength="100" stroke-dasharray="22 78" stroke-dashoffset="-53"></circle>
+          <circle class="ring-dot" cx="50" cy="4" r="3.2"></circle>
+        </g>
+      </svg>
+      <div class="fs-time" id="fs-time">00:00</div>
+    </div>
+  </div>
+
+  <script src="i18n.js"></script>
+  <script src="script.js"></script>
+  <script src="fullscreen.js"></script>
+  <script src="timer.js"></script>
+</body>
+</html>
+
+
+
+
