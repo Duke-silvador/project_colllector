@@ -1,0 +1,86 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { evaluateSignal, confirmSignal } from "./src/signal.js";
+
+function frame(side = "BULLISH") {
+  const bullish = side === "BULLISH";
+  return {
+    close: 100,
+    ema20: bullish ? 101 : 99,
+    ema50: bullish ? 100 : 100.5,
+    rsi14: bullish ? 60 : 40,
+    macd: bullish ? 1 : -1,
+    macdSignal: bullish ? 0 : 0,
+    bullishVotes: bullish ? 4 : 0,
+    bearishVotes: bullish ? 0 : 4,
+    poc: bullish ? 99 : 101,
+    structure: { bos: bullish ? "BULLISH" : "BEARISH", sweep: "NONE" },
+    squeeze: {
+      state: "SQUEEZE_RELEASED",
+      momentum: bullish ? 1 : -1,
+      direction: bullish ? "BULLISH_STRENGTHENING" : "BEARISH_STRENGTHENING"
+    }
+  };
+}
+
+test("aligned bullish M5/M15/H1 plus bullish BOS returns BUY", () => {
+  assert.equal(evaluateSignal({ M5: frame(), M15: frame(), H1: frame() }), "BUY");
+});
+
+test("aligned bearish M5/M15/H1 plus bearish BOS returns SELL", () => {
+  assert.equal(evaluateSignal({
+    M5: frame("BEARISH"), M15: frame("BEARISH"), H1: frame("BEARISH")
+  }), "SELL");
+});
+
+test("strict profile requires stronger H1 agreement and RSI momentum", () => {
+  const weakH1 = frame();
+  weakH1.bullishVotes = 2;
+  assert.equal(evaluateSignal({
+    M5: frame(), M15: frame(), H1: weakH1
+  }, "strict"), "HOLD");
+
+  const weakM5Momentum = frame();
+  weakM5Momentum.rsi14 = 53;
+  assert.equal(evaluateSignal({
+    M5: weakM5Momentum, M15: frame(), H1: frame()
+  }, "strict"), "HOLD");
+});
+
+test("strict profile accepts fully aligned high-momentum setup", () => {
+  assert.equal(evaluateSignal({
+    M5: frame(), M15: frame(), H1: frame()
+  }, "strict"), "BUY");
+});
+
+test("mixed timeframes return HOLD", () => {
+  assert.equal(evaluateSignal({ M5: frame(), M15: frame("BEARISH"), H1: frame() }), "HOLD");
+});
+
+test("missing indicator data safely returns HOLD", () => {
+  assert.equal(evaluateSignal({ M5: {}, M15: {}, H1: {} }), "HOLD");
+});
+
+test("H1 momentum confirms BUY when squeeze is released", () => {
+  assert.equal(confirmSignal("BUY", frame()).status, "H1 ALIGNED");
+});
+
+test("H1 momentum also confirms BUY when no squeeze is active", () => {
+  const h1 = frame();
+  h1.squeeze.state = "NO_SQUEEZE";
+  assert.equal(confirmSignal("BUY", h1).status, "H1 ALIGNED");
+});
+
+test("missing H1 momentum blocks entry", () => {
+  assert.equal(confirmSignal("BUY", {}).status, "WAIT");
+});
+
+test("active H1 squeeze blocks entry", () => {
+  const h1 = frame();
+  h1.squeeze.state = "SQUEEZE_ON";
+  assert.equal(confirmSignal("BUY", h1).status, "WAIT");
+});
+
+test("opposite H1 momentum blocks entry", () => {
+  assert.equal(confirmSignal("BUY", frame("BEARISH")).status, "WAIT");
+});

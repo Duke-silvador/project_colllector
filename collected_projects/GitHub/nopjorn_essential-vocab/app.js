@@ -1,0 +1,2169 @@
+'use strict';
+
+// App version shown in the UI. Bump it (and VERSION in sw.js) on every push.
+const APP_VERSION = '1.214.0';
+
+// iOS home-screen apps (black-translucent status bar) often launch with innerHeight/100dvh
+// short by the status-bar height, so the tab bar floats above the bottom edge until the
+// next resize. In standalone mode use the full screen height when it is only slightly larger.
+function fixAppHeight() {
+  const standalone = navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  let h = window.innerHeight;
+  if (standalone && screen.width && screen.height) {
+    const portrait = window.innerWidth < window.innerHeight + 120;
+    const full = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+    const fullW = portrait ? Math.min(screen.width, screen.height) : Math.max(screen.width, screen.height);
+    if (Math.abs(window.innerWidth - fullW) < 2 && full > h && full - h <= 100) h = full;
+  }
+  document.documentElement.style.setProperty('--app-h', h + 'px');
+}
+fixAppHeight();
+['resize', 'orientationchange', 'pageshow'].forEach(e => window.addEventListener(e, () => { fixAppHeight(); setTimeout(fixAppHeight, 300); }));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) fixAppHeight(); });
+
+// On-screen keyboard (iOS keeps the layout viewport and scrolls the page up, hiding the question):
+// while a text field is focused and the keyboard is up, hide the tab bar and fit #app into the visible area (html.kbd).
+let kbBase = window.innerHeight; // window height with no keyboard (iOS may shrink innerHeight too, so compare to this)
+function syncKeyboard() {
+  const vv = window.visualViewport, el = document.activeElement;
+  const typing = !!el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|range|color|file)$/.test(el.type)));
+  if (!typing) kbBase = Math.max(window.innerHeight, vv ? vv.height : 0);
+  const open = !!vv && typing && kbBase - vv.height > 120;
+  const root = document.documentElement;
+  root.classList.toggle('kbd', open);
+  if (open) {
+    root.style.setProperty('--kb-h', Math.round(vv.height) + 'px');
+    root.style.setProperty('--kb-top', Math.round(vv.offsetTop) + 'px');
+    window.scrollTo(0, 0);
+    const v = el.closest('.view'); if (v) v.scrollTop = 0;
+  }
+}
+addEventListener('orientationchange', () => { kbBase = 0; setTimeout(syncKeyboard, 400); });
+if (window.visualViewport) ['resize', 'scroll'].forEach(e => visualViewport.addEventListener(e, syncKeyboard));
+document.addEventListener('focusin', () => setTimeout(syncKeyboard, 50));
+document.addEventListener('focusout', () => setTimeout(syncKeyboard, 100));
+
+/* ---------- data ---------- */
+// WORDS rows (data/words/<level>.js): [word, pos, level, ipa, thai, example, thai example, topic id, 5 if Oxford 5000-only]
+// g = study group: A1–B2 are Oxford 3000; B2x and C1 are the extra Oxford 5000 words; TOE = the TOEIC set (data/words/toeic.js, rows end with 'T', 1.179); AWL = academic words (data/words/nawl.js, rows end with 'A', 1.180); BIZ = business words (data/words/bsl.js, rows end with 'B', 1.195); IT = software/IT words (data/words/it.js, rows end with 'I', 1.210).
+// Topics (what a word row's topic id means). Pick lists show them grouped: a group id (TOPIC_GROUPS) selects every topic inside it.
+const TOPICS = [
+  ['people', '👪', 'คนและครอบครัว'], ['anatomy', '🫀', 'ร่างกายและอวัยวะ'], ['health', '🏥', 'สุขภาพและการแพทย์'], ['food', '🍜', 'อาหารและเครื่องดื่ม'],
+  ['home', '🏠', 'บ้านและของใช้'], ['clothes', '👕', 'เสื้อผ้าและการแต่งตัว'],
+  ['animal', '🐾', 'สัตว์'], ['plant', '🌳', 'พืชและการเกษตร'], ['weather', '⛅', 'อากาศ ภูมิประเทศ สิ่งแวดล้อม'],
+  ['places', '📍', 'สถานที่และทิศทาง'], ['transport', '🚗', 'การเดินทางและยานพาหนะ'],
+  ['job', '💼', 'งานและอาชีพ'], ['money', '💰', 'เงิน ธุรกิจ การซื้อขาย'],
+  ['edu', '🎓', 'การศึกษา'], ['sci', '🔬', 'วิทยาศาสตร์'], ['tech', '💻', 'เทคโนโลยี'],
+  ['comm', '💬', 'สื่อสารและภาษา'], ['arts', '🎭', 'ศิลปะและบันเทิง'], ['sport', '⚽', 'กีฬาและงานอดิเรก'],
+  ['gov', '🏛️', 'การเมือง การปกครอง การทหาร'], ['law', '⚖️', 'กฎหมายและอาชญากรรม'], ['social', '🌏', 'สังคม วัฒนธรรม ศาสนา'],
+  ['clock', '⏰', 'เวลาและความถี่'], ['num', '🔢', 'ตัวเลข'], ['qty', '📏', 'ปริมาณ ขนาด การวัด'],
+  ['emo', '😊', 'อารมณ์และความรู้สึก'], ['mind', '🧠', 'ความคิดและการรับรู้'], ['char', '🌟', 'นิสัยและบุคลิก'],
+  ['move', '🤸', 'การเคลื่อนไหวและการสัมผัส'], ['make', '🛠️', 'การสร้าง เปลี่ยนแปลง ทำลาย'], ['act', '🏃', 'การกระทำและกระบวนการ'],
+  ['look', '👀', 'ลักษณะภายนอก สี เสียง'], ['value', '⭐', 'คุณภาพ คุณค่า ความสำคัญ'], ['degree', '📊', 'ระดับ ความแน่นอน คำขยาย'],
+  ['grammar', '🔗', 'คำไวยากรณ์ (the, of, and…)'],
+];
+const TOPIC_GROUPS = [
+  ['body', '💪', 'ร่างกายและสุขภาพ', ['anatomy', 'health']], ['nature', '🌿', 'ธรรมชาติ สัตว์ อากาศ', ['animal', 'plant', 'weather']],
+  ['travel', '✈️', 'สถานที่และการเดินทาง', ['places', 'transport']], ['work', '💼', 'งาน เงิน การซื้อขาย', ['job', 'money']],
+  ['study', '🔬', 'การศึกษา วิทยาศาสตร์ เทคโนโลยี', ['edu', 'sci', 'tech']], ['media', '🎬', 'สื่อสาร ศิลปะ กีฬา', ['comm', 'arts', 'sport']],
+  ['society', '🏛️', 'สังคม การเมือง กฎหมาย', ['gov', 'law', 'social']], ['time', '⏰', 'เวลา ตัวเลข ปริมาณ', ['clock', 'num', 'qty']],
+  ['feelings', '💭', 'อารมณ์ ความคิด นิสัย', ['emo', 'mind', 'char']], ['actions', '🏃', 'คำกริยาทั่วไป', ['move', 'make', 'act']],
+  ['describe', '🎨', 'คำบรรยายลักษณะ', ['look', 'value', 'degree']],
+];
+const TOPIC_PARENT = {};
+TOPIC_GROUPS.forEach(([g, , , kids]) => kids.forEach((k) => { TOPIC_PARENT[k] = g; }));
+// A saved/selected topic (a topic or a whole group) matches a word's topic id.
+const topicMatch = (sel, tp) => sel === tp || TOPIC_PARENT[tp] === sel;
+// <option>s for a topic <select>: ungrouped topics as they are, big groups as an <optgroup> with a "whole group" row first.
+// count(sel) adds the number of words in brackets.
+function topicOptions(sel, count) {
+  const n = (id) => (count ? ` (${count(id)})` : '');
+  const opt = (id, label) => `<option value="${id}" ${sel === id ? 'selected' : ''}>${label}${n(id)}</option>`;
+  const seen = new Set(), out = [];
+  TOPICS.forEach(([id]) => {
+    const g = TOPIC_PARENT[id];
+    if (!g) { out.push(opt(id, TOPIC_LABEL[id])); return; }
+    if (seen.has(g)) return;
+    seen.add(g);
+    const [, ic, th, kids] = TOPIC_GROUPS.find((x) => x[0] === g);
+    out.push(`<optgroup label="${ic} ${th}">${opt(g, `${ic} ทั้งหมวด ${th}`)}${kids.map((k) => opt(k, `\u00a0\u00a0${TOPIC_LABEL[k]}`)).join('')}</optgroup>`);
+  });
+  return out.join('');
+}
+// Topics that were split in 1.57 / 1.58 (old id -> new ids): stickers already earned carry over to every new topic.
+const TOPIC_SPLIT = Object.fromEntries(TOPIC_GROUPS.map(([g, , , kids]) => [g, kids]));
+// Moves stickers earned on a retired topic id to its new topics (the group ids are not topics any more). Safe to run again.
+function topicMigrate(r) {
+  for (const [old, ids] of Object.entries(TOPIC_SPLIT)) {
+    if (!r.stk || !(old in r.stk)) continue;
+    ids.forEach((id) => { r.stk[id] = Math.max(r.stk[id] || 0, r.stk[old] || 0); });
+    delete r.stk[old];
+  }
+  return r;
+}
+const TOPIC_IC = Object.fromEntries(TOPICS.map(([id, ic]) => [id, ic]));
+// IPA with the stressed syllable marked (1.116): after ˈ take the onset, the vowel(s) and the coda consonants that are not the
+// onset of the next syllable (a consonant right before a vowel starts the next one). Returns escaped HTML.
+const IPA_V = 'aeiouæɑɒɔəɜɪʊʌɛɐ';
+const IPA_STRESS = new RegExp(`ˈ([^${IPA_V}ˈˌ./\\s()]*[${IPA_V}][${IPA_V}ːˑ̃]*(?:[^${IPA_V}ˈˌ./\\s()ː](?![${IPA_V}ː]))*)`);
+const ipaHtml = (i) => esc(i || '').replace(IPA_STRESS, 'ˈ<b class="ipa-str">$1</b>');
+const TOPIC_LABEL = Object.fromEntries([...TOPICS, ...TOPIC_GROUPS].map(([id, ic, th]) => [id, `${ic} ${th}`]));
+const W = window.WORDS.slice().sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
+  .map(([w, p, l, i, t, e, et, tp, ...more], idx) => ({ idx, w, p, l, i, t, e, et, g: more.includes('T') ? 'TOE' : more.includes('A') ? 'AWL' : more.includes('B') ? 'BIZ' : more.includes('I') ? 'IT' : more.includes(5) ? (l === 'B2' ? 'B2x' : 'C1') : l, tp: tp || '', xe: more.find(Array.isArray) || [] }));
+// Goal tags (data/tags.js): hand-picked words for travel, work, exams …; a word may have several.
+const TAGS = window.TAGS || [];
+const TAG_LABEL = Object.fromEntries(TAGS.map((t) => [t.id, `${t.icon} ${t.th}`]));
+const TAGS_OF = new Map();
+TAGS.forEach((t) => t.w.forEach((x) => { if (!TAGS_OF.has(x)) TAGS_OF.set(x, []); TAGS_OF.get(x).push(t.id); }));
+const tagsOf = (w) => TAGS_OF.get(w.w) || [];
+const hasTag = (w, id) => tagsOf(w).includes(id);
+// New words follow the chosen topic (settings.topic) and goal tag (settings.goal); empty = any.
+const inTopic = (w) => (!S.settings.topic || topicMatch(S.settings.topic, w.tp)) && (!S.settings.goal || hasTag(w, S.settings.goal));
+const LEVELS = ['A1', 'A2', 'B1', 'B2', 'B2x', 'C1', 'TOE', 'AWL', 'BIZ', 'IT'];
+// CEFR-ordered groups only (easy → hard): survival, the tower and placement climb these; the extra sets (TOEIC, academic) sit outside the ladder.
+const LEVELS_CEFR = ['A1', 'A2', 'B1', 'B2', 'B2x', 'C1'];
+const LEVELS_3000 = ['A1', 'A2', 'B1', 'B2'];
+const LEVELS_5000 = ['B2x', 'C1'];
+const LEVELS_EXTRA = ['TOE', 'AWL', 'BIZ', 'IT'];
+const LV_LABEL = { A1: 'A1', A2: 'A2', B1: 'B1', B2: 'B2', B2x: 'B2+', C1: 'C1', C2: 'C2', TOE: 'TOEIC', AWL: 'วิชาการ', BIZ: 'ธุรกิจ', IT: 'IT' };
+const lvNames = (ls) => ls.map((l) => LV_LABEL[l]).join(', ');
+const DAY = 86400000;
+// Review intervals (days) for each box. Box >= MASTERED counts as "จำได้แล้ว".
+const INTERVALS = [0, 1, 3, 7, 16, 35, 80, 180];
+const MASTERED = 4;
+
+/* ---------- storage ---------- */
+const KEY = 'oxford3000.v1';
+// Random id for this install (never in backups): per-device counters are kept apart so syncing can add them up.
+const DEV = (() => {
+  try { let id = localStorage.getItem('o3k.dev'); if (!id) { id = Math.random().toString(36).slice(2, 10); localStorage.setItem('o3k.dev', id); } return id; } catch (e) { return 'local'; }
+})();
+// 1.52.0 kept one flat { game: n } map: it becomes this device's bucket.
+const gplayFix = (g) => (g && Object.values(g).some((v) => typeof v === 'number') ? { [DEV]: g } : g || {});
+// Last day a round of each game started (1.157.0, for the games menu's pick of the day); a function declaration: load() runs early.
+// TOEIC mock tests (1.194.0): keep well-formed entries, newest 30, oldest first (a function declaration: load() runs before most code).
+function cleanMock(m) {
+  if (!Array.isArray(m)) return [];
+  const ok = (x) => x && isFinite(x.t) && isFinite(x.L) && isFinite(x.R) && x.p && typeof x.p === 'object';
+  const out = m.filter(ok).map((x) => ({ t: +x.t, L: +x.L, R: +x.R, p: Object.fromEntries(Object.entries(x.p).filter(([k, v]) => /^toeic\d$/.test(k) && Array.isArray(v) && v.length === 2 && v.every((n) => Number.isInteger(n) && n >= 0)).map(([k, v]) => [k, v.slice()])) }));
+  return out.sort((a, b) => a.t - b.t).slice(-30);
+}
+function cleanGlast(g) {
+  const out = {};
+  if (g && typeof g === 'object' && !Array.isArray(g)) for (const [k, v] of Object.entries(g)) if (typeof v === 'string' && /^\d{4}-\d\d-\d\d$/.test(v) && k.length <= 20) out[k] = v;
+  return out;
+}
+const gamePlays = (id) => Object.values(S.gplay).reduce((n, dev) => n + ((dev && dev[id]) || 0), 0);
+// My word sets (js/decks.js). Everything read from storage, a backup or the cloud goes through cleanDecks()/cleanDprog().
+const DECK_MAX = { decks: 200, words: 500, name: 40, word: 40, icon: 8, tomb: 90 * 86400000, own: 200, ownT: 80, ownE: 160 }; // own = words of my own (not in the list) per set, counted in `words` too
+const isNum = (n) => typeof n === 'number' && isFinite(n);
+const REV_MAX = 2000; // reviews kept in S.rev (personal FSRS, 1.153.0; cleanRev() runs inside load())
+// Activity kinds (1.158.0, see actLog): defined here because load() → cleanAct() runs early.
+const ACT_CATS = [ // stack order bottom → top = the validated colour order (--a-<id> in style.css)
+  ['card', 'แฟลชการ์ด'], ['feed', 'ไถศัพท์'], ['game', 'เกมคำศัพท์'], ['skill', 'เกมทักษะ/ไวยากรณ์'],
+  ['read', 'อ่าน + ฟัง'], ['fun', 'โซนสนุก'], ['other', 'ทดสอบ + อื่นๆ'],
+];
+const ACT_IDS = ACT_CATS.map((c) => c[0]);
+const ACT_DAYS = 400, ACT_GAP = 120, ACT_FIRST = 8;
+const ACT_EVENTS = [['open', '🚀', 'เปิดแอป'], ['round', '🎮', 'เริ่มเล่นเกม'], ['speak', '🔊', 'เล่นเสียงอ่าน'], ['sheet', '📖', 'เปิดดูคำ'],
+  ['search', '🔍', 'ค้นหา'], ['star', '⭐', 'ติด/เอาดาว'], ['note', '✍️', 'เขียนวิธีจำ']];
+function cleanDecks(a) {
+  const byId = new Map();
+  for (const x of Array.isArray(a) ? a : []) {
+    if (!x || typeof x !== 'object' || typeof x.id !== 'string' || !/^[a-z0-9]{1,24}$/.test(x.id)) continue;
+    const del = x.del === true, seen = new Set(), words = [];
+    if (!del) for (const w of Array.isArray(x.words) ? x.words : []) {
+      if (typeof w === 'string' && w && w.length <= DECK_MAX.word && !seen.has(w) && words.length < DECK_MAX.words) { seen.add(w); words.push(w); }
+    }
+    const d = { id: x.id, name: typeof x.name === 'string' ? x.name.slice(0, DECK_MAX.name) : '', icon: typeof x.icon === 'string' && x.icon ? x.icon.slice(0, DECK_MAX.icon) : '📚',
+      words, at: isNum(x.at) ? x.at : 0, used: isNum(x.used) ? x.used : 0 };
+    // Words of my own (1.109): [{w, t, e, et}] — an English word or phrase, its Thai meaning and an optional example with translation.
+    if (!del && Array.isArray(x.own)) {
+      const own = [], low = new Set(words.map((v) => v.toLowerCase())), str = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
+      for (const o of x.own) {
+        if (!o || typeof o !== 'object') continue;
+        const w = str(o.w, DECK_MAX.word), t = str(o.t, DECK_MAX.ownT);
+        if (!/^[A-Za-z][A-Za-z' .-]*$/.test(w) || !t || low.has(w.toLowerCase()) || own.length >= DECK_MAX.own || words.length + own.length >= DECK_MAX.words) continue;
+        low.add(w.toLowerCase()); own.push({ w, t, e: str(o.e, DECK_MAX.ownE), et: str(o.et, DECK_MAX.ownE) });
+      }
+      if (own.length) d.own = own;
+    }
+    if (del) d.del = true;
+    if (typeof x.pre === 'string' && /^[a-z0-9]{1,24}$/.test(x.pre)) d.pre = x.pre; // ready-made set it was copied from (1.198.0)
+    if (isNum(x.rst) && x.rst > 0) d.rst = x.rst; // when the set's progress was last restarted
+    const o = byId.get(d.id);
+    if (!o || d.at > o.at) byId.set(d.id, d);
+  }
+  const all = [...byId.values()].sort((p, q) => q.at - p.at), live = all.filter((d) => !d.del).slice(0, DECK_MAX.decks);
+  return all.filter((d) => d.del).slice(0, DECK_MAX.decks).concat(live);
+}
+function cleanDprog(o, live) {
+  const out = {};
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return out;
+  for (const [id, m] of Object.entries(o)) {
+    if (!live.has(id) || !m || typeof m !== 'object' || Array.isArray(m)) continue;
+    const mm = {};
+    for (const [w, p] of Object.entries(m)) {
+      if (!p || typeof p !== 'object' || !isNum(p.b)) continue;
+      const e = { b: p.b };
+      for (const k of ['i', 'e', 'd', 's', 'c', 'x', 't', 'st', 'df', 'lr']) if (isNum(p[k])) e[k] = p[k];
+      mm[w] = e;
+    }
+    out[id] = mm;
+  }
+  return out;
+}
+function sanitizeDecks(r) {
+  r.decks = cleanDecks(r.decks).filter((d) => !d.del || Date.now() - d.at <= DECK_MAX.tomb);
+  r.dprog = cleanDprog(r.dprog, new Set(r.decks.filter((d) => !d.del).map((d) => d.id)));
+  return r;
+}
+const defaults = () => ({
+  prog: {},            // word -> { b: box, d: due ms, s: seen, c: correct, x: wrong }
+  settings: { levels: ['A1'], topic: '', goal: '', newPerDay: 20, minutes: 0, scheduler: 'fsrs', retention: 0.9, fsk: 1, autoSpeak: true, rate: 0.9, slowRepeat: true, accent: 'en-US', front: 'en', order: 'shuffle', sfx: true, haptic: true, topicTint: true, heroBg: 'theme', heroArt: true, pageBg: true, exam: { date: '', name: '' }, fest: true, season: true, sfxPack: 'chime', qMascot: true, headFont: true, glassBar: true, fsz: 'md', appKbd: 'auto', thumbs: 'auto', optSide: 'right', penMode: 'auto', winGap: 'auto', shareTpl: 'classic', palAuto: false, animPage: true, animAnswer: true, confetti: true, badge: true, start: 'home', rFont: 1, voice: '', theme: 'auto', palette: 'violet', icon: 'purple', wotd: { lv: [], st: [], tp: [] }, gentle: true, weekGoal: 0, timeGoal: 0, frame: '', nextGames: [], gamePin: [], gameHide: [], gameView: 'list', gameFold: [], riddleLv: ['A1', 'A2'], cardPick: { lv: '', tp: '' }, swipeUD: true },
+  daily: { date: '', fresh: 0, reviews: 0 },
+  streak: { last: '', count: 0 },
+  best: {},            // game -> best score
+  hist: {},            // 'YYYY-MM-DD' -> cards/answers that day
+  backupAt: 0,         // ms of the last backup export
+  backupSnooze: '',    // date the backup reminder was dismissed
+  star: {},            // word -> 1 for starred words
+  freeze: 0,           // streak freezes in stock (max MAX_FREEZE)
+  ach: {},             // achievement id -> date unlocked
+  lex: {},             // skill-game item key -> { b, i, e, d, s, c, x } like prog: wrong items come back on schedule (1.65)
+  spc: { t: 0, n: 0 }, // time spent on graded cards: seconds, count (rolling) → seconds per card (1.63)
+  mascot: { equip: { head: '', face: '', body: '' }, at: 0 }, // น้องคำ outfit (1.67)
+  owned: [],           // item ids won early from the daily box (1.67)
+  box: { date: '', got: '' }, // today's mystery box
+  coin: {},            // fun zone coins (1.115): device id -> [earned, spent]; balance = coinBal() (js/fun.js)
+  puz: { d: '', cw: [], rv: [], lad: [], ladDone: false, ladGave: false, streak: 0, best: 0, last: '', n: 0 }, // daily puzzles (1.119, js/puzzle.js)
+  fq: { d: '', c: {}, got: [] }, // daily fun-zone quests (1.121): day, counts per event type, quest indexes done (js/fun.js)
+  room: { own: [] },   // น้องคำ's room (1.122): furniture / pets bought (list words) (js/room.js)
+  paths: {},           // choose-your-path stories (1.122): story id -> [ending ids found] (js/paths.js)
+  pics: [],            // picture-story sentences (1.122): [{ t, w: [words], d }] newest first (js/create.js)
+  sets: {},            // card sets claimed in the album (1.121): topic -> date (js/collect.js)
+  cases: {},           // detective cases (1.120): id -> { ok: solved, t: wrong guesses } (js/cases.js)
+  chain: { best: 0, runs: 0, links: 0 }, // word chain (1.167.0, js/chain.js): longest chain, runs, links made in total
+  cafe: { best: 0, total: 0 }, // ร้านน้องคำ (1.120): most guests served in a day, guests served in total (js/cafe.js)
+  ghost: {},           // ghost race (1.120): game id -> best run (time attack: seconds of each right answer; survival: right answers after each question)
+  foil: {},            // foil cards in the album (1.119): word -> date won (js/collect.js)
+  wboss: { k: '', win: false, tries: 0, low: 100, wins: 0 }, // weekly boss (1.166.0, js/wboss.js): Monday key, beaten this week, tries, lowest HP left %, weeks won
+  tower: { best: 0, cp: 0, runs: 0 }, // endless tower (1.115): highest floor cleared, highest boss floor (checkpoint), runs (js/tower.js)
+  adv: {},             // weekly adventure book (1.114): Monday -> { t: tag id, s: '0101100' stamps, done, perfect } (js/adventure.js)
+  evt: {},             // 'eventId-year' -> { r, n, pass, at } seasonal event quiz results (1.72)
+  wnew: { key: '', n: 0 }, // new words started this week (1.62)
+  readyAt: {},         // story level -> best 'known words' threshold reached (90/95) (1.62)
+  repair: null,        // streak repair offer {count, at, base, need, done} (1.61)
+  quest: { date: '', q: [], bonus: false }, // today's 3 quests (1.61)
+  wq: { key: '', id: '', c: {}, done: false }, // this week's quest (1.61)
+  counts: { quests: 0, speak: 0, perfect: 0 },
+  remind: '2000',      // daily reminder time for the calendar file (HHMM)
+  xp: null,            // experience points; null = not yet seeded from existing progress
+  chist: {},           // 'YYYY-MM-DD' -> flashcards graded that day (hist minus this = game/feed answers)
+  snap: {},            // 'YYYY-MM-DD' -> [learned 3000, mastered 3000, learned all, mastered all]
+  chistFrom: '',       // first day chist was recorded; earlier hist can't be split into cards/games
+  act: {},             // 1.158.0: 'YYYY-MM-DD' -> { category (ACT_CATS id) -> [answers, seconds] }, last ACT_DAYS days (actLog in markActive)
+  note: {},            // word -> the user's own memory hook
+  rev: [],             // flashcard reviews of cards seen before (1.153.0): [minute stamp, days since the last review, stability then, grade 0–3], last REV_MAX → fsFit()
+  ret: [[0, 0], [0, 0], [0, 0], [0, 0]], // due reviews by gap [1–2, 3–6, 7–20, 21+ days]: [reviewed, remembered] → real retention vs the target (1.107)
+  noteAt: {},          // word -> ms of the last edit or delete of its hook (newest wins when syncing; 1.105.4)
+  sketch: {},          // word -> the user's drawn memory hook: SVG path data in a 300×180 box (1.142, sketchD() checks it)
+  sketchAt: {},        // word -> ms of the last edit or delete of its drawing (newest wins, like noteAt)
+  starAt: {},          // word -> ms the star was last set or removed (1.105.4)
+  miss: {},            // 'YYYY-MM-DD' -> { word: times wrong that day } (last 21 days)
+  missY: {},           // 'YYYY' -> device id -> { word: times wrong that year } (this year and last; 1.155.2, year in review)
+  missYFrom: '',       // first day missY was kept: a year counts only if its whole year was logged (otherwise all-time `x` is shown)
+  weekSeen: '',        // Monday key of the last weekly summary the user dismissed
+  monthSeen: '',       // 'YYYY-MM' of the month whose summary card was dismissed
+  read: {},            // story id -> date finished
+  readScore: {},       // story id -> [best right answers, questions]
+  ltest: {},           // level -> best level-test result { r, n, at } (1.63)
+  mtest: {},           // 'YYYY-MM' -> { r: right, n: questions, at: ms } best monthly-test score
+  mock: [],            // TOEIC mock tests (1.194.0): [{t: ms, L, R: rough section scores, p: {toeic1: [right, asked], …}}], oldest first, ≤ 30
+  riddle: { d: '', g: [], over: false, win: false }, // daily word riddle: today's guesses
+  lvmap: {},           // topic id -> string of stars (0–3) per level-map stage
+  gacc: { a: 0.7, n: 0 }, // rolling accuracy (a) of multiple-choice game answers (n answers) → automatic game difficulty
+  duel: {},            // challenge code -> [right, questions, seconds, played at ms] best result per code (latest 30)
+  riddleStat: { played: 0, won: 0, streak: 0, best: 0, dist: [0, 0, 0, 0, 0, 0], last: '' }, // riddle totals; dist[i] = solved in i+1 tries
+  placedAt: '',        // date the placement test was taken/dismissed
+  xpWeek: {},          // Monday key -> XP earned that week (friends leaderboard)
+  nick: '',            // name shown on the friends leaderboard
+  stk: {},             // topic id -> sticker tier reached (1 bronze … 4 diamond)
+  wotdPick: null,      // {day, key, w}: today's word of the day (kept steady even as progress changes)
+  seenVer: null,       // app version whose "what's new" prompt was shown (device-local, not merged from backups)
+  glast: {},           // game id -> 'YYYY-MM-DD' last round started (1.157.0, newest wins when merging)
+  gplay: {},           // device id -> { game id -> rounds started } (summed for the games menu "เล่นบ่อย" row)
+  settingsAt: 0,       // ms when settings/homeCfg last changed on any device: the newest copy wins when syncing
+  homeCfg: null,       // home layout [{id, on, w: 'full'|'half'}] in display order; null = default (see HOME_BLOCKS)
+  decks: [],           // my word sets [{id, name, icon, words: [list words], at: last edit ms, used: last used ms, del: true = deleted}]
+  dprog: {},           // deck id -> { word -> { b, i, e, d, s, c, x } } progress of each set (same shape as prog; kept apart from prog)
+});
+// Set when the saved state could not be read: the old text is copied to KEY + '.rescue' before anything new is written (1.105.4).
+let loadRescued = false;
+let S = load();
+// Users from before 1.8.0 get XP for the work they already did.
+if (S.xp == null) S.xp = Object.values(S.prog).reduce((a, p) => a + (p.s || 0) + (p.c || 0), 0);
+
+function load() {
+  let raw = null;
+  try {
+    raw = localStorage.getItem(KEY);
+    if (raw) {
+      const d = defaults(), s = JSON.parse(raw);
+      const r = { ...d, ...s, settings: { ...d.settings, ...(s.settings || {}) } };
+      r.gplay = gplayFix(r.gplay); r.glast = cleanGlast(r.glast); r.mock = cleanMock(r.mock);
+      // A missing/odd riddle record (older backup, sync from another device) must never break the home screen.
+      if (!r.mascot || typeof r.mascot !== 'object' || !r.mascot.equip || typeof r.mascot.equip !== 'object') r.mascot = d.mascot;
+      if (!Array.isArray(r.ret) || r.ret.length !== 4 || r.ret.some((x) => !Array.isArray(x) || !isNum(x[0]) || !isNum(x[1]))) r.ret = d.ret;
+      r.rev = cleanRev(r.rev); r.missY = cleanMissY(r.missY); r.act = cleanAct(r.act);
+      if (!Array.isArray(r.owned)) r.owned = [];
+      if (!r.evt || typeof r.evt !== 'object' || Array.isArray(r.evt)) r.evt = {};
+      r.adv = cleanAdv(r.adv);
+      r.coin = cleanCoin(r.coin); r.tower = cleanTower(r.tower); r.wboss = cleanWboss(r.wboss); r.puz = cleanPuz(r.puz); r.foil = cleanFoil(r.foil);
+      r.fq = cleanFq(r.fq); r.sets = cleanFoil(r.sets); r.room = cleanRoom(r.room); r.paths = cleanPaths(r.paths); r.pics = cleanPics(r.pics);
+      r.cases = cleanCases(r.cases); r.cafe = cleanCafe(r.cafe); r.chain = cleanChain(r.chain); r.ghost = cleanGhost(r.ghost);
+      if (!r.box || typeof r.box !== 'object') r.box = d.box;
+      if (!r.riddle || typeof r.riddle !== 'object' || !Array.isArray(r.riddle.g)) r.riddle = d.riddle;
+      if (!r.riddleStat || typeof r.riddleStat !== 'object') r.riddleStat = d.riddleStat;
+      else r.riddleStat = { ...d.riddleStat, ...r.riddleStat, dist: (Array.isArray(r.riddleStat.dist) ? r.riddleStat.dist : []).concat([0, 0, 0, 0, 0, 0]).slice(0, 6) };
+      return topicMigrate(sanitizeDecks(r));
+    }
+  } catch (e) {
+    // Unreadable (or a migration threw): keep the original text so the next save cannot destroy it. Never overwrite an earlier rescue copy.
+    if (raw) { try { if (!localStorage.getItem(KEY + '.rescue')) localStorage.setItem(KEY + '.rescue', raw); loadRescued = true; } catch (e2) { /* no room */ } }
+  }
+  return defaults();
+}
+// Settings that are shared across devices: everything in settings + the home layout, except the voice
+// (voice ids differ between devices). save() stamps settingsAt when this changes.
+const settingsSig = () => JSON.stringify([{ ...S.settings, voice: '' }, S.homeCfg]);
+let setSig = null; // baseline taken at the end of boot (boot.js) and after adopting synced settings
+// save() is called after every answer, so the heavy part (medal / sticker / snapshot checks and stringifying all of S)
+// is batched: it runs once ~300 ms after the last save(), and right away when the app is hidden or closed (1.73).
+// flushSave() does it now (backup export, tests).
+let saveTimer = 0, saveDirty = false;
+function save() {
+  const sig = settingsSig();
+  if (setSig !== null && sig !== setSig) S.settingsAt = Date.now();
+  setSig = sig;
+  saveDirty = true;
+  if (!saveTimer) saveTimer = setTimeout(flushSave, 300);
+  if (typeof schedulePush === 'function') schedulePush();
+  if (typeof updateBadge === 'function') updateBadge();
+}
+function flushSave() {
+  clearTimeout(saveTimer); saveTimer = 0;
+  if (!saveDirty) return;
+  saveDirty = false;
+  if (typeof checkAch === 'function') checkAch(); // may call save() again (new medal): that one flushes in another 300 ms
+  if (typeof takeSnap === 'function') takeSnap();
+  let json = JSON.stringify(S);
+  // Close to the limit: thin out old statistics first (never progress), so the write below still fits (1.210.0).
+  if (json.length > STORE_LIMIT * STORE_TRIM && storeTrim()) json = JSON.stringify(S);
+  if (!storeWrite(json) && storeTrim()) storeWrite(JSON.stringify(S));
+}
+function storeWrite(json) {
+  try { localStorage.setItem(KEY, json); saveFailed = false; saveLen = json.length; storeCheck(json.length); return true; } catch (e) {
+    // Storage full or blocked: tell the person once, otherwise progress silently stops being saved.
+    if (!saveFailed && typeof toast === 'function') toast('⚠️ บันทึกข้อมูลลงเครื่องไม่ได้ (พื้นที่เต็มหรือถูกปิดไว้) ลองสำรองข้อมูลไว้ก่อนนะ');
+    saveFailed = true; return false;
+  }
+}
+let saveFailed = false, saveLen = 0;
+/* ---------- storage room (1.210.0) ---------- */
+// Safari gives a site about 5 MB of localStorage, counted as UTF-16 (2 bytes a character): plan on STORE_LIMIT characters.
+// Someone who has learned every word with a year of activity uses about 1 M characters (measured), so this is a safety net.
+const STORE_LIMIT = 2500000, STORE_WARN = 0.7, STORE_TRIM = 0.85, STORE_WARN_DAYS = 7;
+const STORE_KEEP_ACT = 90; // days of S.act whose detail (x: games, hours, events) survives a trim
+function storeUse() { // characters in this site's localStorage (all keys)
+  let n = 0;
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); n += k.length + (localStorage.getItem(k) || '').length; } } catch (e) { /* blocked */ }
+  return n;
+}
+// Drops statistics detail only: S.act x-detail older than STORE_KEEP_ACT days, S.rev beyond half of REV_MAX, S.missY before this year.
+// Card progress, sets, notes and sketches are never touched. Returns true when something was removed.
+function storeTrim() {
+  let cut = false;
+  const old = ymd(new Date(Date.now() - STORE_KEEP_ACT * 864e5));
+  for (const k of Object.keys(S.act || {})) if (k < old && S.act[k] && S.act[k].x) { delete S.act[k].x; cut = true; }
+  if (Array.isArray(S.rev) && S.rev.length > REV_MAX / 2) { S.rev = S.rev.slice(-REV_MAX / 2); cut = true; }
+  const y = String(new Date().getFullYear());
+  for (const k of Object.keys(S.missY || {})) if (k !== y) { delete S.missY[k]; cut = true; }
+  if (cut) { storeTrim.at = Date.now(); if (typeof toast === 'function') toast('🧹 พื้นที่เก็บข้อมูลใกล้เต็ม เลยย่อสถิติเก่าลง (ความคืบหน้าของคำยังอยู่ครบ) แนะนำให้สำรองข้อมูลไว้นะ'); }
+  return cut;
+}
+// Past STORE_WARN of the limit: one toast per STORE_WARN_DAYS days (device-local stamp o3k.storeWarn).
+function storeCheck(len) {
+  if (len < STORE_LIMIT * STORE_WARN * 0.8) return; // cheap exit: the other keys are small
+  const use = storeUse(); if (use < STORE_LIMIT * STORE_WARN) return;
+  try {
+    const last = +localStorage.getItem('o3k.storeWarn') || 0;
+    if (Date.now() - last < STORE_WARN_DAYS * 864e5) return;
+    localStorage.setItem('o3k.storeWarn', String(Date.now()));
+  } catch (e) { return; }
+  if (typeof toast === 'function') toast(`💾 ใช้พื้นที่เก็บข้อมูลในเครื่องไปแล้ว ${Math.round(use / STORE_LIMIT * 100)}% แนะนำให้สำรองข้อมูลไว้ (ตั้งค่า → 💾 สำรองข้อมูล)`);
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
+addEventListener('pagehide', flushSave);
+
+/* ---------- backup ---------- */
+const BACKUP_EVERY = 7; // days before the home screen nags about a backup
+
+// Share sheet when the device can share files (iOS), else a download. Resolves false if the user cancelled.
+async function saveFile(file, title) {
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title }); return true; } catch (e) { if (e.name === 'AbortError') return false; }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file); a.download = file.name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  return true;
+}
+async function exportBackup() {
+  flushSave();
+  const name = `essential-vocab-backup-${today()}.json`;
+  const file = new File([JSON.stringify({ ...S, backupAt: Date.now() })], name, { type: 'application/json' });
+  if (await saveFile(file, 'ศัพท์ต้องรู้ backup')) { S.backupAt = Date.now(); save(); toast('สำรองข้อมูลแล้ว ✅'); }
+}
+
+const needsBackup = () => Object.keys(S.prog).length >= 10
+  && Date.now() - (S.backupAt || 0) > BACKUP_EVERY * DAY && S.backupSnooze !== today()
+  && !(typeof syncOn === 'function' && syncOn() && auth); // signed-in cloud sync is the backup
+
+// Merge a backup into the current state, keeping whichever side is further along for each word.
+const progAhead = (a, b) => (a.b - b.b) || ((a.s || 0) - (b.s || 0)) || ((a.d || 0) - (b.d || 0));
+// Which copy of a card wins when two are merged (1.105.4). Every edit stamps `t` (ms): the newer edit wins, so "forgot", a wrong
+// game answer or "review again" on this device is not undone by an older copy that has a higher box. A card with a stamp beats one
+// without (older app version); two cards without stamps use the old "further ahead wins" rule.
+const cardWins = (inc, cur) => (inc.t && cur.t ? inc.t > cur.t || (inc.t === cur.t && progAhead(inc, cur) > 0) : inc.t || cur.t ? !!inc.t : progAhead(inc, cur) > 0);
+// My word sets: per set the newer edit (`at`) wins, deleted sets stay as tombstones for 90 days so a deletion also reaches
+// other devices and old backups; progress is merged per word like prog, and only for sets that still exist.
+function mergeDecks(d) {
+  const before = JSON.stringify([S.decks, S.dprog]), now = Date.now();
+  const theirDecks = cleanDecks(d.decks);
+  const loc = new Map(S.decks.map((x) => [x.id, x.rst || 0])), inc = new Map(theirDecks.map((x) => [x.id, x.rst || 0]));
+  const map = new Map(S.decks.map((x) => [x.id, x]));
+  for (const t of theirDecks) {
+    const m = map.get(t.id);
+    if (!m) map.set(t.id, t);
+    else if (t.at > m.at) map.set(t.id, { ...t, used: Math.max(t.used, m.used) });
+    else if (t.used > m.used) m.used = t.used;
+  }
+  for (const [id, x] of map) { const r = Math.max(loc.get(id) || 0, inc.get(id) || 0); if (r) x.rst = r; }
+  S.decks = cleanDecks([...map.values()]).filter((x) => !x.del || now - x.at <= DECK_MAX.tomb);
+  // In place: a study session in progress keeps its reference to S.dprog[id].
+  const live = new Set(S.decks.filter((x) => !x.del).map((x) => x.id));
+  for (const id of Object.keys(S.dprog)) if (!live.has(id)) delete S.dprog[id];
+  // "Start this set again" bumps rst: progress from an older start (cloud copy, old backup) must not flow back in,
+  // and a device still on the older start is wiped when the newer one arrives.
+  const theirs = cleanDprog(d.dprog, live);
+  for (const id of live) {
+    const lr = loc.get(id) || 0, ir = inc.get(id) || 0;
+    if (ir > lr && S.dprog[id]) for (const k of Object.keys(S.dprog[id])) delete S.dprog[id][k];
+    if (ir < lr || !theirs[id]) continue;
+    const cur = S.dprog[id] || (S.dprog[id] = {});
+    for (const [w, p] of Object.entries(theirs[id])) if (!cur[w] || cardWins(p, cur[w])) cur[w] = p;
+  }
+  if (typeof current !== 'undefined' && current === 'decks' && before !== JSON.stringify([S.decks, S.dprog]) && !view.querySelector('#dkBack')) setTimeout(() => go('decks'), 0);
+}
+// Merge helpers (1.151.1): keep the larger number per key, skipping anything that is not a number.
+function maxIn(mine, theirs) {
+  if (!theirs || typeof theirs !== 'object') return;
+  for (const [k, v] of Object.entries(theirs)) if (isNum(v)) mine[k] = Math.max(isNum(mine[k]) ? mine[k] : 0, v);
+}
+// A test result {r, n, at}: the better share of right answers wins.
+const testOk = (v) => !!v && typeof v === 'object' && isNum(v.r) && isNum(v.n) && v.n > 0;
+const testBetter = (cur, v) => testOk(v) && (!testOk(cur) || v.r / v.n > cur.r / cur.n);
+// A story score [right, questions]. 1.151.0 made the quizzes longer (3 → 5 questions): a score on the longer quiz always replaces
+// one on the shorter quiz, so an old 3/3 neither blocks today's result nor comes back from an older device.
+const scoreOk = (v) => Array.isArray(v) && isNum(v[0]) && isNum(v[1]) && v[1] > 0;
+const storyBetter = (cur, v) => scoreOk(v) && (!scoreOk(cur) || v[1] > cur[1] || (v[1] === cur[1] && v[0] > cur[0]));
+function mergeBackup(d) {
+  const ahead = progAhead;
+  let added = 0, updated = 0;
+  const fresh = Object.keys(S.prog).length === 0;
+  for (let [w, p] of Object.entries(d.prog || {})) {
+    if (!p || typeof p !== 'object' || !isNum(p.b)) continue;
+    if (!isNum(p.d)) p = { ...p, d: Date.now() }; // without a due time a card would never come up again
+    const cur = S.prog[w];
+    if (!cur) { S.prog[w] = p; added++; }
+    else if (cardWins(p, cur)) { S.prog[w] = p; updated++; }
+  }
+  for (const [k, p] of Object.entries(d.lex || {})) {
+    if (!p || typeof p.b !== 'number' || typeof p.d !== 'number') continue;
+    if (!S.lex[k] || cardWins(p, S.lex[k])) S.lex[k] = p;
+  }
+  // Odd values (null, text) from a damaged backup or cloud row are skipped one by one: a throw here would leave the merge half done
+  // and, from the cloud, make every later sync fail the same way (1.151.1).
+  maxIn(S.hist, d.hist); maxIn(S.best, d.best);
+  for (const [dev, m] of Object.entries(gplayFix(d.gplay))) {
+    const mine = S.gplay[dev] || (S.gplay[dev] = {});
+    for (const [k, v] of Object.entries(m || {})) mine[k] = Math.max(mine[k] || 0, v);
+  }
+  for (const [k, v] of Object.entries(cleanGlast(d.glast))) if (!S.glast[k] || v > S.glast[k]) S.glast[k] = v;
+  if (d.streak && ((d.streak.last || '') > (S.streak.last || '') || (d.streak.last === S.streak.last && d.streak.count > S.streak.count))) S.streak = d.streak;
+  if (d.daily && d.daily.date === S.daily.date) {
+    S.daily.fresh = Math.max(S.daily.fresh, d.daily.fresh || 0);
+    S.daily.reviews = Math.max(S.daily.reviews, d.daily.reviews || 0);
+  } else if (d.daily && d.daily.date > S.daily.date) S.daily = d.daily;
+  // Settings: the copy changed most recently wins (a fresh device takes the backup's); the voice stays per device.
+  if (d.settings && ((fresh && !S.settingsAt) || (d.settingsAt || 0) > (S.settingsAt || 0))) {
+    S.settings = { ...defaults().settings, ...d.settings, voice: S.settings.voice || '' };
+    if (Array.isArray(d.homeCfg) || d.homeCfg === null) S.homeCfg = d.homeCfg;
+    S.settingsAt = Math.max(S.settingsAt || 0, d.settingsAt || 0);
+    setSig = settingsSig();
+    if (typeof applyTheme === 'function') { applyTheme(); applyIcon(); }
+    if (typeof current !== 'undefined' && current === 'settings') setTimeout(() => go(current), 0);
+  }
+  S.backupAt = Math.max(S.backupAt || 0, d.backupAt || 0);
+  // Stars and memory hooks: the newer edit wins (also a delete / un-star, kept as a time stamp). Without stamps (older data) only additions come in.
+  S.rev = mergeRev(S.rev, cleanRev(d.rev));
+  for (const [y, devs] of Object.entries(cleanMissY(d.missY))) for (const [dev, m] of Object.entries(devs)) {
+    const mine = ((S.missY[y] = S.missY[y] || {})[dev] = S.missY[y][dev] || {});
+    for (const [w, n] of Object.entries(m)) mine[w] = Math.max(mine[w] || 0, n); // each device counts its own: max, never a sum twice
+  }
+  if (typeof d.missYFrom === 'string' && /^\d{4}-\d\d-\d\d$/.test(d.missYFrom) && (!S.missYFrom || d.missYFrom < S.missYFrom)) S.missYFrom = d.missYFrom;
+  if (Array.isArray(d.ret) && d.ret.length === 4) d.ret.forEach((x, b) => { if (Array.isArray(x) && isNum(x[0]) && isNum(x[1]) && x[0] > S.ret[b][0]) S.ret[b] = [x[0], Math.min(x[0], x[1])]; });
+  for (const [w, at] of Object.entries(d.starAt || {})) if (isNum(at) && at > (S.starAt[w] || 0)) { S.starAt[w] = at; if (d.star && d.star[w]) S.star[w] = 1; else delete S.star[w]; }
+  for (const w of Object.keys(d.star || {})) if (!(w in (d.starAt || {})) && !(w in S.starAt)) S.star[w] = 1;
+  for (const [w, at] of Object.entries(d.sketchAt || {})) if (isNum(at) && at > (S.sketchAt[w] || 0)) { S.sketchAt[w] = at; const sk = sketchD((d.sketch || {})[w]); if (sk) S.sketch[w] = sk; else delete S.sketch[w]; }
+  for (const [w, at] of Object.entries(d.noteAt || {})) if (isNum(at) && at > (S.noteAt[w] || 0)) { S.noteAt[w] = at; if (typeof (d.note || {})[w] === 'string' && d.note[w]) S.note[w] = d.note[w]; else delete S.note[w]; }
+  for (const [k, v] of Object.entries(d.ach || {})) if (!S.ach[k]) S.ach[k] = v;
+  if (d.mascot && d.mascot.equip && (d.mascot.at || 0) > (S.mascot.at || 0)) S.mascot = d.mascot;
+  if (Array.isArray(d.owned)) S.owned = [...new Set([...S.owned, ...d.owned.filter((x) => typeof x === 'string')])];
+  for (const [k, v] of Object.entries(d.evt || {})) if (v && v.n) { const m = S.evt[k]; S.evt[k] = !m ? v : { ...(v.r > m.r ? v : m), pass: !!(m.pass || v.pass) }; }
+  if (d.adv) mergeAdv(d.adv);
+  for (const [dev, v] of Object.entries(cleanCoin(d.coin))) { const m = S.coin[dev] || [0, 0]; S.coin[dev] = [Math.max(m[0], v[0]), Math.max(m[1], v[1])]; }
+  if (d.puz) mergePuz(d.puz);
+  for (const [k, v] of Object.entries(cleanCases(d.cases))) { const m = S.cases[k] || { ok: false, t: 0 }; S.cases[k] = { ok: m.ok || v.ok, t: Math.max(m.t, v.t) }; }
+  if (d.chain) { const c = cleanChain(d.chain); S.chain = { best: Math.max(S.chain.best, c.best), runs: Math.max(S.chain.runs, c.runs), links: Math.max(S.chain.links, c.links) }; }
+  if (d.cafe) { const c = cleanCafe(d.cafe); S.cafe = { best: Math.max(S.cafe.best, c.best), total: Math.max(S.cafe.total, c.total) }; }
+  for (const [k, v] of Object.entries(cleanGhost(d.ghost))) if (ghostScore(k, v) > ghostScore(k, S.ghost[k] || [])) S.ghost[k] = v;
+  Object.assign(S.foil, cleanFoil(d.foil), S.foil);
+  if (d.tower) {
+    const t = cleanTower(d.tower), a = S.tower.wk, b = t.wk;
+    const wk = !a ? b : !b ? a : a.k === b.k ? { k: a.k, best: Math.max(a.best, b.best) } : a.k > b.k ? a : b;
+    S.tower = { best: Math.max(S.tower.best, t.best), cp: Math.max(S.tower.cp, t.cp), runs: Math.max(S.tower.runs, t.runs), ...(wk ? { wk } : {}) };
+  }
+  if (d.wboss) { // weekly boss: the newer week wins; the same week merges (beaten on either device, more tries, lower HP left)
+    const o = cleanWboss(d.wboss), a = S.wboss, wins = Math.max(a.wins, o.wins);
+    S.wboss = o.k > a.k ? { ...o, wins } : o.k < a.k ? { ...a, wins } : { k: a.k, win: a.win || o.win, tries: Math.max(a.tries, o.tries), low: Math.min(a.low, o.low), wins };
+  }
+  if (d.fq) { const o = cleanFq(d.fq); if (o.d > S.fq.d) S.fq = o; else if (o.d === S.fq.d) { for (const [k, v] of Object.entries(o.c)) S.fq.c[k] = Math.max(S.fq.c[k] || 0, v); S.fq.got = [...new Set([...S.fq.got, ...o.got])]; } }
+  Object.assign(S.sets, cleanFoil(d.sets), S.sets);
+  S.room = { own: [...new Set([...S.room.own, ...cleanRoom(d.room).own])] };
+  for (const [k, v] of Object.entries(cleanPaths(d.paths))) S.paths[k] = [...new Set([...(S.paths[k] || []), ...v])];
+  { const seen = new Set(); S.pics = [...S.pics, ...cleanPics(d.pics)].sort((a, b) => (a.d < b.d ? 1 : a.d > b.d ? -1 : 0)).filter((p) => !seen.has(p.t) && seen.add(p.t)).slice(0, 30); }
+  if (d.box && d.box.date && d.box.date > (S.box.date || '')) S.box = d.box;
+  if (d.wnew && d.wnew.key) {
+    if (d.wnew.key > (S.wnew.key || '')) S.wnew = d.wnew; else if (d.wnew.key === S.wnew.key) S.wnew.n = Math.max(S.wnew.n, d.wnew.n || 0);
+  }
+  maxIn(S.readyAt, d.readyAt);
+  if (d.repair && d.repair.at && (!S.repair || d.repair.at > S.repair.at)) S.repair = d.repair;
+  if (d.wq && d.wq.key) {
+    if (d.wq.key > (S.wq.key || '')) S.wq = d.wq;
+    else if (d.wq.key === S.wq.key) {
+      S.wq.done = S.wq.done || !!d.wq.done; S.wq.c = S.wq.c || {};
+      for (const [k, v] of Object.entries(d.wq.c || {})) S.wq.c[k] = Math.max(S.wq.c[k] || 0, v);
+    }
+  }
+  maxIn(S.counts, d.counts);
+  S.freeze = Math.max(S.freeze || 0, d.freeze || 0);
+  if (d.spc && d.spc.n > (S.spc.n || 0)) S.spc = { t: +d.spc.t || 0, n: +d.spc.n || 0 };
+  if ((d.weekSeen || '') > (S.weekSeen || '')) S.weekSeen = d.weekSeen;
+  if ((d.monthSeen || '') > (S.monthSeen || '')) S.monthSeen = d.monthSeen;
+  S.xp = Math.max(S.xp || 0, d.xp || 0);
+  if (d.chistFrom && (!S.chistFrom || d.chistFrom < S.chistFrom)) S.chistFrom = d.chistFrom;
+  for (const [k, v] of Object.entries(d.note || {})) if (!S.note[k] && !(k in S.noteAt) && !(k in (d.noteAt || {}))) S.note[k] = v;
+  for (const [k, v] of Object.entries(d.miss || {})) if (v && typeof v === 'object' && !Array.isArray(v)) S.miss[k] = { ...v, ...(S.miss[k] || {}) };
+  if (d.placedAt && !S.placedAt) S.placedAt = d.placedAt;
+  maxIn(S.xpWeek, d.xpWeek);
+  if (d.nick && !S.nick) S.nick = d.nick;
+  if (Array.isArray(d.homeCfg) && !S.homeCfg) S.homeCfg = d.homeCfg; // older backups without settingsAt
+  for (const [k, v] of Object.entries(d.read || {})) if (!S.read[k]) S.read[k] = v;
+  maxIn(S.stk, d.stk);
+  for (const [k, v] of Object.entries(d.readScore || {})) if (storyBetter(S.readScore[k], v)) S.readScore[k] = v;
+  if (d.riddle && (d.riddle.d > S.riddle.d || (d.riddle.d === S.riddle.d && (d.riddle.g || []).length > S.riddle.g.length))) S.riddle = { d: d.riddle.d, g: d.riddle.g || [], over: !!d.riddle.over, win: !!d.riddle.win, lv: d.riddle.lv || ['A1', 'A2'] };
+  if (d.riddleStat && d.riddleStat.played > S.riddleStat.played) S.riddleStat = { ...S.riddleStat, ...d.riddleStat, dist: (d.riddleStat.dist || []).concat([0, 0, 0, 0, 0, 0]).slice(0, 6) };
+  for (const [k, v] of Object.entries(d.ltest || {})) if (testBetter(S.ltest[k], v)) S.ltest[k] = v;
+  for (const [k, v] of Object.entries(d.lvmap || {})) {
+    const a = String(S.lvmap[k] || ''), b = String(v || '').replace(/[^0-3]/g, '');
+    S.lvmap[k] = Array.from({ length: Math.max(a.length, b.length) }, (_, i) => Math.max(+a[i] || 0, +b[i] || 0)).join('');
+  }
+  if (d.gacc && d.gacc.n > (S.gacc.n || 0)) S.gacc = { a: +d.gacc.a || 0.7, n: d.gacc.n | 0 };
+  for (const [k, v] of Object.entries(d.duel || {})) if (Array.isArray(v) && (!Array.isArray(S.duel[k]) || v[0] > S.duel[k][0] || (v[0] === S.duel[k][0] && v[2] < S.duel[k][2]))) S.duel[k] = v;
+  S.duel = Object.fromEntries(Object.entries(S.duel).sort((a, b) => b[1][3] - a[1][3]).slice(0, 30));
+  for (const [k, v] of Object.entries(d.mtest || {})) if (testBetter(S.mtest[k], v)) S.mtest[k] = v;
+  { const seen = new Set(S.mock.map((x) => x.t)); S.mock = cleanMock(S.mock.concat(cleanMock(d.mock).filter((x) => !seen.has(x.t)))); }
+  maxIn(S.chist, d.chist);
+  mergeAct(cleanAct(d.act));
+  for (const [k, v] of Object.entries(d.snap || {})) if (Array.isArray(v)) S.snap[k] = (S.snap[k] || [0, 0, 0, 0]).map((x, i) => Math.max(x, isNum(v[i]) ? v[i] : 0));
+  mergeDecks(d);
+  topicMigrate(S);
+  save();
+  return { added, updated };
+}
+
+/* ---------- fun zone (1.115): storage helpers (pages: js/fun.js, js/tower.js) ---------- */
+// Coins: one [earned, spent] bucket per device (only that device writes it), so a merge keeps the larger numbers.
+function cleanCoin(c) {
+  const out = {};
+  if (c && typeof c === 'object' && !Array.isArray(c)) for (const [k, v] of Object.entries(c)) if (Array.isArray(v) && isNum(v[0]) && isNum(v[1])) out[k] = [Math.max(0, Math.floor(v[0])), Math.max(0, Math.floor(v[1]))];
+  return out;
+}
+function cleanPuz(p) {
+  const d = defaults().puz, ok = p && typeof p === 'object' && !Array.isArray(p), arr = (a, f) => (Array.isArray(a) ? a.filter(f) : []);
+  if (!ok) return d;
+  const n = (x) => (isNum(x) && x > 0 ? Math.floor(x) : 0), day = (x) => (typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x) ? x : '');
+  return { d: day(p.d), cw: [...new Set(arr(p.cw, (x) => Number.isInteger(x) && x >= 0 && x < 12))], rv: arr(p.rv, (x) => typeof x === 'string' && /^\d+,\d+$/.test(x)), lad: arr(p.lad, (x) => typeof x === 'string' && /^[a-z]{4}$/.test(x)).slice(0, 40),
+    ladDone: !!p.ladDone, ladGave: !!p.ladGave, streak: n(p.streak), best: n(p.best), last: day(p.last), n: n(p.n) };
+}
+// Same day: solved crossword words and revealed cells are added up, the longer ladder wins; a newer day replaces today's progress.
+function mergePuz(x) {
+  const o = cleanPuz(x), m = S.puz;
+  const tot = { streak: o.last > m.last || (o.last === m.last && o.streak > m.streak) ? o.streak : m.streak, best: Math.max(m.best, o.best), last: o.last > m.last ? o.last : m.last, n: Math.max(m.n, o.n) };
+  if (o.d > m.d) S.puz = { ...o, ...tot };
+  else if (o.d === m.d) S.puz = { ...m, ...tot, cw: [...new Set([...m.cw, ...o.cw])], rv: [...new Set([...m.rv, ...o.rv])], ...(o.ladDone && !m.ladDone || (o.ladDone === m.ladDone && o.lad.length > m.lad.length) ? { lad: o.lad, ladDone: o.ladDone, ladGave: o.ladGave } : {}) };
+  else Object.assign(S.puz, tot);
+}
+function cleanCases(c) {
+  const out = {};
+  if (c && typeof c === 'object' && !Array.isArray(c)) for (const [k, v] of Object.entries(c)) if (/^[a-z0-9]{1,20}$/.test(k) && v && typeof v === 'object') out[k] = { ok: !!v.ok, t: isNum(v.t) && v.t > 0 ? Math.floor(v.t) : 0 };
+  return out;
+}
+function cleanChain(c) { // word chain (1.167.0); a function declaration like cleanCafe
+  const n = (x) => (isNum(x) && x > 0 ? Math.floor(x) : 0);
+  return c && typeof c === 'object' ? { best: n(c.best), runs: n(c.runs), links: n(c.links) } : { best: 0, runs: 0, links: 0 };
+}
+function cleanCafe(c) { // a function declaration: load() runs before this line (a const here would throw and lose the saved state)
+  const n = (x) => (isNum(x) && x > 0 ? Math.floor(x) : 0);
+  return c && typeof c === 'object' ? { best: Math.min(8, n(c.best)), total: n(c.total) } : { best: 0, total: 0 };
+}
+function cleanGhost(g) {
+  const out = {};
+  if (g && typeof g === 'object' && !Array.isArray(g)) for (const k of ['timeAttack', 'survival']) if (Array.isArray(g[k]) && g[k].length && g[k].every(isNum)) out[k] = g[k].slice(0, 400);
+  return out;
+}
+const ghostScore = (k, a) => (!a.length ? 0 : k === 'timeAttack' ? a.length : a[a.length - 1]);
+function cleanFoil(f) {
+  const out = {};
+  if (f && typeof f === 'object' && !Array.isArray(f)) for (const [k, v] of Object.entries(f)) if (typeof v === 'string' && k.length < 40) out[k] = v;
+  return out;
+}
+function cleanTower(t) {
+  const n = (x) => (isNum(x) && x > 0 ? Math.floor(x) : 0);
+  if (!t || typeof t !== 'object') return { best: 0, cp: 0, runs: 0 };
+  const out = { best: n(t.best), cp: Math.floor(n(t.cp) / 10) * 10, runs: n(t.runs) };
+  if (t.wk && typeof t.wk === 'object' && /^\d{4}-\d{2}-\d{2}$/.test(t.wk.k || '')) out.wk = { k: t.wk.k, best: n(t.wk.best) }; // weekly special tower (1.121)
+  return out;
+}
+function cleanWboss(b) {
+  const n = (x) => (isNum(x) && x > 0 ? Math.floor(x) : 0);
+  if (!b || typeof b !== 'object' || !/^\d{4}-\d{2}-\d{2}$/.test(b.k || '')) return { k: '', win: false, tries: 0, low: 100, wins: n(b && b.wins) };
+  return { k: b.k, win: b.win === true, tries: n(b.tries), low: Math.min(100, isNum(b.low) && b.low >= 0 ? Math.round(b.low) : 100), wins: n(b.wins) };
+}
+function cleanRoom(r) { return { own: [...new Set((r && Array.isArray(r.own) ? r.own : []).filter((w) => typeof w === 'string' && /^[a-z ]{2,20}$/.test(w)))] }; }
+function cleanPaths(p) {
+  const out = {};
+  if (p && typeof p === 'object' && !Array.isArray(p)) for (const [k, v] of Object.entries(p)) if (/^[a-z0-9]{1,20}$/.test(k) && Array.isArray(v)) out[k] = [...new Set(v.filter((x) => typeof x === 'string' && x.length < 20))];
+  return out;
+}
+function cleanPics(a) { return (Array.isArray(a) ? a : []).filter((p) => p && typeof p.t === 'string' && Array.isArray(p.w) && typeof p.d === 'string').map((p) => ({ t: p.t.slice(0, 200), w: p.w.filter((x) => typeof x === 'string').slice(0, 3), d: p.d })).slice(0, 30); }
+function cleanFq(q) {
+  const ok = q && typeof q === 'object' && /^\d{4}-\d{2}-\d{2}$/.test(q.d || '');
+  if (!ok) return { d: '', c: {}, got: [] };
+  const c = {};
+  for (const [k, v] of Object.entries(q.c && typeof q.c === 'object' ? q.c : {})) if (/^[a-z]{2,10}$/.test(k) && isNum(v) && v > 0) c[k] = Math.floor(v);
+  return { d: q.d, c, got: [...new Set((Array.isArray(q.got) ? q.got : []).filter((x) => Number.isInteger(x) && x >= 0 && x < 40))] };
+}
+
+/* ---------- weekly adventure book (1.114): storage helpers (the page is js/adventure.js) ---------- */
+// Keep only well-formed weeks (storage, backup and cloud all pass through here).
+function cleanAdv(a) {
+  const out = {};
+  if (!a || typeof a !== 'object' || Array.isArray(a)) return out;
+  for (const [k, v] of Object.entries(a)) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !v || typeof v !== 'object' || !/^[01]{7}$/.test(v.s || '')) continue;
+    out[k] = { t: typeof v.t === 'string' ? v.t : '', s: v.s, done: !!v.done, perfect: !!v.perfect };
+  }
+  const keys = Object.keys(out).sort().slice(-60) /* keep the last 60 weeks */;
+  return Object.fromEntries(keys.map((k) => [k, out[k]]));
+}
+// Merge two copies of the adventure book: stamps are only ever added.
+function mergeAdv(d) {
+  const o = cleanAdv(d);
+  for (const [k, v] of Object.entries(o)) {
+    const m = S.adv[k];
+    if (!m) { S.adv[k] = v; continue; }
+    m.s = m.s.split('').map((c, i) => (c === '1' || v.s[i] === '1' ? '1' : '0')).join('');
+    m.done = m.done || v.done; m.perfect = m.perfect || v.perfect; if (!m.t) m.t = v.t;
+  }
+  S.adv = cleanAdv(S.adv);
+}
+
+// 'YYYY-MM-DD' in local time (same text as toLocaleDateString('en-CA'), but ~50x faster: Intl formatting showed up as 84 ms of boot at 4x CPU).
+const ymd = (d) => { const m = d.getMonth() + 1, k = d.getDate(); return d.getFullYear() + (m < 10 ? '-0' : '-') + m + (k < 10 ? '-0' : '-') + k; };
+const today = () => ymd(new Date());
+function rollDay() {
+  if (S.daily.date !== today()) S.daily = { date: today(), fresh: 0, reviews: 0 };
+}
+// Whole days between two 'YYYY-MM-DD' strings (a - b).
+const dayDiff = (a, b) => Math.round((Date.parse(a + 'T12:00:00') - Date.parse(b + 'T12:00:00')) / DAY);
+const MAX_FREEZE = 2;
+// Streak repair (1.61): a streak of 3+ days that broke can be repaired within 48 h of coming back by doing
+// 2x today's goal in cards/answers (S.hist). S.repair = {count: lost streak, at: ms, base: activity already counted, need, done}.
+const REPAIR_MS = 48 * 3600 * 1000;
+function repairInfo() {
+  const r = S.repair;
+  if (!r || r.done || !r.at || Date.now() - r.at > REPAIR_MS) return null;
+  const from = ymd(new Date(r.at));
+  let n = 0; for (const k of Object.keys(S.hist)) if (k >= from) n += S.hist[k];
+  return { r, n: Math.max(0, n - (r.base || 0)), left: REPAIR_MS - (Date.now() - r.at) };
+}
+function repairCheck() {
+  const i = repairInfo();
+  if (!i || i.n < i.r.need) return;
+  i.r.done = true;
+  S.streak.count += i.r.count;
+  S.counts.repairs = (S.counts.repairs || 0) + 1;
+  setTimeout(() => { confetti(); toast(`🔥 ซ่อมสตรีคสำเร็จ! กลับมาเป็น ${S.streak.count} วัน`); }, 900);
+  updateStreak();
+}
+function markActive(ok) {
+  rollDay();
+  const t = today();
+  S.hist[t] = (S.hist[t] || 0) + 1;
+  actLog(t, ok);
+  // secret medals (1.61): time-of-day / date based
+  const now = new Date(), hr = now.getHours();
+  if (hr === 5) S.counts.early = 1;
+  if (hr < 3) S.counts.owl = 1;
+  if (now.getMonth() === 0 && now.getDate() === 1) S.counts.newyear = 1;
+  if (now.getDay() === 5 && now.getDate() === 13) S.counts.f13 = 1;
+  if (S.streak.last === t) return repairCheck();
+  const missed = S.streak.last ? dayDiff(t, S.streak.last) - 1 : Infinity;
+  if (missed === 0) S.streak.count++;
+  else if (S.streak.count && missed <= S.freeze) {
+    // 🧊 Streak freezes cover the missed days.
+    S.freeze -= missed; S.streak.count++;
+    setTimeout(() => toast(`🧊 ใช้ตัวกันสตรีค ${missed} อัน สตรีคไม่ขาด!`), 400);
+  } else {
+    const lost = S.streak.count;
+    S.streak.count = 1;
+    if (missed >= 30 && missed !== Infinity) S.counts.comeback = 1;
+    if (lost >= 3) {
+      S.repair = { count: lost, at: Date.now(), base: S.hist[t], need: Math.max(20, 2 * newGoal()), done: false };
+      setTimeout(() => toast(`💔 สตรีค ${lost} วันขาดไป แต่ซ่อมได้ภายใน 48 ชม.! ดูที่หน้าแรก`), 1500);
+    }
+  }
+  S.streak.last = t;
+  setTimeout(() => streakFlash(S.streak.count), 500);
+  if (S.streak.count % 7 === 0 && S.freeze < MAX_FREEZE) {
+    S.freeze++;
+    setTimeout(() => toast('🧊 ได้ตัวกันสตรีคเพิ่ม 1 อัน (เรียนต่อเนื่องครบ 7 วัน)'), 1500);
+  }
+  updateStreak();
+  repairCheck();
+}
+function streakNow() {
+  if (!S.streak.last) return 0;
+  const missed = dayDiff(today(), S.streak.last) - 1;
+  return missed <= 0 || missed <= S.freeze ? S.streak.count : 0;
+}
+
+// The one place memory hooks are written (stamps the edit so a delete also reaches other devices).
+function setNote(word, text) {
+  if (text && text !== S.note[word]) actEvent('note');
+  if (text) S.note[word] = text; else delete S.note[word];
+  S.noteAt[word] = Date.now();
+}
+// Drawn memory hooks (1.142): SVG path data only ("M x y L x y …" in whole numbers, 300×180 box); anything else is dropped.
+const SKETCH_MAX = 12000;
+function sketchD(d) { return typeof d === 'string' && d.length <= SKETCH_MAX && /^M[\d MLl-]*$/.test(d) ? d : ''; }
+function setSketch(word, d) {
+  d = sketchD(d);
+  if (d) S.sketch[word] = d; else delete S.sketch[word];
+  S.sketchAt[word] = Date.now();
+}
+const sketchSvg = (word, cls = '') => { const d = sketchD(S.sketch && S.sketch[word]); return d ? `<svg class="sketch ${cls}" viewBox="0 0 300 180" role="img" aria-label="รูปวิธีจำ ${esc(word)}"><path d="${d}"/></svg>` : ''; };
+
+/* ---------- screen wake lock (1.108) ---------- */
+// Long listening (listening review) must not let the screen sleep: iOS stops speech when it does. Asked again when the app
+// comes back to the front (the browser releases it when hidden). Without support nothing happens.
+let wakeLock = null, wantAwake = false;
+async function keepAwake() {
+  wantAwake = true;
+  try { if (navigator.wakeLock && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => { wakeLock = null; }); } } catch (e) { wakeLock = null; }
+}
+function letSleep() {
+  wantAwake = false;
+  if (wakeLock) { try { wakeLock.release(); } catch (e) { /* ignore */ } wakeLock = null; }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && wantAwake) keepAwake(); });
+
+/* ---------- stars ---------- */
+const isStar = (w) => !!S.star[w.w];
+function toggleStar(w) {
+  actEvent('star');
+  if (S.star[w.w]) delete S.star[w.w]; else S.star[w.w] = 1;
+  S.starAt[w.w] = Date.now();
+  save();
+  toast(isStar(w) ? `⭐ ติดดาว "${w.w}" แล้ว` : `เอาดาวออกจาก "${w.w}" แล้ว`);
+  return isStar(w);
+}
+const starIcon = (w) => (isStar(w) ? '⭐' : '☆');
+
+/* ---------- daily quest ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const canListen = !!SR;
+// 1.61: three daily quests (easy / medium / hard, picked per day) + one weekly quest.
+// ev(n, type, d) returns the new progress for an event; types: card, answer, round, match, story, leech.
+const QTIER = [{ icon: '🟢', name: 'ง่าย', xp: 10 }, { icon: '🟡', name: 'กลาง', xp: 15 }, { icon: '🔴', name: 'ท้าทาย', xp: 25 }];
+const QSET_XP = 40, WQ_XP = 100;
+const QUESTS = [
+  { id: 'cards15', tier: 0, text: 'ทำแฟลชการ์ด 15 ใบ', target: 15, ev: (n, t) => (t === 'card' ? n + 1 : n) },
+  { id: 'match', tier: 0, text: 'จับคู่ด่วนให้จบ โดยผิดไม่เกิน 2 ครั้ง', target: 1, game: 'match', ev: (n, t, d) => (t === 'match' && d.mistakes <= 2 ? n + 1 : n) },
+  { id: 'feed', tier: 0, text: 'ไถศัพท์ ตอบถูก 15 ข้อ', target: 15, go: 'feed', ev: (n, t, d) => (t === 'answer' && d.game === 'feed' && d.ok ? n + 1 : n) },
+  { id: 'story', tier: 0, text: 'อ่านเรื่องสั้นให้จบ 1 เรื่อง', target: 1, go: 'read', ev: (n, t) => (t === 'story' ? n + 1 : n) },
+  { id: 'cards', tier: 1, text: 'ทำแฟลชการ์ดให้ครบ 30 ใบ', target: 30, ev: (n, t) => (t === 'card' ? n + 1 : n) },
+  { id: 'fresh', tier: 1, text: 'เรียนคำใหม่ให้ครบเป้าวันนี้', target: () => newGoal(), ev: (n, t) => (t === 'card' ? S.daily.fresh : n) },
+  { id: 'cloze', tier: 1, text: 'เติมคำในประโยค ถูก 8 ข้อขึ้นไปในรอบเดียว', target: 1, game: 'cloze', ev: (n, t, d) => (t === 'round' && d.game === 'cloze' && d.correct >= 8 ? n + 1 : n) },
+  { id: 'listen', tier: 1, text: 'ฟังแล้วตอบ ถูก 8 ข้อขึ้นไปในรอบเดียว', target: 1, game: 'listen', ev: (n, t, d) => (t === 'round' && d.game === 'listen' && d.correct >= 8 ? n + 1 : n) },
+  { id: 'th2en', tier: 1, text: 'ทายคำศัพท์ ถูก 8 ข้อขึ้นไปในรอบเดียว', target: 1, game: 'th2en', ev: (n, t, d) => (t === 'round' && d.game === 'th2en' && d.correct >= 8 ? n + 1 : n) },
+  { id: 'spell', tier: 1, text: 'สะกดคำถูกรวม 10 คำ', target: 10, game: 'spell', ev: (n, t, d) => (t === 'answer' && d.game === 'spell' && d.ok ? n + 1 : n) },
+  { id: 'combo', tier: 2, text: 'ทำคอมโบ x6 ในเกมไหนก็ได้', target: 1, game: 'en2th', ev: (n, t, d) => (t === 'round' && d.bestCombo >= 6 ? n + 1 : n) },
+  { id: 'speak', tier: 2, text: 'พูดตามถูกรวม 10 คำ', target: 10, game: 'speak', needs: () => canListen, ev: (n, t, d) => (t === 'answer' && d.game === 'speak' && d.ok ? n + 1 : n) },
+  { id: 'leech3', tier: 2, text: 'ปราบคำดื้อ: ตอบคำดื้อถูก 3 ครั้ง', target: 3, go: 'cards', needs: () => W.filter(isLeech).length >= 3, ev: (n, t) => (t === 'leech' ? n + 1 : n) },
+  { id: 'skill', tier: 2, text: 'เกมฝึกทักษะ (ไวยากรณ์ ศัพท์เชื่อมโยง ฯลฯ) ถูก 8 ข้อขึ้นไปในรอบเดียว', target: 1, game: 'syn', ev: (n, t, d) => (t === 'round' && SKILL_GAMES.includes(d.game) && d.correct >= 8 ? n + 1 : n) },
+  { id: 'perfect', tier: 2, text: 'เล่นเกมไหนก็ได้ ให้ถูกเต็ม 10/10', target: 1, game: 'th2en', ev: (n, t, d) => (t === 'round' && d.perfect ? n + 1 : n) },
+];
+const dayHash = (str) => { let h = 7; for (const c of str) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
+function pickQuests(t) {
+  return [0, 1, 2].map((tier) => {
+    const list = QUESTS.filter((q) => q.tier === tier && (!q.needs || q.needs()));
+    return list[dayHash(t + tier) % list.length].id;
+  });
+}
+// Today's three quests as [{def, st}] (st = {id, n, done} stored in S.quest.q); a new day, or the pre-1.61 shape, draws a fresh set.
+function questDefs() {
+  const t = today();
+  if (S.quest.date !== t || !Array.isArray(S.quest.q) || S.quest.q.length !== 3 || S.quest.q.some((x) => !x || !QUESTS.some((q) => q.id === x.id))) {
+    S.quest = { date: t, q: pickQuests(t).map((id) => ({ id, n: 0, done: false })), bonus: false };
+  }
+  return S.quest.q.map((st) => ({ def: QUESTS.find((q) => q.id === st.id), st }));
+}
+const questTarget = (q) => (typeof q.target === 'function' ? q.target() : q.target);
+
+// Weekly quest: counters in S.wq.c, or `calc` reads the state directly.
+const WQUESTS = [
+  { id: 'days5', text: 'เล่นให้ครบ 5 วันในสัปดาห์นี้', target: 5, go: 'cards', calc: () => Object.keys(S.hist).filter((k) => k >= mondayKey() && S.hist[k] > 0).length },
+  { id: 'read3', text: 'อ่านเรื่องสั้นให้ครบ 3 เรื่องในสัปดาห์นี้', target: 3, go: 'read', calc: () => Object.values(S.read).filter((d) => d >= mondayKey()).length },
+  { id: 'sets3', text: 'ทำภารกิจประจำวันครบทั้ง 3 ข้อ 3 วัน', target: 3, go: 'cards', c: 'sets' },
+  { id: 'leech10', text: 'ปราบคำดื้อ: ตอบคำดื้อถูกรวม 10 ครั้ง', target: 10, go: 'cards', c: 'leech', needs: () => W.filter(isLeech).length >= 3 },
+  { id: 'skill5', text: 'เล่นเกมฝึกทักษะให้ครบ 5 รอบ', target: 5, go: 'games', c: 'skill' },
+  { id: 'xp300', text: 'เก็บ XP ให้ได้ 300 ในสัปดาห์นี้', target: 300, go: 'cards', calc: () => S.xpWeek[mondayKey()] || 0 },
+];
+function weekQuest() {
+  const k = mondayKey();
+  if (!S.wq || typeof S.wq !== 'object' || S.wq.key !== k || !WQUESTS.some((q) => q.id === S.wq.id)) {
+    const list = WQUESTS.filter((q) => !q.needs || q.needs());
+    S.wq = { key: k, id: list[dayHash(k) % list.length].id, c: {}, done: false };
+  }
+  const def = WQUESTS.find((q) => q.id === S.wq.id);
+  return { def, st: S.wq, n: Math.min(def.target, def.calc ? def.calc() : (S.wq.c || {})[def.c] || 0) };
+}
+function questEvent(type, d = {}) {
+  const list = questDefs(), fin = [];
+  for (const { def, st } of list) {
+    if (st.done) continue;
+    st.n = def.ev(st.n, type, d);
+    if (st.n >= questTarget(def)) {
+      st.done = true; fin.push(def);
+      S.counts.quests = (S.counts.quests || 0) + 1;
+      addXP(QTIER[def.tier].xp);
+    }
+  }
+  const wq = weekQuest(); S.wq.c = S.wq.c || {};
+  if (type === 'leech') { S.wq.c.leech = (S.wq.c.leech || 0) + 1; S.counts.leechWins = (S.counts.leechWins || 0) + 1; }
+  if (type === 'round' && SKILL_GAMES.includes(d.game)) S.wq.c.skill = (S.wq.c.skill || 0) + 1;
+  let bonus = false;
+  if (!S.quest.bonus && list.every((x) => x.st.done)) {
+    S.quest.bonus = bonus = true;
+    S.counts.qsets = (S.counts.qsets || 0) + 1;
+    S.wq.c.sets = (S.wq.c.sets || 0) + 1;
+    addXP(QSET_XP);
+    if (S.counts.qsets % 3 === 0 && S.freeze < MAX_FREEZE) S.freeze++;
+  }
+  let wdone = false;
+  if (!S.wq.done && weekQuest().n >= wq.def.target) {
+    S.wq.done = wdone = true;
+    S.counts.wquests = (S.counts.wquests || 0) + 1;
+    addXP(WQ_XP);
+    if (S.freeze < MAX_FREEZE) S.freeze++;
+  }
+  if (wdone) setTimeout(() => { confetti(); toast(`🗓️ ภารกิจสัปดาห์สำเร็จ! +${WQ_XP} XP และ 🧊`); }, 1300);
+  else if (bonus) setTimeout(() => { confetti(); toast(`🎁 ครบทั้ง 3 ภารกิจ! โบนัส +${QSET_XP} XP${S.counts.qsets % 3 === 0 ? ' และ 🧊' : ''}`); }, 700);
+  else if (fin.length) setTimeout(() => toast(`🎯 ภารกิจสำเร็จ +${QTIER[fin[0].tier].xp} XP · ${questDefs().filter((x) => x.st.done).length}/3`), 700);
+  save();
+}
+
+/* ---------- XP & levels ---------- */
+// Level L starts at 25·L·(L−1) XP: Lv1 0, Lv2 50, Lv3 150, Lv4 300, Lv5 500 …
+const levelOf = (xp) => Math.floor((1 + Math.sqrt(1 + (4 * (xp || 0)) / 25)) / 2);
+const levelStart = (L) => 25 * L * (L - 1);
+function addXP(n) {
+  if (!n) return;
+  const before = levelOf(S.xp);
+  S.xp = (S.xp || 0) + n;
+  if (typeof mondayKey === 'function') { const k = mondayKey(); S.xpWeek[k] = (S.xpWeek[k] || 0) + n; }
+  const after = levelOf(S.xp);
+  if (after > before) setTimeout(() => levelUpScreen(after, before), 400);
+  updateStreak();
+  if (n > 0) xpFly(n);
+}
+const comboXP = (combo) => 2 + Math.min(combo - 1, 5); // 2 XP per right answer, up to +5 for a combo
+
+/* ---------- achievements ---------- */
+const ACH = [
+  { id: 'first', icon: '🌱', name: 'ก้าวแรก', desc: 'เรียนคำแรก', ok: (s) => s.learned >= 1 },
+  { id: 'l100', icon: '📗', name: 'ร้อยคำแรก', desc: 'เรียนครบ 100 คำ', ok: (s) => s.learned >= 100 },
+  { id: 'l500', icon: '📘', name: 'ห้าร้อยคำ', desc: 'เรียนครบ 500 คำ', ok: (s) => s.learned >= 500 },
+  { id: 'l1000', icon: '📙', name: 'พันคำ', desc: 'เรียนครบ 1,000 คำ', ok: (s) => s.learned >= 1000 },
+  { id: 'l3000', icon: '📚', name: 'สามพันคำ', desc: 'เรียนครบ 3,000 คำ', ok: (s) => s.learned >= 3000 },
+  { id: 'm10', icon: '🟢', name: 'จำได้แล้ว', desc: 'จำได้แล้ว 10 คำ', ok: (s) => s.mastered >= 10 },
+  { id: 'm100', icon: '🧠', name: 'สมองไว', desc: 'จำได้แล้ว 100 คำ', ok: (s) => s.mastered >= 100 },
+  { id: 'm500', icon: '💎', name: 'คลังศัพท์', desc: 'จำได้แล้ว 500 คำ', ok: (s) => s.mastered >= 500 },
+  { id: 'm1000', icon: '👑', name: 'เจ้าแห่งศัพท์', desc: 'จำได้แล้ว 1,000 คำ', ok: (s) => s.mastered >= 1000 },
+  { id: 's3', icon: '🔥', name: 'อุ่นเครื่อง', desc: 'เรียนต่อเนื่อง 3 วัน', ok: (s) => s.streak >= 3 },
+  { id: 's7', icon: '⚡', name: 'ครบสัปดาห์', desc: 'เรียนต่อเนื่อง 7 วัน', ok: (s) => s.streak >= 7 },
+  { id: 's30', icon: '🌟', name: 'ครบเดือน', desc: 'เรียนต่อเนื่อง 30 วัน', ok: (s) => s.streak >= 30 },
+  { id: 's100', icon: '🏆', name: 'ร้อยวัน', desc: 'เรียนต่อเนื่อง 100 วัน', ok: (s) => s.streak >= 100 },
+  { id: 'perfect', icon: '💯', name: 'เต็มสิบ', desc: 'ตอบถูก 10/10 ในเกม', ok: (s) => s.perfect >= 1 },
+  { id: 'q7', icon: '🎯', name: 'นักล่าภารกิจ', desc: 'ทำภารกิจรายวันสำเร็จ 7 ครั้ง', ok: (s) => s.quests >= 7 },
+  { id: 'lvl5', icon: '⭐', name: 'เลเวล 5', desc: 'สะสม XP จนถึง Lv.5', ok: (s) => s.level >= 5 },
+  { id: 'lvl10', icon: '🌠', name: 'เลเวล 10', desc: 'สะสม XP จนถึง Lv.10', ok: (s) => s.level >= 10 },
+  { id: 'speak50', icon: '🎤', name: 'นักพูด', desc: 'พูดตามถูก 50 คำ', ok: (s) => s.speak >= 50 },
+  { id: 'read10', icon: '📖', name: 'หนอนหนังสือ', desc: 'อ่านเรื่องสั้นครบ 10 เรื่อง', ok: (s) => s.read >= 10 },
+  { id: 'read50', icon: '📚', name: 'นักอ่านตัวยง', desc: 'อ่านเรื่องสั้นครบ 50 เรื่อง', ok: (s) => s.read >= 50 },
+  { id: 'readall', icon: '🏛️', name: 'ห้องสมุดเดินได้', desc: 'อ่านเรื่องสั้นครบทุกเรื่อง', ok: (s) => typeof STORY_COUNT !== 'undefined' && s.read >= STORY_COUNT },
+  { id: 'boss1', icon: '👾', name: 'นักล่าบอส', desc: 'ปราบบอสคำดื้อในไถศัพท์ 1 ตัว', ok: (s) => s.bosses >= 1 },
+  { id: 'boss10', icon: '🗡️', name: 'ฆาตกรคำดื้อ', desc: 'ปราบบอสคำดื้อ 10 ตัว', ok: (s) => s.bosses >= 10 },
+  { id: 'leech25', icon: '🐢', name: 'ใจเย็นสู้', desc: 'ตอบคำดื้อถูกรวม 25 ครั้ง', ok: (s) => s.leechWins >= 25 },
+  { id: 'allgames', icon: '🎮', name: 'เล่นครบทุกเกม', desc: 'ลองเล่นเกมครบทุกแบบ', ok: (s) => s.allGames },
+  { id: 'mtest', icon: '📝', name: 'เต็มร้อยประจำเดือน', desc: 'แบบทดสอบประจำเดือนได้เต็ม', ok: (s) => s.mtestFull },
+  { id: 'combo30', icon: '🔥', name: 'คอมโบ 30', desc: 'ตอบถูกติดกัน 30 ข้อ', ok: (s) => s.maxCombo >= 30 },
+  { id: 'notes20', icon: '✍️', name: 'นักจดวิธีจำ', desc: 'เขียนวิธีจำ 20 คำ', ok: (s) => s.notes >= 20 },
+  { id: 'qsets10', icon: '🎁', name: 'ครบชุดภารกิจ', desc: 'ทำครบ 3 ภารกิจประจำวัน 10 วัน', ok: (s) => s.qsets >= 10 },
+  { id: 'wq4', icon: '🗓️', name: 'สัปดาห์สำเร็จ', desc: 'ทำภารกิจประจำสัปดาห์สำเร็จ 4 ครั้ง', ok: (s) => s.wquests >= 4 },
+  { id: 'adv1', icon: '🧭', name: 'นักผจญภัย', desc: 'ผจญภัยประจำสัปดาห์สำเร็จ 1 ครั้ง (ได้ตราประทับ 5 ด่าน)', ok: (s) => s.advs >= 1 },
+  { id: 'adv5', icon: '🗺️', name: 'นักเดินทางตัวจริง', desc: 'ผจญภัยประจำสัปดาห์สำเร็จ 5 สัปดาห์', ok: (s) => s.advs >= 5 },
+  { id: 'repair', icon: '🩹', name: 'ซ่อมสตรีค', desc: 'ซ่อมสตรีคที่ขาดสำเร็จ', ok: (s) => s.repairs >= 1 },
+  { id: 'evt1', icon: '🏷️', name: 'นักสะสมเทศกาล', desc: 'ผ่านควิซกิจกรรมเทศกาล 1 ครั้ง', ok: (s) => s.events >= 1 },
+  { id: 'evt4', icon: '🎊', name: 'สี่เทศกาล', desc: 'ผ่านควิซกิจกรรมเทศกาลครบ 4 งานที่ต่างกัน', ok: (s) => s.events >= 4 },
+  { id: 'evt8', icon: '🏮', name: 'ครบทุกเทศกาล', desc: 'ผ่านควิซกิจกรรมครบทั้ง 8 เทศกาล (ฮาโลวีน สงกรานต์ ลอยกระทง ปีใหม่ คริสต์มาส ตรุษจีน วาเลนไทน์ วันแม่)', ok: (s) => s.events >= 8 },
+  { id: 'early', icon: '🌅', name: 'นกที่ตื่นเช้า', desc: 'เรียนตอนตี 5', secret: true, ok: (s) => s.early },
+  { id: 'owl', icon: '🦉', name: 'นกฮูกยามดึก', desc: 'เรียนหลังเที่ยงคืนถึงตีสาม', secret: true, ok: (s) => s.owl },
+  { id: 'newyear', icon: '🎆', name: 'เริ่มปีด้วยศัพท์', desc: 'เรียนในวันปีใหม่ 1 มกราคม', secret: true, ok: (s) => s.newyear },
+  { id: 'tower10', icon: '🏯', name: 'นักปีนหอคอย', desc: 'ผ่านหอคอยไม่รู้จบถึงชั้น 10', ok: (s) => s.tower >= 10 },
+  { id: 'tower50', icon: '🧙', name: 'พ่อมดบนยอดหอ', desc: 'ผ่านหอคอยไม่รู้จบถึงชั้น 50', ok: (s) => s.tower >= 50 },
+  { id: 'sTower', icon: '🌌', name: 'แตะขอบฟ้า', desc: 'ผ่านหอคอยไม่รู้จบถึงชั้น 100', secret: true, ok: (s) => s.tower >= 100 },
+  { id: 'sRich', icon: '💰', name: 'เศรษฐีน้อย', desc: 'มีเหรียญสะสมพร้อมกัน 500 เหรียญ', secret: true, ok: (s) => s.maxCoin >= 500 },
+  { id: 'sShop', icon: '🛍️', name: 'ขาช้อป', desc: 'ซื้อของที่ร้านค้าเหรียญ 5 ชิ้น', secret: true, ok: (s) => s.buys >= 5 },
+  { id: 'puz7', icon: '🧩', name: 'นักไขปริศนา', desc: 'ทำปริศนาประจำวันครบทั้ง 2 อย่าง 7 วันติด', ok: (s) => s.puz >= 7 },
+  { id: 'sFoil', icon: '✨', name: 'นักสะสมฟอยล์', desc: 'มีการ์ดฟอยล์ 25 ใบ', secret: true, ok: (s) => s.foil >= 25 },
+  { id: 'sBloom', icon: '🌸', name: 'สวนดอกไม้บาน', desc: 'มีต้นไม้ในสวนคำศัพท์ออกดอก 1 ต้น', secret: true, ok: (s) => s.bloom },
+  { id: 'case3', icon: '🕵️', name: 'นักสืบฝีมือดี', desc: 'ไขคดีนักสืบได้ 3 คดี', ok: (s) => s.cases >= 3 },
+  { id: 'sCases', icon: '🔎', name: 'เชอร์ล็อกตัวน้อย', desc: 'ไขคดีนักสืบครบทุกคดี (12 คดี)', secret: true, ok: (s) => s.cases >= 12 },
+  { id: 'sCafe', icon: '🍜', name: 'ร้านเต็มทุกโต๊ะ', desc: 'ร้านน้องคำเสิร์ฟครบ 8 คนในวันเดียว', secret: true, ok: (s) => s.cafeBest >= 8 },
+  { id: 'sPaths', icon: '📖', name: 'นักอ่านทุกทางแยก', desc: 'เจอตอนจบนิยายเลือกทางครบทุกแบบ', secret: true, ok: (s) => s.paths >= 12 },
+  { id: 'sRoom', icon: '🏠', name: 'บ้านในฝัน', desc: 'แต่งห้องน้องคำครบทุกชิ้น', secret: true, ok: (s) => s.room >= 21 },
+  { id: 'sF13', icon: '🐈‍⬛', name: 'ไม่กลัวโชคร้าย', desc: 'เรียนในวันศุกร์ที่ 13', secret: true, ok: (s) => s.f13 },
+  { id: 'sSpeed', icon: '⚡', name: 'สายฟ้าแลบ', desc: 'จับเวลา 60 วินาทีตอบถูก 30 ข้อ', secret: true, ok: (s) => s.speed >= 30 },
+  { id: 'comeback', icon: '🦋', name: 'กลับมาอีกครั้ง', desc: 'กลับมาเรียนหลังหายไปเกิน 30 วัน', secret: true, ok: (s) => s.comeback },
+  ...LEVELS.map((l) => ({ id: 'lt' + l, icon: '🎓', name: `ผ่านทดสอบ ${LV_LABEL[l]}`, desc: `ผ่านแบบทดสอบจบระดับ ${LV_LABEL[l]} (ตั้งแต่ 80%)`, ok: (s) => s.lt[l] })),
+  ...LEVELS.map((l) => ({ id: 'lv' + l, icon: '🎓', name: `จบ ${LV_LABEL[l]}`, desc: `เรียนครบทุกคำในระดับ ${LV_LABEL[l]}`, ok: (s) => s.lv[l] })),
+];
+const GROUP = Object.fromEntries(LEVELS.map((l) => [l, W.filter((w) => w.g === l)]));
+// Medal look (1.116): each achievement is a bronze / silver / gold medal by how hard it is; secret ones are purple.
+const MEDAL_GOLD = new Set(['l3000', 'm1000', 's100', 'readall', 'boss10', 'allgames', 'mtest', 'combo30', 'evt8', 'adv5', 'ltC1', 'lvC1']);
+const MEDAL_SILVER = new Set(['l1000', 'm500', 's30', 'read50', 'lvl10', 'qsets10', 'wq4', 'evt4', 'leech25', 'speak50', 'notes20']);
+const MEDAL_NAME = { b: 'ทองแดง', s: 'เงิน', g: 'ทอง', x: 'เหรียญลับ' };
+const medalTier = (a) => (a.secret ? 'x' : MEDAL_GOLD.has(a.id) ? 'g' : MEDAL_SILVER.has(a.id) || /^l[tv]/.test(a.id) ? 's' : 'b');
+const MEDAL_COL = { b: ['#f3b27a', '#b8692e', '#7a3f14'], s: ['#f4f6fb', '#aeb6c6', '#69728a'], g: ['#ffe58a', '#e8a817', '#9a6400'], x: ['#d9c8ff', '#8f6be8', '#4e2fa8'] };
+// Ribbon + disc drawn behind the emoji (the emoji stays a text span on top). Locked = grey.
+function medalSvg(t, on) {
+  const [l, m, d] = on ? MEDAL_COL[t] : ['#e6e6ee', '#c4c4d0', '#9a9aa8'], id = `md${t}${on ? 1 : 0}`;
+  return `<svg class="medal" viewBox="0 0 60 66" aria-hidden="true" focusable="false"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${l}"/><stop offset=".55" stop-color="${m}"/><stop offset="1" stop-color="${d}"/></linearGradient></defs>
+    <path d="M16 0h11l6 18-9 6zM44 0H33l-6 18 9 6z" fill="${on ? 'var(--primary)' : '#c4c4d0'}" opacity="${on ? '.85' : '.6'}"/><path d="M21 0h3l6 17-3 2zM39 0h-3l-6 17 3 2z" fill="#fff" opacity=".35"/>
+    <circle cx="30" cy="40" r="23" fill="url(#${id})"/><circle cx="30" cy="40" r="18.5" fill="none" stroke="${d}" stroke-width="1.2" opacity=".55"/><circle cx="30" cy="40" r="17" fill="${l}" opacity="${on ? '.35' : '.6'}"/>
+    <path d="M14 30a19 19 0 0 1 14-9" stroke="#fff" stroke-width="2.5" stroke-linecap="round" fill="none" opacity=".6"/></svg>`;
+}
+function checkAch() {
+  const progs = Object.values(S.prog);
+  const s = {
+    learned: progs.length,
+    mastered: progs.filter((p) => p.b >= MASTERED).length,
+    streak: S.streak.count, perfect: S.counts.perfect || 0, quests: S.counts.quests || 0, speak: S.counts.speak || 0, level: levelOf(S.xp),
+    lv: Object.fromEntries(LEVELS.map((l) => [l, GROUP[l].every((w) => S.prog[w.w])])),
+    read: Object.keys(S.read).length, bosses: S.counts.bosses || 0, leechWins: S.counts.leechWins || 0, maxCombo: S.counts.maxCombo || 0,
+    notes: Object.keys(S.note).length, qsets: S.counts.qsets || 0, wquests: S.counts.wquests || 0, repairs: S.counts.repairs || 0,
+    early: S.counts.early, owl: S.counts.owl, newyear: S.counts.newyear, comeback: S.counts.comeback,
+    allGames: typeof GAMES !== 'undefined' && Object.keys(GAMES).every((g) => gamePlays(g) > 0 || (!canListen && /^speak/.test(g))),
+    lt: Object.fromEntries(LEVELS.map((l) => [l, ((m) => !!(m && m.n && m.r / m.n >= 0.8))(S.ltest[l])])),
+    paths: Object.values(S.paths || {}).reduce((n, a) => n + a.length, 0), room: ((S.room || {}).own || []).length,
+    cases: Object.values(S.cases || {}).filter((c) => c && c.ok).length, cafeBest: (S.cafe && S.cafe.best) || 0,
+    puz: (S.puz && S.puz.best) || 0, foil: Object.keys(S.foil || {}).length, bloom: typeof plantOf === 'function' && TOPICS.some(([id]) => plantOf(id).stage === 5),
+    tower: (S.tower && S.tower.best) || 0, maxCoin: S.counts.maxCoin || 0, buys: S.counts.buys || 0, f13: S.counts.f13, speed: S.best.timeAttack || 0,
+    advs: Object.values(S.adv || {}).filter((a) => a && a.done).length,
+    events: new Set(Object.entries(S.evt).filter(([, v]) => v && v.pass).map(([k]) => k.replace(/-\d+$/, ''))).size,
+    mtestFull: Object.values(S.mtest).some((m) => m && m.n && m.r === m.n),
+  };
+  checkStickers();
+  const got = ACH.filter((a) => !S.ach[a.id] && a.ok(s));
+  if (!got.length) return;
+  got.forEach((a) => (S.ach[a.id] = today()));
+  setTimeout(() => { confetti(); toast(`🏅 ได้เหรียญ "${got[0].icon} ${got[0].name}"${got.length > 1 ? ` และอีก ${got.length - 1} เหรียญ` : ''}`); }, 1100);
+}
+
+/* ---------- sticker book ---------- */
+// One sticker per topic, upgraded as the topic's words are learned/mastered.
+const STK_TIERS = [
+  { icon: '🥉', name: 'บรอนซ์', desc: 'เรียนแล้ว 20% ของคำชุด 3000 ในหมวด', need: (t) => [t.l3, Math.ceil(t.n3 * 0.2), 'เรียนแล้ว'] },
+  { icon: '🥈', name: 'เงิน', desc: 'จำได้แล้ว 30% ของคำชุด 3000 ในหมวด', need: (t) => [t.m3, Math.ceil(t.n3 * 0.3), 'จำได้แล้ว'] },
+  { icon: '🥇', name: 'ทอง', desc: 'จำได้แล้ว 70% ของคำชุด 3000 ในหมวด', need: (t) => [t.m3, Math.ceil(t.n3 * 0.7), 'จำได้แล้ว'] },
+  { icon: '💎', name: 'เพชร', desc: 'จำได้แล้ว 70% ของทุกคำในหมวด (รวมชุด 5000)', need: (t) => [t.mAll, Math.ceil(t.nAll * 0.7), 'จำได้แล้ว (ทุกคำ)'] },
+];
+let TOPIC_WORDS = null;
+function topicStat(id) {
+  if (!TOPIC_WORDS) { TOPIC_WORDS = {}; W.forEach((w) => { if (w.tp) (TOPIC_WORDS[w.tp] = TOPIC_WORDS[w.tp] || []).push(w); }); }
+  const t = { n3: 0, l3: 0, m3: 0, nAll: 0, mAll: 0 };
+  for (const w of TOPIC_WORDS[id] || []) {
+    const p = S.prog[w.w], m = p && p.b >= MASTERED, in3 = LEVELS_3000.includes(w.g);
+    t.nAll++; if (m) t.mAll++;
+    if (in3) { t.n3++; if (p) t.l3++; if (m) t.m3++; }
+  }
+  return t;
+}
+const tierOf = (t) => { let k = 0; while (k < STK_TIERS.length && t.n3 && (() => { const [h, n] = STK_TIERS[k].need(t); return h >= n; })()) k++; return k; };
+function checkStickers() {
+  if (!S.stk) S.stk = {};
+  const up = [];
+  TOPICS.forEach(([id]) => { const k = tierOf(topicStat(id)); if (k > (S.stk[id] || 0)) { S.stk[id] = k; up.push([id, k]); } });
+  if (!up.length) return;
+  const [id, k] = up[0];
+  setTimeout(() => { confetti(); toast(`📒 ได้สติกเกอร์ ${STK_TIERS[k - 1].icon} ${STK_TIERS[k - 1].name} หมวด ${TOPIC_LABEL[id]}${up.length > 1 ? ` และอีก ${up.length - 1} อัน` : ''}`); }, 1600);
+}
+function stickerBook() {
+  const n = TOPICS.reduce((a, [id]) => a + (S.stk[id] || 0), 0);
+  return `<div class="h2">📒 สมุดสติกเกอร์ <span class="small muted">${n}/${TOPICS.length * STK_TIERS.length}</span></div>
+    <div class="card-box"><div class="stk-grid" id="stk">${TOPICS.map(([id, ic, th]) => {
+      const t = topicStat(id), k = tierOf(t), nx = STK_TIERS[k];
+      const pct = nx ? (() => { const [h, need] = nx.need(t); return Math.min(100, h / Math.max(1, need) * 100); })() : 100;
+      return `<button class="stk t${k}" data-stk="${id}"><span class="stk-ic">${topicIcon(id)}</span>${k ? `<span class="stk-tier">${STK_TIERS[k - 1].icon}</span>` : ''}<small>${esc(th)}</small><span class="stk-bar"><span style="width:${pct}%"></span></span></button>`;
+    }).join('')}</div><div id="stkInfo" class="small muted" style="margin-top:10px">แตะสติกเกอร์เพื่อดูว่าต้องทำอีกเท่าไร · 🥉 → 🥈 → 🥇 → 💎 · ได้ 🥇 ทองแล้ว แฟลชการ์ดของหมวดนั้นจะมีลายพิเศษด้านหลัง</div></div>`;
+}
+// Card-back patterns (1.124): a 🥇 gold (or 💎) sticker in a topic unlocks a drawn pattern on the back of that topic's flashcards.
+// Tiles are 44×44 SVG; topics without their own drawing get stars.
+const PAT_INK = '#8a7fd8';
+const CARD_PAT = {
+  animal: '<g opacity=".2"><ellipse cx="22" cy="26" rx="6" ry="5"/><circle cx="14" cy="18" r="2.6"/><circle cx="19" cy="14" r="2.6"/><circle cx="25" cy="14" r="2.6"/><circle cx="30" cy="18" r="2.6"/></g>',
+  plant: '<path opacity=".2" d="M10 34C10 18 22 10 34 10 34 24 24 34 10 34zM10 34L26 18" stroke="#fff" stroke-width="0"/>',
+  weather: '<g opacity=".2"><ellipse cx="22" cy="26" rx="12" ry="5"/><circle cx="17" cy="22" r="5"/><circle cx="25" cy="20" r="7"/></g>',
+  food: '<g opacity=".2"><path d="M10 22h24a12 12 0 0 1-24 0z"/><path d="M26 8l-6 12M31 9l-6 11" stroke="' + PAT_INK + '" stroke-width="2" stroke-linecap="round"/></g>',
+  home: '<path opacity=".2" d="M22 9L9 21h4v12h7v-7h4v7h7V21h4z"/>',
+  transport: '<g opacity=".2"><rect x="8" y="17" width="28" height="10" rx="4"/><circle cx="15" cy="29" r="3"/><circle cx="29" cy="29" r="3"/><rect x="13" y="12" width="16" height="7" rx="3"/></g>',
+  sport: '<g opacity=".2"><circle cx="22" cy="22" r="11"/><path d="M11 22h22M22 11c-5 6-5 16 0 22M22 11c5 6 5 16 0 22" stroke="#fff" stroke-width="1.6" fill="none"/></g>',
+  arts: '<path opacity=".2" d="M18 30a4 4 0 1 1-2-3.5V12l14-3v17a4 4 0 1 1-2-3.5V13l-10 2z"/>',
+  money: '<g opacity=".2"><circle cx="22" cy="22" r="10"/><path d="M22 15v14M18 19h6a2 2 0 0 1 0 4h-4a2 2 0 0 0 0 4h6" stroke="#fff" stroke-width="2" fill="none"/></g>',
+  tech: '<g opacity=".2"><rect x="10" y="12" width="24" height="16" rx="2"/><rect x="7" y="30" width="30" height="3" rx="1.5"/></g>',
+};
+const PAT_STAR = '<path opacity=".2" d="M22 10l3.5 7.5 8 1-6 5.5 1.6 8-7.1-4-7.1 4 1.6-8-6-5.5 8-1z"/>';
+function cardPattern(tp) {
+  if (!tp || (S.stk && S.stk[tp] || 0) < 3) return '';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" fill="${PAT_INK}">${CARD_PAT[tp] || PAT_STAR}</svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+}
+function bindStickers() {
+  const g = $('#stk'); if (!g) return;
+  g.onclick = (e) => {
+    const b = e.target.closest('[data-stk]'); if (!b) return;
+    const id = b.dataset.stk, t = topicStat(id), k = tierOf(t);
+    g.querySelectorAll('.stk').forEach((x) => x.classList.toggle('sel', x === b));
+    $('#stkInfo').innerHTML = `<div class="stk-info"><b>${TOPIC_LABEL[id]}</b> <span class="muted">· ${t.n3} คำในชุด 3000 · ${t.nAll} คำทั้งหมด</span>
+      ${STK_TIERS.map((tr, j) => { const [h, need, lab] = tr.need(t); return `<div class="stk-row ${j < k ? 'done' : ''}">${j < k ? '✅' : tr.icon} <b>${tr.name}</b> <span class="muted">${lab} ${Math.min(h, need)}/${need}</span></div>`; }).join('')}
+      <button class="btn primary block" id="stkPlay" style="margin-top:10px">🎮 ฝึกหมวดนี้ในเกม</button></div>`;
+    $('#stkPlay').onclick = () => { gameSource = 'topic'; gameTopic = id; go('games'); };
+  };
+}
+
+/* ---------- helpers ---------- */
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const pick = (a) => a[Math.random() * a.length | 0];
+const view = $('#view');
+const lvBadge = (g) => (g === 'own' ? '<span class="lv own">คำของฉัน</span>' : `<span class="lv ${g}">${LV_LABEL[g]}</span>`);
+const thFirst = (t) => t.split(/[;,]/)[0].trim();
+const reEsc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Example sentence with the word (and simple inflections like -s/-ed/-ing) highlighted.
+function hlExample(w) {
+  const m = new RegExp('(^|[^A-Za-z])(' + reEsc(w.w) + '[a-z]*)', 'i').exec(w.e);
+  if (!m) return esc(w.e);
+  const at = m.index + m[1].length;
+  return esc(w.e.slice(0, at)) + '<mark>' + esc(m[2]) + '</mark>' + esc(w.e.slice(at + m[2].length));
+}
+// Words whose example sentence contains the exact word, usable for fill-in-the-blank.
+// Fill-in-the-blank also works when the example has an inflected form (climb → climbed, egg → eggs): 677 sentences used to be skipped (1.107).
+// clozeForm(w) = { kind: 'base' | 's' | 'ed' | 'ing' | 'er' | 'est', tok } or null. Irregular forms (won, stole) are not covered.
+const clozeExact = (w) => new RegExp('(^|[^A-Za-z])' + reEsc(w.w) + '(?![A-Za-z])', 'i');
+const hasClozeExact = (w) => clozeExact(w).test(w.e); // the duel keeps this one: its questions must stay the same across app versions
+function inflections(b, kind) { // plausible spellings of base b (letters only) with this ending
+  const last = b.slice(-1), cy = /[^aeiou]y$/.test(b), dbl = last + '';
+  const y = cy ? b.slice(0, -1) + 'i' : null, e = /e$/.test(b) ? b.slice(0, -1) : null;
+  if (kind === 's') return [/(s|x|z|ch|sh|o)$/.test(b) ? b + 'es' : b + 's', b + 'es', b + 's', ...(y ? [y + 'es'] : [])];
+  if (kind === 'ing') return [b + 'ing', ...(e && !/(ee|oe|ye)$/.test(b) ? [e + 'ing'] : []), b + dbl + 'ing', ...(/ie$/.test(b) ? [b.slice(0, -2) + 'ying'] : [])];
+  const suf = kind === 'ed' ? 'ed' : kind === 'er' ? 'er' : 'est', short = kind === 'ed' ? 'd' : kind === 'er' ? 'r' : 'st';
+  return [b + suf, ...(e ? [b + short] : []), b + dbl + suf, ...(y ? [y + suf] : [])];
+}
+const doubles = (b) => /^[^aeiou]*[aeiou][^aeiouwxy]$/.test(b); // stop → stopped, visit → visited
+function inflect(b, kind) { // one proper form of b, for answer options next to an inflected blank
+  b = b.toLowerCase();
+  const last = b.slice(-1), cy = /[^aeiou]y$/.test(b), e = /e$/.test(b);
+  if (kind === 's') return /(s|x|z|ch|sh)$/.test(b) ? b + 'es' : cy ? b.slice(0, -1) + 'ies' : b + 's';
+  if (kind === 'ing') return /ie$/.test(b) ? b.slice(0, -2) + 'ying' : e && !/(ee|oe|ye)$/.test(b) ? b.slice(0, -1) + 'ing' : doubles(b) ? b + last + 'ing' : b + 'ing';
+  const suf = kind === 'ed' ? 'ed' : kind === 'er' ? 'er' : 'est', short = kind === 'ed' ? 'd' : kind === 'er' ? 'r' : 'st';
+  return e ? b + short : cy ? b.slice(0, -1) + 'i' + suf : doubles(b) ? b + last + suf : b + suf;
+}
+function clozeForm(w) {
+  if (w._cf && w._cf.e === w.e) return w._cf.r;
+  let r = null;
+  const m = clozeExact(w).exec(w.e);
+  if (m) r = { kind: 'base', tok: m[0].replace(/^[^A-Za-z]/, '') };
+  else if (/^[A-Za-z]+$/.test(w.w)) {
+    const b = w.w.toLowerCase(), toks = w.e.match(/[A-Za-z]+/g) || [];
+    for (const kind of ['s', 'ed', 'ing', 'er', 'est']) {
+      const forms = inflections(b, kind), t = toks.find((x) => forms.includes(x.toLowerCase()));
+      if (t) { r = { kind, tok: t }; break; }
+    }
+  }
+  w._cf = { e: w.e, r };
+  return r;
+}
+const clozeRe = (w) => { const f = clozeForm(w); return f && f.kind !== 'base' ? new RegExp('(^|[^A-Za-z])' + reEsc(f.tok) + '(?![A-Za-z])') : clozeExact(w); };
+const hasCloze = (w) => !!clozeForm(w);
+// The text of an answer option in a fill-in-the-blank question about w: the option word in the same form as the blank needs.
+function clozeOpt(o, w) {
+  const f = clozeForm(w);
+  if (!f || f.kind === 'base' || !/^[A-Za-z]+$/.test(o.w)) return o.w;
+  const t = inflect(o.w, f.kind);
+  return /^[A-Z]/.test(f.tok) ? t[0].toUpperCase() + t.slice(1) : t;
+}
+// Example boxes: the main sentence (used by the games) plus extra sentences for the word's
+// other meanings (`w.xe`, optional trailing [[en, th], ...] field of a word row), one box each.
+const exParts = (w) => [[w.e, w.et], ...w.xe].filter(([e]) => e); // words of my own may have no example
+const exampleBox = (w) => exParts(w).map(([e, et]) => `<div class="example"><div class="en" lang="en">${hlExample({ ...w, e })} <button class="say-ex" data-sayex="${esc(e)}" aria-label="ฟังประโยค">🔊</button></div><div class="thx">${esc(et)}</div></div>`).join('');
+// Each 🔊 in the example boxes reads its own sentence.
+const bindSayEx = (root, text) => root.querySelectorAll('[data-sayex]').forEach(b => { b.onclick = () => speak(b.dataset.sayex || text); });
+
+// Tiny sound effects with Web Audio (no files needed).
+let actx;
+// Sound packs (1.124, settings.sfxPack): chime (the original), wood (marimba-like), retro (8-bit), bubble (soft pops).
+// Each: wave, [ok notes], [bad notes], [win notes], note gap (s), length (s), volume, bend (pitch glide factor, bubble).
+const SFX_PACKS = [['chime', '🔔 กริ๊ง'], ['wood', '🪵 ไม้'], ['retro', '👾 เกม 8 บิต'], ['bubble', '🫧 ฟองสบู่']];
+const SFX_DEF = {
+  chime: { w: 'sine', bw: 'square', ok: [660, 880], bad: [220, 160], win: [523, 659, 784, 1047], gap: 0.09, len: 0.16, vol: 0.12 },
+  wood: { w: 'triangle', bw: 'triangle', ok: [523, 784], bad: [196, 147], win: [392, 523, 659, 784], gap: 0.08, len: 0.11, vol: 0.2 },
+  retro: { w: 'square', bw: 'square', ok: [988, 1319], bad: [147, 110], win: [523, 659, 784, 1047, 1319], gap: 0.06, len: 0.08, vol: 0.05 },
+  bubble: { w: 'sine', bw: 'sine', ok: [500, 750], bad: [300, 200], win: [400, 600, 800, 1000], gap: 0.1, len: 0.12, vol: 0.14, bend: 1.8 },
+};
+// `up` (1.168.0) = steps up the scale: a combo in a game plays each right answer a whole tone higher (capped at 7 steps)
+function sfx(kind, up = 0) {
+  haptic(kind);
+  if (!S.settings.sfx) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const P = SFX_DEF[S.settings.sfxPack] || SFX_DEF.chime, notes = P[kind];
+    if (!notes) return;
+    notes.forEach((f, k) => {
+      const o = actx.createOscillator(), g = actx.createGain();
+      const t0 = actx.currentTime + k * P.gap;
+      o.type = kind === 'bad' ? P.bw : P.w;
+      if (up > 0) f *= 2 ** (Math.min(up, 7) * 2 / 12);
+      o.frequency.setValueAtTime(f, t0);
+      if (P.bend) o.frequency.exponentialRampToValueAtTime(f * (kind === 'bad' ? 1 / P.bend : P.bend), t0 + P.len);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(kind === 'bad' ? P.vol * 0.45 : P.vol, t0 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + P.len);
+      o.connect(g).connect(actx.destination);
+      o.start(t0); o.stop(t0 + P.len + 0.02);
+    });
+  } catch (e) { /* audio unavailable */ }
+}
+// A badge that pops over the game for a moment (1.168.0): combo milestones and fast answers. settings.comboFx = false turns it
+// (and the rising pitch) off; without answer animations / with reduced motion it only fades.
+const comboFxOn = () => S.settings.comboFx !== false;
+function answerFx(lines, big) {
+  if (!comboFxOn() || !lines.length) return;
+  document.querySelectorAll('.ans-fx').forEach((x) => x.remove());
+  const el = document.createElement('div');
+  el.className = `ans-fx${big ? ' big' : ''}`; el.setAttribute('aria-hidden', 'true');
+  el.innerHTML = lines.map((t) => `<span${t.startsWith('🔥') ? ' class="c"' : ''}>${t}</span>`).join('');
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1100);
+}
+answerFx.last = null; // the last badge's lines (tests)
+function confetti(kind) {
+  if (confettiOff()) { sfx('win'); return; }
+  const box = document.createElement('div');
+  box.className = 'confetti';
+  if (kind === 'burst') {
+    // Big moments (level up, 3-star stage, boss): paper pieces fly out from the middle, then drop.
+    const cols = ['#6c5ce7', '#ff6b9d', '#ffc145', '#2ecc71', '#4aa8ff', '#ff7a45'];
+    for (let k = 0; k < 56; k++) {
+      const b = document.createElement('i'), a = Math.random() * Math.PI * 2, r = 90 + Math.random() * Math.min(innerWidth, 520) * 0.5;
+      b.style.setProperty('--dx', Math.round(Math.cos(a) * r) + 'px');
+      b.style.setProperty('--dy', Math.round(Math.sin(a) * r * 0.8 - 40) + 'px');
+      b.style.setProperty('--r', Math.round(Math.random() * 720 - 360) + 'deg');
+      b.style.background = cols[k % cols.length];
+      b.style.animationDelay = Math.random() * 0.12 + 's';
+      if (k % 3 === 0) b.style.borderRadius = '50%';
+      box.appendChild(b);
+    }
+    box.classList.add('burst');
+  }
+  const bits = ['🎉', '⭐', '✨', '💜', '🎊', '🔥'];
+  for (let k = 0; k < (kind === 'burst' ? 18 : 36); k++) {
+    const b = document.createElement('span');
+    b.textContent = pick(bits);
+    b.style.left = Math.random() * 100 + 'vw';
+    b.style.animationDelay = Math.random() * 0.6 + 's';
+    b.style.fontSize = 16 + Math.random() * 18 + 'px';
+    box.appendChild(b);
+  }
+  document.body.appendChild(box);
+  setTimeout(() => box.remove(), 3200);
+  sfx('win');
+}
+
+/* ---------- feedback: haptics, floating XP, streak + level-up screens ---------- */
+// Haptics: iOS Safari has no navigator.vibrate, but iOS 18+ gives a light tick whenever an <input type="checkbox" switch>
+// is toggled, so a hidden one is clicked from the answer handler (needs a user gesture). Android uses navigator.vibrate.
+// right = one tick, wrong = two, win = three. Switch: settings.haptic.
+let hapInput = null;
+function haptic(kind) {
+  if (S.settings.haptic === false) return;
+  const ticks = { ok: 1, bad: 2, win: 3 }[kind] || 1;
+  try {
+    if (navigator.vibrate && navigator.userActivation && navigator.userActivation.isActive) navigator.vibrate(kind === 'bad' ? [25, 50, 25] : kind === 'win' ? [20, 40, 20, 40, 40] : 15);
+    if (!hapInput) {
+      const l = document.createElement('label');
+      l.className = 'hap'; l.setAttribute('aria-hidden', 'true');
+      l.innerHTML = '<input type="checkbox" switch tabindex="-1" aria-label="สั่นตอบรับ">';
+      document.body.appendChild(l); hapInput = l.firstChild;
+    }
+    for (let k = 0; k < ticks; k++) setTimeout(() => hapInput.click(), k * 90);
+  } catch (e) { /* no haptics here */ }
+}
+// "+N XP" flies from the last tap to the Lv. chip at the top, which then gives a small bump.
+let lastTap = { x: 0, y: 0, t: 0 }, xpFlyAt = 0;
+document.addEventListener('pointerdown', (e) => { lastTap = { x: e.clientX, y: e.clientY, t: Date.now() }; }, true);
+function xpFly(n) {
+  if (S.settings.animAnswer === false || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const chip = $('#streak'), now = Date.now();
+  if (!chip || !chip.animate || now - xpFlyAt < 120) return;
+  xpFlyAt = now;
+  const to = chip.getBoundingClientRect(), tap = now - lastTap.t < 4000;
+  const x = tap ? lastTap.x : innerWidth / 2, y = tap ? lastTap.y : innerHeight * 0.6;
+  const el = document.createElement('div');
+  el.className = 'xp-fly'; el.textContent = '+' + n + ' XP'; el.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(el);
+  const at = (px, py, sc) => `translate(${px}px, ${py}px) translate(-50%, -50%) scale(${sc})`;
+  const end = () => { el.remove(); chip.classList.add('bump'); setTimeout(() => chip.classList.remove('bump'), 320); };
+  const a = el.animate([{ transform: at(x, y, .6), opacity: 0 }, { transform: at(x, y - 30, 1.1), opacity: 1, offset: .22 },
+    { transform: at(to.left + to.width / 2, to.top + to.height / 2, .7), opacity: .25 }], { duration: 800, easing: 'cubic-bezier(.5,0,.3,1)' });
+  a.onfinish = end;
+  setTimeout(() => el.isConnected && end(), 1500);
+}
+// First activity of the day: 🔥 pops and the streak number counts up. Never blocks taps (pointer-events: none).
+function streakFlash(count) {
+  if (confettiOff() || !count) return;
+  const el = document.createElement('div');
+  el.className = 'celebrate streak-flash'; el.setAttribute('role', 'status');
+  el.innerHTML = `<div class="cel-card"><div class="cel-fire" aria-hidden="true">🔥</div><div class="cel-num">${count > 1 ? count - 1 : 1}</div>
+    <div class="cel-t">${count > 1 ? 'วันติดต่อกัน!' : 'เริ่มสตรีควันแรกแล้ว!'}</div></div>`;
+  document.body.appendChild(el);
+  const num = el.querySelector('.cel-num');
+  if (count > 1) setTimeout(() => { num.textContent = count; num.classList.add('up'); }, 650);
+  setTimeout(() => el.classList.add('out'), 2000);
+  setTimeout(() => el.remove(), 2400);
+}
+// Level-up: full screen with what was unlocked (level medals) and the XP to the next level. Tap or the button closes it.
+function levelUpScreen(L, before = L - 1) {
+  confetti('burst');
+  if (confettiOff()) { toast(`⬆️ เลเวลอัป! ตอนนี้ Lv.${L}`); return; }
+  document.querySelectorAll('.lvlup').forEach((x) => x.remove());
+  const medals = ACH.filter((a) => /^lvl/.test(a.id)).filter((a) => { try { return a.ok({ level: L }) && !a.ok({ level: L - 1 }); } catch (e) { return false; } });
+  const newItems = typeof ITEMS !== 'undefined' ? ITEMS.filter((x) => x.lv > before && x.lv <= L) : [];
+  const el = document.createElement('div');
+  el.className = 'celebrate lvlup'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'เลเวลอัป');
+  el.innerHTML = `<div class="cel-card">${typeof mascotSvg === 'function' ? `<div class="dance cel-mascot" aria-hidden="true">${mascotSvg({ mood: 'happy', size: 84 })}</div>` : ''}<div class="cel-badge" aria-hidden="true">Lv.<b>${L}</b></div><div class="h2">เลเวลอัป!</div>
+    <p>เก่งมาก! ตอนนี้ถึง Lv.${L} แล้ว</p>
+    ${medals.length ? `<div class="cel-unlock">🏅 ปลดล็อกเหรียญ ${medals.map((a) => `${a.icon} ${esc(a.name)}`).join(' · ')}</div>` : ''}
+    ${newItems.length ? `<div class="cel-unlock">🎁 ปลดล็อกของใหม่ ${newItems.map((x) => `${x.ic} ${esc(x.name)}`).join(' · ')} (ดูที่ น้องคำ)</div>` : ''}
+    <p class="small muted">อีก ${(levelStart(L + 1) - S.xp).toLocaleString()} XP ถึง Lv.${L + 1}</p>
+    <button class="btn primary block" data-close>ไปต่อ</button></div>`;
+  const close = () => { clearTimeout(t); el.classList.add('out'); setTimeout(() => el.remove(), 250); document.removeEventListener('keydown', esc_); };
+  const esc_ = (e) => { if (e.key === 'Escape') close(); };
+  // Mid-session (cards, games, feed) it must not swallow taps: it floats, ignores pointers and leaves by itself sooner.
+  const soft = ['cards', 'games', 'feed'].includes(view.dataset.route);
+  if (soft) el.classList.add('soft');
+  const t = setTimeout(close, soft ? 2800 : 5000);
+  el.onclick = close;
+  document.addEventListener('keydown', esc_);
+  document.body.appendChild(el);
+  const b = el.querySelector('[data-close]'); if (b) b.focus({ preventScroll: true });
+}
+
+// "จำได้แล้ว!" (1.128): a golden pill at the top with a shine, never blocks taps. Several in a row are counted in one pill.
+let mstTimer = null, mstN = 0;
+function masteredMoment(w) {
+  let el = document.querySelector('.mst-pop');
+  mstN = el ? mstN + 1 : 1;
+  if (!el) { el = document.createElement('div'); el.className = 'mst-pop'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+  el.classList.remove('out');
+  el.innerHTML = `<span class="mst-ic" aria-hidden="true">✨</span><div>จำได้แล้ว!<small lang="en">${esc(w.w)}${mstN > 1 ? ` <span lang="th">และอีก ${mstN - 1} คำ</span>` : ''}</small></div>`;
+  if (S.settings.sfx) setTimeout(() => sfx('ok'), 120);
+  clearTimeout(mstTimer);
+  mstTimer = setTimeout(() => { el.classList.add('out'); setTimeout(() => { if (el.classList.contains('out')) el.remove(); }, 320); }, 2200);
+}
+let toastTimer;
+// Settings-style rows (<div class="set-row"><span>label</span> … control): give unlabelled controls the row text as their name.
+function labelRows(root) {
+  root.querySelectorAll('.set-row').forEach((r) => {
+    const t = r.firstElementChild, c = r.querySelector('input, select');
+    if (t && c && t !== c && !c.getAttribute('aria-label')) c.setAttribute('aria-label', t.textContent.replace(/\s+/g, ' ').trim());
+  });
+}
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+// SRS functions take the progress table as the last parameter (default = the main S.prog). My word sets pass their own
+// S.dprog[id] table; never swap S.prog or keep a "current set" global.
+function status(w, map = S.prog) {
+  const p = map[w.w];
+  if (!p) return 'new';
+  return p.b >= MASTERED ? 'mastered' : 'learning';
+}
+const pool = () => W.filter((w) => S.settings.levels.includes(w.g));
+// Reviews come from every word already learned (any level); only new words are limited to settings.levels (pool()).
+const dueList = (list = W, map = S.prog) => {
+  const now = Date.now();
+  return list.filter((w) => map[w.w] && map[w.w].d <= now).sort((a, b) => map[a.w].d - map[b.w].d);
+};
+
+/* ---------- daily goal in minutes (1.63) ---------- */
+// grade() measures the seconds between consecutive graded cards (gaps over a minute = a pause, ignored). With
+// settings.minutes (10/15/20/30) the new-words goal is worked out from that budget: minutes ÷ seconds per card =
+// cards for today, minus the reviews (done + still due), divided by what a new card costs (it comes back 2–3 times).
+const NEW_COST = 2.5, SPC_DEFAULT = 9;
+let gradeAt = 0;
+function timeCard() {
+  const now = Date.now(), dt = (now - gradeAt) / 1000;
+  gradeAt = now;
+  if (dt < 1 || dt > 60) return;
+  S.spc.t += dt; S.spc.n++;
+  if (S.spc.n > 600) { S.spc.t /= 2; S.spc.n = Math.round(S.spc.n / 2); }
+}
+const secPerCard = () => (S.spc.n >= 30 ? Math.min(30, Math.max(3, S.spc.t / S.spc.n)) : SPC_DEFAULT);
+// New words to learn today: the fixed setting, or — with a minutes goal — what fits the time left over from reviews.
+// Target date (1.125, settings.exam {date, name}): learn every word of the chosen levels by that date. examPlan() = days left,
+// words still not started, the pace that needs (words a day) and how that compares with the current new-words-a-day.
+function examPlan(now = today()) {
+  const e = S.settings.exam || {};
+  if (!e.date || !/^\d{4}-\d{2}-\d{2}$/.test(e.date)) return null;
+  const days = dayDiff(e.date, now), left = pool().filter((w) => !S.prog[w.w]).length;
+  if (days < 0) return { past: true, days, left, name: e.name || '' };
+  const need = days > 0 ? Math.ceil(left / days) : left;
+  return { days, left, need, name: e.name || '', ok: need <= newGoal(), date: e.date };
+}
+function newGoal() {
+  const m = S.settings.minutes | 0;
+  if (!m) return S.settings.newPerDay;
+  rollDay();
+  // fixed at the first look of the day (per minutes setting) so repeats within a session don't shrink the goal as you go
+  if (!S.daily.ng || S.daily.ng.m !== m) {
+    const cards = m * 60 / secPerCard(), reviews = S.daily.reviews + dueList().length;
+    S.daily.ng = { m, v: Math.max(0, Math.min(100, Math.floor((cards - reviews) / NEW_COST))) };
+  }
+  return S.daily.ng.v;
+}
+
+/* ---------- gentle comeback (1.60) ---------- */
+// A big pile of overdue cards (> BACKLOG_PAUSE) pauses new words and is served BACKLOG_CAP a day, most overdue first,
+// so coming back after a break never starts with a 200-card wall. Off with settings.gentle === false.
+// New words started this week, for the adjustable weekly goal (settings.weekGoal, 0 = off).
+function wnewAdd() {
+  const k = mondayKey();
+  if (!S.wnew || S.wnew.key !== k) S.wnew = { key: k, n: 0 };
+  S.wnew.n++;
+  const g = S.settings.weekGoal | 0;
+  if (g && S.wnew.n === g) setTimeout(() => { confetti(); toast(`🎯 ครบเป้าคำใหม่ประจำสัปดาห์ ${g} คำแล้ว เก่งมาก!`); }, 600);
+}
+const wnewNow = () => (S.wnew && S.wnew.key === mondayKey() ? S.wnew.n : 0);
+const BACKLOG_CAP = 50, BACKLOG_PAUSE = 60;
+function backlogPlan() {
+  rollDay();
+  const due = dueList().length, on = S.settings.gentle !== false && due > BACKLOG_PAUSE;
+  const capLeft = on ? Math.max(0, BACKLOG_CAP - S.daily.reviews) : due;
+  return { on, due, show: Math.min(due, capLeft) };
+}
+// Whole days since the last day with any activity before today (null = never played).
+function daysAway() {
+  const t = today(), last = Object.keys(S.hist).filter((k) => k < t && S.hist[k] > 0).sort().pop() || S.streak.last;
+  return last ? dayDiff(t, last) : null;
+}
+
+/* ---------- app icon badge (cards due today) ---------- */
+// Needs the Badging API (iOS 16.4+ home-screen app, with notification permission). Re-counted after progress
+// changes and when the app goes to the background; the daily push also sets it (sw.js) while the app is closed.
+let badgeTimer = null;
+function updateBadge() {
+  clearTimeout(badgeTimer);
+  badgeTimer = setTimeout(() => {
+    tabBadge();
+    if (!navigator.setAppBadge) return;
+    try {
+      const n = S.settings.badge === false ? 0 : dueList().length;
+      (n ? navigator.setAppBadge(n) : navigator.clearAppBadge()).catch(() => {});
+    } catch (e) { /* unsupported */ }
+  }, 800);
+}
+
+// Cards left today on the แฟลชการ์ด tab (bottom bar and iPad rail): reviews still to do today (capped while clearing a
+// backlog) + new words left of today's goal. Hidden at 0; the button's name says it for VoiceOver.
+function cardsLeft() {
+  rollDay();
+  const plan = backlogPlan();
+  let nw = plan.on ? 0 : Math.max(0, newGoal() - S.daily.fresh);
+  if (nw) { let u = 0; for (const w of W) if (!S.prog[w.w] && S.settings.levels.includes(w.g) && inTopic(w) && ++u >= nw) break; nw = u; }
+  return plan.show + nw;
+}
+function tabBadge() {
+  const b = document.querySelector('#tabbar > button[data-tab="cards"]'); if (!b) return;
+  let el = b.querySelector('.tab-badge');
+  if (!el) { el = document.createElement('span'); el.className = 'tab-badge'; el.setAttribute('aria-hidden', 'true'); b.querySelector('.ti').appendChild(el); } // on the icon's corner in every layout
+  const n = cardsLeft();
+  el.textContent = n > 99 ? '99+' : String(n);
+  el.hidden = !n;
+  b.setAttribute('aria-label', n ? `แฟลชการ์ด (วันนี้เหลือ ${n} ใบ)` : 'แฟลชการ์ด');
+}
+
+/* ---------- speech (iOS needs a user gesture before the first utterance) ---------- */
+let voices = [];
+function loadVoices() { voices = window.speechSynthesis ? speechSynthesis.getVoices() : []; if (typeof fillVoices === 'function') fillVoices(); }
+if (window.speechSynthesis) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+// English voices for the settings picker: Premium/Enhanced (downloaded Siri-quality) voices first.
+const voiceRank = (v) => (/premium/i.test(v.name) ? 0 : /enhanced|siri/i.test(v.name) ? 1 : 2);
+const FLAG = { 'en-US': '🇺🇸', 'en-GB': '🇬🇧', 'en-AU': '🇦🇺', 'en-IE': '🇮🇪', 'en-IN': '🇮🇳', 'en-ZA': '🇿🇦', 'en-NZ': '🇳🇿', 'en-SG': '🇸🇬' };
+function englishVoices() {
+  return voices.filter((v) => /^en[-_]/i.test(v.lang)).map((v) => ({ v, lang: v.lang.replace('_', '-') }))
+    .sort((a, b) => voiceRank(a.v) - voiceRank(b.v) || a.lang.localeCompare(b.lang) || a.v.name.localeCompare(b.v.name));
+}
+function fillVoices() {
+  const sel = document.getElementById('voice'); if (!sel) return;
+  const list = englishVoices();
+  sel.innerHTML = `<option value="">✨ อัตโนมัติ (ตามสำเนียง)</option>` + list.map(({ v, lang }) =>
+    `<option value="${esc(v.voiceURI)}" ${v.voiceURI === S.settings.voice ? 'selected' : ''}>${FLAG[lang] || '🌐'} ${esc(v.name)}${voiceRank(v) < 2 ? ' ⭐' : ''}</option>`).join('');
+  const n = document.getElementById('voiceN'); if (n) n.textContent = list.length ? `มี ${list.length} เสียง · ⭐ = เสียงคุณภาพสูง` : 'ยังโหลดรายชื่อเสียงไม่ได้ ลองเปิดหน้านี้ใหม่';
+}
+// Theme: 'auto' follows the system; 'light'/'dark'/'black' (pure-black OLED) override it. Palette = accent colours (violet is the :root default).
+// Both are mirrored to localStorage (o3k.theme / o3k.palette) for the early script in index.html.
+const PALETTES = [['violet', 'ม่วง', '#6c5ce7', '#fd79a8'], ['ocean', 'ฟ้าทะเล', '#0a6fc2', '#5bc8e0'], ['mint', 'มิ้นต์', '#007a61', '#5fd0cf'],
+  ['orange', 'ส้ม', '#c0540a', '#f58a8f'], ['sakura', 'ชมพูซากุระ', '#c03a78', '#f7b3cc'], ['mono', 'โมโนโครม', '#3d3d46', '#a0a0ac'],
+  ['gold', 'ทอง (ปลดล็อก Lv.10)', '#9a6b00', '#f0c24a'], ['galaxy', 'กาแล็กซี (ปลดล็อก Lv.20)', '#4b2fa5', '#c07fd8']];
+function applyTheme() {
+  const root = document.documentElement, t = S.settings.theme || 'auto';
+  let pal = S.settings.palAuto && typeof skyPalette === 'function' ? skyPalette() : S.settings.palette || 'violet'; if (!PALETTES.some((p) => p[0] === pal) || (typeof paletteOpen === 'function' && !paletteOpen(pal))) pal = 'violet';
+  if (t === 'auto') delete root.dataset.theme; else root.dataset.theme = t;
+  if (pal === 'violet') delete root.dataset.palette; else root.dataset.palette = pal;
+  try { localStorage.setItem('o3k.theme', t); localStorage.setItem('o3k.palette', pal); } catch (e) { /* ignore */ }
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.content = getComputedStyle(root).getPropertyValue('--primary').trim() || '#6c5ce7';
+}
+applyTheme();
+// App icon: the home-screen icon is copied by iOS when "Add to Home Screen" is used, so this only swaps the
+// <link rel="apple-touch-icon"> (+ settings page preview). A change needs the icon to be re-added (backup first).
+const ICONS = [['purple', 'ม่วง'], ['dark', 'มืด'], ['black', 'ดำสนิท'], ['light', 'ขาว'], ['ocean', 'ฟ้าทะเล'], ['sakura', 'ชมพู']];
+const iconSrc = (id) => id === 'purple' ? 'icons/apple-touch-icon.png' : `icons/apple-touch-icon-${id}.png`;
+function applyIcon() {
+  const id = ICONS.some((x) => x[0] === S.settings.icon) ? S.settings.icon : 'purple';
+  const l = document.querySelector('link[rel="apple-touch-icon"]'); if (l) l.href = iconSrc(id);
+}
+applyIcon();
+// Animation switches (settings → แอนิเมชันและเอฟเฟกต์ since 1.162.0), each on its own: animPage → page slides (html.no-vt),
+// animAnswer → bounce/shake on answers (html.no-ans), confetti. 1.39.1 had one `anim` switch for all three.
+if (S.settings.anim === false) { S.settings.animPage = S.settings.animAnswer = S.settings.confetti = false; }
+delete S.settings.anim;
+const FSZ = { sm: 0.9, md: 1, lg: 1.15, xl: 1.3 };
+function applyAnim() {
+  document.documentElement.classList.toggle('no-hf', S.settings.headFont === false);
+  document.documentElement.classList.toggle('no-pbg', S.settings.pageBg === false); // 1.130: soft page background // 1.117: Anuphan headings
+  document.documentElement.classList.toggle('no-glass', S.settings.glassBar === false); // 1.117: floating glass tab bar (phones)
+  document.documentElement.classList.toggle('no-vt', S.settings.animPage === false);
+  document.documentElement.classList.toggle('no-ans', S.settings.animAnswer === false);
+  document.documentElement.style.setProperty('--uz', FSZ[S.settings.fsz] || 1); // 1.123: text size of the pages (settings → หน้าตา)
+}
+applyAnim();
+// The right-answer ripple starts where the finger touched (1.117): pointer position as CSS variables on the pressed control.
+document.addEventListener('pointerdown', (e) => {
+  const b = e.target.closest && e.target.closest('.opt, .btn, .quick-btn, .chip'); if (!b) return;
+  const r = b.getBoundingClientRect();
+  b.style.setProperty('--rx', `${e.clientX - r.left}px`); b.style.setProperty('--ry', `${e.clientY - r.top}px`);
+}, { passive: true });
+// Numbers count up from 0 the first time they scroll into view (1.116). Only the element's first text node is a number
+// ("1,234" or "87"); <small> units stay. Nothing moves with reduced motion or the answer animations off.
+function countUp(els) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches || S.settings.animAnswer === false || !('IntersectionObserver' in window)) return;
+  const run = (el) => {
+    const t = el.firstChild; if (!t || t.nodeType !== 3) return;
+    const txt = t.nodeValue, n = +txt.replace(/,/g, ''); if (!(n > 1) || !/^[\d,]+$/.test(txt.trim())) return;
+    const comma = txt.includes(','), t0 = performance.now(), dur = Math.min(900, 400 + n * 4);
+    const step = (now) => {
+      if (!t.isConnected) return;
+      const k = Math.min(1, (now - t0) / dur), v = Math.round(n * (1 - (1 - k) ** 3));
+      t.nodeValue = comma ? v.toLocaleString() : String(v);
+      if (k < 1) requestAnimationFrame(step); else t.nodeValue = txt;
+    };
+    t.nodeValue = '0'; requestAnimationFrame(step);
+  };
+  const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { io.unobserve(e.target); run(e.target); } }), { root: view });
+  els.forEach((el) => io.observe(el));
+}
+const confettiOff = () => S.settings.confetti === false || matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Slow speech: speak(text, { slow: true }) (🐢 buttons), or tapping 🔊 again for the same text within
+// SLOW_AGAIN ms plays it slower (alternating), unless settings.slowRepeat is false.
+const SLOW_AGAIN = 8000;
+let lastSaid = { text: '', at: 0, slow: false };
+const slowRate = () => Math.max(0.45, Math.round(S.settings.rate * 0.62 * 100) / 100);
+// iOS Safari quirks: speak() right after cancel() of a running utterance is dropped silently (so wait a beat),
+// a paused engine stays mute until resume(), and an utterance nobody references can be garbage-collected
+// before it ends (no onend → a chained dialogue stops), hence `curUtt`.
+let curUtt = null;
+function say(u, wait) {
+  curUtt = u;
+  const go = () => { if (u !== curUtt) return; if (speechSynthesis.paused) speechSynthesis.resume(); speechSynthesis.speak(u); };
+  if (wait) setTimeout(go, 80); else go();
+  return u;
+}
+function speak(text, opt) {
+  if (!window.speechSynthesis) return;
+  actEvent('speak');
+  const busy = speechSynthesis.speaking || speechSynthesis.pending;
+  speechSynthesis.cancel();
+  let slow = opt && opt.slow;
+  if (slow == null) slow = S.settings.slowRepeat !== false && lastSaid.text === text && Date.now() - lastSaid.at < SLOW_AGAIN && !lastSaid.slow;
+  lastSaid = { text, at: Date.now(), slow: !!slow };
+  const u = new SpeechSynthesisUtterance(text);
+  const lang = (opt && opt.lang) || S.settings.accent; // opt.lang = a fixed accent (UK ↔ US comparison), ignores the chosen voice
+  u.lang = lang; u.rate = slow ? slowRate() : S.settings.rate;
+  const chosen = !(opt && opt.lang) && S.settings.voice && voices.find((x) => x.voiceURI === S.settings.voice);
+  if (chosen) { try { u.voice = chosen; u.lang = chosen.lang; } catch (e) { /* voice went away */ } return say(u, busy); }
+  const v = voices.find((v) => v.lang === lang && /Samantha|Daniel|Karen|Ava|Siri/i.test(v.name)) || voices.find((v) => v.lang === lang) || voices.find((v) => v.lang && v.lang.startsWith('en'));
+  if (v) u.voice = v;
+  return say(u, busy);
+}
+
+/* ---------- spaced repetition ---------- */
+// Adaptive intervals (SM-2 style): each word keeps its own interval `i` (days) and ease `e`.
+// `b` (box) is derived from `i` so "จำได้แล้ว" (b >= MASTERED, i.e. i >= 16 days) works as before.
+// Words saved before 1.10.0 have no i/e and start from INTERVALS[b] with the default ease.
+// grade: 0 again, 1 hard, 2 good, 3 easy
+const EASE0 = 2.5, EASE_MIN = 1.3, EASE_MAX = 2.8, MAX_IVL = 365;
+const boxOf = (i) => { let b = 0; while (b + 1 < INTERVALS.length && INTERVALS[b + 1] <= i) b++; return b; };
+const ivlOf = (p) => (p ? (p.i != null ? p.i : INTERVALS[p.b]) : 0);
+function schedSM2(p, g) {
+  const i0 = ivlOf(p), e0 = p && p.e ? p.e : EASE0;
+  // Remembered after a long gap: credit part of the extra time.
+  const late = p && p.d ? Math.max(0, (Date.now() - p.d) / DAY) : 0;
+  const base = i0 + Math.min(late, i0);
+  let i, e = e0;
+  if (g === 0) { i = 0; e = Math.max(EASE_MIN, e0 - 0.2); }
+  else if (g === 1) { i = i0 ? Math.max(1, Math.round(i0 * 1.2)) : 1; e = Math.max(EASE_MIN, e0 - 0.15); }
+  else if (g === 2) i = i0 ? Math.max(i0 + 1, Math.round(base * e0)) : 1;
+  else { i = i0 ? Math.max(i0 + 2, Math.round(base * e0 * 1.3)) : 3; e = Math.min(EASE_MAX, e0 + 0.15); }
+  i = Math.min(MAX_IVL, i);
+  return { i, e: Math.round(e * 100) / 100, b: boxOf(i) };
+}
+
+/* ---------- FSRS-5 scheduler (1.66) ---------- */
+// The open-source FSRS algorithm (default parameters): each card keeps stability `st` (days until recall drops to 90%),
+// difficulty `df` (1–10) and the time of the last review `lr`. The next interval is the day when recall falls to the
+// retention the learner wants (settings.retention, default 90%). Cards saved before have no st/df: fsState() derives
+// them from the old interval `i` and ease `e`, so backups and sync from older versions keep working.
+// Switch back to the old SM-2 style with settings.scheduler = 'sm2'. Grades: 0 again, 1 hard, 2 good, 3 easy.
+const FSRS_W = [0.40255, 1.18385, 3.173, 15.69105, 7.1949, 0.5345, 1.4604, 0.0046, 1.54575, 0.1192, 1.01925, 1.9395, 0.11, 0.29605, 2.2698, 0.2315, 2.9898, 0.51655, 0.6621];
+const FS_FACTOR = 19 / 81, FS_DECAY = -0.5;
+const fsClamp = (x, a, b) => Math.min(b, Math.max(a, x));
+const fsRetr = (t, s) => Math.pow(1 + FS_FACTOR * t / s, FS_DECAY);
+const fsIvl = (s, r) => s / FS_FACTOR * (Math.pow(r, 1 / FS_DECAY) - 1);
+const fsD0 = (G) => fsClamp(FSRS_W[4] - Math.exp(FSRS_W[5] * (G - 1)) + 1, 1, 10);
+const fsOn = () => S.settings.scheduler !== 'sm2';
+// Personal FSRS (1.153.0): the default weights describe an average learner. fsFit() reads this learner's own flashcard reviews
+// (S.rev) and finds one factor K for how long their memories really last: recall is predicted as fsRetr(t, K × stability).
+// K > 1 = remembers longer than the default model (longer gaps, fewer reviews); K < 1 = forgets sooner (shorter gaps).
+// Only used once the learner taps "use" on the stats page (settings.fsk), so the schedule never changes behind their back.
+// The log keeps the stability the default model gave (not × K), so a later fit is measured against the same baseline.
+const FIT_MIN = 150, FSK_MIN = 0.5, FSK_MAX = 2.5; // REV_MAX sits next to isNum: load() needs it before this line runs
+const fsK = () => (fsOn() ? fsClamp(+S.settings.fsk || 1, FSK_MIN, FSK_MAX) : 1);
+function revLog(p, g) {
+  const o = fsState(p);
+  if (o.t < 1) return; // another look on the same day says little about the long-term memory
+  S.rev.push([Math.round(Date.now() / 60000), Math.round(o.t * 10) / 10, Math.round(o.s * 100) / 100, g]);
+  if (S.rev.length > REV_MAX) S.rev.splice(0, S.rev.length - REV_MAX);
+}
+// Activity by kind (1.158.0): every answer counted in S.hist is also counted under what was being used (from the page,
+// and for the games page the game id in actGame) with a rough time: the gap since the previous answer when it is under
+// ACT_GAP (thinking + reading time), else ACT_FIRST seconds (the first answer after a break).
+const ACT_ROUTE = { cards: 'card', feed: 'feed', read: 'read', ear: 'read', ref: 'skill' };
+for (const r of ['fun', 'tower', 'cafe', 'puzzle', 'cases', 'paths', 'pic', 'build', 'room', 'riddle', 'wsearch', 'duel', 'adv', 'event', 'map', 'album', 'garden', 'coinshop']) ACT_ROUTE[r] = 'fun';
+let actGame = '', actLast = 0, actSess = 0; // actGame: the game started by startGame() (cleared by go()); actLast: ms of the previous answer; actSess: ms the current sitting began
+// 1.159.0: a day also keeps x = { g: {game or page id: [answers, seconds, judged, right]}, h: [answers per hour 0–23],
+// e: {ACT_EVENTS id: times}, ss: [sittings, longest sitting in seconds], on: seconds the app was open in front }.
+// Kinds and games: [answers, seconds, judged (right/wrong known), right].
+function actCat() {
+  const r = typeof current === 'string' ? current : '';
+  if (r === 'games') {
+    if (!actGame) return 'game';
+    if (typeof SKILL_GAMES !== 'undefined' && SKILL_GAMES.includes(actGame)) return 'skill';
+    if (typeof STORY_GAMES !== 'undefined' && STORY_GAMES.includes(actGame)) return 'read';
+    return ['riddle', 'wsearch', 'duel', 'map'].includes(actGame) ? 'fun' : 'game';
+  }
+  return ACT_ROUTE[r] || 'other';
+}
+const actX = (t) => { const d = S.act[t] || (S.act[t] = {}); return d.x || (d.x = {}); };
+const actAdd = (v, sec, ok) => { v[0]++; v[1] += sec; if (ok === true || ok === false) { v[2]++; if (ok) v[3]++; } };
+// ok: true / false when the answer was judged, undefined when it was not (a page turn, a puzzle step …)
+function actLog(t, ok) {
+  const now = Date.now(), gap = (now - actLast) / 1000;
+  const near = actLast > 0 && gap >= 0 && gap <= ACT_GAP; // within one sitting
+  if (!near) actSess = now;
+  actLast = now;
+  const sec = near ? Math.max(1, Math.round(gap)) : ACT_FIRST;
+  const day = S.act[t] || (S.act[t] = {}), c = actCat();
+  actAdd(day[c] || (day[c] = [0, 0, 0, 0]), sec, ok);
+  const x = actX(t), gid = String(current === 'games' && actGame ? actGame : current || 'other').slice(0, 24);
+  x.g = x.g || {}; actAdd(x.g[gid] || (x.g[gid] = [0, 0, 0, 0]), sec, ok);
+  x.h = x.h || Array(24).fill(0); x.h[new Date(now).getHours()]++;
+  x.ss = x.ss || [0, 0];
+  if (actSess === now) x.ss[0]++;
+  x.ss[1] = Math.max(x.ss[1], Math.round((now - actSess) / 1000) + ACT_FIRST);
+}
+// Things done that are not answers (no save(): they ride along with the next one, or the app hiding).
+function actEvent(id) {
+  try { const e = actX(today()); e.e = e.e || {}; e.e[id] = (e.e[id] || 0) + 1; saveDirty = true; } catch (err) { /* never break the action */ }
+}
+// Time the app is open in front: counted every 20 s while visible (a gap over 60 s = the phone slept, not counted).
+let actOnAt = Date.now();
+function actOnTick() {
+  const now = Date.now(), d = (now - actOnAt) / 1000;
+  actOnAt = now;
+  if (document.hidden || !(d > 0) || d > 60) return;
+  const x = actX(today()); x.on = (x.on || 0) + Math.round(d); saveDirty = true;
+}
+setInterval(actOnTick, 20000);
+let actHidAt = 0; // coming back after 5+ minutes away counts as opening the app again
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { actOnTick(); actHidAt = Date.now(); return; }
+  actOnAt = Date.now();
+  if (actHidAt && actOnAt - actHidAt > 300000) actEvent('open');
+});
+// A day's numbers → null when no answer was logged that day. ok/jd = right / judged answers.
+function actDay(key) {
+  const d = S.act[key]; if (!d) return null;
+  const by = {}, secBy = {}, okBy = {}, jdBy = {}; let n = 0, sec = 0, ok = 0, jd = 0;
+  for (const id of ACT_IDS) {
+    const v = d[id] || [0, 0, 0, 0];
+    by[id] = v[0]; secBy[id] = v[1]; jdBy[id] = v[2] || 0; okBy[id] = v[3] || 0;
+    n += v[0]; sec += v[1]; jd += v[2] || 0; ok += v[3] || 0;
+  }
+  return n ? { by, secBy, okBy, jdBy, n, sec, ok, jd, x: d.x || {} } : null;
+}
+// Function declarations on purpose: load() runs before these lines.
+function actRow(v) {
+  if (!Array.isArray(v) || !isNum(v[0]) || !isNum(v[1]) || v[0] <= 0) return null;
+  const n = Math.round(v[0]), jd = isNum(v[2]) ? Math.min(n, Math.max(0, Math.round(v[2]))) : 0;
+  return [n, Math.max(0, Math.round(v[1])), jd, isNum(v[3]) ? Math.min(jd, Math.max(0, Math.round(v[3]))) : 0];
+}
+function cleanActX(x) {
+  const out = {};
+  if (!x || typeof x !== 'object' || Array.isArray(x)) return out;
+  if (x.g && typeof x.g === 'object') for (const [id, v] of Object.entries(x.g)) { const r = actRow(v); if (r && /^[A-Za-z0-9_-]{1,24}$/.test(id)) (out.g || (out.g = {}))[id] = r; }
+  if (Array.isArray(x.h) && x.h.length === 24 && x.h.every((v) => isNum(v) && v >= 0)) out.h = x.h.map(Math.round);
+  if (x.e && typeof x.e === 'object') for (const [id, v] of Object.entries(x.e)) if (isNum(v) && v > 0 && ACT_EVENTS.some((a) => a[0] === id)) (out.e || (out.e = {}))[id] = Math.round(v);
+  if (Array.isArray(x.ss) && x.ss.length === 2 && x.ss.every((v) => isNum(v) && v >= 0)) out.ss = x.ss.map(Math.round);
+  if (isNum(x.on) && x.on > 0) out.on = Math.round(x.on);
+  return out;
+}
+function cleanAct(a) {
+  const out = {};
+  if (!a || typeof a !== 'object' || Array.isArray(a)) return out;
+  const keys = Object.keys(a).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort().slice(-ACT_DAYS);
+  for (const k of keys) {
+    const d = a[k]; if (!d || typeof d !== 'object') continue;
+    const day = {};
+    for (const id of ACT_IDS) { const r = actRow(d[id]); if (r) day[id] = r; }
+    const x = cleanActX(d.x); if (Object.keys(x).length) day.x = x;
+    if (Object.keys(day).length) out[k] = day;
+  }
+  return out;
+}
+// Another device's log: the larger number in every place (like hist / chist).
+const maxArr = (a, b) => (a ? a.map((v, i) => Math.max(v, b[i] || 0)) : b.slice());
+function mergeAct(theirs) {
+  for (const [k, d] of Object.entries(theirs)) {
+    const mine = S.act[k] || (S.act[k] = {});
+    for (const id of ACT_IDS) if (d[id]) mine[id] = maxArr(mine[id], d[id]);
+    if (!d.x) continue;
+    const mx = mine.x || (mine.x = {}), tx = d.x;
+    if (tx.g) { mx.g = mx.g || {}; for (const [id, v] of Object.entries(tx.g)) mx.g[id] = maxArr(mx.g[id], v); }
+    if (tx.h) mx.h = maxArr(mx.h, tx.h);
+    if (tx.e) { mx.e = mx.e || {}; for (const [id, v] of Object.entries(tx.e)) mx.e[id] = Math.max(mx.e[id] || 0, v); }
+    if (tx.ss) mx.ss = maxArr(mx.ss, tx.ss);
+    if (tx.on) mx.on = Math.max(mx.on || 0, tx.on);
+  }
+  const keys = Object.keys(S.act).sort();
+  for (const k of keys.slice(0, Math.max(0, keys.length - ACT_DAYS))) delete S.act[k];
+}
+// A function declaration on purpose: load() runs before this line.
+function cleanRev(a) {
+  if (!Array.isArray(a)) return [];
+  return a.filter((r) => Array.isArray(r) && r.length === 4 && r.every(isNum) && r[1] >= 0 && r[2] > 0 && [0, 1, 2, 3].includes(r[3])).slice(-REV_MAX);
+}
+// Two devices' logs: every review once (same minute, gap and grade = the same review), oldest first, newest REV_MAX kept.
+function mergeRev(a, b) {
+  const seen = new Set(), out = [];
+  for (const r of a.concat(b)) { const k = r[0] + '|' + r[1] + '|' + r[3]; if (!seen.has(k)) { seen.add(k); out.push(r); } }
+  return out.sort((x, y) => x[0] - y[0]).slice(-REV_MAX);
+}
+// Best K for the logged reviews: least log-loss of "remembered" (grade > 0) against fsRetr(t, K·s), found by golden-section
+// search on ln K, with a light pull towards 1 while there are few reviews. null below FIT_MIN reviews.
+function fsFit(rows = S.rev) {
+  const n = rows.length;
+  if (n < FIT_MIN) return null;
+  const R = (r, k) => fsClamp(fsRetr(r[1], r[2] * k), 1e-4, 1 - 1e-4);
+  const loss = (lk) => { const k = Math.exp(lk); let L = 0; for (const r of rows) L -= r[3] > 0 ? Math.log(R(r, k)) : Math.log(1 - R(r, k)); return L / n + 10 * lk * lk / n; };
+  let a = Math.log(FSK_MIN), b = Math.log(FSK_MAX);
+  const phi = (Math.sqrt(5) - 1) / 2;
+  let c = b - phi * (b - a), d = a + phi * (b - a), fc = loss(c), fd = loss(d);
+  for (let it = 0; it < 40; it++) {
+    if (fc < fd) { b = d; d = c; fd = fc; c = b - phi * (b - a); fc = loss(c); }
+    else { a = c; c = d; fc = fd; d = a + phi * (b - a); fd = loss(d); }
+  }
+  const k = Math.round(Math.exp((a + b) / 2) * 100) / 100;
+  const mean = (f) => rows.reduce((t, r) => t + f(r), 0) / n;
+  return { k, n, actual: mean((r) => (r[3] > 0 ? 1 : 0)), pred: mean((r) => R(r, 1)), predK: mean((r) => R(r, k)) };
+}
+const retention = () => fsClamp(+S.settings.retention || 0.9, 0.7, 0.97);
+// Current memory state of a stored card: { s, d, t } (t = days since the last review).
+function fsState(p) {
+  const i0 = ivlOf(p), now = Date.now();
+  const s = p.st || Math.max(0.4, i0 || 1);
+  const d = p.df || fsClamp(5 + (EASE0 - (p.e || EASE0)) * 3.75, 1, 10);
+  const last = p.lr || (p.d ? p.d - i0 * DAY + 3600000 : now);
+  return { s, d, t: Math.max(0, (now - last) / DAY) };
+}
+function schedFSRS(p, g) {
+  const w = FSRS_W, G = g + 1, e = p && p.e ? p.e : EASE0;
+  let s, d;
+  if (!p || (p.s || 0) === 0) { s = w[G - 1]; d = fsD0(G); }
+  else {
+    const o = fsState(p), r = fsRetr(o.t, o.s * fsK());
+    d = o.d + (-w[6] * (G - 3)) * (10 - o.d) / 9;
+    d = fsClamp(w[7] * fsD0(4) + (1 - w[7]) * d, 1, 10);
+    if (o.t < 1) s = o.s * Math.exp(w[17] * (G - 3 + w[18])); // another look on the same day
+    else if (G === 1) s = Math.min(o.s, w[11] * Math.pow(o.d, -w[12]) * (Math.pow(o.s + 1, w[13]) - 1) * Math.exp(w[14] * (1 - r)));
+    else s = o.s * (1 + Math.exp(w[8]) * (11 - o.d) * Math.pow(o.s, -w[9]) * (Math.exp(w[10] * (1 - r)) - 1) * (G === 2 ? w[15] : 1) * (G === 4 ? w[16] : 1));
+    if (G >= 3) s = Math.max(s, o.s);
+  }
+  s = fsClamp(s, 0.1, MAX_IVL * 2);
+  const i = g === 0 ? 0 : fsClamp(Math.round(fsIvl(s * fsK(), retention())), 1, MAX_IVL); // × the learner's own K (1.153.0)
+  return { i, e, b: boxOf(i), st: Math.round(s * 100) / 100, df: Math.round(d * 100) / 100, lr: Date.now() };
+}
+const sched = (p, g) => (fsOn() ? schedFSRS(p, g) : schedSM2(p, g));
+// The FSRS fields of a sched() result, to store next to b/i/e/d (empty with the old scheduler).
+const fsFields = (n) => (n.st != null ? { st: n.st, df: n.df, lr: n.lr } : {});
+// Due time for an interval of `i` days. From 3 days up the gap is shifted by a random ±5% (3–6 days), ±8% (7–20) or
+// ±10% (21+) so words learned together don't all come due on the same day (1.68). `i` itself stays exact (button labels).
+const fuzzOf = (i) => (i < 3 ? 0 : i < 7 ? 0.05 : i < 21 ? 0.08 : 0.1);
+const dueAt = (i) => (i === 0 ? Date.now() : Date.now() + i * DAY * (1 + (Math.random() * 2 - 1) * fuzzOf(i)) - 3600000);
+function daysLabel(i) {
+  if (i === 0) return '< 1 นาที';
+  if (i < 30) return i + ' วัน';
+  if (i < 365) return Math.round(i / 30) + ' เดือน';
+  return '1 ปี';
+}
+// Leeches ("คำดื้อ"): forgotten again and again.
+const LEECH = 4;
+const leechIn = (w, map) => !!(map[w.w] && (map[w.w].x || 0) >= LEECH);
+const isLeech = (w) => leechIn(w, S.prog); // one argument on purpose: W.filter(isLeech) passes the index as a 2nd argument
+function logMiss(w) {
+  const t = today();
+  (S.miss[t] = S.miss[t] || {})[w.w] = (S.miss[t][w.w] || 0) + 1;
+  for (const k of Object.keys(S.miss)) if (dayDiff(t, k) > 21) delete S.miss[k];
+  // the year's tally for the year in review (1.155.2): this device's own bucket; years before last are dropped
+  const y = t.slice(0, 4), m = ((S.missY[y] = S.missY[y] || {})[DEV] = S.missY[y][DEV] || {});
+  m[w.w] = (m[w.w] || 0) + 1;
+  if (!S.missYFrom) S.missYFrom = t;
+  for (const k of Object.keys(S.missY)) if (+k < +y - 1) delete S.missY[k];
+}
+// A function declaration on purpose: load() runs before this line. { 'YYYY': { device: { word: count > 0 } } }, nothing else.
+function cleanMissY(o) {
+  const out = {};
+  if (!o || typeof o !== 'object' || Array.isArray(o)) return out;
+  for (const [y, devs] of Object.entries(o)) {
+    if (!/^\d{4}$/.test(y) || !devs || typeof devs !== 'object' || Array.isArray(devs)) continue;
+    for (const [dev, m] of Object.entries(devs)) {
+      if (!m || typeof m !== 'object' || Array.isArray(m)) continue;
+      const ok = Object.entries(m).filter(([, n]) => isNum(n) && n > 0);
+      if (ok.length) (out[y] = out[y] || {})[dev] = Object.fromEntries(ok);
+    }
+  }
+  return out;
+}
+// Real retention (1.107): every review of a card that was due counts in a bucket by the gap it had (1–2, 3–6, 7–20, 21+ days):
+// [reviewed, remembered]. Cards pressed "forgot" are not remembered. Halved at 400 so it follows recent weeks.
+const RET_BUCKETS = ['1–2 วัน', '3–6 วัน', '7–20 วัน', '21 วันขึ้นไป'];
+function retLog(ivl, ok) {
+  if (ivl < 1) return;
+  const b = ivl < 3 ? 0 : ivl < 7 ? 1 : ivl < 21 ? 2 : 3, r = S.ret[b];
+  r[0]++; if (ok) r[1]++;
+  if (r[0] > 400) { r[0] = Math.round(r[0] / 2); r[1] = Math.round(r[1] / 2); }
+}
+// With another table (a word set) the daily new/review counts and the missed-word log are left alone: they belong to the main list.
+function grade(w, g, map = S.prog) {
+  const main = map === S.prog;
+  timeCard();
+  markActive(g > 0);
+  const p = map[w.w];
+  const leechHit = main && p && (p.x || 0) >= LEECH && g >= 2;
+  if (!main) { /* a set: only effort counts (XP, streak, history, quests) */ }
+  else if (!p) {
+    S.daily.fresh++; wnewAdd();
+    if (S.daily.fresh === newGoal()) setTimeout(() => { confetti(); toast('🎯 ครบเป้าคำใหม่วันนี้แล้ว เก่งมาก!'); }, 300);
+  } else S.daily.reviews++;
+  if (main && p && (p.s || 0) > 0 && p.d <= Date.now()) retLog(ivlOf(p), g > 0); // a card that was due: did it come back?
+  if (main && p && (p.s || 0) > 0) revLog(p, g); // every recall of a card seen before (due or early) feeds fsFit()
+  const n = sched(p, g);
+  if (main && g > 0 && p && p.b < MASTERED && n.b >= MASTERED) masteredMoment(w); // 1.128: the moment a word becomes "จำได้แล้ว"
+  map[w.w] = {
+    b: n.b, i: n.i, e: n.e,
+    d: dueAt(n.i),
+    ...fsFields(n),
+    s: (p ? p.s : 0) + 1,
+    c: (p ? p.c : 0) + (g > 0 ? 1 : 0),
+    x: (p ? p.x || 0 : 0) + (g === 0 ? 1 : 0),
+    t: Date.now(),
+  };
+  if (g === 0) {
+    if (main) logMiss(w);
+    if (map[w.w].x === LEECH && !S.note[w.w] && !S.sketch[w.w]) setTimeout(() => toast(`🐢 "${w.w}" ลืมบ่อยแล้ว ลองเขียนวิธีจำดูนะ`), 600);
+  }
+  addXP(g === 0 ? 1 : 2);
+  S.chist[today()] = (S.chist[today()] || 0) + 1;
+  if (leechHit) questEvent('leech');
+  questEvent('card');
+}
+// Skill games (phrasal verbs, idioms, confusable pairs, ...) have no word of their own, so each question gets a key
+// (game + short hash of its text) in S.lex and is scheduled like a word: wrong → back tomorrow-ish, right → longer gaps.
+function lexKey(game, w) {
+  const src = [w.w, w.t, w._q ? w._q[0] : ''].join('|');
+  let h = 5381; for (let k = 0; k < src.length; k++) h = ((h << 5) + h + src.charCodeAt(k)) >>> 0;
+  return game + ':' + h.toString(36);
+}
+function lexGrade(key, ok) {
+  const p = S.lex[key], n = sched(p, ok ? 2 : 0);
+  S.lex[key] = { b: n.b, i: n.i, e: n.e, d: dueAt(n.i), ...fsFields(n), s: (p ? p.s : 0) + 1, c: (p ? p.c : 0) + (ok ? 1 : 0), x: (p ? p.x : 0) + (ok ? 0 : 1), t: Date.now() };
+}
+// Pick `n` questions: those due for review first (at most 7, oldest first), then ones never asked, then the rest.
+function lexPick(game, src, n) {
+  const now = Date.now(), at = (w) => S.lex[lexKey(game, w)];
+  const due = src.filter((w) => at(w) && at(w).d <= now).sort((a, b) => at(a).d - at(b).d).slice(0, 7);
+  const rest = shuffle(src.filter((w) => !due.includes(w)));
+  const fresh = rest.filter((w) => !at(w)), seen = rest.filter((w) => at(w));
+  return shuffle(due.concat(fresh, seen).slice(0, n));
+}
+function lexStats(game) {
+  const now = Date.now(); let seen = 0, solid = 0, due = 0;
+  for (const [k, p] of Object.entries(S.lex)) {
+    if (!k.startsWith(game + ':')) continue;
+    seen++; if (p.i >= 7) solid++; if (p.d <= now) due++;
+  }
+  return { seen, solid, due };
+}
+
+// Lighter update from games: a right answer seeds a new word (or moves a due one on as "hard"), a wrong one sends it back for review.
+function gameResult(w, ok, map = S.prog) {
+  markActive(!!ok);
+  const p = map[w.w];
+  const leechHit = ok && map === S.prog && p && (p.x || 0) >= LEECH;
+  if (!p && map === S.prog) wnewAdd();
+  if (ok) {
+    if (!p) map[w.w] = { b: 1, i: 1, e: EASE0, d: dueAt(1), s: 1, c: 1, x: 0, t: Date.now() };
+    else if (p.d <= Date.now() && (p.i || 0) >= 1) {
+      // 1.152.0: a card that was due for review, answered right in a game or the feed, counts as a review graded "hard":
+      // its next review moves a little further and it leaves today's due list. Picking from options is easier than recalling,
+      // so it never counts as "good". A card just missed (i = 0) stays for the flashcards as before.
+      const main = map === S.prog, n = sched(p, 1);
+      if (main) { S.daily.reviews++; retLog(ivlOf(p), true); }
+      if (main && p.b < MASTERED && n.b >= MASTERED) masteredMoment(w);
+      map[w.w] = { ...p, b: n.b, i: n.i, e: n.e, d: dueAt(n.i), ...fsFields(n), s: (p.s || 0) + 1, c: (p.c || 0) + 1, t: Date.now() };
+    } else { p.c++; p.s++; p.t = Date.now(); }
+  } else {
+    map[w.w] = { ...(p || {}), ...fsFields(sched(p, 0)), b: 0, i: 0, e: Math.max(EASE_MIN, ((p && p.e) || EASE0) - 0.2), d: Date.now(), s: (p ? p.s : 0) + 1, c: p ? p.c : 0, x: (p ? p.x || 0 : 0) + 1, t: Date.now() };
+    if (map === S.prog) logMiss(w);
+  }
+  if (leechHit) questEvent('leech'); else save();
+}
+
+// "I already know this": jump straight to a long interval so it stops appearing as new.
+function markKnown(w, map = S.prog) {
+  markActive();
+  map[w.w] = { b: MASTERED, i: INTERVALS[MASTERED], e: EASE0 + 0.2, d: dueAt(INTERVALS[MASTERED]), s: 1, c: 1, x: 0, t: Date.now() };
+  save();
+}
+function markForReview(w, map = S.prog) {
+  const p = map[w.w];
+  map[w.w] = { ...(p || {}), b: 0, i: 0, d: Date.now(), s: p ? p.s : 0, c: p ? p.c : 0, x: p ? p.x || 0 : 0, t: Date.now() };
+  save();
+}
+
+/* ---------- wide layout (desktop / iPad landscape) ---------- */
+// ≥1000×600 the long one-column pages (home, stats, settings, guide) pack their boxes into columns like masonry, so no
+// box stretches across the whole window. CSS (.masonry, inside the wide media query) makes the columns; this only tells
+// each box how many 4px grid rows it covers (--rs) and keeps that up to date when a box grows, shrinks or lazy-loads.
+const MASONRY_ROW = 4, MASONRY_GAP = 14;
+let masonryRO = null, masonryMO = null;
+// h = height from the ResizeObserver entry (no layout read); reading offsetHeight per box between style writes forced a layout every time (257 ms at 4x CPU on boot).
+function fitMasonry(el, h) { el.style.setProperty('--rs', Math.max(1, Math.ceil(((h == null ? el.offsetHeight : h) + MASONRY_GAP) / MASONRY_ROW))); }
+// `full` = selector for children that take the whole row. Children added later (a list re-rendered by a filter) are picked up too.
+function masonry(boxes, full) {
+  if (!window.ResizeObserver) return;
+  if (!masonryRO) {
+    masonryRO = new ResizeObserver((es) => es.forEach((e) => fitMasonry(e.target, e.borderBoxSize && e.borderBoxSize[0] ? e.borderBoxSize[0].blockSize : undefined)));
+    masonryMO = new MutationObserver((ms) => ms.forEach((m) => masonryKids(m.target)));
+  }
+  masonryRO.disconnect(); masonryMO.disconnect();
+  for (const box of boxes) {
+    if (!box) continue;
+    box.classList.add('masonry');
+    if (full) box.dataset.mfull = full;
+    masonryKids(box);
+    masonryMO.observe(box, { childList: true });
+  }
+}
+function masonryKids(box) {
+  for (const el of box.children) {
+    if (box.dataset.mfull && el.matches(box.dataset.mfull)) el.classList.add('m-full');
+    masonryRO.observe(el); // observing fires once right away (before paint), which sets --rs
+  }
+}
+// The reference pages (pairs, families, irregular verbs, idioms, …) all list their cards in a .pair-list.
+new MutationObserver(() => { const pl = view.querySelector(':scope > .pair-list:not(.masonry)'); if (pl) masonry([pl], '.pair-card:only-child'); }).observe(view, { childList: true });
+// Wraps each .h2 heading and the boxes under it (up to the next heading or a `brk` element) in one <section>,
+// so a heading always moves together with its boxes.
+function sectionize(box, brk) {
+  let sec = null;
+  for (const el of [...box.children]) {
+    const head = el.classList.contains('h2');
+    if (head || (brk && el.matches(brk))) { sec = null; if (!head) continue; }
+    if (head) { sec = document.createElement('section'); sec.className = 'm-sec'; el.before(sec); }
+    if (sec) sec.append(el);
+  }
+}
+
+/* ---------- router ---------- */
+let current = 'home', firstGo = true;
+let cleanup = null;
+const TITLES = { toeic: 'ศูนย์ TOEIC', print: 'ใบงานพิมพ์', mine: 'เก็บคำจากบทความ', ref: 'คลังความรู้', room: 'ห้องของน้องคำ', paths: 'นิยายเลือกทาง', pic: 'เล่าภาพ', build: 'ต่อคำเป็นประโยค', cases: 'คดีนักสืบ', cafe: 'ร้านน้องคำ', puzzle: 'ปริศนาประจำวัน', album: 'อัลบั้มการ์ด', garden: 'สวนคำศัพท์', fun: 'โซนสนุก', tower: 'หอคอยไม่รู้จบ', wboss: 'บอสประจำสัปดาห์', chain: 'ต่อคำ', coinshop: 'ร้านค้าเหรียญ', adv: 'ผจญภัยสัปดาห์', ear: 'ฟังทบทวน', wsearch: 'ค้นหาคำในตาราง', map: 'แผนที่ด่าน', duel: 'ท้าดวลเพื่อน', event: 'กิจกรรมเทศกาล', mascot: 'น้องคำ', year: 'สรุปปีของฉัน', ltest: 'ทดสอบจบระดับ', mtest: 'แบบทดสอบประจำเดือน', home: 'ศัพท์ต้องรู้', cards: 'แฟลชการ์ด', games: 'เกมฝึกศัพท์', list: 'คำศัพท์', settings: 'ตั้งค่า', guide: 'คู่มือการใช้งาน', homeset: 'จัดเรียงหน้าแรก', wotdset: 'ตั้งค่าคำประจำวัน', feed: 'ไถศัพท์', stats: 'สถิติ', login: 'เข้าสู่ระบบ', read: 'อ่านเรื่องสั้น', placement: 'วัดระดับ', changelog: 'ประวัติการอัปเดต', riddle: 'ปริศนาศัพท์', decks: 'ชุดของฉัน' };
+let gameBackTo = ''; // a page that started a game and wants the game's way out (go('games')) to land back on it (1.211.0, TOEIC hub)
+let navSeq = 0; // bumped by every go(): a page that finishes loading late checks it before drawing (1.148)
+function go(tab, ...args) {
+  navSeq++;
+  if (gameBackTo) { const t = gameBackTo; gameBackTo = ''; if (tab === 'games' && !args.length) tab = t; }
+  if (typeof mustLogin === 'function' && mustLogin() && tab !== 'login') return go('login', true);
+  if (!firstGo) animPrep();
+  if (cleanup) { cleanup(); cleanup = null; }
+  actGame = '';
+  if (typeof hovHide === 'function') hovHide(); // a hover-meaning bubble (js/words.js) never outlives its page
+  if (window.speechSynthesis) speechSynthesis.cancel();
+  const prev = current;
+  current = tab;
+  view.classList.remove('feed-mode', 'masonry');
+  view.dataset.route = tab; // CSS uses this for wide (iPad/landscape) layouts
+  // the sets page sits under the word list: on a phone the "คำศัพท์" tab stays lit, on the iPad rail its own item does
+  const wide = matchMedia('(min-width: 700px)').matches;
+  document.querySelectorAll('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab || (tab === 'decks' && !wide && b.dataset.tab === 'list') || (tab === 'ref' && b.dataset.tab === 'games')));
+  $('#title').textContent = TITLES[tab] || 'ศัพท์ต้องรู้';
+  if (firstGo) view.scrollTop = 0; // later pages: done in animPrep() while the layout is still clean
+  ({ home: renderHome, cards: renderCards, ear: renderEar, games: renderGames, list: renderList, settings: renderSettings, guide: renderGuide, homeset: renderHomeSet, wotdset: renderWotdSet, feed: renderFeed, stats: renderStats, login: renderLogin, read: renderRead, placement: renderPlacement, changelog: renderChangelog, mtest: renderMonthTest, ltest: renderLevelTest, year: renderYear, mascot: renderMascot, event: renderEvent, riddle: renderRiddle, duel: renderDuel, map: renderMap, wsearch: renderWSearch, decks: renderDecks, adv: renderAdventure, fun: renderFun, tower: renderTower, wboss: renderWboss, chain: renderChain, coinshop: renderCoinShop, puzzle: renderPuzzle, album: renderAlbum, garden: renderGarden, cases: renderCases, cafe: renderCafe, room: renderRoom, paths: renderPaths, pic: renderPic, build: renderBuild, ref: renderRef, print: renderPrint, mine: renderMine, toeic: renderToeic }[tab])(...args);
+  updateStreak();
+  if (firstGo) { firstGo = false; return; } // the first screen at start-up just appears: no fade, no forced layout before the first paint (1.126)
+  const a = TAB_ORDER.indexOf(prev), b = TAB_ORDER.indexOf(tab);
+  animView(a < 0 || b < 0 || a === b ? 'vin' : b > a ? 'vin-l' : 'vin-r');
+}
+// Page animation: tabs slide in from the side they sit on, sub pages push in / pop back, the rest fades.
+const TAB_ORDER = ['home', 'cards', 'games', 'stats', 'list', 'settings'];
+const VIEW_ANIMS = ['vin', 'vin-l', 'vin-r', 'vin-push', 'vin-pop'];
+// 1.155.1: restarting the animation needs a style/layout pass with the class off. Done after drawing (as before), that pass laid
+// out the whole new page in the middle of the script (≈ 35 ms a page change on a slow phone), and so did setting scrollTop after
+// the old page's classes had changed. animPrep() does both at the start of go(), while the old page's layout is still clean
+// (almost free); animView() then only adds the class. Pages that change without go() (a sub page found by the back-button
+// observer) still take the old forced pass.
+let animPrepped = false, viewW = 0; // viewW = #view's width read here for free (renderStats sizes its first chart from it)
+function animPrep() {
+  if (vtBusy) return;
+  view.classList.remove(...VIEW_ANIMS);
+  view.scrollTop = 0;
+  viewW = view.clientWidth;
+  animPrepped = true;
+  requestAnimationFrame(() => { animPrepped = false; });
+}
+function animView(cls) {
+  if (vtBusy) { document.documentElement.dataset.vt = cls; return; } // a View Transition is animating this change (direction picked here)
+  view.classList.remove(...VIEW_ANIMS);
+  if (!animPrepped) void view.offsetWidth;
+  view.classList.add(cls);
+}
+// View Transitions (1.100): taps on tabs / links morph between pages (document.startViewTransition, iOS 18+).
+// Only user taps use it (vtRun) - a plain go() stays synchronous. Without support, with settings.animPage off or
+// reduced motion, fn() just runs and the old slide/fade (animView) is used. html[data-vt] = direction, see style.css.
+let vtBusy = false;
+const vtOk = () => typeof document.startViewTransition === 'function' && S.settings.animPage !== false && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+function vtRun(fn, dir = 'vin') {
+  if (vtBusy || !vtOk()) return fn();
+  const root = document.documentElement;
+  try {
+    vtBusy = true; root.dataset.vt = dir;
+    const t = document.startViewTransition(() => { fn(); });
+    const end = () => { vtBusy = false; delete root.dataset.vt; };
+    t.finished.then(end, end);
+  } catch (e) { vtBusy = false; delete root.dataset.vt; fn(); }
+}
+// While a lazy data file loads, show a skeleton instead of a frozen screen (only if it takes > 150 ms
+// and nothing else has replaced the page meanwhile). withLoading(loadPairs()).then(renderPairs)
+const SKELETON = '<div class="skel" aria-busy="true" aria-label="กำลังโหลด"><i></i><i></i><i></i><i></i></div>';
+function withLoading(p) {
+  const was = view.firstElementChild;
+  const t = setTimeout(() => { if (view.firstElementChild === was) { view.innerHTML = SKELETON; animView('vin'); } }, 150);
+  return p.then((v) => { clearTimeout(t); return v; });
+}
+let shownLv = 0; // level shown on the chip: a higher one pops (1.131)
+function updateStreak() {
+  const el = $('#streak'), L = levelOf(S.xp);
+  if (shownLv && L > shownLv) { el.classList.remove('lvup'); void el.offsetWidth; el.classList.add('lvup'); setTimeout(() => el.classList.remove('lvup'), 700); }
+  shownLv = L;
+  const n = streakNow(), fl = n >= 100 ? 4 : n >= 30 ? 3 : n >= 7 ? 2 : n >= 1 ? 1 : 0; // flame: none / small / big / purple / blue (1.128)
+  el.innerHTML = `<span class="flame fl${fl}" aria-hidden="true">🔥</span> ${n}${S.freeze ? ' · 🧊' + S.freeze : ''} · Lv.${L}`;
+  el.setAttribute('aria-label', `สตรีค ${n} วัน${S.freeze ? ` ตัวกันสตรีค ${S.freeze}` : ''} เลเวล ${L} ดูสถิติ`);
+  el.style.setProperty('--xp', Math.min(100, Math.max(0, ((S.xp || 0) - levelStart(L)) / (50 * L) * 100)) + '%'); // progress to the next level
+}
+view.addEventListener('click', (e) => { const g = e.target.closest('[data-go]'); if (g) vtRun(() => go(g.dataset.go, g.dataset.year)); });
+// 🐢 buttons (data-slow = the text) replay slowly on any screen.
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-slow]'); if (b) speak(b.dataset.slow, { slow: true }); });
+const slowBtn = (text, label = 'ฟังช้า') => `<button class="slow-btn" data-slow="${esc(text)}" aria-label="ฟังช้าๆ">🐢 ${label}</button>`;
+$('#streak').addEventListener('click', () => { if (current !== 'stats') go('stats', 'home'); });
+// Sub pages carry their own "‹ กลับ" button (id ending in Back); mirror it in the top bar and hide the in-page one.
+// Going deeper = a sub page opened (push); shallower = went back (pop). Depth: no back button 0, a back button with
+// data-depth (the คลังความรู้ page, 1.127) that value, any other back button 2.
+let backDepth = 0;
+new MutationObserver(() => {
+  const b = view.querySelector('[id$="Back"]'), d = !b ? 0 : +(b.dataset.depth || 2);
+  document.body.classList.toggle('has-back', !!b);
+  if (d !== backDepth) animView(d > backDepth ? 'vin-push' : 'vin-pop');
+  backDepth = d;
+}).observe(view, { childList: true });
+// Top bar title on one line (1.131): a title too wide for the bar gets the smaller size (.long), then ends in "…".
+// Measured in the next frame (1.152.1): reading scrollWidth right after go() forced a full layout of the new page in the middle of
+// the script (the slowest step at start-up); in a frame it rides on the layout the browser does for painting anyway.
+let fitRaf = 0;
+function fitTitle() {
+  if (fitRaf) return;
+  fitRaf = requestAnimationFrame(() => { fitRaf = 0; const t = $('#title'); t.classList.remove('long'); if (t.scrollWidth > t.clientWidth + 1) t.classList.add('long'); });
+}
+new MutationObserver(fitTitle).observe($('#title'), { childList: true, characterData: true, subtree: true });
+addEventListener('resize', fitTitle);
+$('#topBack').addEventListener('click', () => { const b = view.querySelector('[id$="Back"]'); if (b) b.click(); });
+// Swipe in from the left edge = the back button (1.134), like native iOS apps: a ‹ bubble follows the finger and the page
+// leans along; let go past 80px (mostly sideways) to go back. Only on pages with a back button and no sheet/dialog open.
+(() => {
+  let x0 = 0, y0 = 0, dx = 0, on = false, locked = false, tip = null;
+  const EDGE = 24, GO = 80;
+  const reset = () => {
+    on = false; locked = false;
+    view.style.transition = 'transform .2s'; view.style.transform = '';
+    setTimeout(() => { view.style.transition = ''; }, 220);
+    if (tip) { const t = tip; tip = null; t.classList.add('out'); setTimeout(() => t.remove(), 200); }
+  };
+  document.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    if (e.touches.length !== 1 || t.clientX > EDGE || !document.body.classList.contains('has-back')) return;
+    if (document.querySelector('.sheet-wrap, .celebrate, dialog[open], [aria-modal="true"], [role="dialog"]')) return;
+    x0 = t.clientX; y0 = t.clientY; dx = 0; on = true; locked = false;
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (!on) return;
+    const t = e.touches[0], mx = t.clientX - x0, my = t.clientY - y0;
+    if (!locked) {
+      if (Math.abs(my) > 12 && Math.abs(my) > mx) { on = false; return; } // a scroll, not a swipe
+      if (mx < 10) return;
+      locked = true;
+      tip = document.createElement('div'); tip.className = 'edge-back'; tip.setAttribute('aria-hidden', 'true'); tip.textContent = '‹';
+      tip.style.top = Math.max(80, Math.min(innerHeight - 120, t.clientY)) - 22 + 'px';
+      document.body.appendChild(tip);
+    }
+    dx = Math.max(0, mx);
+    const k = Math.min(1, dx / GO);
+    tip.style.transform = `translateX(${Math.min(dx, 110) * 0.6}px) scale(${0.6 + 0.4 * k})`;
+    tip.classList.toggle('ready', dx >= GO);
+    view.style.transform = `translateX(${Math.min(dx, 140) * 0.25}px)`;
+  }, { passive: true });
+  const end = () => {
+    if (!on) return;
+    const go = locked && dx >= GO;
+    reset();
+    if (go) { haptic('ok'); $('#topBack').click(); }
+  };
+  document.addEventListener('touchend', end, { passive: true });
+  document.addEventListener('touchcancel', () => { if (on) reset(); }, { passive: true });
+})();
+// iPad sidebar extras: reference pages live under the คลังความรู้ page (route 'ref', 1.127), so open it first (their ‹ กลับ returns there).
+const REF_PAGES = { pairs: () => renderPairs(), fams: () => renderFamilies(), syn: () => renderSyn(), affix: () => renderAffix(), roots: () => renderRoots(), ukus: () => renderUkUs(), phrasal: () => renderPhrasal(), idiom: () => renderIdioms(), wphr: () => renderWorkPhr(), bizcol: () => renderBizCol(), regi: () => renderRegister(), abbr: () => renderBook('abbr'), thai: () => renderBook('thai'), chat: () => renderBook('chat'), sit: () => renderSit(), irr: () => renderIrregular(), dprep: () => renderDepPrep(), mis: () => renderMistakes(), gpat: () => renderGramPat(), ipa: () => renderIpa() };
+// iPad sidebar groups (1.133): a group heading folds its shortcuts away (the active one stays visible); the folded groups are remembered on this device.
+const RAIL_FOLD_KEY = 'o3k.railFold';
+function railFold(apply) {
+  let f = ['ref']; try { const v = localStorage.getItem(RAIL_FOLD_KEY); if (v != null) f = JSON.parse(v) || []; } catch (e) {} // คลังความรู้ starts folded (its 15 shortcuts made the sidebar scroll)
+  document.querySelectorAll('#tabbar .tab-grp').forEach((g) => {
+    const on = f.includes(g.dataset.grp);
+    g.classList.toggle('fold', on);
+    const h = g.querySelector('.tab-h'); if (h) h.setAttribute('aria-expanded', on ? 'false' : 'true');
+  });
+  return f;
+}
+railFold();
+$('#tabbar').addEventListener('click', (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.classList.contains('tab-h')) {
+    const id = b.closest('.tab-grp').dataset.grp, f = railFold().filter((x) => x !== id);
+    if (!b.closest('.tab-grp').classList.contains('fold')) f.push(id);
+    try { localStorage.setItem(RAIL_FOLD_KEY, JSON.stringify(f)); } catch (err) {}
+    railFold(); return;
+  }
+  if (!b.dataset.ref) return vtRun(() => (b.dataset.tab === 'cards' ? go('cards', 'hub') : go(b.dataset.tab))); // 1.169: the flashcard tab opens its start screen
+  vtRun(() => {
+    go('ref'); REF_PAGES[b.dataset.ref]();
+    document.querySelectorAll('.tabbar button').forEach((x) => x.classList.toggle('active', x === b));
+  });
+});
