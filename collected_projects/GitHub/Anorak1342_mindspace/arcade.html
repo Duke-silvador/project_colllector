@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><link rel="icon" type="image/svg+xml" href="./brain.svg">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#090909">
+<title>Mindspace Arcade</title>
+<style>
+:root{color-scheme:dark;--bg:#090909;--panel:#111;--line:#343434;--text:#f5f2ed;--muted:#999;--mint:#83e6bd;--gold:#f2c46d}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,Segoe UI,sans-serif}
+.wrap{width:min(1450px,calc(100% - 44px));margin:auto;padding:22px 0 58px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:14px;margin-bottom:34px}
+.brand{font-weight:900;letter-spacing:.5px}.brand span{color:var(--mint)}
+.back{border:1px solid var(--line);padding:8px 13px;border-radius:7px;text-decoration:none;color:inherit;font-weight:700}
+.hero{margin-bottom:27px}.eyebrow{font-size:11px;letter-spacing:3px;font-weight:900;color:var(--mint)}
+h1{font-family:Georgia,serif;font-size:clamp(34px,5vw,54px);line-height:1.05;margin:8px 0 8px}
+.hero p{margin:0;color:#aaa;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px}
+.games{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:20px}
+.game{min-width:0;min-height:255px;background:var(--panel);border:2px solid var(--line);padding:24px 25px 20px;display:flex;flex-direction:column;transition:border-color .16s,transform .16s,background .16s}
+.game:hover{border-color:#aaa;background:#151515;transform:translateY(-2px)}
+.icon{font-size:43px;line-height:1;margin:4px 0 22px}
+h2{font-family:Georgia,'Times New Roman',serif;font-size:23px;line-height:1.1;margin:0 0 13px;letter-spacing:.3px}
+.desc{color:#999;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0 0 20px;min-height:40px}
+.play{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:auto;padding:11px 14px;background:var(--mint);color:#08140e;text-decoration:none;font-weight:900;letter-spacing:.8px;border:0;border-radius:4px}
+.play:hover{filter:brightness(1.08)}
+.play.gold{background:var(--gold);color:#211607}
+.note{margin-top:25px;color:#777;font:12px ui-monospace,monospace}
+.hidden{display:none!important}
+@media(max-width:1050px){.games{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:720px){.games{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.game{padding:19px 17px;min-height:235px}h2{font-size:20px}.wrap{width:calc(100% - 24px)}}
+@media(max-width:430px){.games{grid-template-columns:1fr 1fr}.game{padding:15px 13px;min-height:220px}.icon{font-size:35px}h2{font-size:17px}.desc{font-size:11px}}
+
+.controls{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:12px;margin:24px 0 18px}
+.controls input,.controls select{width:100%;background:#141414;border:1px solid #444;color:#f5f2ed;padding:14px 16px;border-radius:7px;font:inherit}
+.controls input:focus,.controls select:focus{outline:2px solid var(--mint);outline-offset:2px}
+.daily{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 23px;margin:22px 0 8px;border:1px solid #665b38;background:linear-gradient(110deg,#201d15,#171713);border-radius:10px}
+.daily-label{font:900 10px ui-monospace,monospace;letter-spacing:2px;color:var(--gold)}
+.daily h2{margin:5px 0;font-size:25px}.daily p{margin:0;color:#aaa;font:13px ui-monospace,monospace}
+.daily .play{min-width:150px;max-width:190px}
+.toplinks{display:flex;gap:10px;align-items:center}.toplinks button.back{background:transparent;font:inherit;cursor:pointer}
+@media(max-width:600px){.controls{grid-template-columns:1fr}.daily{align-items:flex-start;flex-direction:column}.daily .play{max-width:none;width:100%}.toplinks{flex-wrap:wrap;justify-content:flex-end}}
+
+
+.whats-new-link{position:relative;padding-right:25px}.new-dot{display:none;position:absolute;top:5px;right:7px;width:9px;height:9px;border-radius:50%;background:#ff5b68;box-shadow:0 0 0 3px #ff5b6826}.new-dot.show{display:block}
+
+/* Personal arcade tools */
+.player-hub{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin:26px 0 28px}
+.hub-panel{min-width:0;border:1px solid #343434;background:#101010;border-radius:10px;padding:18px}
+.hub-panel h2{font-size:21px;margin:0 0 6px}.hub-panel>p{color:#999;font:12px ui-monospace,monospace;margin:0 0 14px}
+.hub-list{display:grid;gap:8px}.hub-empty{color:#777;font:13px ui-monospace,monospace;padding:12px;border:1px dashed #383838;border-radius:7px}
+.hub-game{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:#171717;border:1px solid #303030;border-radius:7px;color:inherit;text-decoration:none}
+.hub-game:hover{border-color:var(--mint)}.hub-game strong{font-size:13px}.hub-game small{color:#999;font:11px ui-monospace,monospace}
+.hub-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.hub-input,.hub-select{min-width:0;background:#171717;border:1px solid #444;color:#f5f2ed;border-radius:6px;padding:10px 11px;font:13px system-ui,sans-serif}
+.hub-input:focus,.hub-select:focus{outline:2px solid var(--mint);outline-offset:2px}.hub-button{background:#83e6bd;color:#08140e;border:0;border-radius:6px;padding:10px 13px;font-weight:850;cursor:pointer}.hub-button.secondary{background:#242424;color:#eee;border:1px solid #444}
+.hub-form{display:flex;gap:8px;flex-wrap:wrap}.hub-form>*{flex:1}.hub-form button{flex:0 0 auto}
+.game-tools{display:flex;align-items:center;gap:7px;margin-top:10px}.favorite-toggle{background:#222;border:1px solid #444;border-radius:5px;color:#f2c46d;padding:7px 10px;cursor:pointer;font-size:13px}.favorite-toggle[aria-pressed=true]{background:#3a2d14;border-color:#8c6a2d}.collection-add{flex:1;min-width:0;background:#171717;color:#ddd;border:1px solid #444;border-radius:5px;padding:7px;font-size:12px}
+.record-row{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:9px 11px;border-bottom:1px solid #292929;font-size:13px}.record-row:last-child{border-bottom:0}.record-value{color:var(--mint);font-weight:850;font-variant-numeric:tabular-nums}
+.collection-block{border:1px solid #303030;border-radius:7px;padding:10px;margin-top:9px}.collection-heading{display:flex;justify-content:space-between;gap:10px;align-items:center}.collection-heading strong{font-size:13px}.collection-heading small{color:#888;font-size:11px}
+.collection-games{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.collection-games a{color:#b8f2d9;background:#1b2a24;padding:5px 8px;border-radius:5px;text-decoration:none;font-size:11px}
+@media(max-width:760px){.player-hub{grid-template-columns:1fr}.hub-panel{padding:15px}}
+
+/* Player progression and selectable arcade themes */
+:root{--player-accent:#83e6bd}
+.player-bar,.theme-panel{border:1px solid #343434;background:#101010;border-radius:10px;padding:17px 19px;margin:18px 0}
+.player-bar{display:grid;grid-template-columns:1fr auto;gap:14px;align-items:center}
+.player-bar h2,.theme-panel h2{font-size:20px;margin:0 0 5px}
+.player-muted{font:12px ui-monospace,monospace;color:#999}
+.player-progress{height:8px;border-radius:20px;background:#292929;overflow:hidden;margin-top:10px}
+.player-progress span{display:block;height:100%;background:var(--player-accent);width:0;transition:width .35s}
+.player-bar a{color:var(--player-accent);font-weight:800;text-decoration:none}
+.theme-options{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0}
+.theme-choice{border:1px solid #444;background:#1b1b1b;color:#eee;border-radius:7px;padding:9px 12px;cursor:pointer;font-weight:750}
+.theme-choice[aria-pressed=true]{border-color:var(--player-accent);box-shadow:0 0 0 1px var(--player-accent) inset}
+.theme-choice:disabled{opacity:.4;cursor:not-allowed}
+.theme-tools{display:flex;gap:14px;align-items:center;flex-wrap:wrap;color:#aaa;font-size:12px}
+.theme-tools label{display:flex;gap:8px;align-items:center}
+.theme-tools input[type=color]{width:34px;height:30px;padding:2px;background:#171717;border:1px solid #444;border-radius:5px}
+.theme-tools input[type=checkbox]{accent-color:var(--player-accent)}
+[data-arcade-theme="neon"]{--bg:#080817;--panel:#11112b;--line:#3b3268;--text:#f5efff;--mint:#67e8f9;--gold:#ff82d1;--player-accent:#67e8f9}
+[data-arcade-theme="neon"] body{background:radial-gradient(ellipse at 15% 0%,#25205a,transparent 40%),radial-gradient(ellipse at 90% 30%,#163b55,transparent 34%),#080817}
+[data-arcade-theme="neon"] .game{background:linear-gradient(145deg,#171438,#101025);border-color:#3b3268;box-shadow:0 8px 25px #05051280}
+[data-arcade-theme="neon"] .game:hover{border-color:#67e8f9}
+[data-arcade-theme="sunset"]{--bg:#1b1014;--panel:#2a171b;--line:#68403b;--text:#fff1dc;--mint:#ffb35c;--gold:#ff756c;--player-accent:#ffb35c}
+[data-arcade-theme="sunset"] body{background:radial-gradient(ellipse at 50% 0%,#63303b,transparent 45%),linear-gradient(180deg,#211217,#130e13)}
+[data-arcade-theme="sunset"] .game{background:linear-gradient(145deg,#3a2024,#25161b);border-color:#68403b}
+[data-arcade-theme="sunset"] .game:hover{border-color:#ffb35c}
+[data-arcade-theme="neon"] .game{border-radius:14px}
+[data-arcade-theme="sunset"] .game{border-radius:3px 14px 3px 14px}
+@keyframes msArcadeGlow{0%,100%{opacity:.25;transform:translateY(0)}50%{opacity:.42;transform:translateY(-8px)}}
+@keyframes msThemeDrift{0%{transform:translate3d(-2%,0,0) scale(1)}50%{transform:translate3d(2%,-1%,0) scale(1.05)}100%{transform:translate3d(-2%,0,0) scale(1)}}
+[data-arcade-theme="neon"] body:before,[data-arcade-theme="sunset"] body:before{content:"";position:fixed;z-index:0;pointer-events:none;inset:-15%;opacity:.45;background:radial-gradient(ellipse at 30% 35%,var(--player-accent),transparent 42%),radial-gradient(ellipse at 75% 65%,#a78bfa55,transparent 38%);filter:blur(30px);animation:msThemeDrift 18s ease-in-out infinite}
+.wrap{position:relative;z-index:1}
+[data-arcade-theme="neon"] .hero:after,[data-arcade-theme="sunset"] .hero:after{content:"";display:block;height:2px;margin-top:18px;background:linear-gradient(90deg,transparent,var(--player-accent),transparent);animation:msArcadeGlow 5s ease-in-out infinite}
+@media(max-width:600px){.player-bar{grid-template-columns:1fr}}
+
+</style>
+<script src="mindspace-lock.js" defer></script>
+</head>
+<body><main class="wrap">
+<header class="top"><div class="brand">mindspace <span>✳ ARCADE</span></div><nav class="toplinks"><button class="back" id="blank-launch" type="button" hidden>↗ Open blank tab</button><a class="back" href="https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=_cdiBrDGHECV4nyShgopF62q1nLVpHhPjuyoCyF7_ZhUOFVGVFlFTEpZWkVVUU1PT0RTMFI2N0dGMy4u" target="_blank" rel="noopener noreferrer">💡 Suggest a Game</a><a class="back" href="./creator-favs.html">★ Creator Favs</a><a class="back whats-new-link" href="./whats-new.html?v=20261107-2">✦ What’s new<span class="new-dot" id="whats-new-dot" aria-label="New updates"></span></a><a class="back" href="./">← Back to study</a></nav></header>
+<section class="player-bar" id="player-bar"><div><h2 id="player-rank">Your Mindspace level</h2><div class="player-muted" id="player-summary">Sign in through Chat to sync your progress across devices.</div><div class="player-progress"><span id="player-progress-fill"></span></div><div class="player-muted" id="player-progress-label">Your XP progress will appear here.</div></div><a href="./chat.html">Player profile ↗</a></section>
+<section class="theme-panel" aria-label="Arcade appearance"><h2>🎨 Arcade themes</h2><div class="player-muted" id="theme-status">Choose your arcade look. New themes unlock as you level up.</div><div class="theme-options"><button class="theme-choice" type="button" data-theme="midnight" aria-pressed="true">🌑 Mindspace Midnight</button><button class="theme-choice" type="button" data-theme="neon" disabled title="Unlock at level 10">⚡ Neon Arcade · Level 10</button><button class="theme-choice" type="button" data-theme="sunset" disabled title="Unlock at level 25">🌇 Pixel Sunset · Level 25</button></div><div class="theme-tools"><label>Accent colour <input id="theme-accent" type="color" value="#83e6bd" aria-label="Choose accent colour"></label><label><input id="theme-sounds" type="checkbox" checked> Theme sounds on</label><span id="theme-save-status">Saved on this device</span></div></section>
+<section class="hero"><div class="eyebrow">THE SECRET SIDE QUEST</div><h1>Pick your game.</h1><p class="tagline">Bigger than FlashOS, better than Studydesk.</p><p>Big games, tiny games, racing, puzzles and city-building. Choose a tile and jump in.</p></section>
+<section class="daily" id="daily-feature"><div><div class="daily-label">✦ GAME OF THE DAY</div><h2 id="daily-title">Choosing today’s game…</h2><p id="daily-desc">A fresh pick from the Mindspace arcade.</p></div><a class="play gold" id="daily-link" href="./arcade-pro/">PLAY TODAY’S PICK ↗</a></section>
+
+<section class="player-hub" id="player-hub" aria-label="Your personal arcade">
+ <div class="hub-panel"><h2>🕹️ Recently Played</h2><p>Your latest six games, ready to jump back into.</p><div class="hub-list" id="recently-played-list"><div class="hub-empty">Your recently played games will appear here.</div></div></div>
+ <div class="hub-panel"><h2>⭐ Favourite Games</h2><p>Star games below to build your own quick-access list.</p><div class="hub-list" id="favourite-games-list"><div class="hub-empty">You haven't favourited any games yet.</div></div></div>
+ <div class="hub-panel"><h2>🏆 Personal Records</h2><p>Keep your best scores, distances or times on this device.</p><form class="hub-form" id="personal-record-form"><select class="hub-select" id="record-game" aria-label="Choose a game" required><option value="">Choose a game…</option></select><input class="hub-input" id="record-value" type="number" min="0" step="any" placeholder="Your record" aria-label="Record value" required><input class="hub-input" id="record-unit" type="text" maxlength="16" placeholder="Unit (e.g. points)" aria-label="Record unit"><button class="hub-button" type="submit">Save record</button></form><div class="hub-list" id="personal-record-list" style="margin-top:12px"><div class="hub-empty">No personal records saved yet.</div></div><small style="display:block;color:#777;margin-top:8px;font-size:11px">Records are entered by you. Automatic score capture depends on each game's code.</small></div>
+ <div class="hub-panel"><h2>🗂️ Game Collections</h2><p>Make your own playlists of games, such as Racing, Favourites or Play with Friends.</p><form class="hub-form" id="collection-form"><input class="hub-input" id="collection-name" type="text" maxlength="28" placeholder="New collection name" aria-label="New collection name" required><button class="hub-button" type="submit">Create collection</button></form><div class="hub-list" id="game-collections-list" style="margin-top:10px"><div class="hub-empty">Create a collection, then add games using the menus on each game card.</div></div></div>
+</section>
+
+<div class="controls"><input id="game-search" type="search" placeholder="Search games by name or description…" aria-label="Search games"><select id="genre-filter" aria-label="Filter games by genre"><option value="all">All genres</option><option value="action">Action</option><option value="arcade">Arcade</option><option value="puzzle">Puzzle</option><option value="racing">Racing</option><option value="simulation">Simulation</option><option value="sports">Sports</option><option value="strategy">Strategy</option><option value="idle">Idle</option></select></div>
+<p id="results-count" class="note" aria-live="polite">Showing all games</p>
+<section class="games">
+<article class="game" data-genres="idle simulation"><div class="icon">⚛️</div><h2>PARTICLE CLICKER</h2><p class="desc">Build a particle physics research lab, discover particles and grow your scientific reputation.</p><a class="play gold" href="./arcade-pro/particle-clicker/">PLAY PARTICLE CLICKER ↗</a></article>
+<article class="game" data-genres="racing action arcade"><div class="icon">🚔</div><h2>SMASHY ROAD</h2><p class="desc">First-person blocky driving. Escape the cops, collect coins and unlock new cars.</p><a class="play" href="./smashy-road-first-person.html">PLAY SMASHY ROAD ↗</a></article>
+<article class="game" data-genres="sports action"><div class="icon">⛷️</div><h2>SKI FRENZY</h2><p class="desc">Escape the avalanche and pull off tricks in the original Ski Frenzy game.</p><a class="play gold" href="./arcade-pro/ski-frenzy/">PLAY SKI FRENZY ↗</a></article>
+<article class="game" data-genres="arcade action"><div class="icon">🐔</div><h2>CROSSY ROAD</h2><p class="desc">Hop across busy roads, rivers and railway tracks in the original 3D Crossy Road game.</p><a class="play gold" href="./arcade-pro/crossy-road/">PLAY CROSSY ROAD ↗</a></article>
+
+<article class="game" data-genres="sports arcade"><div class="icon">🏄</div><h2>EDGE SURF</h2><p class="desc">Ride the waves, dodge obstacles and escape the Kraken in Microsoft Edge’s Surf game.</p><a class="play gold" href="./arcade-pro/edge-surf/">PLAY EDGE SURF ↗</a></article>
+<article class="game" data-genres="arcade puzzle"><div class="icon">🌀</div><h2>ASTRAY</h2><p class="desc">Roll a ball through increasingly tricky 3D mazes using physics and careful steering.</p><a class="play" href="./arcade-pro/astray/">PLAY ASTRAY ↗</a></article>
+<article class="game" data-genres="arcade action"><div class="icon">🌟</div><h2>STARSTRUCK</h2><p class="desc">Pilot a comet, chain star combos, dodge asteroids and chase a new high score.</p><a class="play gold" href="./arcade-pro/starstruck/">PLAY STARSTRUCK ↗</a></article>
+<article class="game" data-genres="arcade action"><div class="icon">🍃</div><h2>SPROUT RUNNER</h2><p class="desc">A colourful side-scrolling platformer. Jump gaps, stomp enemies, collect coins and reach the flag.</p><a class="play gold" href="./arcade-pro/sprout-runner/">PLAY SPROUT RUNNER ↗</a></article>
+<article class="game" data-genres="arcade"><div class="icon">🎮</div><h2>CLASSIC ARCADE</h2><p class="desc">Pong, Snake, Tetris, Flappy Bird and more quick-fire favourites.</p><a class="play" href="./arcade-pro/">PLAY ARCADE ↗</a></article>
+<article class="game" data-genres="racing"><div class="icon">🏎️</div><h2>LIBRECORSA</h2><p class="desc">A full 3D racing experience with cars, circuits and driving.</p><a class="play gold" href="./arcade-pro/librecorsa/">PLAY LIBRECORSA ↗</a></article>
+<article class="game" data-genres="sports arcade"><div class="icon">⚽</div><h2>SOCCER RANDOM</h2><p class="desc">Fast, chaotic two-player soccer matches. Jump, kick and score.</p><a class="play gold" href="./arcade-pro/soccer-random/">PLAY SOCCER RANDOM ↗</a></article>
+<article class="game" data-genres="sports arcade"><div class="icon">🏀</div><h2>BASKET RANDOM</h2><p class="desc">A silly, fast-paced basketball showdown with unpredictable shots and bounces.</p><a class="play gold" href="./arcade-pro/basket-random/">PLAY BASKET RANDOM ↗</a></article>
+<article class="game" data-genres="sports arcade"><div class="icon">🥊</div><h2>BOXING RANDOM</h2><p class="desc">A wild two-player boxing game. Throw punches and try to stay on your feet.</p><a class="play gold" href="./arcade-pro/boxing-random/">PLAY BOXING RANDOM ↗</a></article>
+<article class="game" data-genres="sports arcade"><div class="icon">🏐</div><h2>VOLLEY RANDOM</h2><p class="desc">A quick-fire volleyball game with unpredictable rallies and two-player action.</p><a class="play gold" href="./arcade-pro/volley-random/">PLAY VOLLEY RANDOM ↗</a></article>
+<article class="game" data-genres="simulation"><div class="icon">✈️</div><h2>F-15 FLIGHT SIM</h2><p class="desc">Climb into the cockpit and take a fighter jet into the skies.</p><a class="play" href="./arcade-pro/f15-flight-sim/">PLAY FLIGHT SIM ↗</a></article>
+<article class="game" data-genres="simulation strategy"><div class="icon">🚇</div><h2>MINI METRO</h2><p class="desc">Draw railway lines, connect stations and keep a growing city moving.</p><a class="play" href="./mini-metro.html">PLAY MINI METRO ↗</a></article>
+<article class="game" data-genres="simulation strategy"><div class="icon">🚗</div><h2>TINY TRAFFIC TOWN</h2><p class="desc">A Mini Motorways-style traffic puzzle. Connect colourful homes and businesses, then beat the gridlock.</p><a class="play gold" href="./tiny-traffic-town.html">PLAY TRAFFIC TOWN ↗</a></article>
+<article class="game" data-genres="arcade"><div class="icon">👾</div><h2>PAC-MAN</h2><p class="desc">Four maps, clever ghost personalities, daily challenges and arcade-style maze runs.</p><a class="play gold" href="./arcade-pro/pacman/">PLAY PAC-MAN ↗</a></article>
+<article class="game" data-genres="puzzle"><div class="icon">🔢</div><h2>2048</h2><p class="desc">Slide, combine and chain number tiles. Reach 2048 without filling the board.</p><a class="play" href="./arcade-pro/2048/">PLAY 2048 ↗</a></article>
+<article class="game" data-genres="arcade action"><div class="icon">🦖</div><h2>T-REX RUNNER</h2><p class="desc">The classic endless desert dash. Jump cacti, duck under birds and chase a new high score.</p><a class="play gold" href="./arcade-pro/trex-runner/">PLAY T-REX ↗</a></article>
+<article class="game" data-genres="puzzle"><div class="icon">⬡</div><h2>HEXTRIS</h2><p class="desc">Rotate a hexagon to catch falling coloured blocks. Match colours, clear combos and survive the rising stack.</p><a class="play" href="./arcade-pro/hextris/">PLAY HEXTRIS ↗</a></article>
+<article class="game" data-genres="arcade action"><div class="icon">⛷️</div><h2>SKIFREE</h2><p class="desc">Ski down an endless mountain, dodge trees and rocks, and try to outrun the monster.</p><a class="play gold" href="./arcade-pro/skifree/">PLAY SKIFREE ↗</a></article>
+<article class="game" data-genres="arcade simulation"><div class="icon">🕳️</div><h2>SNACK HOLE</h2><p class="desc">Control a hungry hole in a colourful 3D city. Swallow bigger objects, earn upgrades and grow into a world-eating void.</p><a class="play" href="./arcade-pro/snack-hole/">PLAY SNACK HOLE ↗</a></article>
+<article class="game" data-genres="arcade action"><div class="icon">🔴</div><h2>SLOPE</h2><p class="desc">Steer a rolling ball down an endless neon track. Dodge red blocks, collect cyan orbs and beat your distance record.</p><a class="play gold" href="./arcade-pro/slope/">PLAY SLOPE ↗</a></article>
+<article class="game" data-genres="action"><div class="icon">🥊</div><h2>MK FIGHTER</h2><p class="desc">A retro arcade fighting game. Challenge a friend in local two-player combat with animated fighters.</p><a class="play gold" href="./arcade-pro/mk-fighter/">PLAY MK FIGHTER ↗</a></article>
+<article class="game" data-genres="strategy puzzle"><div class="icon">🔴</div><h2>CONNECT FOUR</h2><p class="desc">A polished strategy classic. Play the computer or challenge a friend on the same screen.</p><a class="play" href="./connect-four.html">PLAY CONNECT FOUR ↗</a></article>
+
+<article class="game" data-genres="idle puzzle strategy"><div class="icon">🌗</div><h2>GRIDLAND</h2><p class="desc">Match resources by day, build your settlement and survive the monsters that arrive after dark.</p><a class="play gold" href="./arcade-pro/gridland/">PLAY GRIDLAND ↗</a></article>
+<article class="game" data-genres="idle simulation strategy"><div class="icon">⌛</div><h2>PROGRESS KNIGHT</h2><p class="desc">Start with nothing, build skills and careers, manage your lifespan and rise through repeated lives.</p><a class="play" href="./arcade-pro/progress-knight/">PLAY PROGRESS KNIGHT ↗</a></article>
+<article class="game" data-genres="idle simulation strategy"><div class="icon">🧬</div><h2>EVOLVE</h2><p class="desc">Begin as primordial life and develop a civilisation, research, industry and eventually a spacefaring empire.</p><a class="play gold" href="./arcade-pro/evolve/">PLAY EVOLVE ↗</a></article>
+<article class="game" data-genres="simulation strategy"><div class="icon">⛷️</div><h2>SLOPER</h2><p class="desc">Design a mountain ski resort. Draw downhill runs, build lifts, manage guests and keep the slopes running until dusk.</p><a class="play gold" href="./arcade-pro/sloper/">PLAY SLOPER ↗</a></article>
+<article class="game" data-genres="simulation strategy"><div class="icon">🚦</div><h2>TRAFFIC LANE</h2><p class="desc">Build roads across a growing city, connect matching homes and shops, and stop traffic rings from filling.</p><a class="play" href="./arcade-pro/traffic-lane/">PLAY TRAFFIC LANE ↗</a></article>
+<article class="game" data-genres="idle strategy"><div class="icon">🧬</div><h2>TRIMPS</h2><p class="desc">Build a growing army, explore dangerous zones, unlock upgrades and push further in this deep idle strategy game.</p><a class="play gold" href="./arcade-pro/trimps/">PLAY TRIMPS ↗</a></article>
+<article class="game" data-genres="idle adventure"><div class="icon">🦈</div><h2>SHARK GAME</h2><p class="desc">Start with a tiny aquatic world, gather resources, discover new places and grow your shark-filled ecosystem.</p><a class="play" href="./arcade-pro/shark-game/">PLAY SHARK GAME ↗</a></article>
+<article class="game" data-genres="chat"><div class="icon">💬</div><h2>MINDSPACE CHAT</h2><p class="desc">Private chat rooms. Create a room, share its secret join code and talk with friends.</p><a class="play gold" href="./chat.html">OPEN CHAT ↗</a></article>
+<article class="game" data-genres="simulation strategy"><div class="icon">🏙️</div><h2>3D.CITY</h2><p class="desc">Build and manage a living 3D city in your browser, inspired by classic city simulators.</p><a class="play gold" href="./arcade-pro/3d-city/index.html">BUILD YOUR CITY ↗</a></article>
+<article class="game" data-genres="strategy adventure"><div class="icon">🔥</div><h2>A DARK ROOM</h2><p class="desc">Begin beside a dying fire. Gather wood, build a village, explore the wilderness and uncover a strange world.</p><a class="play gold" href="./arcade-pro/dark-room/">PLAY A DARK ROOM ↗</a></article>
+<article class="game" data-genres="arcade puzzle"><div class="icon">🧱</div><h2>STACK</h2><p class="desc">Build the tallest tower you can. Time each moving block perfectly or watch your tower get narrower.</p><a class="play gold" href="./arcade-pro/stack/">PLAY STACK ↗</a></article>
+
+<article class="game" data-genres="arcade action"><div class="icon">🏜️</div><h2>DUNE DASH</h2><p class="desc">A fast desert-runner game, launched through its Unity WebGL build.</p><a class="play gold" href="./arcade-pro/dune-dash/">PLAY DUNE DASH ↗</a></article>
+<article class="game" data-genres="action arcade"><div class="icon">🏹</div><h2>RAGDOLL ARCHERS</h2><p class="desc">Take aim, loose your arrows and outshoot the floppy-limbed competition in this physics-based archery duel.</p><a class="play gold" href="./arcade-pro/ragdoll-archers/">PLAY RAGDOLL ARCHERS ↗</a></article>
+<article class="game" data-genres="action arcade"><div class="icon">😈</div><h2>FABLEDEVIL</h2><p class="desc">A trap-filled rage platformer with 30 handcrafted levels, fake floors, surprise spikes and instant retries.</p><a class="play gold" href="./arcade-pro/fabledevil/">PLAY FABLEDEVIL ↗</a></article>
+<article class="game" data-genres="action puzzle"><div class="icon">🧲</div><h2>GRAVITY FORGE</h2><p class="desc">Bend gravity in four directions, dodge deadly hazards and escape through 22 handcrafted levels.</p><a class="play gold" href="./arcade-pro/gravity-forge/">PLAY GRAVITY FORGE ↗</a></article>
+<article class="game" data-genres="action"><div class="icon">👑</div><h2>PIXEL PRINCESS</h2><p class="desc">Explore six themed worlds, defeat enemies, unlock outfits and face a multi-phase final boss.</p><a class="play gold" href="./arcade-pro/pixel-princess/">PLAY PIXEL PRINCESS ↗</a></article>
+<article class="game" data-genres="arcade"><div class="icon">🐤</div><h2>FLAPPY BIRD-REMADE</h2><p class="desc">A 3D flapping challenge. Fly between pipes, beat your best score and switch camera views.</p><a class="play" href="./arcade-pro/flappy-bird-remade/">PLAY FLAPPY BIRD-REMADE ↗</a></article>
+<article class="game" data-genres="action"><div class="icon">🥊</div><h2>STREET CRIME</h2><p class="desc">A classic side-scrolling beat ’em up. Punch, kick, block and fight through enemy waves and boss encounters.</p><a class="play gold" href="./arcade-pro/street-crime/">PLAY STREET CRIME ↗</a></article>
+<article class="game" data-genres="action"><div class="icon">⚔️</div><h2>VOXEL MUSOU</h2><p class="desc">Take on huge armies in a 3D warrior action game with seven officers, story campaigns, trials and weapon combos.</p><a class="play gold" href="./arcade-pro/voxel-musou/">PLAY VOXEL MUSOU ↗</a></article>
+
+
+
+<article class="game" data-genres="racing action arcade"><div class="icon">🚓</div><h2>BLOCKY PURSUIT</h2><p class="desc">A Smashy Road-inspired blocky driving game. Escape the police and see how long you can survive.</p><a class="play" href="https://id-preview--9add94c4-75b4-4f91-a597-617c9efedab0.lovable.app/?__lovable_receipt=mat_7qsvf110g396ds9qx48bqy24ck"></article>
+</section>
+<p class="note" id="arcade-note">Mindspace Arcade · Select a game to play. Your study-library unlock stays in place.</p>
+</main>
+<script>
+(function(){
+ const launch=document.getElementById("blank-launch");
+ launch.addEventListener("click",()=>{
+   const tab=window.open("about:blank","_blank");
+   if(!tab){alert("Your browser blocked the new tab. Allow pop-ups for Mindspace, then try again.");return;}
+   const frame=tab.document.createElement("iframe");
+   frame.title="Mindspace Arcade";
+   frame.src=new URL("./arcade.html",window.location.href).href;
+   frame.style.cssText="position:fixed;inset:0;width:100%;height:100%;border:0;background:#090909";
+   tab.document.title="Mindspace";
+   tab.document.documentElement.style.cssText="width:100%;height:100%;margin:0;overflow:hidden;background:#090909";
+   tab.document.body.style.cssText="width:100%;height:100%;margin:0;overflow:hidden;background:#090909";
+   tab.document.body.appendChild(frame);
+ });
+})();
+
+(function(){
+ let unlocked=false;
+ try{unlocked=localStorage.getItem("ms-arcade-unlocked")==="yes"}catch(e){}
+ if(unlocked){document.getElementById("blank-launch").hidden=false;}
+ if(!unlocked){
+  document.querySelector(".hero").innerHTML='<div class="eyebrow">LOCKED</div><h1>The arcade is still asleep.</h1><p>Create a study deck named <strong>Library</strong> on the Mindspace dashboard, or press Enter three times on the front page to open the arcade.</p><a class="back" href="./">Return to Mindspace</a>';
+  document.querySelector(".games").classList.add("hidden");
+  document.querySelector("#results-count").classList.add("hidden");
+  document.querySelector("#arcade-note").classList.add("hidden");
+ }
+})();
+
+(function(){
+ const cards=[...document.querySelectorAll(".game")];
+ const search=document.getElementById("game-search");
+ const filter=document.getElementById("genre-filter");
+ const count=document.getElementById("results-count");
+ const dailyTitle=document.getElementById("daily-title");
+ const dailyDesc=document.getElementById("daily-desc");
+ const dailyLink=document.getElementById("daily-link");
+ const playable=cards.filter(card=>!card.dataset.genres.includes("chat"));
+ if(playable.length){
+   const today=new Date();
+   const key="mindspace-game-of-day-"+today.getFullYear()+"-"+(today.getMonth()+1)+"-"+today.getDate();
+   let chosen=-1;
+   try{const saved=localStorage.getItem(key);chosen=saved===null?-1:Number(saved);}catch(e){}
+   if(!Number.isInteger(chosen)||chosen<0||chosen>=playable.length){
+     chosen=Math.floor(Math.random()*playable.length);
+     try{localStorage.setItem(key,String(chosen));}catch(e){}
+   }
+   const card=playable[chosen];
+   dailyTitle.textContent=card.querySelector("h2").textContent;
+   dailyDesc.textContent=card.querySelector(".desc")?.textContent||"Today's featured game.";
+   dailyLink.href=card.querySelector(".play").href;
+ }
+ function apply(){
+   const q=search.value.trim().toLowerCase();
+   const genre=filter.value;
+   let shown=0;
+   cards.forEach(card=>{
+     const text=card.textContent.toLowerCase();
+     const genres=(card.dataset.genres||"").split(/\s+/);
+     const visible=(!q||text.includes(q))&&(genre==="all"||genres.includes(genre));
+     card.classList.toggle("hidden",!visible);
+     if(visible)shown++;
+   });
+   count.textContent="Showing "+shown+" of "+cards.length+" games";
+ }
+ search.addEventListener("input",apply);
+ filter.addEventListener("change",apply);
+ apply();
+})();
+
+</script>
+
+<script>
+(()=>{const release="2026-11-07-2";const key="mindspace-whats-new-seen";if(localStorage.getItem(key)!==release){const dot=document.getElementById("whats-new-dot");if(dot)dot.classList.add("show");}})();
+
+(function(){
+ const cards=[...document.querySelectorAll('.game')];
+ if(!cards.length)return;
+ const KEYS={recent:'mindspace-recently-played-v1',favs:'mindspace-favourite-games-v1',records:'mindspace-personal-records-v1',collections:'mindspace-game-collections-v1'};
+ const read=(key,fallback)=>{try{const v=JSON.parse(localStorage.getItem(key));return v??fallback}catch(e){return fallback}};
+ const write=(key,value)=>{try{localStorage.setItem(key,JSON.stringify(value));return true}catch(e){return false}};
+ const clean=(value)=>String(value||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const games=cards.map(card=>{const link=card.querySelector('.play');return {card,href:link?.getAttribute('href')||'',url:link?.href||'',title:card.querySelector('h2')?.textContent.trim()||'Game',icon:card.querySelector('.icon')?.textContent.trim()||'🎮'};}).filter(g=>g.href);
+ const byHref=new Map(games.map(g=>[g.href,g]));
+ let recent=read(KEYS.recent,[]),favs=read(KEYS.favs,[]),records=read(KEYS.records,{}),collections=read(KEYS.collections,[]);
+ if(!Array.isArray(recent))recent=[];if(!Array.isArray(favs))favs=[];if(!records||typeof records!=='object')records={};if(!Array.isArray(collections))collections=[];
+ const recentEl=document.getElementById('recently-played-list'),favsEl=document.getElementById('favourite-games-list'),recordsEl=document.getElementById('personal-record-list'),collectionsEl=document.getElementById('game-collections-list');
+ const gameRow=(game,detail='')=>{const a=document.createElement('a');a.className='hub-game';a.href=game.href;a.innerHTML='<span><strong>'+clean(game.icon)+' '+clean(game.title)+'</strong></span><small>'+clean(detail||'PLAY ↗')+'</small>';return a;};
+ function renderRecent(){recent=recent.filter(h=>byHref.has(h));recentEl.replaceChildren();if(!recent.length){recentEl.innerHTML='<div class="hub-empty">Your recently played games will appear here.</div>';return;}recent.slice(0,6).forEach((href,i)=>{const g=byHref.get(href);recentEl.appendChild(gameRow(g,i===0?'Most recent':'Played recently'));});}
+ function renderFavs(){favs=favs.filter(h=>byHref.has(h));favsEl.replaceChildren();if(!favs.length){favsEl.innerHTML='<div class="hub-empty">You haven\'t favourited any games yet. Tap ☆ on a game card.</div>';return;}favs.forEach(h=>{const g=byHref.get(h);favsEl.appendChild(gameRow(g,'★ FAVOURITE'));});}
+ function renderRecords(){recordsEl.replaceChildren();const rows=Object.entries(records).filter(([h,r])=>byHref.has(h)&&r&&Number.isFinite(Number(r.value))).sort((a,b)=>Number(b[1].value)-Number(a[1].value));if(!rows.length){recordsEl.innerHTML='<div class="hub-empty">No personal records saved yet.</div>';return;}rows.forEach(([h,r])=>{const g=byHref.get(h),row=document.createElement('div');row.className='record-row';row.innerHTML='<span>'+clean(g.icon)+' '+clean(g.title)+'</span><span class="record-value">'+clean(Number(r.value).toLocaleString())+' '+clean(r.unit||'')+'</span>';recordsEl.appendChild(row);});}
+ function renderCollections(){collectionsEl.replaceChildren();if(!collections.length){collectionsEl.innerHTML='<div class="hub-empty">Create a collection, then add games using the menus on each game card.</div>';return;}collections.forEach((c,index)=>{const block=document.createElement('div');block.className='collection-block';const heading=document.createElement('div');heading.className='collection-heading';const title=document.createElement('strong');title.textContent=c.name;const remove=document.createElement('button');remove.type='button';remove.className='favorite-toggle';remove.textContent='Delete';remove.addEventListener('click',()=>{if(!confirm('Delete the collection “'+c.name+'”?'))return;collections.splice(index,1);write(KEYS.collections,collections);renderCollections();renderCardTools();});heading.append(title,remove);const meta=document.createElement('small');meta.textContent=(c.games||[]).length+' games';const links=document.createElement('div');links.className='collection-games';(c.games||[]).forEach(h=>{const g=byHref.get(h);if(!g)return;const a=document.createElement('a');a.href=g.href;a.textContent=g.icon+' '+g.title;links.appendChild(a);});if(!links.children.length){const empty=document.createElement('small');empty.style.color='#888';empty.textContent='No games added yet.';links.appendChild(empty);}block.append(heading,meta,links);collectionsEl.appendChild(block);});}
+ function renderCardTools(){games.forEach(g=>{let tools=g.card.querySelector('.game-tools');if(!tools){tools=document.createElement('div');tools.className='game-tools';g.card.appendChild(tools);}tools.replaceChildren();const fav=document.createElement('button');fav.type='button';fav.className='favorite-toggle';fav.setAttribute('aria-pressed',String(favs.includes(g.href)));fav.textContent=favs.includes(g.href)?'★ Favourited':'☆ Favourite';fav.addEventListener('click',()=>{if(favs.includes(g.href))favs=favs.filter(h=>h!==g.href);else favs.unshift(g.href);write(KEYS.favs,favs);renderFavs();renderCardTools();});tools.appendChild(fav);const select=document.createElement('select');select.className='collection-add';select.setAttribute('aria-label','Add '+g.title+' to a collection');const first=document.createElement('option');first.value='';first.textContent=collections.length?'＋ Add to collection':'Create a collection first';select.appendChild(first);collections.forEach((c,i)=>{const o=document.createElement('option');o.value=String(i);o.textContent='Add to '+c.name;select.appendChild(o);});select.addEventListener('change',()=>{if(select.value==='')return;const c=collections[Number(select.value)];if(c&&!c.games.includes(g.href)){c.games.push(g.href);write(KEYS.collections,collections);renderCollections();}select.value='';});tools.appendChild(select);});}
+ const recordGame=document.getElementById('record-game');games.forEach(g=>{const o=document.createElement('option');o.value=g.href;o.textContent=g.title;recordGame.appendChild(o);});
+ document.getElementById('personal-record-form').addEventListener('submit',e=>{e.preventDefault();const href=recordGame.value,value=Number(document.getElementById('record-value').value),unit=document.getElementById('record-unit').value.trim();if(!byHref.has(href)||!Number.isFinite(value)||value<0)return;const old=records[href];if(!old||value>Number(old.value)){records[href]={value,unit,updatedAt:Date.now()};write(KEYS.records,records);renderRecords();}else{alert('That is not higher than your saved record yet. Your best is '+Number(old.value).toLocaleString()+' '+(old.unit||'')+'.');}document.getElementById('record-value').value='';});
+ document.getElementById('collection-form').addEventListener('submit',e=>{e.preventDefault();const input=document.getElementById('collection-name'),name=input.value.trim();if(!name)return;if(collections.some(c=>c.name.toLowerCase()===name.toLowerCase())){alert('You already have a collection with that name.');return;}collections.push({name,games:[]});write(KEYS.collections,collections);input.value='';renderCollections();renderCardTools();});
+ games.forEach(g=>{const link=g.card.querySelector('.play');link.addEventListener('click',()=>{recent=[g.href,...recent.filter(h=>h!==g.href)].slice(0,20);write(KEYS.recent,recent);});});
+ renderRecent();renderFavs();renderRecords();renderCollections();renderCardTools();
+})();
+</script>
+
+<script type="module">
+import {ready,levelFor,recordActivity,getTheme,setTheme,getAccent,setAccent,getSounds,setSounds,currentUser,getCurrentStats} from "./player-system.js";
+const $=id=>document.getElementById(id);
+let soundContext=null;
+function uiSound(){if(!getSounds())return;try{const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;soundContext=soundContext||new Audio();const osc=soundContext.createOscillator(),gain=soundContext.createGain();osc.type="sine";osc.frequency.setValueAtTime(660,soundContext.currentTime);osc.frequency.exponentialRampToValueAtTime(880,soundContext.currentTime+.08);gain.gain.setValueAtTime(.045,soundContext.currentTime);gain.gain.exponentialRampToValueAtTime(.001,soundContext.currentTime+.12);osc.connect(gain);gain.connect(soundContext.destination);osc.start();osc.stop(soundContext.currentTime+.13);}catch(e){}}
+const themeButtons=[...document.querySelectorAll("[data-theme]")];
+function paintTheme(theme){setTheme(theme);themeButtons.forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.theme===theme)));}
+paintTheme(getTheme());
+if(getAccent()){$("theme-accent").value=getAccent();document.documentElement.style.setProperty("--player-accent",getAccent());}
+$("theme-accent").addEventListener("input",e=>setAccent(e.target.value));
+$("theme-sounds").checked=getSounds();
+$("theme-sounds").addEventListener("change",e=>{setSounds(e.target.checked);$("theme-save-status").textContent=e.target.checked?"Theme sounds enabled":"Theme sounds muted";});
+themeButtons.forEach(b=>b.addEventListener("click",()=>{if(b.disabled)return;paintTheme(b.dataset.theme);uiSound();}));
+await ready;
+const stats=getCurrentStats();const user=currentUser();
+const level=levelFor(stats?.xp||0);
+$("player-rank").textContent="Level "+level.level+" · "+level.rank;
+$("player-summary").textContent=(user?(user.displayName||"Player"):"Guest player")+" · "+level.title+" · "+(stats?.xp||0).toLocaleString()+" XP";
+$("player-progress-fill").style.width=level.progress+"%";
+$("player-progress-label").textContent=level.level>=100?"Maximum level reached":Math.floor(level.xpIntoLevel)+" / "+level.xpForNext+" XP to level "+(level.level+1);
+themeButtons.find(b=>b.dataset.theme==="neon").disabled=level.level<10;
+themeButtons.find(b=>b.dataset.theme==="sunset").disabled=level.level<25;
+if(getTheme()==="neon"&&level.level<10)paintTheme("midnight");
+if(getTheme()==="sunset"&&level.level<25)paintTheme("midnight");
+$("theme-status").textContent="Midnight is always available. Neon unlocks at level 10; Pixel Sunset unlocks at level 25.";
+const gameLaunches=new Map([...document.querySelectorAll(".game .play")].map(link=>{const card=link.closest(".game");return [link.href,link.getAttribute("href")||card?.querySelector("h2")?.textContent||"arcade"];}));document.addEventListener("click",event=>{const link=event.target.closest("a[href]");if(!link)return;const game=gameLaunches.get(link.href);if(game)recordActivity("game",{game}).catch(console.warn);});
+window.MindspaceSoundsEnabled=getSounds();
+$("theme-sounds").addEventListener("change",e=>{window.MindspaceSoundsEnabled=e.target.checked;if(e.target.checked)uiSound();});
+document.addEventListener("click",event=>{const b=event.target.closest(".favorite-toggle");if(b&&b.getAttribute("aria-pressed")==="false")recordActivity("favourite").catch(console.warn);});
+document.getElementById("collection-form").addEventListener("submit",()=>recordActivity("collection").catch(console.warn));
+document.getElementById("personal-record-form").addEventListener("submit",()=>recordActivity("record").catch(console.warn));
+window.addEventListener("mindspace:progress",e=>{const l=levelFor(e.detail.stats.xp);themeButtons.find(b=>b.dataset.theme==="neon").disabled=l.level<10;themeButtons.find(b=>b.dataset.theme==="sunset").disabled=l.level<25;$("player-rank").textContent="Level "+l.level+" · "+l.rank;$("player-summary").textContent=(user?.displayName||"Player")+" · "+l.title+" · "+e.detail.stats.xp.toLocaleString()+" XP";$("player-progress-fill").style.width=l.progress+"%";$("player-progress-label").textContent=l.level>=100?"Maximum level reached":Math.floor(l.xpIntoLevel)+" / "+l.xpForNext+" XP to level "+(l.level+1);});
+</script>
+
+</body></html>

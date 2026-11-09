@@ -1,0 +1,2945 @@
+# -*- coding: utf-8 -*-
+"""
+صانع صور الهوية — الجزائر (نسخة سطح المكتب)
+
+واجهة عربية مبنية على محرك مشروع HivisionIDPhotos مفتوح المصدر
+(https://github.com/Zeyi-Lin/HivisionIDPhotos — رخصة Apache-2.0).
+المحرك: كشف وجه MTCNN بعتبات صارمة + قاعدة «وجه واحد فقط»،
+وقصّ ذكي بنسب رأس قياسية، وإزالة خلفية بنموذج MODNet المهيّأ لصور الهوية.
+
+مسار جودة عالٍ (HQ): المحرك يعمل داخلياً على نسخة مصغّرة (2000px)؛
+عند توفر صورة أصلية أكبر نعيد بناء القص النهائي من بكسلات الأصلية كاملة
+الدقة بنفس هندسة المحرك، مع تحسين حدة خفيف قياسي — فتبقى التفاصيل.
+
+وضع يدوي كامل: تدوير بالدرجة، تقريب وإزاحة، وأدلة قص احترافية على
+المعاينة فقط (بيضوي رأس مزدوج بقياسات المليمتر، شريط منطقة العينين،
+خطوط عرض الرأس وخط المنتصف) — لا تظهر الأدلة في أي ملف نهائي.
+كل المعالجة على جهاز المستخدم، والإعدادات محفوظة في settings.json.
+"""
+import os
+import shutil
+import logging
+import tempfile
+import threading
+import uuid
+import math
+import sys
+
+
+def _configure_console_utf8():
+    """Keep Arabic status messages from crashing in legacy Windows consoles."""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="backslashreplace")
+        except (AttributeError, OSError, ValueError):
+            # Some IDEs replace stdout/stderr with objects that cannot be reconfigured.
+            pass
+
+
+_configure_console_utf8()
+
+os.environ.setdefault("GRADIO_ANALYTICS_ENABLED", "False")
+
+import json
+import datetime
+import numpy as np
+import cv2
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont, ImageOps
+import gradio as gr
+
+from hivision import IDCreator
+from hivision.creator.choose_handler import choose_handler
+from hivision.creator.context import Context, Params
+from hivision.creator.photo_adjuster import adjust_photo, IDphotos_cut, move
+from hivision.creator.utils import get_box, detect_distance
+from hivision.error import FaceError
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+OUT_DIR = os.path.join(BASE_DIR, "outputs")
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+os.makedirs(OUT_DIR, exist_ok=True)
+os.makedirs(LOG_DIR, exist_ok=True)
+SETTINGS_FILE = os.path.join(BASE_DIR, "settings.json")
+APP_VERSION = "13.0"
+
+logger = logging.getLogger("dz_photoid_studio")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    from logging.handlers import RotatingFileHandler
+    _handler = RotatingFileHandler(
+        os.path.join(LOG_DIR, "studio.log"), maxBytes=2_000_000,
+        backupCount=4, encoding="utf-8"
+    )
+    _handler.setFormatter(logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+    ))
+    logger.addHandler(_handler)
+    logger.propagate = True
+
+_SETTINGS_LOCK = threading.RLock()
+DPI = 300
+HD_FACTOR = 1.4526      # نسبة النسخة عالية الدقة إلى القياسية
+HD_DPI = round(DPI * HD_FACTOR)
+SHEET_DPI = 600         # ورقة طباعة عالية الدقة مع المقاس الفيزيائي نفسه
+SHEET_SCALE = SHEET_DPI // DPI
+HQ_MIN_EDGE = 2100      # فوق هذا الحد نفعّل مسار الجودة العالية
+HQ_MAX_EDGE = 6000      # سقف أبعاد المسار عالي الجودة (توازن جودة/ذاكرة)
+MAX_INPUT_PIXELS = 50_000_000  # 50MP prevents accidental memory exhaustion
+MAX_UPLOAD_BYTES = 40 * 1024 * 1024  # Bound HTTP uploads before image decoding
+
+# ----------------------------- المقاسات والألوان والأوراق -----------------------------
+
+SIZES = {
+    "جزائرية رسمية 3.5 × 4.5 سم": (531, 413),   # (الارتفاع، العرض) بالبكسل @300dpi
+    "صغيرة 2.5 × 3.5 سم": (413, 295),
+    "كبيرة 3.5 × 4.9 سم": (579, 413),
+    "جواز سفر 5 × 5 سم": (591, 591),
+    "مقاس مخصص…": None,
+}
+
+COLORS = {
+    "أبيض": (255, 255, 255),
+    "أزرق": (67, 142, 219),
+    "أزرق فاتح": (168, 197, 230),
+    "رمادي فاتح": (240, 240, 240),
+    "أحمر": (215, 30, 25),
+    "لون مخصص…": None,
+}
+
+SHEETS = {
+    "بدون ورقة طباعة": None,
+    "8 صور — ورقة 10 × 15 سم": ((1800, 1200), 4, 2),   # ورق المختبر 6×4 بوصة بالضبط عند 300 DPI (152.4×101.6مم)
+    "12 صورة — ورقة 15 × 20 سم": ((2400, 1800), 4, 3),  # ورق المختبر الحقيقي 8×6 بوصة (203×152مم) عند 300 DPI
+}
+
+NOTIF_SLOTS = 6   # بطاقات إشعار متراكبة كحد أقصى (داخل صندوق بسكرول)
+LIST_ROWS = 10    # صور ظاهرة في قائمة الصور كحد أقصى (داخل صندوق بسكرول)
+
+MODES = ["تلقائي — كشف الوجه والقص الذكي", "يدوي — أنا أضبط القص بنفسي"]
+
+# معاملات القص القياسية (قيم المحرك المُختبَرة على 8 بورتريهات: ذقن ≈ 71.6%،
+# عينان ≈ 44.6%، قمة ≈ 10.9% — مطابقة لقوالب صور الهوية المعتمدة)
+CROP_PARAMS = dict(head_measure_ratio=0.20, head_height_ratio=0.45,
+                   head_top_range=(0.12, 0.10))
+# نسب الأدلة القياسية من ارتفاع الصورة (توافق القالب المرجعي 35×45مم):
+# الذقن عند 70% من الأعلى (31.5مم)، العينان عند 44%، القمة المستهدفة 8%
+GUIDE_CROWN, GUIDE_CHIN, GUIDE_EYE = 0.08, 0.70, 0.44
+
+DEFAULT_SETTINGS = {
+    "mode": MODES[0],
+    "size": "جزائرية رسمية 3.5 × 4.5 سم",
+    "custom_w": 35, "custom_h": 45,
+    "color": "أبيض", "custom_color": "#ffffff",
+    "sheet": "8 صور — ورقة 10 × 15 سم",
+    "align": True,
+    "angle": 0.0, "zoom": 1.0, "pan_x": 0, "pan_y": 0, "guides": True,
+    "brightness": 1.0, "contrast": 1.0, "saturation": 1.0, "sharpness": 1.0,
+    "shadows": 0, "highlights": 0, "temperature": 0,
+    "inbox": "", "watch": False, "automake": False, "printer": "",
+    "ui_cut": True, "ui_bg": False, "ui_color": False, "ui_quality": False,
+    "ui_paper": False,
+    "ui_studio": False, "ui_list": True, "ui_layout": False,
+    "layout_page": 100, "layout_split": 40, "layout_listh": 340,
+}
+
+
+def _clamp_setting(value, low, high, fallback):
+    try:
+        number = float(value)
+        if not math.isfinite(number):
+            return fallback
+        return min(high, max(low, number))
+    except (TypeError, ValueError, OverflowError):
+        return fallback
+
+
+def _bool_setting(value, fallback):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in ("true", "1", "yes", "on"):
+            return True
+        if lowered in ("false", "0", "no", "off"):
+            return False
+    return fallback
+
+
+def _sanitize_settings(saved):
+    merged = dict(DEFAULT_SETTINGS)
+    if isinstance(saved, dict):
+        merged.update({k: v for k, v in saved.items() if k in DEFAULT_SETTINGS})
+
+    if merged.get("mode") not in MODES:
+        merged["mode"] = DEFAULT_SETTINGS["mode"]
+    if merged.get("size") not in SIZES:
+        merged["size"] = DEFAULT_SETTINGS["size"]
+    if merged.get("color") not in COLORS:
+        merged["color"] = DEFAULT_SETTINGS["color"]
+    if merged.get("sheet") not in SHEETS:
+        merged["sheet"] = DEFAULT_SETTINGS["sheet"]
+
+    numeric_ranges = {
+        "custom_w": (8, 250), "custom_h": (8, 250),
+        "angle": (-15, 15), "zoom": (0.2, 5.0),
+        "pan_x": (-100, 100), "pan_y": (-100, 100),
+        "brightness": (0.5, 1.5), "contrast": (0.5, 1.5),
+        "saturation": (0, 2.0), "sharpness": (0, 3.0),
+        "shadows": (-100, 100), "highlights": (-100, 100),
+        "temperature": (-50, 50), "layout_page": (60, 100),
+        "layout_split": (25, 65), "layout_listh": (160, 800),
+    }
+    for key, (low, high) in numeric_ranges.items():
+        merged[key] = _clamp_setting(
+            merged.get(key), low, high, DEFAULT_SETTINGS[key]
+        )
+
+    for key in ("align", "guides", "watch", "automake", "ui_cut", "ui_bg",
+                "ui_color", "ui_quality", "ui_paper", "ui_studio", "ui_list",
+                "ui_layout"):
+        merged[key] = _bool_setting(merged.get(key), DEFAULT_SETTINGS[key])
+
+    for key in ("inbox", "printer", "custom_color"):
+        value = merged.get(key)
+        merged[key] = value if isinstance(value, str) else DEFAULT_SETTINGS[key]
+    if not (len(merged["custom_color"]) == 7
+            and merged["custom_color"].startswith("#")
+            and all(c in "0123456789abcdefABCDEF" for c in merged["custom_color"][1:])):
+        merged["custom_color"] = DEFAULT_SETTINGS["custom_color"]
+    return merged
+
+
+def load_settings():
+    try:
+        with open(SETTINGS_FILE, encoding="utf-8") as f:
+            saved = json.load(f)
+        return _sanitize_settings(saved)
+    except FileNotFoundError:
+        return dict(DEFAULT_SETTINGS)
+    except Exception:
+        logger.exception("Could not read settings.json; defaults are being used")
+        return dict(DEFAULT_SETTINGS)
+
+
+_last_saved_json = None
+
+
+def save_settings_dict(values, replace=False):
+    """Persist settings atomically; partial updates preserve unrelated UI preferences."""
+    global _last_saved_json
+    if not isinstance(values, dict):
+        raise TypeError("settings must be a dictionary")
+    with _SETTINGS_LOCK:
+        try:
+            current = dict(DEFAULT_SETTINGS) if replace else load_settings()
+            current.update({k: v for k, v in values.items() if k in DEFAULT_SETTINGS})
+            payload_obj = _sanitize_settings(current)
+            payload = json.dumps(payload_obj, ensure_ascii=False, sort_keys=True)
+            if payload == _last_saved_json and os.path.isfile(SETTINGS_FILE):
+                return True
+
+            os.makedirs(BASE_DIR, exist_ok=True)
+            fd, temp_path = tempfile.mkstemp(
+                prefix="settings_", suffix=".tmp", dir=BASE_DIR
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    json.dump(payload_obj, f, ensure_ascii=False, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                if os.path.isfile(SETTINGS_FILE):
+                    try:
+                        shutil.copy2(SETTINGS_FILE, SETTINGS_FILE + ".bak")
+                    except OSError:
+                        logger.warning("Could not create settings backup", exc_info=True)
+                os.replace(temp_path, SETTINGS_FILE)
+            finally:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+
+            _last_saved_json = payload
+            return True
+        except Exception:
+            logger.exception("Could not save settings")
+            raise
+
+
+SETTINGS = load_settings()
+_creator = None
+_CREATOR_LOCK = threading.RLock()
+
+
+def get_creator() -> IDCreator:
+    """محرك واحد يُعاد استعماله (تحميل النماذج مرة واحدة فقط)."""
+    global _creator
+    with _CREATOR_LOCK:
+        if _creator is None:
+            _creator = IDCreator()
+            choose_handler(_creator, "hivision_modnet", "mtcnn")
+            # تعطيل إضافة التجميل: لا حاجة لها في صور الهوية، وتحتاج ملفاً ثنائياً
+            # (جدول ألوان LUT) — تجاوزها يجعل البرنامج يعمل بنفس الشكل في كل النسخ.
+            _creator.beauty_handler = lambda ctx: None
+            # تسجيل زاوية ميلان الوجه من الكشف الأول لكل تشغيل: المحرك (عند
+            # التصحيح) يدوّر صوره داخلياً ثم يعيد الكشف فيكتب زاوية ثانية شبه
+            # صفرية فوق الأولى — ومسار الجودة العالية يحتاج الزاوية الأصلية
+            # ليدوّر الأصلية كاملة الدقة بنفس مقدار المحرك تماماً.
+            def _dz_before(ctx):
+                _creator._dz_first_roll = None
+
+            def _dz_detect(ctx):
+                if getattr(_creator, "_dz_first_roll", None) is None and ctx.face:
+                    _creator._dz_first_roll = ctx.face.get("roll_angle")
+
+            _creator.before_all = _dz_before
+            _creator.after_detect = _dz_detect
+    return _creator
+
+
+def mm_to_px(mm: float) -> int:
+    return int(round(float(mm) / 25.4 * DPI))
+
+
+def hex_to_rgb(value: str):
+    value = (value or "#ffffff").lstrip("#")
+    if len(value) != 6:
+        return (255, 255, 255)
+    return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def resolve_size(size_label, custom_w_mm, custom_h_mm):
+    size = SIZES.get(size_label)
+    if size is not None:
+        return size
+    try:
+        w_px, h_px = mm_to_px(custom_w_mm), mm_to_px(custom_h_mm)
+    except Exception:
+        raise gr.Error("المقاس المخصص غير صحيح — أدخل العرض والارتفاع بالمليمتر.")
+    if not (100 <= w_px <= 3000 and 100 <= h_px <= 3000):
+        raise gr.Error("المقاس المخصص خارج الحدود المعقولة (بين 8 و250 مم تقريباً).")
+    return (h_px, w_px)
+
+
+def resolve_color(color_label, custom_color):
+    rgb = COLORS.get(color_label)
+    if rgb is None:
+        rgb = hex_to_rgb(custom_color)
+    return rgb
+
+
+# ----------------------------- معالجة الصور -----------------------------
+
+def _validate_input_dimensions(width, height):
+    """Reject invalid or needlessly huge uploads before decoding them into memory."""
+    try:
+        width, height = int(width), int(height)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise gr.Error("تعذّر قراءة أبعاد الصورة المرفوعة.") from exc
+    if width < 2 or height < 2:
+        raise gr.Error("الصورة صغيرة جداً للمعالجة؛ اختر صورة بحجم بكسلين على الأقل في كل اتجاه.")
+    # الصور الأكبر من الحد لا تُرفض: تُخفَّض تلقائياً داخل normalize_input
+    # (انظر _fit_to_pixel_cap) — الرفض كان يعطّل العمل على صور الكاميرات
+    # والماسحات الحديثة دون أي مكسب جودة، لأن النتيجة النهائية 413×531 فقط.
+    return width, height
+
+
+_LAST_INPUT_RESIZED = None
+
+
+def _fit_to_pixel_cap(pil):
+    """تخفيض صورة PIL إلى حدّ البكسلات الآمن مع حفظ نسبة الأبعاد (LANCZOS).
+
+    يُستدعى من normalize_input فقط. يدوّن ما حدث في _LAST_INPUT_RESIZED
+    كي تعرض الواجهة ملاحظة للمستخدم بدل رفض الصورة.
+    """
+    global _LAST_INPUT_RESIZED
+    w, h = pil.size
+    if w * h <= MAX_INPUT_PIXELS:
+        return pil
+    scale = math.sqrt(MAX_INPUT_PIXELS / (w * h))
+    nw, nh = max(2, int(w * scale)), max(2, int(h * scale))
+    _LAST_INPUT_RESIZED = (w, h, nw, nh)
+    return pil.resize((nw, nh), Image.LANCZOS)
+
+
+def _pop_input_resized():
+    global _LAST_INPUT_RESIZED
+    note, _LAST_INPUT_RESIZED = _LAST_INPUT_RESIZED, None
+    return note
+
+
+def normalize_input(img) -> np.ndarray:
+    """
+    تحويل الصورة المرفوعة إلى BGR بثلاث قنوات — وهو ما يتوقعه المحرك.
+    عند استلام مسار ملف (وهو الحال من الواجهة): فك ترميز يحفظ قيم البكسل
+    حرفياً كما تفعل برامج صور الهوية الاحترافية (لا تحويلات فضاء ألوان —
+    الألوان تبقى كما في الملف تماماً)، مع تطبيق اتجاه EXIF. الصور الشفافة
+    تُدمج على أبيض أولاً.
+    """
+    if img is None:
+        return None
+    if isinstance(img, (str, os.PathLike)):
+        # Keep the source handle scoped; otherwise Windows can keep camera or
+        # inbox files locked longer than expected after a successful upload.
+        with Image.open(img) as source:
+            _validate_input_dimensions(*source.size)
+            # JPEG ضخم: فكّ تدريجي (draft) بمقاس قريب من الحدّ بدل فكّ الصورة
+            # كاملة في الذاكرة، ثم ضبط دقيق بـ LANCZOS في _fit_to_pixel_cap.
+            if source.format == "JPEG" and \
+                    source.size[0] * source.size[1] > MAX_INPUT_PIXELS:
+                _sc = math.sqrt(MAX_INPUT_PIXELS /
+                                (source.size[0] * source.size[1]))
+                source.draft("RGB", (max(2, int(source.size[0] * _sc * 1.1)),
+                                     max(2, int(source.size[1] * _sc * 1.1))))
+            pil = ImageOps.exif_transpose(source)
+            if pil.mode in ("RGBA", "LA") or (pil.mode == "P" and "transparency" in pil.info):
+                rgba = pil.convert("RGBA")
+                white = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+                pil = Image.alpha_composite(white, rgba).convert("RGB")
+            else:
+                pil = pil.convert("RGB")
+            pil = _fit_to_pixel_cap(pil)
+            img = np.array(pil)
+    if not isinstance(img, np.ndarray):
+        raise gr.Error("تعذّر قراءة بيانات الصورة المرفوعة.")
+    if img.ndim not in (2, 3):
+        raise gr.Error("تنسيق الصورة غير مدعوم؛ ارفع JPEG أو PNG أو صورة من الكاميرا.")
+    _validate_input_dimensions(img.shape[1], img.shape[0])
+    if img.ndim == 3 and img.shape[2] not in (3, 4):
+        raise gr.Error("تنسيق قنوات الصورة غير مدعوم؛ ارفع JPEG أو PNG أو صورة من الكاميرا.")
+    if img.ndim == 2:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+    if img.ndim == 3 and img.shape[2] == 4:
+        rgba = Image.fromarray(img).convert("RGBA")
+        white = Image.new("RGBA", rgba.size, (255, 255, 255, 255))
+        img = np.array(Image.alpha_composite(white, rgba).convert("RGB"))
+    if img.shape[0] * img.shape[1] > MAX_INPUT_PIXELS:
+        img = np.array(_fit_to_pixel_cap(Image.fromarray(img)))
+    return cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+
+def composite_bg(bgra: np.ndarray, rgb) -> Image.Image:
+    """تركيب الصورة المقصوصة (BGRA) على لون خلفية موحّد."""
+    rgba = cv2.cvtColor(bgra, cv2.COLOR_BGRA2RGBA)
+    fg = Image.fromarray(rgba, mode="RGBA")
+    canvas = Image.new("RGBA", fg.size, tuple(rgb) + (255,))
+    return Image.alpha_composite(canvas, fg).convert("RGB")
+
+
+def finalize_from_crop(crop_bgra: np.ndarray, target_w: int, target_h: int, rgb) -> Image.Image:
+    """تصغير قصّ BGRA عالي الدقة إلى المقاس الهدف بـ LANCZOS وتركيبه على الخلفية."""
+    rgba = cv2.cvtColor(crop_bgra, cv2.COLOR_BGRA2RGBA)
+    fg = Image.fromarray(rgba, mode="RGBA")
+    if fg.size != (target_w, target_h):
+        fg = fg.resize((target_w, target_h), Image.LANCZOS)
+    canvas = Image.new("RGBA", (target_w, target_h), tuple(rgb) + (255,))
+    return Image.alpha_composite(canvas, fg).convert("RGB")
+
+
+def mild_sharpen(img: Image.Image) -> Image.Image:
+    """تحسين حدة خفيف قياسي (قناع إزالة ضباب) — يعيد للتفاصيل حضورها بعد التصغير."""
+    return img.filter(ImageFilter.UnsharpMask(radius=2, percent=40, threshold=3))
+
+
+def apply_color_adjustments(img: Image.Image, brightness=1.0, contrast=1.0,
+                            saturation=1.0, sharpness=1.0, shadows=0,
+                            highlights=0, temperature=0) -> Image.Image:
+    """ضبط الألوان: حرارة اللون والظلال والإبرازات (numpy) ثم السطوع والتباين والتشبع والحدة (PIL)."""
+    if (brightness == 1.0 and contrast == 1.0 and saturation == 1.0
+            and sharpness == 1.0 and not shadows and not highlights and not temperature):
+        return img
+    arr = np.asarray(img).astype(np.float32) / 255.0
+    if temperature:
+        f = float(temperature) / 100.0 * 0.25
+        arr[..., 0] = np.clip(arr[..., 0] * (1 + f), 0, 1)   # الأحمر — دفء
+        arr[..., 2] = np.clip(arr[..., 2] * (1 - f), 0, 1)   # الأزرق — برودة
+    if shadows or highlights:
+        lum = (0.299 * arr[..., 0] + 0.587 * arr[..., 1] + 0.114 * arr[..., 2])[..., None]
+        if shadows:
+            arr = arr + (float(shadows) / 100.0) * 0.30 * (1.0 - lum) ** 2
+        if highlights:
+            arr = arr + (float(highlights) / 100.0) * 0.30 * lum ** 2
+        arr = np.clip(arr, 0, 1)
+    out = Image.fromarray((arr * 255).astype(np.uint8))
+    if brightness != 1.0:
+        out = ImageEnhance.Brightness(out).enhance(float(brightness))
+    if contrast != 1.0:
+        out = ImageEnhance.Contrast(out).enhance(float(contrast))
+    if saturation != 1.0:
+        out = ImageEnhance.Color(out).enhance(float(saturation))
+    if sharpness != 1.0:
+        out = ImageEnhance.Sharpness(out).enhance(float(sharpness))
+    return out
+
+
+def build_virtual_bgra(orig_bgr: np.ndarray, capped_matting: np.ndarray):
+    """
+    بناء نسخة افتراضية كاملة الدقة من صورة الإزالة: بكسلات الأصلية الحقيقية
+    + قناة الشفافية من المحرك مكبّرة. تُستخدم في مسار الجودة العالية.
+    تعيد None إن كانت الأصلية صغيرة أصلاً (لا فائدة منها).
+    """
+    oh, ow = orig_bgr.shape[:2]
+    if max(ow, oh) <= HQ_MIN_EDGE:
+        return None
+    f = min(1.0, HQ_MAX_EDGE / max(ow, oh))
+    vw, vh = int(ow * f), int(oh * f)
+    orig_v = (cv2.resize(orig_bgr, (vw, vh), interpolation=cv2.INTER_AREA)
+              if f < 1.0 else orig_bgr)
+    alpha_v = cv2.resize(capped_matting[:, :, 3], (vw, vh),
+                         interpolation=cv2.INTER_LINEAR)
+    return cv2.merge((orig_v[:, :, 0], orig_v[:, :, 1], orig_v[:, :, 2], alpha_v))
+
+
+def hq_rerender(orig_bgr: np.ndarray, creator: IDCreator, size_hw, face_alignment: bool):
+    """
+    إعادة بناء قصّ المحرك من الأصلية كاملة الدقة:
+    نأخذ مستطيل الوجه الذي كشفه المحرك على النسخة المصغّرة، نطابقه على
+    النسخة الافتراضية كاملة الدقة، ونعيد تشغيل حسابات القص نفسها.
+    تعيد مصفوفة BGRA للقص عالي الدقة أو None عند عدم الإمكانية.
+    """
+    try:
+        ctx = creator.ctx
+        if ctx is None or ctx.face is None or ctx.face.get("rectangle") is None:
+            return None
+        roll = ctx.face.get("roll_angle") or 0
+        base_bgr = orig_bgr
+        if face_alignment:
+            first_roll = getattr(creator, "_dz_first_roll", None)
+            if first_roll is None:
+                # لا نعرف مقدار التدوير الذي طبّقه المحرك داخلياً — لا نخاطر
+                # بتركيب هندسة غير مؤكدة (كان ينتج وجهاً مقصوصاً)؛ نتراجع
+                # إلى نتيجة المحرك القياسية السليمة.
+                return None
+            if abs(first_roll) > 2:
+                # المحرك دوّر صوره داخلياً بالزاوية الأصلية: ندوّر الأصلية
+                # كاملة الدقة بنفس الزاوية والأداة حتى تتطابق مع قناع الإزالة
+                # ومستطيل الوجه (كلاهما في إطار الصورة المدوَّرة).
+                from hivision.creator.rotation_adjust import rotate_bound_4channels
+                _alpha = np.full(orig_bgr.shape[:2], 255, dtype=np.uint8)
+                base_bgr = rotate_bound_4channels(
+                    orig_bgr, _alpha, -1 * first_roll)[0]
+        virt = build_virtual_bgra(base_bgr, ctx.matting_image)
+        if virt is None:
+            return None
+        ch, cw = ctx.origin_image.shape[:2]
+        k = virt.shape[1] / cw
+        rect = ctx.face["rectangle"]
+        ctx2 = Context(Params(size=size_hw))
+        ctx2.matting_image = virt
+        ctx2.face = {"rectangle": [rect[0] * k, rect[1] * k, rect[2] * k, rect[3] * k],
+                     "roll_angle": roll}
+        hd_a, _std_a, _clothing, _typo = adjust_photo(ctx2)
+        return hd_a
+    except Exception:
+        return None
+
+
+def render_manual(matting_bgra: np.ndarray, angle, zoom, pan_x, pan_y,
+                  target_w: int, target_h: int, rgb) -> Image.Image:
+    """
+    القص اليدوي: تدوير بالدرجة حول المركز، ثم تقريب (تغطية للإطار)،
+    ثم إزاحة، ثم قص نافذة الإطار وتركيبها على لون الخلفية.
+    """
+    rgba = cv2.cvtColor(matting_bgra, cv2.COLOR_BGRA2RGBA)
+    img = Image.fromarray(rgba, mode="RGBA")
+    if angle:
+        img = img.rotate(float(angle), resample=Image.BICUBIC,
+                         expand=False, fillcolor=(0, 0, 0, 0))
+    base = max(target_w / img.width, target_h / img.height)
+    scale = base * max(0.05, float(zoom))
+    new_w, new_h = max(1, round(img.width * scale)), max(1, round(img.height * scale))
+    img = img.resize((new_w, new_h), Image.LANCZOS)
+    excess_x = max(0, new_w - target_w)
+    excess_y = max(0, new_h - target_h)
+    fx = min(1.0, max(0.0, 0.5 + float(pan_x) / 200.0))
+    fy = min(1.0, max(0.0, 0.5 + float(pan_y) / 200.0))
+    left, top = int(excess_x * fx), int(excess_y * fy)
+    crop = img.crop((left, top, left + target_w, top + target_h))
+    if crop.size != (target_w, target_h):  # حماية عند الحواف بعد التدوير
+        padded = Image.new("RGBA", (target_w, target_h), (0, 0, 0, 0))
+        padded.paste(crop, (0, 0))
+        crop = padded
+    canvas = Image.new("RGBA", (target_w, target_h), tuple(rgb) + (255,))
+    return Image.alpha_composite(canvas, crop).convert("RGB")
+
+
+def _font(size: int):
+    try:
+        return ImageFont.load_default(size=size)
+    except Exception:
+        return ImageFont.load_default()
+
+
+def _vlabel(base: Image.Image, text: str, xy, fill, size: int = 13):
+    """رسم نص عمودي (مدوّر 90°) على الصورة — بعرض يُقاس حسب النص."""
+    f = _font(size)
+    try:
+        tw = int(f.getlength(text)) + 8
+    except Exception:
+        tw = 8 + len(text) * (size // 2 + 2)
+    tmp = Image.new("RGBA", (tw, size + 10), (0, 0, 0, 0))
+    td = ImageDraw.Draw(tmp)
+    td.text((3, 3), text, font=f, fill=fill)
+    tmp = tmp.rotate(90, expand=True)
+    base.paste(tmp, xy, tmp)
+
+
+def draw_guides(img: Image.Image) -> Image.Image:
+    """
+    أدلة قص احترافية على المعاينة فقط — بهوامش قياس خارجية كما في قوالب
+    برامج صور الهوية المعتمدة: أسهم أبعاد خضراء حول الصورة (الارتفاع الكلي،
+    العرض، موضع الذقن من الأعلى مع مجال التسامح، وبعد العينين عن الأسفل)،
+    وعلى الصورة نفسها: منطقة قمة الرأس، بيضوي رأس خارجي/داخلي، شريط العينين،
+    خط المنتصف. النسب القياسية: قمة 8%، ذقن 70%، عينان 44% من الارتفاع —
+    وهي ما ينتجه القص التلقائي فعلياً (قياسات مُتحققة على بورتريهات حقيقية).
+    """
+    photo = img.copy().convert("RGB")
+    w, h = photo.size
+    total_h_mm = h / DPI * 25.4
+    total_w_mm = w / DPI * 25.4
+    f_big = max(12, int(w * 0.030))
+    f_small = max(10, int(w * 0.024))
+
+    mx_l = int(w * 0.16)          # هامش يسار (سهم الارتفاع)
+    mx_r = int(w * 0.46)          # هامش يمين (سهما الذقن والعينين + التسميات)
+    mx_t = int(h * 0.04)
+    mx_b = int(h * 0.12)          # هامش أسفل (سهم العرض)
+    W2, H2 = w + mx_l + mx_r, h + mx_t + mx_b
+    canvas = Image.new("RGB", (W2, H2), (246, 246, 246))
+    canvas.paste(photo, (mx_l, mx_t))
+    d = ImageDraw.Draw(canvas, "RGBA")
+    green = (26, 158, 75)
+    red = (225, 38, 38)
+    blue = (52, 120, 220)
+    yellow = (245, 197, 0)
+
+    crown_y = mx_t + h * GUIDE_CROWN
+    chin_y = mx_t + h * GUIDE_CHIN
+    eye_y = mx_t + h * GUIDE_EYE
+    ox0, ox1 = mx_l + w * 0.23, mx_l + w * 0.77     # البيضوي الخارجي
+    ix0, ix1 = mx_l + w * 0.27, mx_l + w * 0.73     # البيضوي الداخلي
+    crown_in = mx_t + h * 0.13
+
+    # --- على الصورة: المناطق والبيضويات والخطوط ---
+    d.rectangle([mx_l, mx_t, mx_l + w, crown_y], fill=(225, 38, 38, 42))
+    for hx in range(mx_l - int(h * 0.08), mx_l + w, 13):
+        d.line([(hx, crown_y), (hx + (crown_y - mx_t), mx_t)], fill=(225, 38, 38, 66), width=1)
+    d.rectangle([mx_l, mx_t + h * (GUIDE_EYE - 0.04), mx_l + w, mx_t + h * (GUIDE_EYE + 0.04)],
+                fill=(90, 160, 235, 40))
+    for x in (ox0, ox1):
+        d.line([(x, mx_t), (x, mx_t + h)], fill=blue + (170,), width=1)
+    d.ellipse([ox0, crown_y, ox1, chin_y], outline=red + (255,), width=3)
+    steps = 90
+    for i in range(steps):
+        if i % 2 == 0:
+            d.arc([ix0, crown_in, ix1, chin_y], start=i / steps * 360,
+                  end=(i + 1) / steps * 360, fill=red + (225,), width=2)
+    d.line([(mx_l + w / 2, mx_t), (mx_l + w / 2, mx_t + h)], fill=yellow + (255,), width=2)
+    d.line([(mx_l, eye_y), (mx_l + w, eye_y)], fill=yellow + (170,), width=1)
+    d.line([(mx_l, chin_y), (mx_l + w, chin_y)], fill=green + (200,), width=1)
+    cx = mx_l + w / 2
+    d.polygon([(cx - 7, crown_y - 9), (cx + 7, crown_y - 9), (cx, crown_y)], fill=yellow + (255,))
+    d.rectangle([mx_l, mx_t, mx_l + w, mx_t + h], outline=(150, 150, 150), width=1)
+
+    # --- أسهم الأبعاد في الهوامش (خضراء، كالقوالب المعتمدة) ---
+    def varrow(x, y0, y1):
+        d.line([(x, y0), (x, y1)], fill=green, width=2)
+        d.polygon([(x - 5, y0 + 8), (x + 5, y0 + 8), (x, y0)], fill=green)
+        d.polygon([(x - 5, y1 - 8), (x + 5, y1 - 8), (x, y1)], fill=green)
+
+    def harrow(y, x0, x1):
+        d.line([(x0, y), (x1, y)], fill=green, width=2)
+        d.polygon([(x0 + 8, y - 5), (x0 + 8, y + 5), (x0, y)], fill=green)
+        d.polygon([(x1 - 8, y - 5), (x1 - 8, y + 5), (x1, y)], fill=green)
+
+    # الارتفاع الكلي — يسار
+    varrow(mx_l - 12, mx_t, mx_t + h)
+    _vlabel(canvas, f"{total_h_mm:.1f} mm", (mx_l - 34, int(mx_t + h * 0.40)), green + (255,), f_big)
+    # العرض الكلي — أسفل
+    harrow(mx_t + h + 14, mx_l, mx_l + w)
+    d.text((mx_l + w / 2 - 26, mx_t + h + 22), f"{total_w_mm:.1f} mm",
+           font=_font(f_big), fill=green)
+    # موضع الذقن من الأعلى — يمين قريب
+    chin_mm = total_h_mm * GUIDE_CHIN
+    varrow(mx_l + w + 12, mx_t, chin_y)
+    _vlabel(canvas, f"{chin_mm:.1f} mm ({chin_mm * 0.914:.1f}-{chin_mm * 1.086:.1f})",
+            (mx_l + w + 16, int(mx_t + h * 0.26)), green + (255,), f_small)
+    # بعد العينين عن الأسفل — يمين بعيد
+    eye_mm = total_h_mm * (1 - GUIDE_EYE)
+    varrow(mx_l + w + int(mx_r * 0.52), eye_y, mx_t + h)
+    _vlabel(canvas, f"{eye_mm:.1f} mm ({eye_mm * 0.90:.1f}-{eye_mm * 1.10:.1f})",
+            (mx_l + w + int(mx_r * 0.52) + 5, int(mx_t + h * 0.62)), green + (255,), f_small)
+    return canvas
+
+
+def save_jpg(img: Image.Image, path: str, target_kb: float = 0, dpi: int = DPI) -> str:
+    """Write an atomic, quality-100, 4:4:4 JPEG at the requested print DPI."""
+    dpi = int(dpi)
+    if dpi <= 0:
+        raise ValueError("JPEG DPI must be positive")
+    temp_path = path + ".part"
+    try:
+        def _write(quality):
+            # optimize=True only changes Huffman tables, never visual quality,
+            # but can fail in Pillow/libjpeg for high-detail portraits. Avoid
+            # it so a maximum-quality export is reliable on every image.
+            img.save(temp_path, "JPEG", quality=quality, subsampling=0,
+                     dpi=(dpi, dpi), optimize=False, progressive=False)
+
+        if target_kb and target_kb > 0:
+            limit = float(target_kb) * 1024
+            quality = 100
+            while True:
+                _write(quality)
+                if os.path.getsize(temp_path) <= limit or quality <= 35:
+                    break
+                quality = max(35, quality - 5)
+        else:
+            _write(100)
+        os.replace(temp_path, path)
+        return path
+    except Exception:
+        logger.exception("Could not write output image: %s", path)
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+        raise
+
+
+def build_sheet(tile: Image.Image, sheet_cfg, dpi: int = SHEET_DPI) -> Image.Image:
+    """
+    تجميع النسخ على ورقة طباعة بقياس حقيقي:
+    توزيع متوازن — فراغات متساوية بين الصور وعند الحواف —
+    وخطوط قص رمادية تمتد من طرف الورقة إلى طرفها لتسهيل القص الدقيق.
+
+    إعدادات الورقة محفوظة بوحدة بكسل عند 300 DPI. نكبر الورقة والبلاط معاً
+    عند 600 DPI، لذلك تظل ورقة 10×15 أو 15×20 سم ومقاس كل صورة ثابتين
+    في الطباعة، مع بكسلات أكثر بكثير للحفاظ على تفاصيل الوجه.
+    """
+    dpi = int(dpi)
+    if dpi <= 0:
+        raise ValueError("Sheet DPI must be positive")
+    scale = dpi / DPI
+    (base_sheet_w, base_sheet_h), cols, rows = sheet_cfg
+    sheet_w, sheet_h = round(base_sheet_w * scale), round(base_sheet_h * scale)
+    tw, th = tile.size
+    if cols * tw > sheet_w or rows * th > sheet_h:
+        raise gr.Error(
+            "مقاس الصورة المختار لا يتسع في ورقة الطباعة هذه. "
+            "اختر ورقة أكبر أو قلّل المقاس المخصص."
+        )
+    gap_x = (sheet_w - cols * tw) / (cols + 1)
+    gap_y = (sheet_h - rows * th) / (rows + 1)
+    xs = [round((i + 1) * gap_x + i * tw) for i in range(cols)]
+    ys = [round((j + 1) * gap_y + j * th) for j in range(rows)]
+    sheet = Image.new("RGB", (sheet_w, sheet_h), (255, 255, 255))
+    for y in ys:
+        for x in xs:
+            sheet.paste(tile, (x, y))
+    draw = ImageDraw.Draw(sheet)
+    line = (176, 176, 176)
+    line_width = max(1, round(scale))
+    for x in xs:  # خطوط عمودية بطول الورقة كاملاً عند حدَّي كل صورة
+        draw.line([(x, 0), (x, sheet_h)], fill=line, width=line_width)
+        draw.line([(x + tw - 1, 0), (x + tw - 1, sheet_h)], fill=line, width=line_width)
+    for y in ys:  # خطوط أفقية بعرض الورقة كاملاً
+        draw.line([(0, y), (sheet_w, y)], fill=line, width=line_width)
+        draw.line([(0, y + th - 1), (sheet_w, y + th - 1)], fill=line, width=line_width)
+    return sheet
+
+
+# ----------------------------- أحداث الواجهة -----------------------------
+
+PREVIEW_ARGS = ("angle", "zoom", "pan_x", "pan_y", "size_label", "custom_w",
+                "custom_h", "color_label", "custom_color", "guides", "brightness",
+                "contrast", "saturation", "sharpness", "shadows", "highlights",
+                "temperature")
+
+
+_mtcnn_detector = None
+_MTCNN_LOCK = threading.RLock()
+
+
+def _get_mtcnn():
+    global _mtcnn_detector
+    if _mtcnn_detector is None:
+        from mtcnnruntime import MTCNN
+        _mtcnn_detector = MTCNN()
+    return _mtcnn_detector
+
+
+def compute_auto_init(matting_bgra, width, height):
+    """
+    استخراج ضبط ابتدائي للوضع اليدوي يطابق تأطير القص التلقائي:
+    يُحاكي نافذة adjust_photo (نفس الحسابات والخطوة الثانية وخطوة الإزاحة)
+    على نسخة إزالة الخلفية مع مستطيل الوجه من MTCNN، ثم يحوّل النافذة إلى
+    (تكبير، إزاحة أفقية، إزاحة عمودية) لمنزلقات الوضع اليدوي.
+    يعيد None عند عدم كشف وجه واحد واضح.
+    """
+    import math
+    try:
+        rgb = np.array(composite_bg(matting_bgra, (255, 255, 255)))
+        # The detector instance is cached for speed. Serialize access because
+        # this callback can arrive concurrently from a browser and folder watch.
+        with _MTCNN_LOCK:
+            faces, _lm = _get_mtcnn().detect(rgb)
+        if faces is None or len(faces) == 0:
+            return None
+        # عند تعدد الوجوه (صورة جماعية) نوسّط على الأكبر — نقطة بداية يحرّكها المستخدم
+        faces = sorted(faces, key=lambda f: (f[2] - f[0]) * (f[3] - f[1]), reverse=True)
+        n_faces = len(faces)
+        fx1, fy1, fx2, fy2 = [float(v) for v in faces[0][:4]]
+        x, y, w, h = fx1, fy1, fx2 - fx1, fy2 - fy1
+        mh, mw = matting_bgra.shape[:2]
+        face_center = (x + w / 2, y + h / 2)
+        crop_measure = (w * h) / CROP_PARAMS["head_measure_ratio"]
+        rrs = math.sqrt(crop_measure / (height * width))
+        crop_size = (int(height * rrs), int(width * rrs))
+        x1 = int(face_center[0] - crop_size[1] / 2)
+        y1 = int(face_center[1] - crop_size[0] * CROP_PARAMS["head_height_ratio"])
+        x2, y2 = x1 + crop_size[1], y1 + crop_size[0]
+        cut = IDphotos_cut(x1, y1, x2, y2, matting_bgra)
+        cut = cv2.resize(cut, (crop_size[1], crop_size[0]))
+        y_top, _yb, x_left, x_right = get_box(cut.astype(np.uint8), model=2,
+                                              correction_factor=0)
+        if x_left > 0 or x_right > 0:
+            cut_value_top = int(((x_left + x_right) * (height / width)) / 2)
+        else:
+            cut_value_top = 0
+        status_top, move_value = detect_distance(
+            y_top - cut_value_top, crop_size[0],
+            max=CROP_PARAMS["head_top_range"][0], min=CROP_PARAMS["head_top_range"][1])
+        X1 = x1 + x_left
+        Y1 = y1 + cut_value_top + status_top * move_value
+        X2 = x2 - x_right
+        Y2 = y2 - cut_value_top + status_top * move_value
+        win_img = IDphotos_cut(X1, Y1, X2, Y2, matting_bgra)
+        _moved, y_high = move(win_img.astype(np.uint8))
+        Y1 -= y_high
+        Y2 -= y_high
+        win_w, win_h = X2 - X1, Y2 - Y1
+        if win_w <= 10 or win_h <= 10:
+            return None
+        s_total = width / win_w
+        base = max(width / mw, height / mh)
+        zoom = max(0.2, min(5.0, s_total / base))
+        ex = mw * s_total - width
+        ey = mh * s_total - height
+        fx = (X1 * s_total) / ex if ex > 1 else 0.5
+        fy = (Y1 * s_total) / ey if ey > 1 else 0.5
+        pan_x = max(-100.0, min(100.0, (fx - 0.5) * 200))
+        pan_y = max(-100.0, min(100.0, (fy - 0.5) * 200))
+        return float(zoom), float(pan_x), float(pan_y), n_faces
+    except Exception:
+        return None
+
+
+def on_upload(img, mode, *preview_vals):
+    """عند رفع صورة: إزالة الخلفية مرة واحدة + بناء نسخة HQ + توسيط الوجه تلقائياً للوضع اليدوي."""
+    skip = gr.skip()
+    if img is None:
+        return None, None, "", skip, skip, skip
+    try:
+        bgr = normalize_input(img)
+        _resized = _pop_input_resized()
+        resized_note = ""
+        if _resized:
+            resized_note = (f" 🗜 الصورة كبيرة ({_resized[0]}×{_resized[1]}) — "
+                            f"خُفّضت تلقائياً إلى {_resized[2]}×{_resized[3]} "
+                            "لتناسب المعالجة الآمنة، دون أي تأثير على جودة النتيجة.")
+        # IDCreator stores its active Context on itself. Keep the complete call
+        # exclusive so two arrivals cannot overwrite each other's context.
+        with _CREATOR_LOCK:
+            creator = get_creator()
+            result = creator(bgr, change_bg_only=True)
+        state = {"matting": result.standard,
+                 "matting_hq": build_virtual_bgra(bgr, result.standard),
+                 "init": None}
+        height, width = resolve_size(preview_vals[4], preview_vals[5], preview_vals[6])
+        _init = compute_auto_init(result.standard, width, height)
+        state["init"] = _init[:3] if _init else None
+        state["init_faces"] = _init[3] if _init else 0
+    except gr.Error as e:
+        return None, None, getattr(e, "message", None) or str(e), skip, skip, skip
+    except Exception as e:
+        logger.exception("Image upload preparation failed")
+        return None, None, f"تعذّر تجهيز الصورة. راجع logs/studio.log للتفاصيل ({type(e).__name__}).", skip, skip, skip
+    init = state["init"]
+    vals = list(preview_vals)
+    if init is not None:
+        vals[1], vals[2], vals[3] = init
+    preview = manual_preview(state, *vals) if mode == MODES[1] else None
+    hq_note = " بدقة عالية كاملة" if state["matting_hq"] is not None else ""
+    if init is not None:
+        if state.get("init_faces", 1) > 1:
+            status = (f"تم تجهيز الصورة{hq_note}{resized_note} ✓ ووُسّطت على أكبر وجه ظاهر — "
+                      "حرّك الإطار بالمنزلقات نحو الشخص المقصود إن كان غيره، أو اصنع مباشرة.")
+        else:
+            status = (f"تم تجهيز الصورة{hq_note}{resized_note} ✓ ووُسّط الوجه تلقائياً كما في القص الذكي — "
+                      "في الوضع اليدوي حرّك قليلاً يميناً أو يساراً أو ارفع وأنزل إن أردت، أو اصنع مباشرة.")
+        return state, preview, status, init[0], init[1], init[2]
+    status = (f"تم تجهيز الصورة{hq_note}{resized_note} ✓ — لم يُكتشف وجه واحد واضح للتوسيط التلقائي "
+              "(صورة جماعية أو وجه غير واضح)، اضبط القص يدوياً بالمنزلقات.")
+    return state, preview, status, skip, skip, skip
+
+
+def manual_preview(state, angle, zoom, pan_x, pan_y, size_label, custom_w, custom_h,
+                   color_label, custom_color, guides, brightness, contrast,
+                   saturation, sharpness, shadows, highlights, temperature):
+    """المعاينة تعمل على النسخة المصغّرة (سريعة) — النتيجة النهائية تُبنى بدقة كاملة."""
+    if not state or "matting" not in state:
+        return None
+    try:
+        height, width = resolve_size(size_label, custom_w, custom_h)
+        rgb = resolve_color(color_label, custom_color)
+        img = render_manual(state["matting"], angle, zoom, pan_x, pan_y, width, height, rgb)
+        img = apply_color_adjustments(img, brightness, contrast, saturation,
+                                      sharpness, shadows, highlights, temperature)
+        if guides:
+            img = draw_guides(img)
+        return np.array(img)
+    except Exception:
+        logger.exception("Manual preview rendering failed")
+        return None
+
+
+def _make_id_photo_impl(img, state, mode, size_label, custom_w_mm, custom_h_mm,
+                  color_label, custom_color, sheet_label, align_face, target_kb,
+                  angle, zoom, pan_x, pan_y,
+                  brightness, contrast, saturation, sharpness,
+                  shadows, highlights, temperature):
+    height, width = resolve_size(size_label, custom_w_mm, custom_h_mm)
+    rgb = resolve_color(color_label, custom_color)
+    adj = dict(brightness=brightness, contrast=contrast, saturation=saturation,
+               sharpness=sharpness, shadows=shadows, highlights=highlights,
+               temperature=temperature)
+    hq_used = False
+    small_src = False
+    sheet_cfg = SHEETS.get(sheet_label)
+    print_w, print_h = width * SHEET_SCALE, height * SHEET_SCALE
+    print_img = None
+
+    if mode == MODES[1]:
+        # ---------- الوضع اليدوي ----------
+        if not state or "matting" not in state:
+            raise gr.Error("ارفع الصورة أولاً وانتظر رسالة «تم تجهيز الصورة» — الضبط اليدوي يعمل على الصورة المجهّزة.")
+        _hq = state.get("matting_hq")
+        source = _hq if _hq is not None else state["matting"]
+        hq_used = _hq is not None
+        std_img = render_manual(source, angle, zoom, pan_x, pan_y, width, height, rgb)
+        hd_w, hd_h = round(width * HD_FACTOR), round(height * HD_FACTOR)
+        hd_img = render_manual(source, angle, zoom, pan_x, pan_y, hd_w, hd_h, rgb)
+        if sheet_cfg is not None:
+            print_img = render_manual(source, angle, zoom, pan_x, pan_y,
+                                      print_w, print_h, rgb)
+    else:
+        # ---------- الوضع التلقائي ----------
+        if img is None:
+            raise gr.Error("ارفع صورة أولاً — اضغط على مربع الصورة واختر صورة من جهازك.")
+        bgr = normalize_input(img)
+        with _CREATOR_LOCK:
+            creator = get_creator()
+            try:
+                result = creator(bgr, size=(height, width), face_alignment=bool(align_face), **CROP_PARAMS)
+            except FaceError as e:
+                n = getattr(e, "face_num", 0)
+                if n == 0:
+                    raise gr.Error("لم يظهر أي وجه في الصورة. جرّب صورة أوضح، يكون فيها الوجه من الأمام ومضاءً جيداً — أو بدّل إلى الوضع اليدوي واضبط القص بنفسك.")
+                raise gr.Error(f"الصورة تحتوي {n} وجوه — صورة الهوية يجب أن تحتوي وجهاً واحداً فقط. اختر صورة فيها شخص واحد.")
+            except Exception as e:
+                logger.exception("Automatic ID photo processing failed")
+                if isinstance(state, dict) and state.get("init_faces", 1) == 0:
+                    raise gr.Error("لم يظهر أي وجه في الصورة. جرّب صورة أوضح، يكون فيها الوجه من الأمام ومضاءً جيداً — أو بدّل إلى الوضع اليدوي واضبط القص بنفسك.")
+                raise gr.Error(f"تعذّرت معالجة الصورة. راجع ملف logs/studio.log للتفاصيل. ({type(e).__name__})")
+            try:
+                import math as _math
+                _rect = creator.ctx.face["rectangle"]
+                _rrs = _math.sqrt((_rect[2] * _rect[3] / CROP_PARAMS["head_measure_ratio"]) / (height * width))
+                small_src = int(width * _rrs) < width
+            except Exception:
+                small_src = False
+            crop_hq = hq_rerender(bgr, creator, (height, width), bool(align_face))
+        if crop_hq is not None:
+            hq_used = True
+            std_img = finalize_from_crop(crop_hq, width, height, rgb)
+            hd_img = finalize_from_crop(crop_hq, round(width * HD_FACTOR),
+                                        round(height * HD_FACTOR), rgb)
+            if sheet_cfg is not None:
+                print_img = finalize_from_crop(crop_hq, print_w, print_h, rgb)
+        else:
+            hd_img = composite_bg(result.hd, rgb)
+            std_img = (hd_img.resize((width, height), Image.LANCZOS)
+                       if hd_img.size != (width, height)
+                       else composite_bg(result.standard, rgb))
+            if sheet_cfg is not None:
+                # Even with a small source, use the HD result rather than
+                # re-enlarging the lower-detail standard 300-DPI image.
+                print_img = (hd_img.resize((print_w, print_h), Image.LANCZOS)
+                             if hd_img.size != (print_w, print_h) else hd_img.copy())
+
+    std_img = mild_sharpen(apply_color_adjustments(std_img, **adj))
+    hd_img = mild_sharpen(apply_color_adjustments(hd_img, **adj))
+    if print_img is not None:
+        print_img = mild_sharpen(apply_color_adjustments(print_img, **adj))
+
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f") + "_" + uuid.uuid4().hex[:6]
+    files = []
+    std_path = save_jpg(std_img, os.path.join(OUT_DIR, f"photo_{stamp}.jpg"), target_kb or 0)
+    hd_path = save_jpg(hd_img, os.path.join(OUT_DIR, f"photo_{stamp}_hd.jpg"), 0,
+                       dpi=HD_DPI)
+    files.extend((std_path, hd_path))
+
+    sheet_path = None
+    if sheet_cfg is not None:
+        sheet = build_sheet(print_img, sheet_cfg, dpi=SHEET_DPI)
+        sheet_path = save_jpg(sheet, os.path.join(OUT_DIR, f"sheet_{stamp}.jpg"), 0,
+                              dpi=SHEET_DPI)
+        files.append(sheet_path)
+
+    if mode == MODES[1] and state and "matting" in state:
+        _src = state.get("matting_hq")
+        _src = _src if _src is not None else state["matting"]
+        _sh, _sw = _src.shape[:2]
+        _base = max(width / _sw, height / _sh)
+        small_src = (width / (_base * max(float(zoom), 0.01))) < width
+    _notes = []
+    if target_kb and target_kb > 0:
+        actual_kb = os.path.getsize(files[0]) / 1024.0
+        if actual_kb <= float(target_kb):
+            _notes.append(f"حجم الملف القياسي {actual_kb:.1f} KB (الهدف {int(target_kb)} KB)")
+        else:
+            _notes.append(f"أصغر حجم أمكن الوصول إليه {actual_kb:.1f} KB، وهو أعلى من الهدف {int(target_kb)} KB؛ لا يمكن ضغط هذه الصورة أكثر دون فقد ملحوظ للتفاصيل")
+    _active = [nm for nm, off in (("السطوع", adj["brightness"] != 1.0), ("التباين", adj["contrast"] != 1.0),
+                                  ("التشبع", adj["saturation"] != 1.0), ("الحدة", adj["sharpness"] != 1.0),
+                                  ("الظلال", bool(adj["shadows"])), ("الإبرازات", bool(adj["highlights"])),
+                                  ("حرارة اللون", bool(adj["temperature"]))) if off]
+    if _active:
+        _notes.append("تعديلات ألوان مفعّلة (" + "، ".join(_active) + ") — هي وحدها ما يغيّر الألوان عن الأصل؛ للإلغاء اضغط «إعادة ضبط الألوان»")
+    if small_src:
+        _notes.append("الصورة الأصلية صغيرة أو الوجه بعيد فيها — النتيجة مكبّرة رقمياً وقد تبدو أقل حدة عند التكبير الشديد؛ صورة أقرب وأكبر تعطي نتيجة أفضل")
+    mode_name = "يدوي" if mode == MODES[1] else "تلقائي"
+    quality_note = " بمسار الجودة العالية من الأصلية كاملة الدقة" if hq_used else ""
+    status = (
+        f"تم بنجاح ✓ ({mode_name}{quality_note}) — صورة {width}×{height} بكسل (300 DPI) بخلفية "
+        f"#{rgb[0]:02X}{rgb[1]:02X}{rgb[2]:02X} وبصيغة JPG عالية الجودة. "
+        f"حُفظت الملفات في مجلد outputs ويمكنك تنزيلها أو طباعتها من الأسفل."
+    )
+    if sheet_path:
+        status += (f" ورقة الطباعة JPEG بدقة {SHEET_DPI} DPI (4:4:4، جودة 100)؛ "
+                   "يبقى مقاسها الحقيقي كما هو عند الطباعة.")
+    if _notes:
+        status += " | تنبيه: " + "؛ ".join(_notes) + "."
+    # Pass exact JPEG paths to Gradio rather than numpy arrays. This prevents
+    # Gradio's default WebP preview cache from replacing what the user sees or
+    # downloads from the image card.
+    return std_path, hd_path, sheet_path, files, status
+
+
+def make_id_photo(*args, **kwargs):
+    """Gradio-facing wrapper: log unexpected failures and keep the UI message actionable."""
+    try:
+        return _make_id_photo_impl(*args, **kwargs)
+    except gr.Error:
+        raise
+    except Exception as exc:
+        logger.exception("Unexpected ID photo creation error")
+        raise gr.Error(
+            "تعذّر إنشاء صورة الهوية بسبب خطأ داخلي. لم تُحذف صورتك الأصلية؛ "
+            "راجع logs/studio.log لمعرفة التفاصيل."
+        ) from exc
+
+
+# ----------------------------- الطباعة -----------------------------
+# دالتان منفصلتان (واحدة للصورة وواحدة للورقة المقسمة) — بلا أي مكوّنات حالة
+# وسيطة، حتى تصل الوسائط مرتبة تماماً كما هي معرّفة.
+
+_PRINT_BODY = """
+  if (!files || !files.length) { alert('اصنع الصورة أولاً، ثم اطبعها'); return; }
+  const nm = f => ((f && (f.name || f.path || f.url)) || '');
+  let pick = files.filter(FILTER_EXPR).pop();
+  const f = pick || files[files.length - 1];
+  const url = (f && f.url) || (f && f.path ? '/file=' + encodeURI(f.path) : null);
+  if (!url) { alert('تعذّر العثور على الملف للطباعة'); return; }
+  let css = '';
+  CSS_EXPR
+  const w = window.open('', '_blank', 'width=900,height=700');
+  if (!w) { alert('اسمح بالنوافذ المنبثقة لهذا البرنامج ثم أعد الطباعة.'); return; }
+  w.document.open();
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>طباعة</title></head><body></body></html>');
+  w.document.close();
+  const style = w.document.createElement('style');
+  style.textContent = css;
+  w.document.head.appendChild(style);
+  const image = w.document.createElement('img');
+  image.alt = 'صورة الهوية للطباعة';
+  image.onload = () => w.setTimeout(() => { w.focus(); w.print(); }, 300);
+  image.onerror = () => { w.document.body.textContent = 'تعذّر تحميل ملف الصورة للطباعة. أغلق النافذة وأعد المحاولة.'; };
+  image.src = url;
+  w.document.body.appendChild(image);
+"""
+
+_SHEET_CSS = """
+  const size = sheetLabel.includes('15 × 20') ? '20.32cm 15.24cm' : '15.24cm 10.16cm';
+  css = '@page { size: ' + size + '; margin: 0; } html, body { margin: 0; padding: 0; } img { width: 100%; height: 100%; display: block; }';
+"""
+
+_PHOTO_CSS = """
+  const presets = {'3.5 × 4.5': 35, '2.5 × 3.5': 25, '3.5 × 4.9': 35, '5 × 5': 50};
+  let wmm = 35;
+  for (const k in presets) { if (sizeLabel.includes(k)) { wmm = presets[k]; break; } }
+  if (sizeLabel.includes('مخصص')) wmm = parseFloat(cwMm) || 35;
+  css = '@page { margin: 5mm; } body { margin: 0; } img { width: ' + wmm + 'mm; display: block; }';
+"""
+
+
+# ===================== الاستوديو: مراقبة المجلد + طباعة مباشرة =====================
+
+
+def _sec_label(title, opened):
+    return ("▼ " if opened else "◀ ") + title
+
+
+def clean_folder(p):
+    """تنظيف مسار مجلد منسوخ من ويندوز (نسخ كمسار يضيف علامتي تنصيص)."""
+    if not p:
+        return ""
+    return str(p).strip().strip('"').strip().strip("'")
+
+
+# ===================== قاعدة بيانات الاستوديو (دائمة) =====================
+# سجلّ SQLite داخل مجلد البرنامج: كل صورة واصلة تُعرَّف ببصمة محتواها (SHA-256)
+# لا باسمها — فالصورة نفسها تُعرَف ولو تغيّر اسمها أو مجلدها، وحالتها
+# (وصلت/صُنعت/طُبعت وعدد مرات الطباعة) تعيش عبر الجلسات وإعادات التشغيل.
+import hashlib
+import sqlite3
+
+DB_FILE = os.path.join(BASE_DIR, "studio.db")
+
+
+def _fingerprint(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _db_connect():
+    con = sqlite3.connect(DB_FILE, timeout=15)
+    try:
+        con.execute("PRAGMA busy_timeout=15000")
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("""CREATE TABLE IF NOT EXISTS photos(
+            fp TEXT PRIMARY KEY,
+            name TEXT, src_path TEXT, local_path TEXT,
+            arrived_at TEXT, made INTEGER DEFAULT 0,
+            printed INTEGER DEFAULT 0, print_count INTEGER DEFAULT 0,
+            last_printed_at TEXT)""")
+        return con
+    except Exception:
+        con.close()
+        raise
+
+
+def _row_to_dict(r):
+    return {"fp": r[0], "name": r[1], "src": r[2], "path": r[3],
+            "time": (r[4] or "")[11:16], "made": bool(r[5]),
+            "printed": bool(r[6]), "print_count": r[7],
+            "last_printed": (r[8] or "")[11:16]}
+
+
+def db_delete_photo(fp):
+    """
+    حذف سجل صورة من القائمة نهائياً + تذكّر بصمتها كي لا يعيدها المراقب
+    من مجلد الكاميرا. ملف الصورة الأصلي في المجلد لا يُمسّ أبداً.
+    """
+    con = _db_connect()
+    try:
+        con.execute("CREATE TABLE IF NOT EXISTS ignored(fp TEXT PRIMARY KEY, at TEXT)")
+        con.execute("DELETE FROM photos WHERE fp = ?", (fp,))
+        con.execute("INSERT OR REPLACE INTO ignored(fp, at) VALUES(?, ?)",
+                    (fp, datetime.datetime.now().isoformat(timespec="seconds")))
+        con.commit()
+    finally:
+        con.close()
+
+
+def db_ignored_fps():
+    con = None
+    try:
+        con = _db_connect()
+        con.execute("CREATE TABLE IF NOT EXISTS ignored(fp TEXT PRIMARY KEY, at TEXT)")
+        rows = con.execute("SELECT fp FROM ignored").fetchall()
+        return {r[0] for r in rows}
+    except Exception:
+        logger.exception("Could not read ignored photo fingerprints")
+        return set()
+    finally:
+        if con is not None:
+            con.close()
+
+
+def db_unignore(fp):
+    """إلغاء تجاهل بصمة واحدة (رجعت صورتها بعد غياب — تُعامل كوافد جديد)."""
+    con = _db_connect()
+    try:
+        con.execute("CREATE TABLE IF NOT EXISTS ignored(fp TEXT PRIMARY KEY, at TEXT)")
+        con.execute("DELETE FROM ignored WHERE fp=?", (fp,))
+        con.commit()
+    finally:
+        con.close()
+
+
+def db_clear_ignored():
+    """إلغاء تجاهل كل الصور المحذوفة من القائمة — يعيد عددها."""
+    con = _db_connect()
+    try:
+        con.execute("CREATE TABLE IF NOT EXISTS ignored(fp TEXT PRIMARY KEY, at TEXT)")
+        n = con.execute("SELECT COUNT(*) FROM ignored").fetchone()[0]
+        con.execute("DELETE FROM ignored")
+        con.commit()
+        return n
+    finally:
+        con.close()
+
+
+def db_photo_fingerprints():
+    """Return every known fingerprint, not just the latest visible history rows."""
+    con = _db_connect()
+    try:
+        return {row[0] for row in con.execute("SELECT fp FROM photos").fetchall()}
+    finally:
+        con.close()
+
+
+def db_list(limit=60):
+    """أحدث الصور المسجلة (الأحدث أولاً) كقواميس جاهزة للعرض."""
+    con = None
+    try:
+        con = _db_connect()
+        rows = con.execute(
+            "SELECT fp, name, src_path, local_path, arrived_at, made, "
+            "printed, print_count, last_printed_at FROM photos "
+            "ORDER BY arrived_at DESC, rowid DESC LIMIT ?", (limit,)).fetchall()
+        return [_row_to_dict(r) for r in rows]
+    except Exception:
+        logger.exception("Could not read photo history from studio.db")
+        return []
+    finally:
+        if con is not None:
+            con.close()
+
+
+def db_register(fp, name, src_path, local_path):
+    """
+    تسجيل وصول صورة: إن كانت بصمتها جديدة أُنشئ سجلّها (created=True)،
+    وإن كانت معروفة حُدّث اسمها ووقت وصولها ومسارها — بلا أي تكرار.
+    """
+    now = datetime.datetime.now().isoformat(timespec="seconds")
+    con = _db_connect()
+    try:
+        cur = con.execute("SELECT fp FROM photos WHERE fp = ?", (fp,))
+        created = cur.fetchone() is None
+        if created:
+            con.execute("INSERT INTO photos(fp, name, src_path, local_path, "
+                        "arrived_at) VALUES(?,?,?,?,?)",
+                        (fp, name, src_path, local_path, now))
+        else:
+            con.execute("UPDATE photos SET name = ?, src_path = ?, local_path = ?, "
+                        "arrived_at = ? WHERE fp = ?",
+                        (name, src_path, local_path, now, fp))
+        con.commit()
+        r = con.execute("SELECT fp, name, src_path, local_path, arrived_at, "
+                        "made, printed, print_count, last_printed_at "
+                        "FROM photos WHERE fp = ?", (fp,)).fetchone()
+        if r is None:
+            raise RuntimeError("The photo record could not be read after saving")
+        return _row_to_dict(r), created
+    finally:
+        con.close()
+
+
+def db_mark(fp, made=None, printed=False):
+    """Update processing and print-spool submission state (not physical paper confirmation)."""
+    con = _db_connect()
+    try:
+        if made is not None:
+            con.execute("UPDATE photos SET made = ? WHERE fp = ?",
+                        (1 if made else 0, fp))
+        if printed:
+            now = datetime.datetime.now().isoformat(timespec="seconds")
+            con.execute("UPDATE photos SET printed = 1, "
+                        "print_count = print_count + 1, last_printed_at = ? "
+                        "WHERE fp = ?", (now, fp))
+        con.commit()
+    finally:
+        con.close()
+
+
+def db_mark_by_local(local_path):
+    """ربط طباعة مباشرة بصورتها في السجل عبر مسار النسخة المحلية."""
+    con = None
+    try:
+        con = _db_connect()
+        r = con.execute("SELECT fp FROM photos WHERE local_path = ?",
+                        (local_path,)).fetchone()
+        if r:
+            now = datetime.datetime.now().isoformat(timespec="seconds")
+            con.execute("UPDATE photos SET printed = 1, "
+                        "print_count = print_count + 1, last_printed_at = ? "
+                        "WHERE fp = ?", (now, r[0]))
+            con.commit()
+            return True
+    except Exception:
+        logger.exception("Could not update print status for %s", local_path)
+    finally:
+        if con is not None:
+            con.close()
+    return False
+
+
+def render_dynamic(pd):
+    """بناء تحديثات الإشعارات وقائمة الصور من الحالة (قيم فقط — بلا مكوّنات)."""
+    pd = pd or {"photos": [], "notifs": []}
+    photos, notifs = pd.get("photos", []), pd.get("notifs", [])
+    by_fp = {p["fp"]: p for p in photos}
+    out = [pd]
+    for i in range(NOTIF_SLOTS):
+        if i < len(notifs):
+            n = notifs[i]
+            rec = by_fp.get(n["pid"])
+            nm = rec["name"] if rec else "صورة"
+            tm = rec["time"] if rec else ""
+            kind = n.get("kind", "new")
+            if kind == "again_printed" and rec:
+                txt = (f"⚠ **تنبيه: صورة سبق إرسالها للطباعة وصلت مجدداً** — {nm}  \n"
+                       f"🕒 وصلت {tm} · أُرسلت للطباعة {rec['print_count']} مرة "
+                       f"(آخرها {rec['last_printed']})")
+            elif kind == "again_unprinted":
+                txt = (f"📸 **وصلت مجدداً** — {nm}  \n"
+                       f"🕒 {tm} · موجودة في قائمتك ولم تُرسل للطباعة بعد")
+            else:
+                txt = f"📸 **صورة جديدة وصلت** — {nm}  \n🕒 {tm}"
+            out += [gr.update(visible=True), gr.update(value=txt)]
+        else:
+            out += [gr.update(visible=False), gr.update(value="")]
+    for j in range(LIST_ROWS):
+        if j < len(photos):
+            p = photos[j]
+            if p.get("printed"):
+                chip = (f"🟢 **أُرسلت للطباعة** (×{p['print_count']} — "
+                        f"آخرها {p['last_printed']})")
+            else:
+                chip = "🔴 **لم تُرسل للطباعة بعد**"
+            out += [gr.update(visible=True),
+                    gr.update(value=f"**{p['name']}** — 🕒 {p['time']} — {chip}")]
+        else:
+            out += [gr.update(visible=False), gr.update(value="")]
+    return tuple(out)
+
+
+def _file_complete(path):
+    """
+    اكتمال ملف صورة: خاتمة صحيحة، أو فكّ ترميز كامل ناجح.
+    المسار السريع: JPEG ينتهي بعلامة FFD9 (تقبل حشوة بيضاء/صفريّة بعدها)
+    وPNG بمقطع IEND. وإن فشل، فكٌّ كامل بـ PIL: صور سليمة ببايتات زائدة
+    بعد الخاتمة (تصدير هواتف وبرامج تحرير) كانت ترفضها الخاتمة الصارمة
+    فتبقى معلّقة إلى الأبد ولا تظهر أبداً — والآن تُقبل ما دامت تُفكّ.
+    استقرار الحجم عبر نبضتين شرط مستقلّ في المراقب قبل أي معالجة.
+    """
+    try:
+        with open(path, "rb") as f:
+            head = f.read(8)
+            f.seek(0, os.SEEK_END)
+            n = f.tell()
+            if n > MAX_UPLOAD_BYTES:
+                return False
+            f.seek(max(0, n - 65536))
+            tail = f.read()
+    except OSError:
+        return False
+    if head[:3] == b"\xff\xd8\xff":  # JPEG (ويشمل JFIF)
+        idx = tail.rfind(b"\xff\xd9")
+        if idx >= 0 and not tail[idx + 2:].strip(b"\x00\r\n\t "):
+            return True
+    elif head[:8] == b"\x89PNG\r\n\x1a\n":
+        if b"IEND" in tail[-32:]:
+            return True
+    try:
+        with Image.open(path) as im:
+            im.load()
+        return True
+    except Exception:
+        return False
+
+
+def _incoming_image_limit_message(path):
+    """Return a user-facing limit message, or None when the file is acceptable/unknown."""
+    try:
+        file_bytes = os.path.getsize(path)
+        if file_bytes > MAX_UPLOAD_BYTES:
+            return (
+                f"حجم الملف أكبر من الحد الآمن ({MAX_UPLOAD_BYTES // (1024 * 1024)} MB). "
+                "صدّر نسخة JPEG أصغر ثم أعد التقاطها أو نسخها."
+            )
+        with Image.open(path) as image:
+            width, height = image.size
+    except Exception:
+        # A transient/incomplete file is handled by the ordinary retry path.
+        return None
+    if width < 2 or height < 2:
+        return "أبعاد الصورة صغيرة جداً للمعالجة."
+    # الدقة فوق الحدّ ليست رفضاً: normalize_input يخفّضها تلقائياً أثناء
+    # المعالجة. يبقى حدّ حجم الملف وحده سبباً للتخطّي هنا.
+    return None
+
+
+def _inbox_copy(path):
+    """Copy an incoming image into Gradio's allowed output area without stale-name collisions."""
+    src = os.path.abspath(os.fspath(path))
+    if not os.path.isfile(src):
+        raise FileNotFoundError(f"Incoming image does not exist: {src}")
+
+    out_root = os.path.abspath(OUT_DIR)
+    try:
+        if os.path.commonpath([src, out_root]) == out_root:
+            return src
+    except ValueError:
+        pass
+
+    dst_dir = os.path.join(OUT_DIR, "inbox")
+    os.makedirs(dst_dir, exist_ok=True)
+    before = os.stat(src)
+    src_fp = _fingerprint(src)
+    stem, ext = os.path.splitext(os.path.basename(src))
+    candidate = os.path.join(dst_dir, os.path.basename(src))
+
+    if os.path.isfile(candidate):
+        if _fingerprint(candidate) == src_fp:
+            return candidate
+        candidate = os.path.join(dst_dir, f"{stem}__{src_fp[:12]}{ext}")
+        if os.path.isfile(candidate):
+            if _fingerprint(candidate) == src_fp:
+                return candidate
+            candidate = os.path.join(
+                dst_dir, f"{stem}__{src_fp[:12]}_{uuid.uuid4().hex[:6]}{ext}"
+            )
+
+    temp_path = candidate + f".{uuid.uuid4().hex}.part"
+    try:
+        shutil.copy2(src, temp_path)
+        after = os.stat(src)
+        if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+            raise OSError("The source image changed while it was being copied")
+        if _fingerprint(temp_path) != src_fp:
+            raise OSError("The copied image failed its SHA-256 verification")
+        os.replace(temp_path, candidate)
+        return candidate
+    except Exception:
+        logger.exception("Failed to copy incoming image: %s", src)
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                pass
+        raise
+
+
+def _lan_ip():
+    try:
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            return sock.getsockname()[0]
+    except Exception:
+        return None
+
+
+def watch_tick(wstate, photos, inbox_dir, watch_on, auto_make, cur_img, mode,
+               sheet_label, align_face, kb,
+               angle, zoom, pan_x, pan_y, size_label, cw, ch,
+               color_label, custom_color, guides,
+               bright, contrast, satur, sharp, shadows, highlights, temp):
+    """
+    نبضة المؤقّت: مسح كامل لمجلد الاستقبال في كل نبضة —
+    • كل صورة جديدة (حتى لو وصلت دفعة كاملة معاً) تُسجَّل في قاعدة البيانات
+      بعد استقرار حجمها، لا أحدث صورة فقط.
+    • أول نبضة في الجلسة «بذرة» صامتة: تسجيل بلا إشعارات وبلا لمس للوحة
+      (تحديث الصفحة لا يزيف وصولاً جديداً ولا يمسح عملك).
+    • صورة معروفة البصمة تعود → إشعار (تحذير إن طُبعت سابقاً) بلا تكرار سجل.
+    • القائمة تُقرأ دائماً من قاعدة البيانات: الحقيقة واحدة لكل الجلسات.
+    """
+    _s = gr.skip()
+    SKIP12 = (_s,) * 12
+    SKIPDYN = (_s,) * (1 + NOTIF_SLOTS * 2 + LIST_ROWS * 2)
+    pd = {"photos": [], "notifs": list((photos or {}).get("notifs", []))}
+    now_ts = datetime.datetime.now().timestamp()
+    kept = [n for n in pd["notifs"] if n.get("expires", 0) > now_ts]
+    dyn_changed = len(kept) != len(pd["notifs"])
+    pd["notifs"] = kept
+    folder = clean_folder(inbox_dir)
+    if not watch_on or not folder or not os.path.isdir(folder):
+        if dyn_changed:
+            pd["photos"] = db_list()
+            return SKIP12 + render_dynamic(pd)
+        return SKIP12 + SKIPDYN
+
+    ws = dict(wstate or {})
+    present = dict(ws.get("present") or {})
+    pending = dict(ws.get("pending") or {})
+    ign_present = dict(ws.get("ign") or {})      # بصمة مهملة -> مسارها الحالي
+    ign_noted = list(ws.get("ign_noted") or [])  # بصمات نُبّه عنها هذه الجلسة
+    seed_ign_names = []
+    first = not ws.get("seeded")
+
+    # مسح شامل متكرر (يشمل المجلدات الفرعية) وبصمة (حجم، وقت تعديل) لكل ملف،
+    # بامتدادات أوسع من ذي قبل: صورة .jfif/.webp/.bmp سليمة كانت تُتخطّى
+    # بصمت، وصورة في مجلد فرعي لا تُرى، وصورة بُدّلت بأخرى بنفس الاسم
+    # (عدّاد الكاميرا يعود للصفر) لا تُكتشف — والثلاثة الآن تُرصد.
+    IMG_EXTS = (".jpg", ".jpeg", ".jfif", ".png", ".bmp", ".webp",
+                ".tif", ".tiff")
+    outputs_root = os.path.normpath(os.path.join(BASE_DIR, "outputs"))
+    scan = {}
+    try:
+        if os.path.normpath(folder) != outputs_root:
+            for root, dirs, files in os.walk(folder):
+                dirs[:] = [d for d in dirs if not d.startswith(".")
+                           and os.path.normpath(os.path.join(root, d))
+                           != outputs_root]
+                for fname in files:
+                    if fname.lower().endswith(IMG_EXTS):
+                        fpath = os.path.join(root, fname)
+                        try:
+                            stt = os.stat(fpath)
+                            scan[fpath] = [stt.st_size, int(stt.st_mtime)]
+                        except OSError:
+                            pass
+    except OSError:
+        return SKIP12 + (render_dynamic({**pd, "photos": db_list()})
+                         if dyn_changed else SKIPDYN)
+
+    # الاستقرار أولاً: لا تُعالج إلا صورة كانت معلّقة من نبضة سابقة وثبتت بصمتها
+    ready = []
+    for p, info in list(pending.items()):
+        if p not in scan:
+            pending.pop(p)
+        elif scan[p] == info.get("sig"):
+            ready.append((p, bool(info.get("silent")),
+                          int(info.get("fails", 0))))
+            pending.pop(p)
+        else:
+            info["sig"] = scan[p]
+    # الظهور الجديد أو تغيّر المحتوى بنفس المسار → تعليق حتى يثبت
+    for p in scan:
+        if p not in pending and present.get(p) != scan[p]:
+            pending[p] = {"sig": scan[p], "silent": bool(first), "fails": 0}
+    # صورة مهملة غادرت المجلد: يُلغى تجاهلها — رجوعها القادم قرار جديد
+    for fp_ig, p_ig in list(ign_present.items()):
+        if p_ig not in scan:
+            try:
+                db_unignore(fp_ig)
+            except Exception:
+                pass  # فشل قاعدة بيانات عابر لا يقتل النبضة؛ يُعاد تلقائياً
+            ign_present.pop(fp_ig, None)
+            if fp_ig in ign_noted:
+                ign_noted.remove(fp_ig)
+    ws["present"] = scan
+    ws["pending"] = pending
+    ws["ign"] = ign_present
+    ws["ign_noted"] = ign_noted
+    ws["seeded"] = True
+
+    if not ready:
+        if dyn_changed:
+            pd["photos"] = db_list()
+            return (ws,) + (_s,) * 11 + render_dynamic(pd)
+        return (ws,) + (_s,) * 11 + SKIPDYN
+
+    def _mtime_safe(item):
+        try:
+            return os.path.getmtime(item[0])
+        except OSError:
+            return 0.0
+    ready.sort(key=_mtime_safe)
+    try:
+        known_fps = db_photo_fingerprints()
+    except Exception:
+        logger.exception("Could not load known photo fingerprints")
+        known_fps = set()
+    ignored_fps = db_ignored_fps()
+    preview_vals = [angle, zoom, pan_x, pan_y, size_label, cw, ch,
+                    color_label, custom_color, guides,
+                    bright, contrast, satur, sharp, shadows, highlights, temp]
+    base = None
+    lines = []
+    loud = 0
+    warn_names = []
+    for path, silent, fails in ready:
+        try:
+            limit_message = _incoming_image_limit_message(path)
+            if limit_message:
+                name = os.path.basename(path)
+                lines.append(f"⚠ لم تُجهَّز ({name}): {limit_message}")
+                continue
+            local = _inbox_copy(path)
+            if not _file_complete(local):
+                # لم تكتمل/لا تُفكّ بعد: تبقى معلّقة وتُعاد المحاولة كل نبضة،
+                # مع تحذير مرئي واحد عند التعثّر الطويل، وترك نهائي بعد ~240
+                # محاولة كي لا تسمّم المراقب (تعود من تلقائها إن تغيّر محتواها).
+                nf = fails + 1
+                if nf == 8:
+                    warn_names.append(os.path.basename(path))
+                if nf < 240:
+                    pending[path] = {"sig": scan.get(path), "silent": silent,
+                                     "fails": nf}
+                continue
+            try:
+                fp = _fingerprint(local)
+            except Exception:
+                # تعذّرت قراءتها الآن (ملف مشغول/نسخة تُكتب): تُعاد المحاولة
+                # كأي ملف ناقص، مع تحذير عند التعثّر الطويل — لا إسقاط صامت
+                nf = fails + 1
+                if nf == 8:
+                    warn_names.append(os.path.basename(path))
+                if nf < 240:
+                    pending[path] = {"sig": scan.get(path), "silent": silent,
+                                     "fails": nf}
+                continue
+            if fp in ignored_fps:
+                # حذفها المستخدم من القائمة: لا تُسجَّل ما دامت في المجلد —
+                # لكن بلا صمت وبلا أبدية: تُنبَّه مرة، وتُحيا إن غابت ورجعت
+                ign_present[fp] = path
+                ws["ign"] = ign_present
+                if fp not in ign_noted:
+                    ign_noted.append(fp)
+                    ws["ign_noted"] = ign_noted
+                    if silent:
+                        seed_ign_names.append(os.path.basename(path))
+                    else:
+                        lines.append(
+                            f"🗑 ({os.path.basename(path)}) محذوفة من القائمة من قبل — لن تظهر ما دامت في المجلد. "
+                            "إن أردتها: اضغط «↩ إظهار الصور المحذوفة» تحت القائمة ثم حدّث الصفحة.")
+                continue
+            if silent and fp in known_fps:
+                continue  # معروفة من قبل: لا نلمس سجلّها (وقتها وحالتها محفوظان)
+            row, created = db_register(fp, os.path.basename(path), path, local)
+            if silent:
+                continue
+            loud += 1
+            kind = ("new" if created else
+                    "again_printed" if row["printed"] else "again_unprinted")
+            pd["notifs"] = [n for n in pd["notifs"] if n["pid"] != fp]
+            pd["notifs"].append({"pid": fp, "kind": kind,
+                                 "expires": now_ts + 30})
+            st, preview, ostatus, nzoom, npanx, npany = on_upload(
+                local, mode, *preview_vals)
+            name = os.path.basename(path)
+            if st is None:
+                lines.append(f"📥 وصلت ({name}) لكن تعذّر تجهيزها: {ostatus}")
+                base = (ws, local, None, None, _s, _s, _s, _s,
+                        "\n".join(lines), _s, _s, _s)
+                continue
+            if not auto_make:
+                lines.append(f"📥 وصلت صورة من الكاميرا: {name} — {ostatus}")
+                base = (ws, local, st, preview, _s, _s, _s, _s,
+                        "\n".join(lines), nzoom, npanx, npany)
+                continue
+            ez, epx, epy = zoom, pan_x, pan_y
+            if st.get("init"):
+                ez, epx, epy = st["init"]
+            try:
+                m = make_id_photo(local, st, mode, size_label, cw, ch,
+                                  color_label, custom_color, sheet_label,
+                                  align_face, kb, angle, ez, epx, epy,
+                                  bright, contrast, satur, sharp,
+                                  shadows, highlights, temp)
+                db_mark(fp, made=True)
+                lines.append(f"📥 ({name}) — صُنعت تلقائياً ✓\n{m[4]}")
+                base = (ws, local, st, preview, m[0], m[1], m[2], m[3],
+                        "\n".join(lines), nzoom, npanx, npany)
+            except gr.Error as e:
+                msg = getattr(e, "message", None) or str(e)
+                lines.append(f"📥 وصلت ({name}) لكن تعذّر صنعها: {msg}")
+                base = (ws, local, st, preview, _s, _s, _s, _s,
+                        "\n".join(lines), nzoom, npanx, npany)
+            except Exception as e:
+                lines.append(f"📥 وصلت ({name}) وخطأ أثناء الصنع: {e}")
+                base = (ws, local, st, preview, _s, _s, _s, _s,
+                        "\n".join(lines), nzoom, npanx, npany)
+        except Exception as e:
+            # Keep the file pending so transient locks/copy errors do not lose it forever.
+            logger.exception("Inbox processing failed for %s", path)
+            nf = fails + 1
+            if nf < 240 and path in scan:
+                pending[path] = {"sig": scan[path], "silent": silent, "fails": nf}
+            lines.append(
+                f"⚠ تعذّرت معالجة صورة ({os.path.basename(path)}): "
+                f"{type(e).__name__}. ستتم إعادة المحاولة تلقائياً."
+            )
+            continue
+    if loud > 1:
+        _verb = "سُجّلت وصُنعت" if auto_make else "سُجّلت وجُهّزت"
+        lines.insert(0, f"📥 وصلت {loud} صور دفعة واحدة — {_verb} كلها:")
+    if warn_names:
+        lines.append("⚠ صور وصلت لكنها لا تُقرأ حتى الآن (نسخها لم يكتمل أو "
+                     "ملفها تالف) وتبقى منتظرة: " + "، ".join(warn_names[:4]))
+    if seed_ign_names:
+        lines.append("🗑 في المجلد " + str(len(seed_ign_names)) +
+                     " صورة محذوفة من القائمة من قبل (لن تظهر): " +
+                     "، ".join(seed_ign_names[:4]) +
+                     " — اضغط «↩ إظهار الصور المحذوفة» تحت القائمة إن أردتها.")
+    pd["photos"] = db_list()
+    dyn = render_dynamic(pd)
+    if base is None:
+        if lines:
+            # Output order is: watch state, 7 photo/result components,
+            # status textbox, then zoom/pan controls. Keep the status message
+            # at index 8; misalignment here can inject Arabic text into a
+            # numeric slider and make several Gradio components show Error.
+            return (ws,) + (_s,) * 7 + ("\n".join(lines),) + (_s,) * 3 + dyn
+        return (ws,) + (_s,) * 11 + dyn
+    base = base[:8] + ("\n".join(lines),) + base[9:]
+    return base + dyn
+
+
+def quick_make_print(photos, which, idx, kind, mode, printer, align_face, kb,
+                     *preview_vals):
+    """
+    زر «تجهيز مباشر + طبع»: يجهّز صورة من القائمة/الإشعار بورقة 8 أو 12
+    ويطبعها مباشرة على الطابعة المختارة (تنفيذ على الخادم — يعمل من الهاتف).
+    """
+    _s = gr.skip()
+    pd = {"photos": db_list(),
+          "notifs": list((photos or {}).get("notifs", []))}
+    rec = None
+    if which == "slot":
+        if 0 <= idx < len(pd["notifs"]):
+            pid = pd["notifs"][idx]["pid"]
+            rec = next((x for x in pd["photos"] if x["fp"] == pid), None)
+    elif 0 <= idx < len(pd["photos"]):
+        rec = pd["photos"][idx]
+    if rec is None:
+        return (pd, _s, _s, _s, _s, _s) + render_dynamic({**pd, 'photos': db_list()})[1:]
+    sheet_label = ("8 صور — ورقة 10 × 15 سم" if kind == "8"
+                   else "12 صورة — ورقة 15 × 20 سم")
+    try:
+        st, _pv, _ost, _nz, _nx, _ny = on_upload(rec["path"], mode, *preview_vals)
+        if st is None:
+            return (pd, _s, _s, _s, _s,
+                    f"تعذّر تجهيز الصورة {rec['name']} — جرّب صنعها من اللوحة يدوياً.") \
+                + render_dynamic({**pd, 'photos': db_list()})[1:]
+        ez, epx, epy = preview_vals[1], preview_vals[2], preview_vals[3]
+        if st.get("init"):
+            ez, epx, epy = st["init"]
+        m = make_id_photo(rec["path"], st, mode, preview_vals[4], preview_vals[5],
+                          preview_vals[6], preview_vals[7], preview_vals[8],
+                          sheet_label, align_face, kb, preview_vals[0],
+                          ez, epx, epy, *preview_vals[10:17])
+        status = f"⚡ تجهيز مباشر ({kind} صور) — {rec['name']} ✓\n{m[4]}"
+        db_mark(rec["fp"], made=True)
+        if printer:
+            pr = direct_print(m[3], printer, True, sheet_label)
+            status += "\n" + pr
+            if pr.startswith("🖨"):
+                db_mark(rec["fp"], printed=True)
+                if rec.get("printed"):
+                    status += "\n(إعادة طباعة — هذه الصورة كانت مطبوعة سابقاً.)"
+        else:
+            status += "\n⚠ صُنعت الورقة لكن لم تُطبع: اختر الطابعة أولاً من قسم الاستوديو."
+        if which == "slot":
+            pd["notifs"] = [n for n in pd["notifs"] if n["pid"] != rec["fp"]]
+        return (pd, m[0], m[1], m[2], m[3], status) + render_dynamic({**pd, 'photos': db_list()})[1:]
+    except gr.Error as e:
+        msg = getattr(e, "message", None) or str(e)
+        return (pd, _s, _s, _s, _s,
+                f"⚡ تعذّر التجهيز المباشر لـ{rec['name']}: {msg}") + render_dynamic({**pd, 'photos': db_list()})[1:]
+    except Exception as e:
+        logger.exception("Quick make/print failed for %s", rec.get("name", "unknown"))
+        return (pd, _s, _s, _s, _s,
+                f"⚡ تعذّر التجهيز المباشر لـ{rec['name']} ({type(e).__name__}). راجع logs/studio.log.") + render_dynamic({**pd, 'photos': db_list()})[1:]
+
+
+def delete_photo_record(photos, idx):
+    """زر 🗑 في قائمة الصور: حذف السجل من القائمة فقط (بلا مساس بالملفات)."""
+    pd = {"photos": db_list(),
+          "notifs": list((photos or {}).get("notifs", []))}
+    msg = ""
+    if 0 <= idx < len(pd["photos"]):
+        rec = pd["photos"][idx]
+        try:
+            db_delete_photo(rec["fp"])
+        except Exception:
+            msg = ("⚠ تعذّر حذف السجل من قاعدة البيانات. أعد المحاولة، "
+                   "وإن تكرر راجع logs/studio.log.")
+            return render_dynamic(pd) + (msg,)
+        pd["notifs"] = [n for n in pd["notifs"] if n["pid"] != rec["fp"]]
+        msg = (f"🗑 حُذف سجل «{rec['name']}» من القائمة. ملف الصورة نفسه "
+               "باقٍ في مجلد الكاميرا كما هو.")
+    return render_dynamic({**pd, "photos": db_list()}) + (msg,)
+
+
+def list_printers():
+    """أسماء الطابعات المثبتة (ويندوز فقط — عبر PowerShell)."""
+    if os.name != "nt":
+        return []
+    try:
+        import subprocess
+        r = subprocess.run(["powershell", "-NoProfile", "-Command",
+                            "Get-Printer | Select-Object -ExpandProperty Name"],
+                           capture_output=True, text=True, timeout=25,
+                           encoding="utf-8", errors="replace")
+        return [ln.strip() for ln in (r.stdout or "").splitlines() if ln.strip()]
+    except Exception:
+        logger.exception("Could not enumerate Windows printers")
+        return []
+
+
+def _pick_result(files, want_sheet):
+    paths = []
+    for f in (files or []):
+        p = f.get("path") if isinstance(f, dict) else str(f)
+        if p:
+            paths.append(p)
+    if not paths:
+        return None
+    for p in paths:
+        b = os.path.basename(p).lower()
+        if want_sheet and b.startswith("sheet"):
+            return p
+        if not want_sheet and b.startswith("photo") and not b.endswith("_hd.jpg"):
+            return p
+    return paths[-1] if want_sheet else paths[0]
+
+
+def _is_managed_print_output(path, want_sheet):
+    """Only permit direct printing of JPEGs that this application generated."""
+    if not path:
+        return False
+    try:
+        root = os.path.normcase(os.path.realpath(OUT_DIR))
+        candidate = os.path.normcase(
+            os.path.realpath(os.path.abspath(os.fspath(path)))
+        )
+        if os.path.commonpath([root, candidate]) != root:
+            return False
+        if os.path.dirname(candidate) != root:
+            return False
+        filename = os.path.basename(candidate).lower()
+    except (OSError, TypeError, ValueError):
+        return False
+    if not filename.endswith(".jpg"):
+        return False
+    if want_sheet:
+        return filename.startswith("sheet_")
+    return filename.startswith("photo_") and not filename.endswith("_hd.jpg")
+
+
+def direct_print(files, printer, want_sheet, sheet_label):
+    """
+    طباعة مباشرة صامتة على طابعة الحاسوب (ويندوز): تُنفَّذ على الخادم نفسه،
+    فتعمل حتى لو ضغط الزر من متصفح الهاتف — بالمقاس الحقيقي عبر print_sheet.ps1.
+    """
+    if os.name != "nt":
+        return "الطباعة المباشرة الصامتة تعمل على ويندوز فقط — شغّل البرنامج على حاسوب الويندوز."
+    target = _pick_result(files, want_sheet)
+    if not target:
+        return "اصنع صورة الهوية أولاً — لا يوجد ملف نتيجة جاهز للطباعة بعد."
+    if not _is_managed_print_output(target, want_sheet):
+        logger.warning("Rejected direct-print request for an unmanaged path")
+        return "رُفضت الطباعة: اختر نتيجة أنشأها البرنامج أولاً ثم أعد المحاولة."
+    target = os.path.abspath(os.fspath(target))
+    if not os.path.isfile(target):
+        return "اصنع صورة الهوية أولاً — لا يوجد ملف نتيجة جاهز للطباعة بعد."
+    ps1 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "print_sheet.ps1")
+    if not os.path.isfile(ps1):
+        return "ملف الطباعة print_sheet.ps1 غير موجود — ضعه بجانب app.py في نفس المجلد."
+    if want_sheet and sheet_label and "15 × 20" in sheet_label:
+        pw, ph, mode = 203.2, 152.4, "fill"
+    elif want_sheet:
+        pw, ph, mode = 152.4, 101.6, "fill"
+    else:
+        pw, ph, mode = 152.4, 101.6, "exact"
+    try:
+        import subprocess
+        r = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                            "-File", ps1, "-Path", target,
+                            "-Printer", printer or "",
+                            "-PaperW", str(pw), "-PaperH", str(ph), "-Mode", mode],
+                           capture_output=True, text=True, timeout=120,
+                           encoding="utf-8", errors="replace")
+        out = (r.stdout or "").strip()
+        err = (r.stderr or "").strip()
+        if r.returncode == 0 and "OK" in out:
+            kind = "الورقة المقسمة" if want_sheet else "الصورة"
+            return (f"🖨 أُرسلت {kind} إلى قائمة الطباعة ({printer or 'الافتراضية'}) "
+                    f"بالمقاس المحدد. تأكيد خروج الورقة فعلياً يعتمد على الطابعة.")
+        return f"تعذّرت الطباعة المباشرة: {err or out or 'خطأ غير معروف من الطابعة'}"
+    except Exception as e:
+        logger.exception("Direct printing failed")
+        return f"تعذّرت الطباعة المباشرة ({type(e).__name__}). راجع logs/studio.log للتفاصيل."
+
+
+PRINT_SHEET_JS = ("(files, sheetLabel, sizeLabel, cwMm, chMm) => {" +
+                  _PRINT_BODY.replace("FILTER_EXPR", "f => nm(f).includes('sheet_')")
+                             .replace("CSS_EXPR", _SHEET_CSS) + "}")
+PRINT_PHOTO_JS = ("(files, sheetLabel, sizeLabel, cwMm, chMm) => {" +
+                  _PRINT_BODY.replace("FILTER_EXPR", "f => nm(f).includes('photo_') && !nm(f).includes('_hd')")
+                             .replace("CSS_EXPR", _PHOTO_CSS) + "}")
+
+# ----------------------------- الواجهة -----------------------------
+
+CUSTOM_CSS = """
+/* Local-first typography: no remote font request is needed. */
+.gradio-container {
+  direction: rtl;
+  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+  color-scheme: light;
+  --body-background-fill: #F3F5F8;
+  --body-text-color: #202938;
+  --block-background-fill: #FFFFFF;
+  --block-border-color: #E4E8EF;
+  --block-label-background-fill: #F8FAFC;
+  --block-label-text-color: #667085;
+  --block-title-text-color: #111827;
+  --input-background-fill: #FFFFFF;
+  --input-border-color: #D5DCE6;
+  --input-placeholder-color: #98A2B3;
+  --input-shadow: none;
+  --checkbox-border-color: #CBD5E1;
+  --checkbox-label-text-color: #273449;
+  --checkbox-label-text-color-selected: #1D4ED8;
+  --checkbox-background-color: #FFFFFF;
+  --checkbox-background-color-selected: #2563EB;
+  --checkbox-label-background-fill: #FFFFFF;
+  --checkbox-label-background-fill-selected: #EFF6FF;
+  --radio-circle-fill: #2563EB;
+  --slider-color: #2563EB;
+  --color-accent: #2563EB;
+  --color-accent-soft: #EFF6FF;
+  --border-color-primary: #E4E8EF;
+  --border-color-accent: #BFDBFE;
+  --shadow-drop: 0 1px 2px rgba(16,24,40,.04);
+  --shadow-drop-lg: 0 8px 24px rgba(16,24,40,.07);
+  --button-primary-background-fill: #2563EB;
+  --button-primary-background-fill-hover: #1D4ED8;
+  --button-primary-text-color: #FFFFFF;
+  --button-primary-border-color: #2563EB;
+  --button-secondary-background-fill: #FFFFFF;
+  --button-secondary-background-fill-hover: #F8FAFC;
+  --button-secondary-text-color: #344054;
+  --button-secondary-border-color: #D8DEE8;
+  --link-text-color: #2563EB;
+  --table-text-color: #344054;
+  margin: 0 auto;
+  width: min(var(--pagew, 100%), 100%);
+  max-width: none;
+}
+body.dark .gradio-container {
+  --body-background-fill: #F3F5F8;
+  --body-text-color: #202938;
+  --block-background-fill: #FFFFFF;
+  --block-border-color: #E4E8EF;
+  --block-label-background-fill: #F8FAFC;
+  --block-label-text-color: #667085;
+  --block-title-text-color: #111827;
+  --input-background-fill: #FFFFFF;
+  --input-border-color: #D5DCE6;
+  --checkbox-label-text-color: #273449;
+  --checkbox-label-text-color-selected: #1D4ED8;
+  --checkbox-background-color: #FFFFFF;
+  --checkbox-label-background-fill: #FFFFFF;
+  --checkbox-label-background-fill-selected: #EFF6FF;
+  --table-text-color: #344054;
+  --button-secondary-background-fill: #FFFFFF;
+  --button-secondary-text-color: #344054;
+}
+.gradio-container.app, .gradio-container .main,
+.gradio-container .contain, .gradio-container .wrap {
+  max-width: none !important;
+  width: 100% !important;
+  margin: 0 auto !important;
+}
+.gradio-container {
+  width: 100% !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  padding: 12px 16px 24px !important;
+}
+.gradio-container .block {
+  border-color: #E4E8EF;
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(16,24,40,.035);
+  background: #FFFFFF;
+}
+.gradio-container footer { display: none !important; }
+#layout_style { display: none !important; }
+
+/* Header */
+#topbar {
+  position: sticky;
+  top: 8px;
+  z-index: 40;
+  background: rgba(255,255,255,.97) !important;
+  border: 1px solid #E4E8EF !important;
+  border-radius: 14px;
+  padding: 9px 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 14px rgba(16,24,40,.045);
+  backdrop-filter: blur(10px);
+}
+#topbar * { background-color: transparent !important; }
+#topbar .brand { display: flex; align-items: center; gap: 12px; }
+#topbar .brand-name { font-size: 20px; font-weight: 800; color: #101828; letter-spacing: .35px; line-height: 1.2; }
+#topbar .brand-sub { font-size: 13px; color: #667085; margin-top: 2px; }
+#topbar .top-status { display: flex; align-items: center; color: #087443; font-weight: 600; font-size: 13px; }
+#topbar .version-tag {
+  margin-inline-start: 10px; padding: 3px 8px; border-radius: 20px;
+  background: #EFF6FF !important; color: #1D4ED8; font-size: 11px; font-weight: 700;
+}
+#topbar .top-status .dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background-color: #12B76A !important; margin-inline-end: 8px;
+  box-shadow: 0 0 0 3px rgba(18,183,106,.13);
+}
+#topbar button {
+  border: 1px solid #E4E8EF !important;
+  background: #FFFFFF !important;
+  color: #344054 !important;
+  border-radius: 9px !important;
+  font-weight: 600;
+}
+#topbar button:hover { background: #F8FAFC !important; }
+
+/* Work columns */
+#main_row { gap: 16px; align-items: flex-start; }
+#col_controls, #col_canvas, #col_results {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  min-width: 0 !important;
+}
+.canvas-title { color: #344054; font-weight: 750; }
+.canvas-title h3 { font-size: 16px !important; margin: 2px 0 10px !important; color: #344054 !important; }
+
+/* Control panel */
+#col_controls {
+  background: #FFFFFF !important;
+  border: 1px solid #E4E8EF !important;
+  border-radius: 14px;
+  padding: 10px 13px;
+}
+.section-head {
+  width: 100%;
+  justify-content: space-between !important;
+  text-align: start !important;
+  background: #FFFFFF !important;
+  color: #1D2939 !important;
+  border: 0 !important;
+  border-bottom: 1px solid #EEF1F5 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  padding: 12px 5px !important;
+  min-height: 0 !important;
+}
+.section-head:hover { background: #F8FAFC !important; color: #2563EB !important; }
+#size_radio label, #color_radio label {
+  border: 1px solid #E4E8EF !important;
+  background: #FFFFFF !important;
+  border-radius: 9px !important;
+  padding: 8px 10px !important;
+  font-weight: 600;
+  color: #273449;
+}
+#size_radio label:has(input:checked), #color_radio label:has(input:checked) {
+  border-color: #93B7FB !important;
+  background: #EFF6FF !important;
+}
+#color_radio label::before {
+  content: ""; display: inline-block; width: 12px; height: 12px;
+  border-radius: 50%; margin-inline-end: 8px; vertical-align: -2px;
+  border: 1px solid rgba(17,24,39,.18); background: #FFFFFF;
+}
+#color_radio label:nth-of-type(2)::before { background: #438EDB; }
+#color_radio label:nth-of-type(3)::before { background: #A8C5E6; }
+#color_radio label:nth-of-type(4)::before { background: #F0F0F0; }
+#color_radio label:nth-of-type(5)::before { background: #D71E19; }
+#color_radio label:nth-of-type(6)::before { background: conic-gradient(#F59E0B,#10B981,#3B82F6,#EF4444,#F59E0B); }
+#col_controls select, #col_controls [data-testid="dropdown"] input {
+  color: #1D2939 !important; background: #FFFFFF !important;
+}
+#col_controls input, #col_controls textarea { color: #1D2939 !important; }
+
+/* Main canvas and action */
+#col_canvas .block { border-radius: 12px; }
+#btn-make-top {
+  min-height: 48px;
+  font-size: 17px !important; font-weight: 800 !important;
+  border-radius: 11px !important;
+  box-shadow: 0 5px 14px rgba(37,99,235,.18);
+}
+#btn-make-top:hover { box-shadow: 0 7px 18px rgba(37,99,235,.24); }
+#status_box .block, #status_box textarea {
+  background: #F8FAFC !important;
+  border-color: #E4E8EF !important;
+  color: #344054 !important;
+}
+
+/* Results stay in their own scroll area on large screens */
+#col_results {
+  background: #FFFFFF !important;
+  border: 1px solid #E4E8EF !important;
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+.result-panel {
+  background: #FFFFFF !important;
+  border: 1px solid #E8ECF2 !important;
+  border-radius: 11px;
+  padding: 9px 10px 10px;
+  margin-bottom: 10px;
+}
+.result-panel .block { border-color: #E8ECF2 !important; }
+.result-panel p { color: #475467; font-size: 13px; margin: 0 0 7px; }
+#col_results .image-container, #col_canvas .image-container { background: #F8FAFC !important; }
+#photo_list_box, #notif_box {
+  overflow-y: auto; overflow-x: hidden; padding-inline-end: 5px;
+  scrollbar-width: thin; scrollbar-color: #C6CED8 #F2F4F7;
+}
+#photo_list_box { max-height: var(--listh, 340px); }
+#notif_box { max-height: 360px; margin-bottom: 10px; }
+#photo_list_box > *, #notif_box > * { flex-shrink: 0 !important; }
+#photo_list_box::-webkit-scrollbar, #notif_box::-webkit-scrollbar,
+#col_controls::-webkit-scrollbar, #col_results::-webkit-scrollbar { width: 7px; }
+#photo_list_box::-webkit-scrollbar-thumb, #notif_box::-webkit-scrollbar-thumb,
+#col_controls::-webkit-scrollbar-thumb, #col_results::-webkit-scrollbar-thumb {
+  background: #C6CED8; border-radius: 8px;
+}
+#photo_list_box::-webkit-scrollbar-track, #notif_box::-webkit-scrollbar-track,
+#col_controls::-webkit-scrollbar-track, #col_results::-webkit-scrollbar-track { background: #F2F4F7; }
+
+/* Wide desktops */
+@media (min-width: 1320px) {
+  #main_row { flex-wrap: nowrap !important; }
+  #col_controls {
+    flex: 0 0 330px !important; max-width: 330px;
+    flex-wrap: nowrap !important; position: sticky; top: 76px;
+    align-self: flex-start; max-height: calc(100vh - 88px); overflow-y: auto;
+  }
+  #col_controls > * { flex-shrink: 0 !important; }
+  #col_canvas { flex: 1 1 0% !important; min-width: 0; }
+  #col_results {
+    flex: 0 0 min(var(--wres, 34%), 460px) !important;
+    max-width: 460px; position: sticky; top: 76px;
+    align-self: flex-start; max-height: calc(100vh - 88px); overflow-y: auto;
+  }
+}
+
+/* Tablet and mobile: clear vertical workflow */
+@media (max-width: 1319px) {
+  #main_row { flex-wrap: wrap !important; }
+  #main_row > #col_canvas { order: -1 !important; }
+  #main_row > #col_controls { order: 0 !important; }
+  #main_row > #col_results { order: 1 !important; }
+  #col_controls, #col_canvas, #col_results {
+    flex: 1 1 100% !important; width: 100% !important; max-width: 100% !important;
+    max-height: none !important; position: static !important; overflow: visible !important;
+  }
+  /* Keep the primary action reachable while the user scrolls through settings. */
+  .gradio-container { padding-bottom: 94px !important; }
+  #actionbar {
+    position: fixed !important; left: 50%; bottom: 10px;
+    transform: translateX(-50%); width: min(760px, calc(100vw - 16px)) !important;
+    margin: 0 !important; z-index: 60; flex-wrap: wrap !important;
+  }
+}
+@media (max-width: 700px) {
+  .gradio-container { padding: 8px 9px 18px !important; }
+  #topbar { padding: 8px 10px; top: 4px; }
+  #topbar .top-status { display: none !important; }
+  #topbar .brand svg { display: none; }
+  #topbar .brand-name { font-size: 15px; white-space: nowrap; }
+  #topbar .brand-sub { font-size: 11px; white-space: nowrap; }
+  #topbar button { min-width: 0 !important; padding: 5px 7px !important; font-size: 11px !important; }
+  #topbar_row { flex-wrap: wrap !important; row-gap: 6px; }
+  #topbar_row > * { flex: 1 1 42% !important; min-width: 0 !important; }
+  #btn-make-top { min-height: 50px; font-size: 15px !important; }
+}
+/* ===== v12: تثبيت الهوية الفاتحة على مستوى الصفحة + علاج النصوص الباهتة =====
+   خلفية الصفحة يرسمها عنصر body نفسه من متغيراته؛ تثبيتها هنا بقوة يمنع
+   وراثة ألوان Gradio الليلية عندما يكون ويندوز في الوضع الداكن. */
+body, body.dark {
+  --body-background-fill: #F3F5F8 !important;
+  --body-text-color: #202938 !important;
+  color-scheme: light;
+}
+.gradio-container span.svelte-jdcl7l,
+.gradio-container fieldset.block > span:first-child {
+  background: #F1F5F9 !important;
+  color: #475569 !important;
+}
+.gradio-container .min_value, .gradio-container .max_value {
+  color: #64748B !important;
+  font-weight: 600;
+}
+.gradio-container .or { color: #64748B !important; }
+.gradio-container .label-clear-button { color: #475569 !important; }
+.gradio-container tr.file, .gradio-container .file-preview tr {
+  background: #FFFFFF !important;
+}
+.gradio-container tr.file td, .gradio-container .file-preview td {
+  color: #202938 !important;
+}
+/* شريط الإجراءات العلوي: ثابت أثناء التمرير وأزراره كبيرة واضحة */
+#actionbar {
+  position: sticky; top: 6px; z-index: 60;
+  background: #FFFFFF; border: 1px solid #E4E8EF; border-radius: 12px;
+  padding: 6px; box-shadow: 0 4px 14px rgba(16,24,40,.06);
+}
+#actionbar button { font-size: 15px !important; font-weight: 700; min-height: 44px; }
+/* استوديو الطباعة والحفظ */
+#print_studio {
+  border: 2px solid #2563EB !important; border-radius: 14px;
+  background: #FFFFFF; padding: 10px 14px; margin-top: 10px;
+}
+/* ===== v13: تحويم أخضر لكل الأزرار + علامة صحّ واضحة + مساحة عمل للعرض فقط ===== */
+.gradio-container button {
+  transition: background-color .15s ease, color .15s ease,
+              border-color .15s ease, box-shadow .15s ease;
+}
+.gradio-container button:not(.icon-button):hover {
+  background: #16A34A !important; border-color: #16A34A !important;
+  color: #FFFFFF !important;
+}
+.gradio-container button:not(.icon-button):active {
+  background: #15803D !important; border-color: #15803D !important;
+  color: #FFFFFF !important;
+}
+/* علامة الصحّ: مربع أكبر وحدّ أوضح، والمحدَّد أزرق قوي تظهر عليه العلامة البيضاء */
+.gradio-container input[type="checkbox"] {
+  width: 19px !important; height: 19px !important; min-width: 19px;
+  border: 2px solid #94A3B8 !important; border-radius: 5px !important;
+  cursor: pointer;
+}
+.gradio-container input[type="checkbox"]:checked {
+  border-color: #2563EB !important;
+}
+.gradio-container label:has(> input[type="checkbox"]:checked),
+.gradio-container label:has(input[type="checkbox"]:checked) {
+  color: #1D4ED8 !important; font-weight: 700;
+}
+/* مساحة العمل: عرض فقط — أزرار الرفع/الكاميرا الأصلية مخفية (يقودها الشريط العلوي) */
+#col_canvas .upload-container > button {
+  opacity: 0 !important; position: absolute !important; inset: 0 !important;
+  width: 100% !important; height: 100% !important; cursor: pointer;
+}
+#col_canvas .source-selection { display: none !important; }
+#col_canvas .upload-container { position: relative; }
+#col_canvas .upload-container::after {
+  content: "📷 صورتك تظهر هنا — اضغط «استيراد صورة» أو «التقاط بالكاميرا» في الشريط العلوي";
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 82%; text-align: center; pointer-events: none;
+  color: #64748B; font-size: 16px; font-weight: 600; line-height: 1.9;
+}
+"""
+
+def _layout_style(page, split, listh):
+    """ستايل مقاسات الواجهة (متغيرات CSS) من قيم آمنة مضغوطة ضمن حدود."""
+    def _cl(v, lo, hi, dflt):
+        try:
+            return min(hi, max(lo, float(v)))
+        except Exception:
+            return dflt
+    page = _cl(page, 50, 100, 100)
+    split = _cl(split, 20, 70, 40)
+    listh = _cl(listh, 120, 1200, 340)
+    return (f"<style>:root{{--pagew:{page:g}%;--wres:{split:g}%;"
+            f"--listh:{listh:g}px}}</style>")
+
+
+S = SETTINGS
+
+with gr.Blocks(title=f"ID PHOTO STUDIO v{APP_VERSION} — صانع صور الهوية — الجزائر") as demo:
+    layout_style = gr.HTML("", elem_id="layout_style")
+    state = gr.State(None)
+    watch_state = gr.State({"present": {}, "pending": {}, "seeded": False})
+    photos_state = gr.State({"photos": db_list(), "notifs": []})
+    about_state = gr.State(False)
+
+    # ======== الشريط العلوي ========
+    with gr.Group(elem_id="topbar"):
+        with gr.Row(elem_id="topbar_row"):
+            gr.HTML("""
+            <div class="brand">
+              <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#2563EB" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              <div>
+                <div class="brand-name">ID PHOTO STUDIO</div>
+                <div class="brand-sub">صانع صور الهوية — الجزائر</div>
+              </div>
+            </div>
+            """, scale=5)
+            gr.HTML(f"""
+            <div class="top-status"><span class="dot"></span> معالجة محلية — دون رفع سحابي <span class="version-tag">v{APP_VERSION}</span></div>
+            """, scale=2)
+            settings_btn = gr.Button("⚙ الإعدادات العامة", size="sm", variant="secondary", scale=1)
+            about_btn = gr.Button("ℹ حول البرنامج", size="sm", variant="secondary", scale=1)
+        with gr.Group(visible=False) as about_group:
+            gr.Markdown(
+                "**ID PHOTO STUDIO — صانع صور الهوية الاحترافي (الجزائر)**\n\n"
+                "قصّ ذكي بكشف الوجه وتصحيح الميلان، أو ضبط يدوي بأدلة قياس معتمدة، "
+                "بجودة كاملة من صورتك الأصلية. استقبال تلقائي من الكاميرا، سجل دائم "
+                "بقاعدة بيانات، وطباعة مباشرة — وكل شيء يعمل على جهازك بلا إنترنت.\n\n"
+                "(Apache-2.0). "
+                "صُنع بواسطة **Zizo3114**.")
+
+    # ======== شريط الإجراءات الرئيسي (v12 — بأسلوب استوديوهات الصور) ========
+    with gr.Row(elem_id="actionbar"):
+        import_btn = gr.Button("📥 استيراد صورة", variant="secondary", scale=2,
+                               elem_id="btn-import")
+        camera_btn = gr.Button("📷 التقاط بالكاميرا", variant="secondary", scale=2,
+                               elem_id="btn-camera")
+        tmake_btn = gr.Button("✂ اصنع صورة الهوية", variant="primary", scale=3,
+                              elem_id="btn-make-top")
+        studio_btn = gr.Button("🖨 الطباعة والحفظ", variant="secondary", scale=2,
+                               elem_id="btn-studio")
+        save_settings_btn = gr.Button("💾 احفظ إعداداتي", variant="secondary", scale=2,
+                                      elem_id="btn-save-top")
+
+    # ======== إشعارات الصور الجديدة (تعيش 30 ثانية) ========
+    notif_slots = []
+    _notif_ctx = gr.Column(elem_id="notif_box")
+    _notif_ctx.__enter__()
+    for _i in range(NOTIF_SLOTS):
+        with gr.Group(visible=False) as _ng:
+            _nmd = gr.Markdown("")
+            with gr.Row():
+                _nb8 = gr.Button("⚡ تجهيز مباشر 8 صور + طبع", size="sm", variant="primary")
+                _nb12 = gr.Button("⚡ تجهيز مباشر 12 صورة + طبع", size="sm")
+                _nbh = gr.Button("إخفاء", size="sm")
+        notif_slots.append((_ng, _nmd, _nb8, _nb12, _nbh))
+    _notif_ctx.__exit__(None, None, None)
+
+
+    with gr.Row(elem_id="main_row"):
+        # ======== لوحة الإعدادات (يمين الشاشة) ========
+        with gr.Column(scale=5, elem_id="col_controls"):
+            mode_radio = gr.Radio(MODES, value=S["mode"], label="وضع العمل")
+
+            cut_head = gr.Button(_sec_label("📷 الصورة والمقاسات", S["ui_cut"]), elem_classes=["section-head"])
+            with gr.Group(visible=S["ui_cut"]) as cut_group:
+                size_radio = gr.Radio(list(SIZES.keys()), value=S["size"], label="مقاس الصورة", elem_id="size_radio")
+                with gr.Row(visible=(S["size"] == "مقاس مخصص…")) as custom_size_row:
+                    custom_w = gr.Number(label="العرض (مم)", value=S["custom_w"], minimum=8, maximum=250)
+                    custom_h = gr.Number(label="الارتفاع (مم)", value=S["custom_h"], minimum=8, maximum=250)
+                with gr.Group(visible=(S["mode"] == MODES[0])) as auto_group:
+                    align_chk = gr.Checkbox(label="تصحيح ميلان الوجه تلقائياً (حسب العينين)", value=S["align"])
+                with gr.Group(visible=(S["mode"] == MODES[1])) as manual_group:
+                    angle_slider = gr.Slider(-15, 15, value=S["angle"], step=0.1,
+                                             label="تدوير الصورة (درجة) — لاستقامة الكتفين والرأس")
+                    angle_num = gr.Number(label="الزاوية بدقة (اكتب الرقم ثم Enter)", value=S["angle"],
+                                          minimum=-15, maximum=15, step=0.1)
+                    zoom_slider = gr.Slider(0.2, 5.0, value=S["zoom"], step=0.01,
+                                            label="التقريب والتبعيد (1 = ملء الإطار)")
+                    pan_x = gr.Slider(-100, 100, value=S["pan_x"], step=1, label="إزاحة أفقية")
+                    pan_y = gr.Slider(-100, 100, value=S["pan_y"], step=1, label="إزاحة عمودية")
+                    guides_chk = gr.Checkbox(label="إظهار أدلة القص في المعاينة", value=S["guides"])
+                    center_btn = gr.Button("🎯 توسيط الوجه تلقائياً", size="sm")
+                    reset_manual_btn = gr.Button("إعادة ضبط اليدوي", size="sm")
+
+            bg_head = gr.Button(_sec_label("🎨 الخلفية", S["ui_bg"]), elem_classes=["section-head"])
+            with gr.Group(visible=S["ui_bg"]) as bg_group:
+                color_radio = gr.Radio(list(COLORS.keys()), value=S["color"], label="لون الخلفية", elem_id="color_radio")
+                custom_color = gr.ColorPicker(label="اختر لونك", value=S["custom_color"],
+                                              visible=(S["color"] == "لون مخصص…"))
+
+            color_head = gr.Button(_sec_label("✨ تحسين الصورة", S["ui_color"]), elem_classes=["section-head"])
+            with gr.Group(visible=S["ui_color"]) as color_group:
+                bright_s = gr.Slider(0.5, 1.5, value=S["brightness"], step=0.01, label="السطوع")
+                contrast_s = gr.Slider(0.5, 1.5, value=S["contrast"], step=0.01, label="التباين")
+                satur_s = gr.Slider(0, 2.0, value=S["saturation"], step=0.01, label="تشبع الألوان")
+                sharp_s = gr.Slider(0, 3.0, value=S["sharpness"], step=0.05, label="الحدة")
+                shadows_s = gr.Slider(-100, 100, value=S["shadows"], step=1, label="الظلال (تفتيح المناطق الداكنة)")
+                highlights_s = gr.Slider(-100, 100, value=S["highlights"], step=1, label="الإبرازات (المناطق الفاتحة)")
+                temp_s = gr.Slider(-50, 50, value=S["temperature"], step=1, label="حرارة اللون (بارد ← دافئ)")
+                reset_color_btn = gr.Button("إعادة ضبط التحسينات", size="sm")
+
+            quality_head = gr.Button(_sec_label("💎 الجودة وحجم الملف", S["ui_quality"]), elem_classes=["section-head"])
+            with gr.Group(visible=S["ui_quality"]) as quality_group:
+                kb_num = gr.Number(label="حجم ملف مستهدف (KB) — 0 يعني أعلى جودة (يُضغط لهذه المرة فقط ولا يُحفظ)", value=0, minimum=0)
+                gr.Markdown(
+                    "الصورة القياسية تُصدَّر JPG بجودة 100 و300 DPI. "
+                    "ورقة 8/12 تُصدَّر JPG بجودة 100 و600 DPI للحفاظ على تفاصيل الوجه. "
+                    "الضغط بالحجم المستهدف يخص الصورة القياسية لهذه العملية فقط."
+                )
+
+            paper_head = gr.Button(_sec_label("🖨 الورقة والطباعة", S["ui_paper"]), elem_classes=["section-head"])
+            with gr.Group(visible=S["ui_paper"]) as paper_group:
+                sheet_radio = gr.Radio(list(SHEETS.keys()), value=S["sheet"], label="ورقة الطباعة")
+                with gr.Row():
+                    print_photo_btn = gr.Button("🖨 طباعة الصورة", size="sm")
+                    print_sheet_btn = gr.Button("🖨 طباعة الورقة المقسمة", size="sm")
+                gr.Markdown(
+                    "الورقة الناتجة JPG 600 DPI وبالمقاس الحقيقي. عند الطباعة اختر "
+                    "«الحجم الفعلي/100%» ولا تختر «ملء الصفحة». المعاينة وزر تنزيلها "
+                    "يعرضان الآن ملف JPG النهائي نفسه، لا نسخة WebP."
+                )
+
+            studio_head = gr.Button(_sec_label("📥 الاستوديو — الكاميرا والهاتف", S["ui_studio"]), elem_classes=["section-head"])
+            with gr.Group(visible=S["ui_studio"]) as studio_group:
+                inbox_txt = gr.Textbox(label="مجلد استقبال صور الكاميرا (نفس مجلد وجهة EOS Utility)",
+                                       value=S["inbox"], placeholder="مثال: D:\\Studio\\Incoming")
+                watch_chk = gr.Checkbox(label="مراقبة المجلد — تحميل أي صورة جديدة تلقائياً", value=S["watch"])
+                automake_chk = gr.Checkbox(label="صنع صورة الهوية تلقائياً فور وصول صورة جديدة", value=S["automake"])
+                printer_dd = gr.Dropdown(choices=list_printers(), value=(S["printer"] or None),
+                                         label="طابعة الطباعة المباشرة", allow_custom_value=True)
+                with gr.Row():
+                    refresh_printers_btn = gr.Button("🔄 تحديث الطابعات", size="sm")
+                    direct_sheet_btn = gr.Button("🖨 طباعة الورقة مباشرة", size="sm")
+                    direct_photo_btn = gr.Button("🖨 طباعة الصورة مباشرة", size="sm")
+                gr.Markdown(
+                    "**ربط الكاميرا:**\n"
+                    "1. صوّر بصيغة JPEG (صور RAW بصيغة CR3 لا تُقرأ).\n"
+                    "2. في برنامج EOS Utility اجعل مجلد الوجهة هو نفس المجلد المكتوب أعلاه.\n"
+                    "3. فعّل «مراقبة المجلد» — كل صورة جديدة تصل تظهر في السجل تلقائياً.\n\n"
+                    "**من الهاتف:**\n"
+                    "1. الهاتف والحاسوب على نفس شبكة الوايفاي.\n"
+                    "2. افتح من متصفح الهاتف العنوان الذي يظهر في نافذة التشغيل السوداء عند بدء البرنامج (مثال: http://192.168.1.7:7860).\n"
+                    "3. إن لم يفتح العنوان، شغّل ملف allow-phone.bat مرة واحدة كمسؤول على شبكة خاصة ثم أعد المحاولة.\n\n"
+                    "**الخصوصية:** عند استخدام الهاتف تنتقل الصورة عبر شبكة Wi-Fi المحلية إلى الحاسوب. لا تستخدم شبكة عامة، ويمكنك حماية الصفحة بتعيين PHOTOID_AUTH=user:pass قبل تشغيل البرنامج.")
+
+            layout_head = gr.Button(_sec_label("⚙ الإعدادات العامة", S["ui_layout"]), elem_classes=["section-head"])
+            with gr.Group(visible=S["ui_layout"]) as layout_group:
+                layout_page = gr.Slider(60, 100, value=S["layout_page"], step=1,
+                                        label="عرض الصفحة على الشاشة (%) — 100 يعني ملء الشاشة بلا فراغات جانبية")
+                layout_split = gr.Slider(25, 65, value=S["layout_split"], step=1,
+                                         label="عرض عمود النتائج — الصور والقائمة (%) — الباقي لمساحة العمل والتحرير")
+                layout_listh = gr.Slider(160, 800, value=S["layout_listh"], step=20,
+                                         label="ارتفاع قائمة الصور (بكسل) — القائمة بداخلها سكرول")
+                gr.Markdown("تتطبق المقاسات فوراً أثناء السحب وتُحفظ تلقائياً — تحديث الصفحة لا يغيّرها.")
+                reset_settings_btn = gr.Button("↩️ إعادة ضبط الإعدادات", variant="secondary", size="sm")
+
+        # ======== مساحة العمل (الوسط): الصورة أولاً وزر الإنشاء تحتها مباشرة ========
+        with gr.Column(scale=7, elem_id="col_canvas"):
+            gr.Markdown("### مساحة العمل", elem_classes=["canvas-title"])
+            in_image = gr.Image(label="صورتك",
+                                type="filepath", format="jpeg",
+                                sources=["upload", "webcam"], height=470)
+            out_preview = gr.Image(label="معاينة القص اليدوي (الأدلة هنا فقط — لا تظهر في النتائج أبداً)",
+                                   type="numpy", format="png", interactive=False, height=360,
+                                   visible=(S["mode"] == MODES[1]))
+            guide_md = gr.Markdown(
+                "دليل الأدلة (كما في القوالب المعتمدة): الأسهم الخضراء حول الصورة = الارتفاع والعرض الكليان، "
+                "وموضع الذقن من الأعلى، وبعد العينين عن الأسفل — بالمليمتر مع مجال التسامح. "
+                "وعلى الصورة: ضع قمة الرأس عند المنطقة الحمراء، والذقن عند الخط الأخضر، والعينين داخل الشريط الأزرق.",
+                visible=(S["mode"] == MODES[1]))
+            out_status = gr.Textbox(label="الحالة", interactive=False, elem_id="status_box")
+
+        # ======== النتائج والسجل (يسار الشاشة) ========
+        with gr.Column(scale=5, elem_id="col_results"):
+            gr.Markdown("### النتائج", elem_classes=["canvas-title"])
+            with gr.Group(elem_classes=["result-panel"]):
+                gr.Markdown("**الصورة القياسية** — JPG بدقة 300 DPI")
+                out_std = gr.Image(label="الصورة القياسية", type="filepath", format="jpeg",
+                                   buttons=["download", "fullscreen"], interactive=False,
+                                   height=230, show_label=False)
+            with gr.Group(elem_classes=["result-panel"]):
+                gr.Markdown(f"**نسخة عالية الدقة** — JPG بدقة {HD_DPI} DPI، بنفس المقاس الحقيقي")
+                out_hd = gr.Image(label="نسخة عالية الدقة", type="filepath", format="jpeg",
+                                  buttons=["download", "fullscreen"], interactive=False,
+                                  height=195, show_label=False)
+            with gr.Group(elem_classes=["result-panel"]):
+                gr.Markdown(f"**ورقة الطباعة** — JPG بدقة {SHEET_DPI} DPI، قصّ على الخطوط المتقطعة")
+                out_sheet = gr.Image(label="ورقة الطباعة", type="filepath", format="jpeg",
+                                     buttons=["download", "fullscreen"], interactive=False,
+                                     height=195, show_label=False)
+            out_files = gr.File(
+                label=f"تصدير النتائج — JPG عالي الجودة (الصورة 300 DPI، الورقة {SHEET_DPI} DPI)",
+                file_count="multiple"
+            )
+
+            list_head = gr.Button(_sec_label("🗂 السجل والمعرض", S["ui_list"]), elem_classes=["section-head"])
+            with gr.Group(visible=S["ui_list"]) as list_group:
+                photo_rows = []
+              # (الصفوف تُنشأ داخل صندوق التمرير أدناه)
+              # fmt: off
+                _rows_ctx = gr.Column(elem_id="photo_list_box")
+                _rows_ctx.__enter__()
+                for _j in range(LIST_ROWS):
+                    with gr.Group(visible=False) as _rg:
+                        _rmd = gr.Markdown("")
+                        with gr.Row():
+                            _rb8 = gr.Button("⚡ تجهيز 8 صور + طبع", size="sm", variant="primary")
+                            _rb12 = gr.Button("⚡ تجهيز 12 صورة + طبع", size="sm")
+                            _rbdel = gr.Button("🗑 حذف", size="sm")
+                    photo_rows.append((_rg, _rmd, _rb8, _rb12, _rbdel))
+                _rows_ctx.__exit__(None, None, None)
+                gr.Markdown("السجل محفوظ دائماً في قاعدة بيانات البرنامج — يبقى بعد الإغلاق وتحديث الصفحة. زر «🗑 حذف» يزيل السجل من القائمة فقط — ملف الصورة في مجلد الكاميرا لا يُمسّ.")
+                unignore_btn = gr.Button("↩ إظهار الصور المحذوفة من القائمة", size="sm", variant="secondary")
+
+    # ======== استوديو الطباعة والحفظ (يظهر عند الطلب — v12) ========
+    with gr.Group(visible=False, elem_id="print_studio") as print_studio:
+        with gr.Row():
+            gr.Markdown("### 🖨 استوديو الطباعة والحفظ")
+            studio_close_btn = gr.Button("✖ إغلاق", size="sm", scale=0)
+        studio_sheet = gr.Image(label="ورقة الطباعة", type="filepath", format="jpeg",
+                                buttons=["download", "fullscreen"], interactive=False,
+                                height=380, show_label=False)
+        with gr.Row():
+            studio_print_sheet_btn = gr.Button("🖨 طباعة الورقة (نافذة الطباعة)",
+                                               variant="primary")
+            studio_print_photo_btn = gr.Button("🖨 طباعة الصورة (نافذة الطباعة)")
+        with gr.Row():
+            studio_direct_sheet_btn = gr.Button("⚡ طباعة الورقة مباشرة على الطابعة")
+            studio_direct_photo_btn = gr.Button("⚡ طباعة الصورة مباشرة على الطابعة")
+        gr.Markdown(
+            "من هنا تطبع الورقة أو الصورة، وزر التنزيل داخل معاينة الورقة يحفظ "
+            "ملفها الأصلي. الصورة القياسية وعالية الدقة وملفات التصدير كلها في "
+            "قسم «النتائج» يسار الشاشة.")
+
+    # ---------- حفظ الإعدادات (بمنع التكرار داخل save_settings_dict) ----------
+    SETTINGS_KEYS = ["mode", "size", "custom_w", "custom_h", "color", "custom_color",
+                     "sheet", "align", "angle", "zoom", "pan_x", "pan_y", "guides",
+                     "brightness", "contrast", "saturation", "sharpness",
+                     "shadows", "highlights", "temperature",
+                     "inbox", "watch", "automake", "printer",
+                     "layout_page", "layout_split", "layout_listh"]
+    SETTINGS_INPUTS = [mode_radio, size_radio, custom_w, custom_h, color_radio,
+                       custom_color, sheet_radio, align_chk, angle_slider,
+                       zoom_slider, pan_x, pan_y, guides_chk, bright_s, contrast_s,
+                       satur_s, sharp_s, shadows_s, highlights_s, temp_s,
+                       inbox_txt, watch_chk, automake_chk, printer_dd,
+                       layout_page, layout_split, layout_listh]
+
+    def _persist(*vals):
+        try:
+            save_settings_dict(dict(zip(SETTINGS_KEYS, vals)))
+        except Exception as e:
+            logger.exception("Automatic settings persistence failed")
+            raise gr.Error("تعذّر حفظ الإعدادات. تحقق من صلاحية الكتابة في مجلد البرنامج وراجع logs/studio.log.") from e
+
+    for _c in SETTINGS_INPUTS:
+        _c.change(_persist, inputs=SETTINGS_INPUTS, outputs=None)
+
+    # ---------- أقسام قابلة للطي بحالة محفوظة ----------
+    SECTION_DEFS = [("ui_cut", cut_head, cut_group, "📷 الصورة والمقاسات"),
+                    ("ui_bg", bg_head, bg_group, "🎨 الخلفية"),
+                    ("ui_color", color_head, color_group, "✨ تحسين الصورة"),
+                    ("ui_quality", quality_head, quality_group, "💎 الجودة وحجم الملف"),
+                    ("ui_paper", paper_head, paper_group, "🖨 الورقة والطباعة"),
+                    ("ui_studio", studio_head, studio_group,
+                     "📥 الاستوديو — الكاميرا والهاتف"),
+                    ("ui_list", list_head, list_group, "🗂 السجل والمعرض"),
+                    ("ui_layout", layout_head, layout_group, "⚙ الإعدادات العامة")]
+    SECTION_OUTS = []
+    for _k, _h, _g, _t in SECTION_DEFS:
+        SECTION_OUTS += [_g, _h]
+
+    def _section_updates(s):
+        out = []
+        for key, _h, _g, title in SECTION_DEFS:
+            o = bool(s.get(key))
+            out += [gr.update(visible=o), gr.update(value=_sec_label(title, o))]
+        return out
+
+    def _mk_toggle(key, title):
+        def _toggle():
+            d = load_settings()
+            newv = not d.get(key, False)
+            d[key] = newv
+            try:
+                save_settings_dict(d)
+            except Exception as e:
+                raise gr.Error("تعذّر حفظ الإعدادات. تحقق من صلاحية الكتابة في مجلد البرنامج وراجع logs/studio.log.") from e
+            return gr.update(visible=newv), gr.update(value=_sec_label(title, newv))
+        return _toggle
+
+    for _k, _h, _g, _t in SECTION_DEFS:
+        _h.click(_mk_toggle(_k, _t), inputs=None, outputs=[_g, _h])
+
+    settings_btn.click(_mk_toggle("ui_layout", "⚙ الإعدادات العامة"),
+                       inputs=None, outputs=[layout_group, layout_head])
+
+    def _about_toggle(v):
+        return gr.update(visible=not v), not v
+
+    about_btn.click(_about_toggle, inputs=about_state,
+                    outputs=[about_group, about_state])
+
+    def _apply_layout(page, split, listh):
+        return gr.update(value=_layout_style(page, split, listh))
+
+    for _lc in (layout_page, layout_split, layout_listh):
+        _lc.change(_apply_layout,
+                   inputs=[layout_page, layout_split, layout_listh],
+                   outputs=layout_style)
+
+    # ---------- مخرجات الإشعارات وقائمة الصور ----------
+    DYN_OUTPUTS = [photos_state]
+    for _slot in notif_slots:
+        DYN_OUTPUTS += [_slot[0], _slot[1]]
+    for _row in photo_rows:
+        DYN_OUTPUTS += [_row[0], _row[1]]
+
+    # ---------- إظهار/إخفاء ----------
+    size_radio.change(lambda v: gr.update(visible=(v == "مقاس مخصص…")),
+                      inputs=size_radio, outputs=custom_size_row)
+    color_radio.change(lambda v: gr.update(visible=(v == "لون مخصص…")),
+                       inputs=color_radio, outputs=custom_color)
+
+    def _mode_switch(m):
+        manual = (m == MODES[1])
+        return (gr.update(visible=not manual), gr.update(visible=manual),
+                gr.update(visible=manual), gr.update(visible=manual))
+
+    mode_radio.change(_mode_switch, inputs=mode_radio,
+                      outputs=[auto_group, manual_group, out_preview, guide_md])
+
+    # ---------- المعاينة: أحداث محسوبة بعناية ----------
+    # المنزلقات تُطلق المعاينة عند الإفلات فقط (release) لا أثناء السحب،
+    # وخانة الزاوية عند الإدخال (submit) — لا حلقات إعادة بناء أبداً.
+    PREVIEW_INPUTS = [angle_slider, zoom_slider, pan_x, pan_y, size_radio, custom_w,
+                      custom_h, color_radio, custom_color, guides_chk, bright_s,
+                      contrast_s, satur_s, sharp_s, shadows_s, highlights_s, temp_s]
+
+    def _preview(state_v, *vals):
+        return manual_preview(state_v, *vals)
+
+    in_image.change(on_upload, inputs=[in_image, mode_radio] + PREVIEW_INPUTS,
+                    outputs=[state, out_preview, out_status, zoom_slider, pan_x, pan_y])
+
+    for _c in (angle_slider, zoom_slider, pan_x, pan_y, bright_s, contrast_s,
+               satur_s, sharp_s, shadows_s, highlights_s, temp_s):
+        _c.release(_preview, inputs=[state] + PREVIEW_INPUTS, outputs=out_preview)
+    for _c in (size_radio, color_radio, custom_color, guides_chk):
+        _c.change(_preview, inputs=[state] + PREVIEW_INPUTS, outputs=out_preview)
+    custom_w.change(_preview, inputs=[state] + PREVIEW_INPUTS, outputs=out_preview)
+    custom_h.change(_preview, inputs=[state] + PREVIEW_INPUTS, outputs=out_preview)
+    mode_radio.change(_preview, inputs=[state] + PREVIEW_INPUTS, outputs=out_preview)
+
+    angle_slider.release(lambda v: v, inputs=angle_slider, outputs=angle_num)
+
+    def _angle_submit(value, state_v, *vals):
+        angle = _clamp_setting(value, -15, 15, 0.0)
+        try:
+            save_settings_dict({"angle": angle})
+        except Exception as exc:
+            raise gr.Error("تعذّر حفظ زاوية القص. راجع logs/studio.log.") from exc
+        preview_values = [angle] + list(vals)
+        return angle, manual_preview(state_v, *preview_values)
+
+    angle_num.submit(_angle_submit,
+                     inputs=[angle_num, state] + PREVIEW_INPUTS[1:],
+                     outputs=[angle_slider, out_preview])
+
+    def _reset_manual(*vals):
+        d = dict(zip(SETTINGS_KEYS, vals))
+        d.update({"angle": 0.0, "zoom": 1.0, "pan_x": 0, "pan_y": 0})
+        try:
+            save_settings_dict(d)
+        except Exception as e:
+            raise gr.Error("تعذّر حفظ الإعدادات. تحقق من صلاحية الكتابة في مجلد البرنامج وراجع logs/studio.log.") from e
+        return 0.0, 0.0, 1.0, 0, 0
+
+    def _apply_init(state_v, *vals):
+        init = (state_v or {}).get("init")
+        if not init:
+            return gr.skip(), gr.skip(), gr.skip(), gr.skip()
+        v = list(vals)
+        v[1], v[2], v[3] = init
+        return init[0], init[1], init[2], manual_preview(state_v, *v)
+
+    center_btn.click(_apply_init, inputs=[state] + PREVIEW_INPUTS,
+                     outputs=[zoom_slider, pan_x, pan_y, out_preview])
+
+    reset_manual_btn.click(_reset_manual, inputs=SETTINGS_INPUTS,
+                           outputs=[angle_slider, angle_num, zoom_slider, pan_x, pan_y])
+
+    def _reset_colors(*vals):
+        d = dict(zip(SETTINGS_KEYS, vals))
+        d.update({"brightness": 1.0, "contrast": 1.0, "saturation": 1.0,
+                  "sharpness": 1.0, "shadows": 0, "highlights": 0, "temperature": 0})
+        try:
+            save_settings_dict(d)
+        except Exception as e:
+            raise gr.Error("تعذّر حفظ الإعدادات. تحقق من صلاحية الكتابة في مجلد البرنامج وراجع logs/studio.log.") from e
+        return 1.0, 1.0, 1.0, 1.0, 0, 0, 0
+
+    reset_color_btn.click(_reset_colors, inputs=SETTINGS_INPUTS,
+                          outputs=[bright_s, contrast_s, satur_s, sharp_s,
+                                   shadows_s, highlights_s, temp_s])
+
+    # ---------- الصنع ----------
+    # ---------- الطباعة ----------
+    print_photo_btn.click(None, inputs=[out_files, sheet_radio,
+                                        size_radio, custom_w, custom_h], js=PRINT_PHOTO_JS)
+    print_sheet_btn.click(None, inputs=[out_files, sheet_radio,
+                                        size_radio, custom_w, custom_h], js=PRINT_SHEET_JS)
+
+    # ---------- الاستوديو: طباعة مباشرة + مراقبة المجلد ----------
+    refresh_printers_btn.click(lambda: gr.update(choices=list_printers()),
+                               inputs=None, outputs=printer_dd)
+
+    def _after_direct(status, photos, img):
+        if status.startswith("🖨") and isinstance(img, str) and img:
+            if db_mark_by_local(img):
+                status += "\n✓ سُجّلت هذه الطباعة في قائمة الصور."
+        pd = {"photos": db_list(),
+              "notifs": list((photos or {}).get("notifs", []))}
+        return (status,) + render_dynamic(pd)
+
+    def _dprint_sheet(files, printer, sheet_label, photos, img):
+        return _after_direct(direct_print(files, printer, True, sheet_label),
+                             photos, img)
+
+    def _dprint_photo(files, printer, photos, img):
+        return _after_direct(direct_print(files, printer, False, None),
+                             photos, img)
+
+    direct_sheet_btn.click(_dprint_sheet,
+                           inputs=[out_files, printer_dd, sheet_radio,
+                                   photos_state, in_image],
+                           outputs=[out_status] + DYN_OUTPUTS)
+    direct_photo_btn.click(_dprint_photo,
+                           inputs=[out_files, printer_dd, photos_state,
+                                   in_image],
+                           outputs=[out_status] + DYN_OUTPUTS)
+
+    # ---------- شريط الإجراءات العلوي + استوديو الطباعة (v12) ----------
+    tmake_btn.click(
+        make_id_photo,
+        inputs=[in_image, state, mode_radio, size_radio, custom_w, custom_h,
+                color_radio, custom_color, sheet_radio, align_chk, kb_num,
+                angle_slider, zoom_slider, pan_x, pan_y,
+                bright_s, contrast_s, satur_s, sharp_s,
+                shadows_s, highlights_s, temp_s],
+        outputs=[out_std, out_hd, out_sheet, out_files, out_status],
+    )
+    import_btn.click(
+        None,
+        js="() => { const fire = (el) => { if (!el) return; for (const t of ['pointerdown','mousedown','pointerup','mouseup','click']) el.dispatchEvent(new MouseEvent(t, {bubbles: true, cancelable: true, view: window})); }; const dz = document.querySelector('#col_canvas .upload-container > button'); if (dz) { fire(dz); return; } fire(document.querySelector('#col_canvas button[aria-label=\"Upload file\"]')); }")
+    camera_btn.click(
+        None,
+        js="() => { const fire = (el) => { if (!el) return; for (const t of ['pointerdown','mousedown','pointerup','mouseup','click']) el.dispatchEvent(new MouseEvent(t, {bubbles: true, cancelable: true, view: window})); }; fire(document.querySelector('#col_canvas button[aria-label=\"Capture from camera\"]')); const c = document.querySelector('#col_canvas'); if (c) c.scrollIntoView({behavior: 'smooth', block: 'center'}); }")
+
+    def _open_studio(sheet_path):
+        return gr.update(visible=True), (sheet_path if sheet_path else gr.skip())
+
+    studio_btn.click(
+        _open_studio, inputs=[out_sheet], outputs=[print_studio, studio_sheet],
+        js="(...args) => { setTimeout(() => { const s = document.querySelector("
+           "'#print_studio'); if (s) s.scrollIntoView({behavior: 'smooth', "
+           "block: 'start'}); }, 350); return args; }")
+    studio_close_btn.click(lambda: gr.update(visible=False), inputs=None,
+                           outputs=[print_studio])
+    studio_print_sheet_btn.click(None, inputs=[out_files, sheet_radio,
+                                               size_radio, custom_w, custom_h],
+                                 js=PRINT_SHEET_JS)
+    studio_print_photo_btn.click(None, inputs=[out_files, sheet_radio,
+                                               size_radio, custom_w, custom_h],
+                                 js=PRINT_PHOTO_JS)
+    studio_direct_sheet_btn.click(_dprint_sheet,
+                                  inputs=[out_files, printer_dd, sheet_radio,
+                                          photos_state, in_image],
+                                  outputs=[out_status] + DYN_OUTPUTS)
+    studio_direct_photo_btn.click(_dprint_photo,
+                                  inputs=[out_files, printer_dd, photos_state,
+                                          in_image],
+                                  outputs=[out_status] + DYN_OUTPUTS)
+
+    watch_timer = gr.Timer(1.5)
+    watch_timer.tick(
+        watch_tick,
+        inputs=[watch_state, photos_state, inbox_txt, watch_chk, automake_chk,
+                in_image, mode_radio, sheet_radio, align_chk, kb_num] + PREVIEW_INPUTS,
+        outputs=[watch_state, in_image, state, out_preview, out_std, out_hd,
+                 out_sheet, out_files, out_status, zoom_slider, pan_x,
+                 pan_y] + DYN_OUTPUTS)
+
+    # ---------- أزرار التجهيز المباشر + إخفاء الإشعارات + مسح القائمة ----------
+    QUICK_INPUTS = [photos_state, mode_radio, printer_dd, align_chk,
+                    kb_num] + PREVIEW_INPUTS
+    QUICK_OUTPUTS = [photos_state, out_std, out_hd, out_sheet, out_files,
+                     out_status] + DYN_OUTPUTS[1:]
+
+    def _mk_quick(which, idx, kind):
+        def _h(photos, mode, printer, align, kb, *pv):
+            return quick_make_print(photos, which, idx, kind, mode, printer,
+                                    align, kb, *pv)
+        return _h
+
+    def _mk_dismiss(idx):
+        def _d(photos):
+            pd = {"photos": list((photos or {}).get("photos", [])),
+                  "notifs": list((photos or {}).get("notifs", []))}
+            if 0 <= idx < len(pd["notifs"]):
+                pd["notifs"].pop(idx)
+            return render_dynamic(pd)
+        return _d
+
+    for _i, _slot in enumerate(notif_slots):
+        _slot[2].click(_mk_quick("slot", _i, "8"), inputs=QUICK_INPUTS,
+                       outputs=QUICK_OUTPUTS)
+        _slot[3].click(_mk_quick("slot", _i, "12"), inputs=QUICK_INPUTS,
+                       outputs=QUICK_OUTPUTS)
+        _slot[4].click(_mk_dismiss(_i), inputs=[photos_state],
+                       outputs=DYN_OUTPUTS)
+    def _mk_delete(idx):
+        def _del(photos):
+            return delete_photo_record(photos, idx)
+        return _del
+
+    for _j, _row in enumerate(photo_rows):
+        _row[2].click(_mk_quick("row", _j, "8"), inputs=QUICK_INPUTS,
+                      outputs=QUICK_OUTPUTS)
+        _row[3].click(_mk_quick("row", _j, "12"), inputs=QUICK_INPUTS,
+                      outputs=QUICK_OUTPUTS)
+        _row[4].click(_mk_delete(_j), inputs=[photos_state],
+                      outputs=DYN_OUTPUTS + [out_status])
+
+    def _unignore_all():
+        try:
+            n = db_clear_ignored()
+        except Exception as e:
+            raise gr.Error("تعذّرت إعادة إظهار الصور المحذوفة. راجع logs/studio.log للتفاصيل.") from e
+        if n:
+            return (f"↩ أُلغي حذف {n} صورة. حدّث الصفحة الآن (F5) — "
+                    "ستظهر الصور المحذوفة الموجودة في مجلد الكاميرا.")
+        return "لا توجد صور محذوفة مخفية حالياً."
+
+    unignore_btn.click(_unignore_all, outputs=[out_status], queue=False)
+
+
+    # ---------- حفظ/استرجاع الإعدادات ----------
+    # المشكلة التي أزعجت المستخدم: قيم البداية تتجمّد لحظة إقلاع الخادم، فكل
+    # تحديث للصفحة كان يعرض قيم الإقلاع لا آخر ما حُفظ. الحل: عند كل تحميل
+    # للصفحة (demo.load) نعيد قراءة settings.json ونملأ المكوّنات من جديد،
+    # + زر حفظ صريح يلتقط حتى الحقول النصية التي لم يُضغط خارجها بعد.
+    def _settings_values(s):
+        vals = [s[k] for k in SETTINGS_KEYS]
+        vals[SETTINGS_KEYS.index("printer")] = \
+            vals[SETTINGS_KEYS.index("printer")] or None
+        return vals
+
+    def _save_now(*vals):
+        try:
+            save_settings_dict(dict(zip(SETTINGS_KEYS, vals)))
+        except Exception as e:
+            raise gr.Error("تعذّر حفظ الإعدادات. راجع logs/studio.log للتفاصيل.") from e
+        return ("💾 تم حفظ إعداداتك ✓ — ستبقى كما هي بعد تحديث الصفحة "
+                "أو إعادة فتح البرنامج أو من هاتفك.")
+
+    def _reset_now():
+        try:
+            save_settings_dict(dict(DEFAULT_SETTINGS), replace=True)
+        except Exception as e:
+            raise gr.Error("تعذّر إعادة ضبط الإعدادات أو حفظها. راجع logs/studio.log.") from e
+        defaults = dict(DEFAULT_SETTINGS)
+        manual = defaults["mode"] == MODES[1]
+        return (*_settings_values(defaults),
+                gr.update(visible=(defaults["size"] == "مقاس مخصص…")),
+                gr.update(visible=(defaults["color"] == "لون مخصص…")),
+                gr.update(visible=not manual), gr.update(visible=manual),
+                gr.update(value=None, visible=manual),
+                gr.update(visible=manual),
+                gr.update(value=defaults["angle"]), gr.update(value=0),
+                *_section_updates(defaults),
+                gr.update(value=_layout_style(
+                    defaults["layout_page"], defaults["layout_split"],
+                    defaults["layout_listh"])),
+                "↩️ تمت إعادة ضبط الإعدادات إلى القيم الأصلية.")
+
+    def _load_saved():
+        saved = load_settings()
+        manual = saved["mode"] == MODES[1]
+        return (*_settings_values(saved),
+                gr.update(visible=(saved["size"] == "مقاس مخصص…")),
+                gr.update(visible=(saved["color"] == "لون مخصص…")),
+                gr.update(visible=not manual), gr.update(visible=manual),
+                gr.update(visible=manual), gr.update(visible=manual),
+                gr.update(value=saved["angle"]), gr.update(value=0),
+                *_section_updates(saved),
+                *render_dynamic({"photos": db_list(), "notifs": []}),
+                gr.update(value=_layout_style(saved.get("layout_page", 100),
+                                              saved.get("layout_split", 40),
+                                              saved.get("layout_listh", 340))))
+
+    save_settings_btn.click(_save_now, inputs=SETTINGS_INPUTS, outputs=out_status)
+    reset_settings_btn.click(
+        _reset_now, inputs=None,
+        outputs=SETTINGS_INPUTS + [custom_size_row, custom_color, auto_group,
+                                   manual_group, out_preview, guide_md, angle_num, kb_num]
+                + SECTION_OUTS + [layout_style, out_status]
+    )
+    demo.load(
+        _load_saved, inputs=None,
+        outputs=SETTINGS_INPUTS + [custom_size_row, custom_color, auto_group,
+                                   manual_group, out_preview, guide_md, angle_num, kb_num]
+                + SECTION_OUTS + DYN_OUTPUTS + [layout_style]
+    )
+
+    gr.HTML("""
+    <div style="text-align:center;color:#888;font-size:13px">صُنع بواسطة <b>Zizo3114</b></div>
+    """)
+
+if __name__ == "__main__":
+    logger.info("Starting ID PHOTO STUDIO v%s", APP_VERSION)
+    logger.info("Project directory: %s", BASE_DIR)
+    logger.info("Gradio version: %s", getattr(gr, "__version__", "unknown"))
+    print(f"ID PHOTO STUDIO v{APP_VERSION}")
+    print(f"سجل الأخطاء والتشغيل: {os.path.join(LOG_DIR, 'studio.log')}")
+    print("ملاحظة: استخدم رابط Local URL الذي يعرضه Gradio في الأسفل؛ قد يتغير رقم المنفذ إذا كان 7860 مستخدماً.")
+    # اختيار أول منفذ فارغ تلقائياً: إن بقيت نسخة قديمة من البرنامج تعمل في
+    # الخلفية (وهي ما تسبب خطأ «المنفذ مشغول») تُفتح الجديدة على المنفذ التالي.
+    import socket
+
+    def _free_port(start=7860):
+        for _p in range(start, start + 20):
+            with socket.socket() as _s:
+                try:
+                    _s.bind(("127.0.0.1", _p))
+                    return _p
+                except OSError:
+                    continue
+        return start
+
+    # الشبكة المحلية مفتوحة (0.0.0.0) ليصل الهاتف على نفس الوايفاي إلى اللوحة.
+    # كلمة سر اختيارية: عيّن متغير البيئة PHOTOID_AUTH على صورة user:pass قبل التشغيل.
+    _auth = None
+    _ea = os.environ.get("PHOTOID_AUTH", "")
+    if ":" in _ea:
+        _u, _pw = _ea.split(":", 1)
+        _auth = (_u, _pw)
+    if _auth is None:
+        print("تنبيه خصوصية: الوصول من الهاتف غير محمي بكلمة سر. استخدم شبكة Wi-Fi موثوقة، أو عيّن PHOTOID_AUTH=user:pass قبل التشغيل.")
+    else:
+        print("تم تفعيل تسجيل الدخول للوصول من الهاتف.")
+    _lan_address = _lan_ip()
+    if _lan_address:
+        print("الهاتف (نفس الوايفاي): http://" + _lan_address + ":<المنفذ الظاهر أسفله>")
+    else:
+        print("تعذّر تحديد عنوان الشبكة المحلية؛ استخدم رابط Local URL الظاهر أسفله على هذا الحاسوب.")
+    try:
+        demo.launch(inbrowser=True, server_name="0.0.0.0", server_port=_free_port(),
+                    auth=_auth,
+                    theme=gr.themes.Soft(primary_hue="blue", neutral_hue="slate"),
+                    css=CUSTOM_CSS,
+                    # Image matting is memory-intensive and IDCreator keeps a
+                    # mutable context, so favour a small, reliable worker pool.
+                    max_threads=4,
+                    state_session_capacity=32,
+                    max_file_size=MAX_UPLOAD_BYTES,
+                    # Results must stay downloadable/printable, but settings,
+                    # logs, and the local studio database must never be served.
+                    allowed_paths=[OUT_DIR],
+                    blocked_paths=[SETTINGS_FILE, SETTINGS_FILE + ".bak",
+                                   DB_FILE, LOG_DIR],
+                    # Identity-photo runs should not be retained by the browser.
+                    run_history=False)
+    except Exception:
+        logger.exception("Gradio server failed to launch")
+        print("تعذّر تشغيل الواجهة. افتح logs\\studio.log وأرسل آخر رسالة خطأ.")
+        raise
