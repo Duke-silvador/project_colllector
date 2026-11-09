@@ -1,0 +1,1509 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23070d17'/%3E%3Crect x='10' y='14' width='44' height='36' rx='4' fill='none' stroke='%2300e5ff' stroke-width='4'/%3E%3Crect x='10' y='30' width='44' height='4' fill='%2300e5ff'/%3E%3Ccircle cx='18' cy='22' r='3' fill='%2300ff9d'/%3E%3Ccircle cx='27' cy='22' r='3' fill='%2300ff9d'/%3E%3C/svg%3E">
+<title>南棠员工扫描看板</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body { overflow-x:hidden; }
+body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: #f0f2f5;
+    min-height: 100vh;
+    padding: 20px;
+    color: #333;
+    font-size: 14px;
+}
+.container { max-width: 1280px; margin: 0 auto; }
+
+/* Tab栏 */
+.tabs {
+    display:flex; gap:8px; margin-bottom:20px;
+    background: #ffffff; padding:8px; border-radius:8px;
+    width:fit-content; max-width:100%;
+    overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none;
+}
+.tabs::-webkit-scrollbar { display:none; }
+.tab-btn {
+    padding:10px 20px; border-radius:6px; border:none; background:transparent;
+    font-size:14px; cursor:pointer; color:#666; font-weight:500;
+    transition:all .15s; white-space:nowrap;
+}
+.tab-btn:hover { color:#333; }
+.tab-btn.active {
+    background: #1890ff;
+    color:#fff; font-weight:500;
+}
+.tab-page { display:none; }
+.tab-page.active { display:block; }
+
+/* 顶部标题条 - 渐变彩色 */
+.topbar {
+    background: linear-gradient(135deg, #d4380d 0%, #fa541c 50%, #fa8c16 100%);
+    border-radius:8px; padding:20px 24px; margin-bottom:20px;
+    color:#fff; display:flex; justify-content:space-between; align-items:center;
+    flex-wrap:wrap; gap:10px;
+}
+.topbar h1 { font-size:18px; font-weight:600; color:#fff; }
+.topbar .sub { font-size:13px; margin-top:4px; color:rgba(255,255,255,.85); }
+.topbar .live {
+    background:rgba(255,255,255,.2); padding:6px 12px; border-radius:20px;
+    font-size:12px; display:flex; align-items:center; gap:6px; color:#fff;
+}
+.dot { width:8px; height:8px; background:#52c41a; border-radius:50%; }
+
+/* KPI卡 - 顶部彩色边框 */
+.kpis { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:20px; }
+.kpi {
+    background:#ffffff; border-radius:8px; padding:20px;
+    border-top:3px solid var(--c,#f5222d);
+    box-shadow: 0 1px 2px rgba(0,0,0,.05);
+}
+.kpi .v { font-size:28px; font-weight:700; color:var(--c,#f5222d); font-variant-numeric:tabular-nums; line-height:1.2; }
+.kpi .l { font-size:13px; color:#666; margin-top:8px; }
+
+/* 卡片 */
+.card {
+    background:#ffffff; border-radius:8px; padding:20px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.05);
+    margin-bottom:16px;
+}
+.card-t, .card-title { font-size:15px; font-weight:600; color:#333; margin-bottom:16px; }
+.card-t .tip { font-size:12px; color:#999; font-weight:normal; margin-left:8px; }
+
+.row2 { display:grid; grid-template-columns:1.5fr 1fr; gap:16px; margin-bottom:16px; }
+.row1 { margin-bottom:16px; }
+
+/* 表格 */
+.tw { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+table { width:100%; border-collapse:collapse; min-width:560px; }
+th,td { padding:12px; text-align:left; border-bottom:1px solid #f0f0f0; font-size:13px; white-space:nowrap; }
+th { color:#999; font-weight:500; font-size:13px; background:#fafafa; }
+td { color:#333; }
+td:first-child { color:#1890ff; font-weight:600; }
+.tag { padding:2px 8px; border-radius:4px; font-size:12px; font-weight:500; display:inline-block; }
+.tag-blue { background:#e6f7ff; color:#1890ff; }
+.tag-orange { background:#fff7e6; color:#fa8c16; }
+.tag-red { background:#fff1f0; color:#f5222d; }
+.tag-teal { background:#f6ffed; color:#52c41a; }
+
+/* 响应式 */
+@media (max-width:768px) {
+    body { padding:12px; }
+    .kpis { grid-template-columns:repeat(2,1fr); gap:12px; }
+    .row2 { grid-template-columns:1fr; }
+    .topbar h1 { font-size:16px; }
+    .kpi .v { font-size:22px; }
+    .tab-btn { padding:8px 14px; font-size:13px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="tabs">
+    <button class="tab-btn active" data-tab="print">🖨️ 打印看板</button>
+    <button class="tab-btn" data-tab="scan">📦 员工扫描</button>
+    <button class="tab-btn" data-tab="timely">⏰ 时效提醒</button>
+    <button class="tab-btn" data-tab="transfer">📦 分仓件移库</button>
+    <button class="tab-btn" data-tab="stock">📋 仓库库存</button>
+    <button class="tab-btn" data-tab="cost">💰 件均成本</button>
+</div>
+
+<!-- Tab1 打印 -->
+<div id="tab-print" class="tab-page active">
+    <div class="topbar">
+        <div>
+            <h1>🖨️ 打印看板</h1>
+            <div class="sub">BQ_1015 标签打印机 · 实时</div>
+        </div>
+        <div class="live"><div class="dot"></div><span id="printUpdateTime">加载中...</span></div>
+    </div>
+
+    <div class="kpis">
+        <div class="kpi" style="--c:#2affb2;"><div class="v" id="printTotal">0</div><div class="l">今日总数</div></div>
+        <div class="kpi" style="--c:#4dff88;"><div class="v" id="printSuccess">0</div><div class="l">成功</div></div>
+        <div class="kpi" style="--c:#ff5d73;"><div class="v" id="printFail">0</div><div class="l">失败</div></div>
+        <div class="kpi" style="--c:#0a0a0a;"><div class="v" id="printRate">0%</div><div class="l">成功率</div></div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">📋 最近打印记录</div>
+        <table>
+            <thead><tr><th>时间</th><th>货件号</th><th>页码范围</th><th>状态</th></tr></thead>
+            <tbody id="printLogs"><tr><td colspan="4" style="text-align:center;color:#6d8db0;">加载中...</td></tr></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Tab2 扫描 -->
+<div id="tab-scan" class="tab-page">
+    <div class="topbar">
+        <div>
+            <h1>📦 员工当日扫描看板</h1>
+            <div class="sub">FBA中转仓-金华 / 金华2仓 · 实时统计</div>
+        </div>
+        <div class="live"><div class="dot"></div><span id="scanUpdateTime">加载中...</span></div>
+    </div>
+
+    <div class="kpis">
+        <div class="kpi" style="--c:#2affb2;"><div class="v" id="scanTotalBoxes">0</div><div class="l">今日已扫箱数</div></div>
+        <div class="kpi" style="--c:#0a0a0a;"><div class="v" id="markedBulk">0</div><div class="l">已扫方数(m³)</div></div>
+        <div class="kpi" style="--c:#ffab40;"><div class="v" id="scanTotalBatches">0</div><div class="l">已标记提货单</div></div>
+        <div class="kpi" style="--c:#b388ff;"><div class="v" id="scanMaxUser">-</div><div class="l">今日最多</div></div>
+        <div class="kpi" style="--c:#9d7bff;"><div class="v" id="avgEff">-</div><div class="l">整体平均(箱/h)</div></div>
+        <div class="kpi" style="--c:#ff5d73;"><div class="v" id="unmarkedBulk">0</div><div class="l">未标记方数(m³)</div></div>
+        <div class="kpi" style="--c:#ffcc4d;"><div class="v" id="unmarkedCount">0</div><div class="l">未标记单数</div></div>
+        <div class="kpi" style="--c:#4dff88;"><div class="v" id="scanTotalUsers">0</div><div class="l">扫描员工数</div></div>
+    </div>
+
+    <!-- 历史概览 -->
+    <div class="card row1">
+        <div class="card-t">📈 历史出货概览 <span class="tip">单位：方(m³)</span></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;" id="historyStats">
+            <div style="text-align:center;padding:12px;background:rgba(0,229,255,.07);border:1px solid rgba(0,229,255,.18);border-radius:10px;">
+                <div style="font-size:22px;font-weight:700;color:#2affb2;text-shadow:0 0 12px rgba(42,255,178,.5);" id="todayBulk">-</div>
+                <div style="font-size:12px;color:#71717a;margin-top:4px;">今天累计</div>
+            </div>
+            <div style="text-align:center;padding:12px;background:rgba(0,229,255,.07);border:1px solid rgba(0,229,255,.18);border-radius:10px;">
+                <div style="font-size:22px;font-weight:700;color:#0a0a0a;text-shadow:0 0 12px rgba(92,225,255,.5);" id="weekBulk">-</div>
+                <div style="font-size:12px;color:#71717a;margin-top:4px;">本周(周一至今)</div>
+            </div>
+            <div style="text-align:center;padding:12px;background:rgba(255,171,64,.07);border:1px solid rgba(255,171,64,.2);border-radius:10px;">
+                <div style="font-size:22px;font-weight:700;color:#ffab40;text-shadow:0 0 12px rgba(255,171,64,.5);" id="lastWeekBulk">-</div>
+                <div style="font-size:12px;color:#71717a;margin-top:4px;">上周整周</div>
+            </div>
+            <div style="text-align:center;padding:12px;background:rgba(255,122,217,.07);border:1px solid rgba(255,122,217,.2);border-radius:10px;">
+                <div style="font-size:22px;font-weight:700;color:#ff7ad9;text-shadow:0 0 12px rgba(255,122,217,.5);" id="monthBulk">-</div>
+                <div style="font-size:12px;color:#71717a;margin-top:4px;">本月累计</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 每小时折线图 -->
+    <div class="card row1">
+        <div class="card-t">⏱️ 每小时扫描量分布 <span class="tip">点圆点看该小时明细</span></div>
+        <div class="tw" style="overflow-x:auto;">
+            <div id="hourlyChart" style="height:340px;min-width:600px;"></div>
+        </div>
+        <div id="hourlyDetail" style="margin-top:10px;padding:10px;background:rgba(0,229,255,.06);border-radius:8px;font-size:13px;color:#9db8d4;">点图上的圆点查看该小时详情</div>
+    </div>
+
+    <!-- 每小时打印箱子标签统计 -->
+    <div class="card">
+        <div class="card-t">🖨️ 每小时打印箱子标签统计 <span class="tip">今天</span> <div style="display:inline-block;margin-left:15px;line-height:1.2;">
+            <div id="printHourlyTotal" style="color:#e74c3c;font-weight:600;font-size:15px;"></div>
+            <div id="printHourlyAvg" style="color:#666;font-size:12px;"></div>
+        </div></div>
+        <div id="printHourlyChart" style="height:260px;"></div>
+    </div>
+
+    <!-- 对比图+饼图 -->
+    <div class="row2">
+        <div class="card" style="margin-bottom:0;">
+            <div class="card-t">📊 今日扫描对比 <span class="tip">单位：箱</span></div>
+            <div id="barChart" style="display:flex;align-items:flex-end;justify-content:space-around;height:280px;padding:16px 8px 0;"></div>
+        </div>
+        <div class="card" style="margin-bottom:0;">
+            <div class="card-t">🍩 占比分布</div>
+            <div id="pieChart" style="display:flex;align-items:center;justify-content:center;min-height:280px;"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-t">📋 员工扫描汇总 <span class="tip">今天</span></div>
+        <div class="tw"><table>
+            <thead><tr><th>排名</th><th>员工</th><th>箱数</th><th>货件数</th><th>工时</th><th>平均效率</th><th>占比</th></tr></thead>
+            <tbody id="scanSummaryTable"></tbody>
+        </table></div>
+    </div>
+
+    <div class="card">
+        <div class="card-t">⏳ 未标记待扫提货单 <span style="color:#ff5d73;font-weight:normal;font-size:11px;">还没开始扫</span></div>
+        <div class="tw"><table>
+            <thead><tr><th>提货单号</th><th>仓库</th><th>物流商</th><th>下单时间</th><th>已等多久</th><th>总箱数</th><th>方数(m³)</th><th>收货人</th></tr></thead>
+            <tbody id="unmarkedTable"></tbody>
+        </table></div>
+    </div>
+
+    <div class="card">
+        <div class="card-t">⏳ 部分标记提货单 <span style="color:#ffcc4d;font-weight:normal;font-size:11px;">正在扫 · 不限当天</span></div>
+        <div class="tw"><table>
+            <thead><tr><th>提货单号</th><th>仓库</th><th>物流商</th><th>总箱数</th><th>已标记箱数</th><th>未标记箱数</th></tr></thead>
+            <tbody id="partialTable"></tbody>
+        </table></div>
+    </div>
+</div>
+
+<!-- Tab4 仓库库存 -->
+<div id="tab-stock" class="tab-page">
+    <div class="topbar" style="background:linear-gradient(135deg,#096dd9 0%,#1890ff 50%,#40a9ff 100%);">
+        <div>
+            <h1>📋 仓库库存详情</h1>
+            <div class="sub">FBA中转仓-金华 / 金华2仓 · 各环节待处理箱数</div>
+            <div style="color:#fff;font-size:14px;font-weight:600;margin-top:8px;">📊 三环节合计库存：<span id="stockTotal" style="font-size:20px;font-weight:700;">-</span> 箱 <span id="stockTotalCount" style="font-size:12px;font-weight:400;color:rgba(255,255,255,.8);"></span></div>
+        </div>
+        <div class="live"><div class="dot"></div><span id="stockUpdateTime">加载中...</span></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:16px;">
+        <div class="kpi" style="--c:#0a0a0a;">
+            <div class="v" id="stockPrint">-</div>
+            <div class="l">📦 待打印箱子标签 <span id="stockPrintCount" style="font-weight:400;font-size:12px;color:#71717a;"></span></div>
+        </div>
+        <div class="kpi" style="--c:#ffcc4d;">
+            <div class="v" id="stockQuote">-</div>
+            <div class="l">🚚 待上传物流询价 <span id="stockQuoteCount" style="font-weight:400;font-size:12px;color:#71717a;"></span></div>
+        </div>
+        <div class="kpi" style="--c:#2affb2;">
+            <div class="v" id="stockConfirm">-</div>
+            <div class="l">✅ 待确认发货 <span id="stockConfirmCount" style="font-weight:400;font-size:12px;color:#71717a;"></span></div>
+        </div>
+    </div>
+    <!-- 今日/昨日打印箱子标签 当日量 -->
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:16px;padding:0 16px 16px;">
+        <div class="kpi" style="--c:#9d7bff;">
+            <div class="v" id="stockTodayPrint">-</div>
+            <div class="l">🖨️ 今日打印箱子标签 <span id="stockTodayPrintCount" style="font-weight:400;font-size:12px;color:#71717a;"></span></div>
+        </div>
+        <div class="kpi" style="--c:#0a0a0a;">
+            <div class="v" id="stockYestPrint">-</div>
+            <div class="l">🗓️ 昨日打印箱子标签 <span id="stockYestPrintCount" style="font-weight:400;font-size:12px;color:#71717a;"></span></div>
+        </div>
+    </div>
+</div>
+
+<!-- Tab5 件均人力成本 -->
+<div id="tab-cost" class="tab-page">
+    <div class="topbar" style="background:linear-gradient(135deg,#531dab 0%,#722ed1 50%,#9254de 100%);">
+        <div>
+            <h1>💰 件均人力成本</h1>
+            <div class="sub">出库量(P次数) ÷ 当日人力总成本 · 员工4000+500按26天折算 · 加班17元/小时(半小时取整) · 含管理岗人力成本（明细保密）</div>
+        </div>
+        <div class="live">
+        <div class="dot"></div><span id="costUpdateTime">加载中...</span>
+        <button id="btnEditCost" onclick="openCostEditor()" style="margin-left:10px;padding:5px 14px;border-radius:6px;border:1px solid rgba(255,255,255,.4);background:rgba(255,255,255,.15);color:#fff;font-size:12px;cursor:pointer;font-weight:500;">✏️ 编辑数据</button>
+    </div>
+    </div>
+
+    <div class="kpis">
+        <div class="kpi" style="--c:#2affb2;">
+            <div class="v" id="weekOutQty">0</div>
+            <div class="l">本周出库量(件) <span id="weekOutQtyCmp" style="font-size:11px;font-weight:400;"></span></div>
+        </div>
+        <div class="kpi" style="--c:#ffab40;">
+            <div class="v" id="weekCost">0</div>
+            <div class="l">本周人力成本(元) <span id="weekCostCmp" style="font-size:11px;font-weight:400;"></span></div>
+        </div>
+        <div class="kpi" style="--c:#ff7ad9;">
+            <div class="v" id="weekAvg">0</div>
+            <div class="l">本周件均(元/件) <span id="weekAvgCmp" style="font-size:11px;font-weight:400;"></span></div>
+        </div>
+    </div>
+
+    <!-- 本周逐日波动 -->
+    <div class="card row1">
+        <div class="card-t">📈 本周逐日件均成本 <span class="tip">周一~周日 · 每天单独算不累计 · 周日结束自动翻篇，下周重新开始</span></div>
+        <div id="weeklyChart" class="tw" style="overflow-x:auto;">
+            <svg id="weeklySvg" viewBox="0 0 1100 320" style="min-width:640px;width:100%;height:100%;"></svg>
+        </div>
+        <div id="weeklyTable" style="margin-top:10px;"></div>
+    </div>
+
+    <!-- 周度对比 -->
+    <div class="card row1">
+        <div class="card-t">📊 当月周度趋势 <span class="tip">第1周~第4周 · 柱=出库量 线=件均(元)</span></div>
+        <div class="tw" style="overflow-x:auto;">
+            <svg id="weeklyCompareSvg" viewBox="0 0 1100 320" style="min-width:640px;width:100%;height:100%;"></svg>
+        </div>
+    </div>
+
+    <!-- 本月逐日明细 -->
+    <div class="card">
+        <div class="card-t">📅 本月逐日明细 <span class="tip">月初~今天 · 持续更新到月底</span></div>
+        <div id="monthlyTable" class="tw" style="overflow-x:auto;"></div>
+    </div>
+
+    <div class="card">
+        <div class="card-t">📋 今日人力成本明细 <span class="tip">按考勤表 · 请假/休息/缺卡不计</span></div>
+        <div id="costStatus" style="margin-bottom:10px;font-size:13px;color:#ffcc4d;"></div>
+        <div class="tw"><table>
+            <thead><tr><th>员工</th><th>班次</th><th>考勤班次</th><th>下班时间</th><th>日薪(元)</th><th>加班(h)</th><th>加班费(元)</th><th>合计(元)</th><th>打卡结果</th></tr></thead>
+            <tbody id="costPersonsTable"><tr><td colspan="9" style="text-align:center;color:#6d8db0;">加载中...</td></tr></tbody>
+        </table></div>
+        <div id="costHiddenNote" style="margin-top:8px;font-size:12px;color:#71717a;display:none;"></div>
+    </div>
+</div>
+
+<!-- 编辑数据弹窗 -->
+<div id="costEditorModal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.4);backdrop-filter:blur(4px);">
+  <div style="max-width:760px;margin:30px auto;background:#fff;border:1px solid #e0e6ed;border-radius:16px;padding:24px;max-height:90vh;overflow-y:auto;color:#333;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <h3 style="color:#ff7ad9;font-size:18px;">✏️ 编辑当日成本</h3>
+      <button onclick="closeCostEditor()" style="background:none;border:none;color:#71717a;font-size:22px;cursor:pointer;">✕</button>
+    </div>
+    <div style="font-size:12px;color:#71717a;margin-bottom:12px;">选日期 → 填出库量 → 填每人实际下班时间 → 自动算薪资 → 保存发布</div>
+
+    <!-- 日期选择 -->
+    <div id="costEditorDays" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;"></div>
+
+    <!-- 出库量 -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px;background:rgba(255,171,64,.06);border-radius:8px;">
+      <span style="font-size:14px;color:#ffab40;font-weight:600;">📦 出库量(件)：</span>
+      <input type="number" id="edOutQty" placeholder="填当天出库总件数" style="width:160px;padding:6px 10px;background:rgba(255,171,64,.1);border:1px solid rgba(255,171,64,.3);border-radius:6px;color:#ffab40;font-size:15px;text-align:right;" oninput="recalcCost()">
+    </div>
+
+    <!-- 上传考勤Excel -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px;background:rgba(0,255,157,.06);border:1px dashed rgba(0,255,157,.3);border-radius:8px;">
+      <span style="font-size:13px;color:#2affb2;font-weight:600;">📤 上传考勤Excel：</span>
+      <input type="file" id="attFile" accept=".xlsx,.xls" style="display:none;" onchange="parseAttendance(this)">
+      <button onclick="document.getElementById('attFile').click()" style="padding:6px 16px;border-radius:6px;border:1px solid rgba(0,255,157,.3);background:rgba(0,255,157,.1);color:#2affb2;font-size:13px;cursor:pointer;font-weight:600;">选择考勤文件</button>
+      <span id="attFileName" style="font-size:12px;color:#71717a;"></span>
+    </div>
+
+    <!-- 员工下班时间表 -->
+    <table style="width:100%;border-collapse:collapse;margin-bottom:14px;">
+      <thead><tr style="background:rgba(0,229,255,.06);">
+        <th style="padding:8px;text-align:left;font-size:12px;color:#71717a;">员工</th>
+        <th style="padding:8px;text-align:left;font-size:12px;color:#71717a;">班次</th>
+        <th style="padding:8px;text-align:center;font-size:12px;color:#71717a;">标准下班</th>
+        <th style="padding:8px;text-align:center;font-size:12px;color:#71717a;">实际下班</th>
+        <th style="padding:8px;text-align:right;font-size:12px;color:#71717a;">加班(h)</th>
+        <th style="padding:8px;text-align:right;font-size:12px;color:#71717a;">加班费</th>
+        <th style="padding:8px;text-align:right;font-size:12px;color:#71717a;">日薪+餐补</th>
+        <th style="padding:8px;text-align:right;font-size:12px;color:#71717a;">合计</th>
+      </tr></thead>
+      <tbody id="edPersonsBody"></tbody>
+    </table>
+
+    <!-- 汇总 -->
+    <div style="display:flex;gap:16px;justify-content:flex-end;align-items:center;margin-bottom:16px;padding:12px;background:rgba(255,122,217,.06);border-radius:8px;">
+      <span style="font-size:13px;color:#71717a;">人力总成本：<b id="edTotalCost" style="color:#0a0a0a;font-size:18px;">0.00</b> 元</span>
+      <span style="font-size:13px;color:#71717a;">件均：<b id="edAvgCost" style="color:#ff7ad9;font-size:18px;">—</b> 元/件</span>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="closeCostEditor()" style="padding:10px 20px;border-radius:8px;border:1px solid rgba(148,190,220,.2);background:transparent;color:#71717a;cursor:pointer;">取消</button>
+      <button onclick="saveCostData()" id="btnSaveCost" style="padding:10px 24px;border-radius:8px;border:none;background:linear-gradient(135deg,#ff7ad9,#b388ff);color:#0d1724;font-weight:700;cursor:pointer;">💾 保存并发布</button>
+    </div>
+    <div id="costEditorMsg" style="margin-top:10px;font-size:13px;color:#ffcc4d;"></div>
+  </div>
+</div>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script>
+window.onerror = function(msg, url, line){
+  var d = document.createElement('div');
+  d.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ff3344;color:#fff;padding:10px;z-index:99999;font-size:14px;';
+  d.textContent = 'JS错误: '+msg+' (行'+line+')';
+  document.body.appendChild(d);
+};
+async function loadStock(){
+    try{
+        const res = await fetch('https://jie-2026erp.github.io/erp-kankan-data/stock_data.json?t='+Date.now());
+        const d = await res.json();
+        document.getElementById('stockUpdateTime').textContent = '实时 · '+(d.update_time||'--');
+        document.getElementById('stockPrint').textContent = d.print_boxes||0;
+        document.getElementById('stockQuote').textContent = d.quote_boxes||0;
+        document.getElementById('stockConfirm').textContent = d.confirm_boxes||0;
+        document.getElementById('stockPrintCount').textContent = '('+(d.print_count||0)+'票)';
+        document.getElementById('stockQuoteCount').textContent = '('+(d.quote_count||0)+'票)';
+        document.getElementById('stockConfirmCount').textContent = '('+(d.confirm_count||0)+'票)';
+        var _tb = (d.print_boxes||0)+(d.quote_boxes||0)+(d.confirm_boxes||0);
+        var _tc = (d.print_count||0)+(d.quote_count||0)+(d.confirm_count||0);
+        document.getElementById('stockTotal').textContent = _tb;
+        document.getElementById('stockTotalCount').textContent = '共'+_tc+'票';
+        document.getElementById('stockTodayPrint').textContent = d.print_today_boxes||0;
+        document.getElementById('stockTodayPrintCount').textContent = (d.print_today_count||0)+'票 · '+(d.print_today_boxes||0)+'箱';
+        document.getElementById('stockYestPrint').textContent = d.print_yesterday_boxes||0;
+        document.getElementById('stockYestPrintCount').textContent = (d.print_yesterday_count||0)+'票 · '+(d.print_yesterday_boxes||0)+'箱';
+    }catch(e){ document.getElementById('stockUpdateTime').textContent='加载失败'; }
+}
+setInterval(loadStock, 60000);
+loadStock();
+</script>
+
+<!-- Tab3 时效提醒 -->
+<div id="tab-timely" class="tab-page">
+    <div class="topbar">
+        <div>
+            <h1>⏰ 时效提醒</h1>
+            <div class="sub">FBA中转仓-金华 / 金华2仓 · 等待进入下一环节的货件</div>
+        </div>
+        <div class="live"><div class="dot"></div><span id="timelyUpdateTime">加载中...</span></div>
+    </div>
+
+    <!-- 上传装箱信息 -->
+    <div class="kpis">
+        <div class="kpi" style="--c:#ff5d73;"><div class="v" id="timelyTotal">0</div><div class="l">📦 待上传装箱信息</div></div>
+        <div class="kpi" style="--c:#ffab40;"><div class="v" id="timelyOver24">0</div><div class="l">已停留 ≥24h</div></div>
+        <div class="kpi" style="--c:#b91c1c;"><div class="v" id="timelyOver48">0</div><div class="l">已停留 ≥48h</div></div>
+        <div class="kpi" style="--c:#7c3aed;"><div class="v" id="timelyMax">0h</div><div class="l">最长停留</div></div>
+    </div>
+
+    <div class="card">
+        <div class="card-t">📋 待上传装箱信息明细 <span class="tip">按停留时长从大到小 · 单位 h(小时)</span></div>
+        <div class="tw"><table>
+            <thead><tr><th>货件号</th><th>仓库</th><th>平台</th><th>暂存库位</th><th>物流方式</th><th>箱数</th><th>异常信息</th><th>上传装箱时间</th><th>已停留</th><th>负责人</th></tr></thead>
+            <tbody id="timelyTable"><tr><td colspan="10" style="text-align:center;color:#6d8db0;">加载中...</td></tr></tbody>
+        </table></div>
+    </div>
+
+    <!-- 打印箱子标签 -->
+    <div class="kpis" style="margin-top:16px;">
+        <div class="kpi" style="--c:#2563eb;"><div class="v" id="printTotal">0</div><div class="l">🖨️ 待打印箱子标签</div></div>
+        <div class="kpi" style="--c:#0a0a0a;"><div class="v" id="printDtb">0</div><div class="l">DTB暂存位</div></div>
+        <div class="kpi" style="--c:#ffab40;"><div class="v" id="printOver24">0</div><div class="l">已停留 ≥24h</div></div>
+        <div class="kpi" style="--c:#7c3aed;"><div class="v" id="printMax">0h</div><div class="l">最长停留</div></div>
+    </div>
+
+    <div class="card">
+        <div class="card-t">🖨️ 待打印箱子标签明细 <span class="tip">DTB开头暂存位高亮标红</span></div>
+        <div class="tw"><table>
+            <thead><tr><th>货件号</th><th>仓库</th><th>平台</th><th>暂存库位</th><th>物流方式</th><th>箱数</th><th>异常信息</th><th>打印箱标时间</th><th>已停留</th><th>负责人</th></tr></thead>
+            <tbody id="printTable"><tr><td colspan="10" style="text-align:center;color:#6d8db0;">加载中...</td></tr></tbody>
+        </table></div>
+    </div>
+</div>
+
+<!-- 分仓件移库 -->
+<div id="tab-transfer" class="tab-page">
+    <div class="topbar" style="background:linear-gradient(135deg,#08979c 0%,#13c2c2 50%,#36cfc9 100%);">
+        <div>
+            <h1>📦 分仓件移库</h1>
+            <div class="sub">打印箱子标签 · 暂存位重复的货件（需移库）</div>
+        </div>
+        <div class="live"><div class="dot"></div><span id="transferUpdateTime">加载中...</span></div>
+    </div>
+
+    <div class="kpis">
+        <div class="kpi" style="--c:#ff5d73;"><div class="v" id="transferTotal">0</div><div class="l">📦 重复暂存位数</div></div>
+        <div class="kpi" style="--c:#ffab40;"><div class="v" id="transferBoxCount">0</div><div class="l">涉及箱数</div></div>
+        <div class="kpi" style="--c:#b91c1c;"><div class="v" id="transferMaxDup">0</div><div class="l">最重复数量</div></div>
+        <div class="kpi" style="--c:#7c3aed;"><div class="v" id="transferSpaceCount">0</div><div class="l">需移库位数</div></div>
+    </div>
+
+    <div class="card">
+        <div class="card-t">📋 重复暂存位货件明细 <span class="tip">同一暂存位有多个货件的 · 需移库分开</span></div>
+        <div class="tw"><table>
+            <thead><tr><th>货件号</th><th>仓库</th><th>平台</th><th>暂存库位</th><th>箱数</th><th>异常信息</th></tr></thead>
+            <tbody id="transferTable"><tr><td colspan="6" style="text-align:center;color:#666;">加载中...</td></tr></tbody>
+        </table></div>
+    </div>
+</div>
+
+</div>
+
+<script>
+document.querySelectorAll('.tab-btn').forEach(b=>b.addEventListener('click',()=>{
+    document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab-page').forEach(p=>p.classList.remove('active'));
+    b.classList.add('active');
+    document.getElementById('tab-'+b.dataset.tab).classList.add('active');
+    // 切换到scan tab时，重新渲染图表
+    if(b.dataset.tab === 'scan'){
+        loadScanData();
+    }
+}));
+
+const colors = ['#00e5ff','#ffab40','#2affb2','#b388ff','#ff5d73','#4dff88','#ff7ad9','#4d7cff'];
+let _curUsers = [], _curHourly = {};
+function showHourDetail(hr){
+    const el = document.getElementById('hourlyDetail');
+    let html = `<b>${hr}:00 - ${hr+1}:00</b> 扫描明细：<div style="margin-top:6px;display:flex;gap:12px;flex-wrap:wrap;">`;
+    let total = 0;
+    _curUsers.forEach((u,i)=>{
+        const v = ((_curHourly[u.name]||{})[hr])||0;
+        total += v;
+        if(v>0) html += `<span style="display:inline-flex;align-items:center;gap:4px;"><span style="width:10px;height:10px;border-radius:2px;background:${colors[i%colors.length]};"></span>${u.name} <b>${v}</b>箱</span>`;
+    });
+    html += `</div><div style="margin-top:6px;color:#dff3ff;font-weight:600;">合计：${total}箱</div>`;
+    el.innerHTML = html;
+}
+
+async function loadScanData(){
+    try{
+        const res = await fetch('https://jie-2026erp.github.io/erp-kankan-data/scan_data.json?t='+Date.now());
+        const data = await res.json();
+        document.getElementById('scanUpdateTime').textContent = '实时 · '+(data.update_time||'--');
+        document.getElementById('scanTotalBoxes').textContent = data.total_boxes||0;
+        document.getElementById('scanTotalUsers').textContent = data.total_users||0;
+        document.getElementById('scanTotalBatches').textContent = data.total_batches||0;
+        document.getElementById('markedBulk').textContent = (data.total_marked_bulk||0).toFixed(1);
+        document.getElementById('unmarkedBulk').textContent = (data.unmarked_bulk||0).toFixed(1);
+        document.getElementById('unmarkedCount').textContent = data.unmarked_count||0;
+        document.getElementById('todayBulk').textContent = (data.total_marked_bulk||0).toFixed(1);
+        const ws = data.week_stat || {};
+        const lws = data.last_week_stat || {};
+        const ms = data.month_stat || {};
+        document.getElementById('weekBulk').textContent = (ws.bulk||0).toFixed(1);
+        document.getElementById('lastWeekBulk').textContent = (lws.bulk||0).toFixed(1);
+        document.getElementById('monthBulk').textContent = (ms.bulk||0).toFixed(1);
+
+        // 未标记先渲染（不管今天有没有扫描都要显示）
+        try {
+        const um0 = data.unmarked||[];
+        const now0 = new Date();
+        if(um0.length>0){
+            let uh0='';
+            um0.forEach(u=>{
+                let wait='-'; let waitNum=0;
+                if(u.datetime){
+                    try{
+                        const t=new Date(u.datetime.replace(' ','T'));
+                        const h=(now0-t)/3600000;
+                        waitNum=h;
+                        wait = h<1?Math.round(h*60)+'分钟':h.toFixed(1)+'h';
+                    }catch(e){}
+                }
+                const wc = waitNum>4?'#ff5d73':waitNum>2?'#ffab40':'#2affb2';
+                uh0 += `<tr>
+                    <td><span class="tag tag-orange">${u.batch_code}</span></td>
+                    <td style="color:#71717a;">${u.warehouse||''}</td>
+                    <td>${u.provider||''}</td>
+                    <td style="color:#71717a;">${u.datetime||''}</td>
+                    <td style="font-weight:600;color:${wc};">${wait}</td>
+                    <td>${u.sum_box||0} 箱</td>
+                    <td style="font-weight:600;color:#ff5d73;">${(Number(u.bulk)||0).toFixed(2)}</td>
+                    <td>${u.is_write==='已填写'?'<span style="color:#2affb2;">已填写</span>':'<span style="color:#ff5d73;">未填写</span>'}</td></tr>`;
+            });
+            document.getElementById('unmarkedTable').innerHTML = uh0;
+        } else {
+            document.getElementById('unmarkedTable').innerHTML = '<tr><td colspan="8" style="text-align:center;color:#4dff88;">✅ 全部已标记</td></tr>';
+        }
+        } catch(e){ console.error('unmarked render:',e); }
+
+        // 部分标记（正在扫的单，不限当天）
+        try {
+            const pl = data.partial_list||[];
+            let ph = '';
+            pl.forEach(p=>{
+                ph += `<tr>
+                    <td><span class="tag tag-teal">${p.batch_code}</span></td>
+                    <td style="color:#71717a;">${p.warehouse||''}</td>
+                    <td>${p.provider||''}</td>
+                    <td>${p.total_box||0} 箱</td>
+                    <td style="color:#2affb2;font-weight:600;">${p.marked_box||0} 箱</td>
+                    <td style="color:#ffcc4d;font-weight:600;">${p.unmarked_box||0} 箱</td></tr>`;
+            });
+            document.getElementById('partialTable').innerHTML = ph || '<tr><td colspan="6" style="text-align:center;color:#6d8db0;">暂无部分标记单</td></tr>';
+        } catch(e){ console.error('partial render:',e); }
+
+        const users = data.by_user||[];
+        const total = data.total_boxes||0;
+        const hourly = data.hourly||{};
+
+        if(users.length===0){
+            document.getElementById('scanMaxUser').textContent='-';
+            document.getElementById('barChart').innerHTML='<div style="color:#6d8db0;align-self:center;">今日暂无扫描</div>';
+            document.getElementById('pieChart').innerHTML='<div style="color:#6d8db0;">暂无</div>';
+            document.getElementById('hourlyChart').innerHTML='<div style="color:#6d8db0;text-align:center;line-height:280px;">暂无数据</div>';
+            return;
+        }
+        document.getElementById('scanMaxUser').textContent = users[0].name;
+        const maxB = users[0].boxes||1;
+
+        // 柱状图
+        let barHtml='';
+        users.forEach((u,i)=>{
+            const h = Math.max(20, Math.round(u.boxes/maxB*220));
+            barHtml += `<div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;">
+                <div style="font-size:20px;font-weight:700;color:#dff3ff;margin-bottom:6px;">${u.boxes}</div>
+                <div style="width:56px;height:${h}px;background:${colors[i%colors.length]};border-radius:6px 6px 0 0;box-shadow:0 4px 10px ${colors[i%colors.length]}55;"></div>
+                <div style="margin-top:8px;font-size:13px;font-weight:600;color:#dff3ff;">${u.name}</div>
+                <div style="font-size:11px;color:#6d8db0;">${u.shipments}票</div></div>`;
+        });
+        document.getElementById('barChart').innerHTML = barHtml;
+
+        // 饼图
+        let acc=0, parts=[], leg='';
+        users.forEach((u,i)=>{
+            const p = total>0?u.boxes/total*100:0;
+            parts.push(`${colors[i%colors.length]} ${acc}% ${acc+p}%`); acc+=p;
+            leg += `<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:5px;color:#9db8d4;">
+                <div style="width:10px;height:10px;border-radius:2px;background:${colors[i%colors.length]};"></div>
+                <span>${u.name}</span><span style="color:#6d8db0;margin-left:auto;">${Math.round(p)}%</span></div>`;
+        });
+        document.getElementById('pieChart').innerHTML = `<div style="text-align:center;">
+            <div style="width:170px;height:170px;border-radius:50%;background:conic-gradient(${parts.join(',')});display:flex;align-items:center;justify-content:center;margin:0 auto;">
+                <div style="width:95px;height:95px;background:#0d1724;border:1px solid rgba(0,229,255,.25);border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                    <div style="font-size:22px;font-weight:700;color:#dff3ff;">${total}</div>
+                    <div style="font-size:11px;color:#6d8db0;">总箱数</div>
+                </div></div>
+            <div style="margin-top:10px;text-align:left;display:inline-block;min-width:130px;">${leg}</div></div>`;
+
+        // 每小时折线图：固定营业时间 10-22点
+        const allHours = [];
+        for(let h=10; h<=22; h++) allHours.push(h);
+        const nowH = new Date().getHours();
+        const maxHourTotal = Math.max(...allHours.map(h => users.reduce((s,u)=>s+((hourly[u.name]||{})[h]||0),0)), 1);
+        const W = 1100, H = 340, padL=40, padR=20, padT=30, padB=30;
+        const plotW = W-padL-padR, plotH = H-padT-padB;
+        const xOf = idx => padL + plotW*idx/(allHours.length-1);
+        const yOf = v => padT + plotH - plotH*v/maxHourTotal;
+        let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:100%;">`;
+        for(let i=0;i<=4;i++){
+            const y = padT + plotH*i/4;
+            const v = Math.round(maxHourTotal*(4-i)/4);
+            svg += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(0,229,255,.12)"/>`;
+            svg += `<text x="${padL-6}" y="${y+4}" text-anchor="end" font-size="10" fill="#6d8db0">${v}</text>`;
+        }
+        const nowIdx = allHours.indexOf(nowH);
+        if(nowIdx>=0){
+            svg += `<line x1="${xOf(nowIdx)}" y1="${padT}" x2="${xOf(nowIdx)}" y2="${H-padB}" stroke="#ff5d73" stroke-width="1" stroke-dasharray="4 3" opacity="0.5"/>`;
+        }
+        users.forEach((u,i)=>{
+            const color = colors[i%colors.length];
+            let pts = '', circles = '', labels = '';
+            allHours.forEach((hr,idx)=>{
+                if(hr > nowH) return;
+                const v = ((hourly[u.name]||{})[hr])||0;
+                pts += (pts===''?'M':'L') + xOf(idx) + ',' + yOf(v) + ' ';
+                circles += `<circle cx="${xOf(idx)}" cy="${yOf(v)}" r="4" fill="#0d1724" stroke="${color}" stroke-width="2" style="cursor:pointer;" onclick="showHourDetail(${hr})"><title>${u.name} ${hr}时 = ${v}箱</title></circle>`;
+                if(v>0) labels += `<text x="${xOf(idx)}" y="${yOf(v)-10}" text-anchor="middle" font-size="11" font-weight="600" fill="${color}">${v}</text>`;
+            });
+            svg += `<path d="${pts}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+            svg += circles + labels;
+        });
+        allHours.forEach((hr,idx)=>{
+            const lc = hr > nowH ? '#4a6a8a' : '#71717a';
+            svg += `<text x="${xOf(idx)}" y="${H-padB+18}" text-anchor="middle" font-size="12" fill="${lc}" style="cursor:pointer;font-weight:600;" onclick="showHourDetail(${hr})">${hr}时</text>`;
+        });
+        let lgX = padL;
+        users.forEach((u,i)=>{
+            svg += `<rect x="${lgX}" y="${6}" width="12" height="12" rx="2" fill="${colors[i%colors.length]}"/>`;
+            svg += `<text x="${lgX+16}" y="${16}" font-size="12" fill="#9db8d4">${u.name}</text>`;
+            lgX += 16 + u.name.length*13 + 24;
+        });
+        svg += '</svg>';
+        document.getElementById('hourlyChart').innerHTML = svg;
+        _curUsers = users; _curHourly = hourly;
+
+        // 汇总表（含小时效率，剔除饭点12:00-13:00、17:00-17:30）
+        let rows='';
+        let totalWorkHours = 0;
+        function workHoursOf(hm){
+            let h = 0;
+            Object.keys(hm).filter(hr=>hm[hr]>0).forEach(hr=>{
+                hr = parseInt(hr);
+                if(hr === 12) return;           // 12点整午休，整小时剔除
+                if(hr === 17) h += 0.5;         // 17点前半小时吃饭，只算0.5h
+                else h += 1;
+            });
+            return h;
+        }
+        users.forEach((u,i)=>{
+            totalWorkHours += workHoursOf(hourly[u.name]||{});
+        });
+        const overallAvg = totalWorkHours>0 ? (total/totalWorkHours).toFixed(0) : 0;
+        document.getElementById('avgEff').textContent = overallAvg;
+        users.forEach((u,i)=>{
+            const p = total>0?Math.round(u.boxes/total*100):0;
+            const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+            // 计算该员工工作小时数（有产出的小时）
+            const hm = hourly[u.name]||{};
+            const wh = workHoursOf(hm);
+            const avg = wh>0 ? (u.boxes/wh).toFixed(0) : 0;
+            rows += `<tr>
+                <td style="font-size:16px;">${medal}</td>
+                <td><span class="tag tag-teal">${u.name}</span></td>
+                <td style="font-size:16px;font-weight:700;color:#2affb2;">${u.boxes} 箱</td>
+                <td>${u.shipments} 票</td>
+                <td>${wh}h</td>
+                <td><b style="color:#0a0a0a;">${avg}</b> 箱/h</td>
+                <td style="width:25%;">
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <div style="flex:1;height:6px;background:rgba(0,229,255,.12);border-radius:3px;overflow:hidden;">
+                            <div style="height:100%;width:${p}%;background:#2affb2;border-radius:3px;"></div>
+                        </div><span style="font-size:12px;color:#71717a;min-width:36px;">${p}%</span>
+                    </div></td></tr>`;
+        });
+        document.getElementById('scanSummaryTable').innerHTML = rows;
+
+    }catch(e){ console.log(e); document.getElementById('scanUpdateTime').textContent='加载失败'; }
+}
+
+async function loadPrintData(){
+    try{
+        const res = await fetch('https://jie-2026erp.github.io/erp-kankan-data/dashboard_data.json?t='+Date.now());
+        const d = await res.json();
+        document.getElementById('printTotal').textContent = d.total||0;
+        document.getElementById('printSuccess').textContent = d.success||0;
+        document.getElementById('printFail').textContent = d.fail||0;
+        document.getElementById('printRate').textContent = (d.rate||0)+'%';
+        document.getElementById('printUpdateTime').textContent = '更新于 '+(d.update_time||'');
+        const logs = d.all_logs||[];
+        if(logs.length===0){
+            document.getElementById('printLogs').innerHTML = '<tr><td colspan="4" style="text-align:center;color:#6d8db0;">今日暂无打印</td></tr>';
+        } else {
+            let html='';
+            logs.slice().reverse().forEach(l=>{
+                const ok = l.状态==='成功';
+                html += `<tr><td>${l.时间||''}</td><td>${l.货件号||''}</td><td>${l.页码范围||''}</td><td style="color:${ok?'#4dff88':'#ff5d73'};font-weight:600;">${l.状态||''}</td></tr>`;
+            });
+            document.getElementById('printLogs').innerHTML = html;
+        }
+    }catch(e){ console.log(e); document.getElementById('printUpdateTime').textContent='加载失败'; }
+
+        // 每小时打印箱子标签统计 - 原生div柱状图
+        try{
+            const phRes2 = await fetch('https://jie-2026erp.github.io/erp-kankan-data/dashboard_data.json?t='+Date.now());
+            const phData2 = await phRes2.json();
+            const phHourly2 = phData2.print_hourly || {};
+            const phHours2 = [];
+            const phValues2 = [];
+            for(let h=8; h<=23; h++){
+                const key = String(h).padStart(2,'0');
+                phHours2.push(h+'时');
+                phValues2.push(phHourly2[key] || 0);
+            }
+            const maxV = Math.max(...phValues2, 1);
+            let phHtml = '<div style="display:flex;align-items:flex-end;justify-content:space-around;height:200px;padding:10px 10px 0;">';
+            phValues2.forEach((v,i)=>{
+                const h = Math.round(v/maxV*180);
+                phHtml += `<div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;">
+                    <div style="font-size:12px;color:#666;margin-bottom:4px;">${v||''}</div>
+                    <div style="width:24px;height:${h}px;background:#ff9f43;border-radius:4px 4px 0 0;"></div>
+                    <div style="margin-top:6px;font-size:11px;color:#999;">${phHours2[i]}</div>
+                </div>`;
+            });
+            phHtml += '</div>';
+            document.getElementById('printHourlyChart').innerHTML = phHtml;
+            
+            // 计算总数量和平均值
+            const phTotal = phValues2.reduce((a,b) => a+b, 0);
+            const activeHours = phValues2.filter(v => v > 0).length;
+            const phAvg = activeHours > 0 ? (phTotal / activeHours).toFixed(1) : 0;
+            document.getElementById('printHourlyTotal').textContent = `共${phTotal}条`;
+            document.getElementById('printHourlyAvg').textContent = `平均${phAvg}条/小时`;
+        }catch(e){ console.warn('print hourly chart fail:', e); }
+}
+
+loadScanData();
+setInterval(loadScanData, 30000);
+loadPrintData();
+setInterval(loadPrintData, 5000);
+
+async function loadTimelyData(){
+    try{
+        const res = await fetch('https://jie-2026erp.github.io/erp-kankan-data/timely_data.json?t='+Date.now());
+        const d = await res.json();
+        document.getElementById('timelyUpdateTime').textContent = '实时 · '+(d.update_time||'--');
+
+        // pack3: 上传装箱信息
+        const p3 = d.pack3 || {};
+        document.getElementById('timelyTotal').textContent = p3.total||0;
+        document.getElementById('timelyOver24').textContent = p3.over24||0;
+        document.getElementById('timelyOver48').textContent = p3.over48||0;
+        document.getElementById('timelyMax').textContent = (p3.max_hours||0)+'h';
+        renderTimelyTable('timelyTable', p3.list||[]);
+
+        // pack9: 打印箱子标签
+        const p9 = d.pack9 || {};
+        document.getElementById('printTotal').textContent = p9.total||0;
+        document.getElementById('printDtb').textContent = p9.dtb_count||0;
+        document.getElementById('printOver24').textContent = p9.over24||0;
+        document.getElementById('printMax').textContent = (p9.max_hours||0)+'h';
+        renderTimelyTable('printTable', p9.list||[], true);
+    }catch(e){ console.log(e); document.getElementById('timelyUpdateTime').textContent='加载失败'; }
+}
+
+function renderTimelyTable(tbodyId, list, highlightDtb){
+    if(!list || list.length===0){
+        document.getElementById(tbodyId).innerHTML = '<tr><td colspan="10" style="text-align:center;color:#4dff88;font-weight:600;">✅ 当前没有等待处理的货件</td></tr>';
+        return;
+    }
+    let html='';
+    list.forEach(r=>{
+        const h = r.hours;
+        let color = '#2affb2', badge = '正常';
+        if(h>=24){ color='#ff5d73'; badge='超期'; }
+        else if(h>=12){ color='#ffab40'; badge='临近'; }
+        const hTxt = h<0 ? '—' : (h<1 ? Math.round(h*60)+'分钟' : h.toFixed(1)+'h');
+        let errHtml = '<span style="color:#2affb2;">无</span>';
+        if(r.err_msg){
+            const full = String(r.err_msg).replace(/"/g,'&quot;');
+            const short = r.err_msg.length > 18 ? r.err_msg.slice(0,18)+'…' : r.err_msg;
+            errHtml = `<span style="color:#ff5d73;font-weight:600;cursor:help;white-space:nowrap;" title="${full}">⚠ ${short}</span>`;
+        }
+        const rowBg = (highlightDtb && r.is_dtb) ? 'background:rgba(255,93,115,.08);' : '';
+        const spaceHtml = (highlightDtb && r.is_dtb)
+            ? `<span style="color:#ff5d73;font-weight:700;">🔴 ${r.space||''}</span>`
+            : `<span style="color:#71717a;">${r.space||''}</span>`;
+        html += `<tr style="${rowBg}">
+            <td style="font-weight:500;color:#71717a;">${r.code||''}</td>
+            <td style="font-size:12px;color:#71717a;">${(r.warehouse||'').replace('FBA中转仓-','')}</td>
+            <td>${r.platform||''}</td>
+            <td>${spaceHtml}</td>
+            <td style="color:#71717a;">${r.transport||''}</td>
+            <td style="text-align:center;color:#71717a;">${r.box_total||0}</td>
+            <td>${errHtml}</td>
+            <td style="color:#71717a;">${r.pack_time||''}</td>
+            <td><span class="tag" style="background:${color}18;color:${color};font-weight:700;">${hTxt}</span> <span style="font-size:11px;color:${color};">${badge}</span></td>
+            <td>${r.owner||''}</td></tr>`;
+    });
+    document.getElementById(tbodyId).innerHTML = html;
+}
+loadTimelyData();
+setInterval(loadTimelyData, 30000);
+
+/* ================= 分仓件移库 ================= */
+async function loadTransferData(){
+    try{
+        const res = await fetch('https://jie-2026erp.github.io/erp-kankan-data/transfer_data.json?t='+Date.now());
+        const d = await res.json();
+        document.getElementById('transferUpdateTime').textContent = '实时 · '+(d.update_time||'--');
+        document.getElementById('transferTotal').textContent = d.total_dup_spaces||0;
+        document.getElementById('transferBoxCount').textContent = d.total_boxes||0;
+        document.getElementById('transferMaxDup').textContent = d.max_dup||0;
+        document.getElementById('transferSpaceCount').textContent = d.space_count||0;
+        const list = d.list || [];
+        if(list.length === 0){
+            document.getElementById('transferTable').innerHTML = '<tr><td colspan="6" style="text-align:center;color:#52c41a;font-weight:600;">✅ 没有重复暂存位，无需移库</td></tr>';
+            return;
+        }
+        let html = '';
+        list.forEach(g=>{
+            g.items.forEach((r, idx)=>{
+                const spaceColor = g.count > 1 ? '#f5222d' : '#333';
+                const rowBg = idx === 0 ? 'background:#fff1f0;' : '';
+                let errHtml = '<span style="color:#52c41a;">无</span>';
+                if(r.err_msg){
+                    errHtml = `<span style="color:#f5222d;font-weight:600;">⚠ ${r.err_msg.slice(0,20)}${r.err_msg.length>20?'…':''}</span>`;
+                }
+                html += `<tr style="${rowBg}">
+                    <td style="font-weight:500;color:#71717a;">${r.code||''}</td>
+                    <td style="font-size:12px;color:#666;">${(r.warehouse||'').replace('FBA中转仓-','')}</td>
+                    <td>${r.platform||''}</td>
+                    <td style="color:${spaceColor};font-weight:600;">🔴 ${r.space||''}</td>
+                    <td style="text-align:center;">${r.box_total||0}</td>
+                    <td>${errHtml}</td>
+                </tr>`;
+            });
+        });
+        document.getElementById('transferTable').innerHTML = html;
+    }catch(e){ console.log(e); document.getElementById('transferUpdateTime').textContent='加载失败'; }
+}
+loadTransferData();
+setInterval(loadTransferData, 30000);
+
+/* ================= 件均人力成本 ================= */
+function fmtNum(n){ return (n===null||n===undefined||isNaN(n))?'—':Number(n).toLocaleString('zh-CN'); }
+function fmtMoney(n){ return (n===null||n===undefined||isNaN(n))?'—':Number(n).toFixed(2); }
+
+function costChart(svgId, labels, bars, line, opts){
+    opts = opts||{};
+    const svg = document.getElementById(svgId);
+    const W=1100, H=320, padL=56, padR=24, padT=36, padB=44;
+    const plotW=W-padL-padR, plotH=H-padT-padB;
+    const maxBar = Math.max(1, ...bars);
+    const maxLine = Math.max(0.0001, ...line.filter(v=>v!==null&&!isNaN(v)));
+    const n = labels.length;
+    const xOf = i => padL + plotW*(n===1?0.5:(i/(n-1)));
+    const yBar = v => padT + plotH - plotH*v/maxBar;
+    const yLine = v => padT + plotH - plotH*(v===null||isNaN(v)?0:v)/maxLine;
+    let s = '';
+    for(let i=0;i<=4;i++){
+        const y = padT + plotH*i/4;
+        const bv = Math.round(maxBar*(4-i)/4);
+        s += `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="rgba(0,0,0,.06)"/>`;
+        s += `<text x="${padL-8}" y="${y+4}" text-anchor="end" font-size="10" fill="#333">${fmtNum(bv)}</text>`;
+    }
+    // 右轴件均刻度
+    for(let i=0;i<=4;i++){
+        const y = padT + plotH*i/4;
+        const lv = (maxLine*(4-i)/4).toFixed(1);
+        s += `<text x="${W-padR+6}" y="${y+4}" font-size="10" fill="#ff7ad9">${lv}</text>`;
+    }
+    // 柱 - 调整宽度，4个点时更窄
+    const bw = n <= 4 ? 60 : Math.max(10, Math.min(40, plotW/n*0.55));
+    bars.forEach((v,i)=>{
+        const x = xOf(i)-bw/2, y = yBar(v);
+        const h = padT+plotH-y;
+        s += `<rect x="${x}" y="${y}" width="${bw}" height="${h}" rx="4" fill="${opts.barColor||'rgba(0,0,0,.5)'}"/>`;
+        // 0值在x轴上方，非0值在柱子顶部上方，错开折线
+        const labelY = v === 0 ? padT+plotH-8 : y-6;
+        s += `<text x="${x+bw/2}" y="${labelY}" text-anchor="middle" font-size="11" fill="#333" font-weight="600">${fmtNum(v)}</text>`;
+    });
+    // 线 - 数据标签往下挪，避免和柱子数字重叠
+    let path='', dots='', labelsSvg='';
+    line.forEach((v,i)=>{
+        if(v===null||isNaN(v)) return;
+        const x=xOf(i), y=yLine(v);
+        path += (path===''?'M':'L')+x+','+y+' ';
+        dots += `<circle cx="${x}" cy="${y}" r="5" fill="#fff" stroke="#ff7ad9" stroke-width="2.5"/>`;
+        // 件均数字放在节点下方，避免和柱子顶部数字重叠
+        labelsSvg += `<text x="${x}" y="${y+18}" text-anchor="middle" font-size="11" font-weight="600" fill="#ff7ad9">${fmtMoney(v)}</text>`;
+    });
+    if(path){ s += `<path d="${path}" fill="none" stroke="#ff7ad9" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`+dots+labelsSvg; }
+    // x 轴标签
+    labels.forEach((lb,i)=>{
+        s += `<text x="${xOf(i)}" y="${H-padB+18}" text-anchor="middle" font-size="12" fill="#333" font-weight="500">${lb}</text>`;
+    });
+    s += `<text x="${padL}" y="18" font-size="12" fill="#333" font-weight="600">出库量(P次数)</text>`;
+    s += `<text x="${W-padR-4}" y="18" font-size="12" fill="#ff7ad9" text-anchor="end" font-weight="600">件均(元)</text>`;
+    svg.innerHTML = s;
+}
+
+async function loadCostData(){
+    try{
+        const res = await fetch('https://jie-2026erp.github.io/erp-kankan-data/cost_data.json?t='+Date.now());
+        const d = await res.json();
+        document.getElementById('costUpdateTime').textContent = '实时 · '+(d.update_time||'--');
+
+        // 本周汇总（周一~今天）
+        const now0 = new Date();
+        const todayStr = now0.getFullYear()+'-'+String(now0.getMonth()+1).padStart(2,'0')+'-'+String(now0.getDate()).padStart(2,'0');
+        const mon0 = new Date(now0.getFullYear(), now0.getMonth(), now0.getDate() - ((now0.getDay()+6)%7));
+        const dMap = d.daily || {};
+        let wkOut=0, wkCost=0;
+        for(let i=0;i<7;i++){
+            const dd = new Date(mon0.getFullYear(), mon0.getMonth(), mon0.getDate()+i);
+            if(dd.getTime() > now0.getTime()) break;
+            const key = dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')+'-'+String(dd.getDate()).padStart(2,'0');
+            const rec = dMap[key];
+            if(rec){ wkOut += rec.out_qty||0; wkCost += rec.cost||0; }
+        }
+        const wkAvg = wkOut>0 ? Math.round(wkCost/wkOut*100)/100 : 0;
+
+        // 上周汇总
+        const lastMon = new Date(mon0); lastMon.setDate(lastMon.getDate()-7);
+        let lwOut=0, lwCost=0;
+        for(let i=0;i<7;i++){
+            const dd = new Date(lastMon.getFullYear(), lastMon.getMonth(), lastMon.getDate()+i);
+            const key = dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')+'-'+String(dd.getDate()).padStart(2,'0');
+            const rec = dMap[key];
+            if(rec){ lwOut += rec.out_qty||0; lwCost += rec.cost||0; }
+        }
+        const lwAvg = lwOut>0 ? Math.round(lwCost/lwOut*100)/100 : 0;
+
+        // 环比函数
+        function cmp(cur, prev, invert){
+            if(!prev || prev===0) return '';
+            const pct = (cur-prev)/prev*100;
+            const arrow = pct>0?'↑':pct<0?'↓':'→';
+            const color = (invert ? pct<0 : pct>0) ? '#2affb2' : '#ff5d73';
+            return `<span style="color:${color};">${arrow} ${Math.abs(pct).toFixed(1)}%</span>`;
+        }
+        document.getElementById('weekOutQty').textContent = fmtNum(wkOut);
+        document.getElementById('weekOutQtyCmp').innerHTML = cmp(wkOut, lwOut);
+        document.getElementById('weekCost').textContent = fmtMoney(wkCost);
+        document.getElementById('weekCostCmp').innerHTML = cmp(wkCost, lwCost);
+        document.getElementById('weekAvg').textContent = fmtMoney(wkAvg);
+        document.getElementById('weekAvgCmp').innerHTML = cmp(wkAvg, lwAvg, true); // 件均越低越好，下降是绿色
+
+        // 状态提示
+        const status = [];
+        if(d.cost_estimated) status.push('⏳ 今日考勤未出，名单人员暂按基础日薪预估（加班计0），考勤更新后自动修正');
+        else if(d.cost_error) status.push('⚠ '+d.cost_error);
+        if(d.skipped_no_roster && d.skipped_no_roster.length) status.push('未配置班次名单: '+d.skipped_no_roster.join('、'));
+        if(d.today_cost===0 && !d.cost_error) status.push('今日成本为0，可能考勤数据未录入或名单未配置');
+        document.getElementById('costStatus').textContent = status.join('　')||'';
+
+        // 本周逐日（周一~周日，不累计，每天单独算；跨周自动只显示新一周）
+        const weekNames = ['周一','周二','周三','周四','周五','周六','周日'];
+        const weekDays = [];
+        for(let i=0;i<7;i++){
+            const dd = new Date(mon0.getFullYear(), mon0.getMonth(), mon0.getDate()+i);
+            const key = dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')+'-'+String(dd.getDate()).padStart(2,'0');
+            weekDays.push({
+                key: key,
+                label: key.slice(5).replace('-','/'),
+                wname: weekNames[i],
+                rec: dMap[key]||null,
+                isToday: key===todayStr,
+                isFuture: dd.getTime() > now0.getTime()
+            });
+        }
+        costChart('weeklySvg',
+            weekDays.map(x=>x.wname+' '+x.label),
+            weekDays.map(x=> x.rec ? (x.rec.out_qty||0) : 0),
+            weekDays.map(x=> (x.rec && !x.isFuture) ? x.rec.avg : null),
+            {barColor:'rgba(255,171,64,.5)'});
+        let wh='<div class="tw"><table><thead><tr><th>日期</th><th>星期</th><th style="text-align:right;">出库量</th><th style="text-align:right;">人力成本(元)</th><th style="text-align:right;">件均(元/件)</th></tr></thead><tbody>';
+        weekDays.forEach(x=>{
+            if(!x.rec && x.isFuture){
+                wh += `<tr style="opacity:.4;"><td>${x.label}</td><td>${x.wname}</td><td style="text-align:right;color:#4d6a8a;">—</td><td style="text-align:right;color:#4d6a8a;">—</td><td style="text-align:right;color:#4d6a8a;">—</td></tr>`;
+            } else {
+                const tag = x.isToday ? '<br><span style="color:#ffcc4d;font-size:11px;">今日·进行中</span>' : '';
+                const oq = x.rec ? (x.rec.out_qty||0) : 0;
+                const ct = x.rec ? (x.rec.cost||0) : 0;
+                const av = (x.rec && x.rec.out_qty>0) ? x.rec.avg : null;
+                wh += `<tr><td>${x.label}${tag}</td><td>${x.wname}</td><td style="font-weight:600;color:#ffab40;text-align:right;">${fmtNum(oq)}</td><td style="text-align:right;">${fmtMoney(ct)}</td><td style="font-weight:700;color:#ff7ad9;text-align:right;">${av==null?'—':fmtMoney(av)}</td></tr>`;
+            }
+        });
+        document.getElementById('weeklyTable').innerHTML = wh+'</tbody></table></div>';
+
+        // 本月逐日明细（包try-catch，避免出错影响整个页面）
+        try{
+            const now = new Date();
+            const y = now.getFullYear(), m = now.getMonth();
+            const daysInMonth = new Date(y, m+1, 0).getDate();
+            const monthWeekNames = ['周日','周一','周二','周三','周四','周五','周六'];
+            let mh = '<table><thead><tr><th>日期</th><th>星期</th><th style="text-align:right;">出库量</th><th style="text-align:right;">人力成本(元)</th><th style="text-align:right;">件均(元/件)</th></tr></thead><tbody>';
+            let mOut=0, mCost=0;
+            for(let day=1; day<=daysInMonth; day++){
+                const dd = new Date(y, m, day);
+                if(dd.getTime() > now.getTime()) break;
+                const key = y+'-'+String(m+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+                const rec = dMap[key]||null;
+                const label = String(day).padStart(2,'0');
+                const wname = monthWeekNames[dd.getDay()];
+                const isToday = key===todayStr;
+                if(rec){
+                    const oq = rec.out_qty||0;
+                    const ct = rec.cost||0;
+                    const av = rec.out_qty>0 ? rec.avg : null;
+                    mOut += oq; mCost += ct;
+                    const tag = isToday ? '<br><span style="color:#ffcc4d;font-size:11px;">今日·进行中</span>' : '';
+                    mh += `<tr><td>${label}日${tag}</td><td>${wname}</td><td style="font-weight:600;color:#ffab40;text-align:right;">${fmtNum(oq)}</td><td style="text-align:right;">${fmtMoney(ct)}</td><td style="font-weight:700;color:#ff7ad9;text-align:right;">${av==null?'—':fmtMoney(av)}</td></tr>`;
+                } else {
+                    mh += `<tr style="opacity:.5;"><td>${label}日</td><td>${wname}</td><td style="text-align:right;color:#4d6a8a;">—</td><td style="text-align:right;color:#4d6a8a;">—</td><td style="text-align:right;color:#4d6a8a;">—</td></tr>`;
+                }
+            }
+            const mAvg = mOut>0 ? Math.round(mCost/mOut*100)/100 : 0;
+            mh += `<tr style="border-top:2px solid #ff7ad9;font-weight:700;background:rgba(255,122,217,.06);"><td>合计</td><td>—</td><td style="text-align:right;color:#ffab40;">${fmtNum(mOut)}</td><td style="text-align:right;">${fmtMoney(mCost)}</td><td style="text-align:right;color:#ff7ad9;">${fmtMoney(mAvg)}</td></tr>`;
+            document.getElementById('monthlyTable').innerHTML = mh+'</tbody></table>';
+        }catch(e){ console.warn('monthly detail render fail:', e); }
+
+        // 周度对比图（按周一到周日为一周，当月4周）
+        try{
+            const now = new Date();
+            const y = now.getFullYear(), m = now.getMonth();
+            // 当月第一天是星期几（0=周日，1=周一，...，6=周六）
+            const firstDay = new Date(y, m, 1).getDay();
+            // 计算当月第一个周一的日期
+            // 如果1号是周一，offset=0，第一个周一是1号
+            // 如果1号是周二，offset=6，第一个周一是7号
+            // 如果1号是周日，offset=1，第一个周一是2号
+            const offset = (1 - firstDay + 7) % 7;
+            const firstMonday = new Date(y, m, 1 + offset);
+            const weekLabels = [], weekBars = [], weekLine = [];
+            for(let w=0; w<4; w++){
+                // 第w周：周一到周日
+                const wStart = new Date(firstMonday);
+                wStart.setDate(firstMonday.getDate() + w*7);
+                const wEnd = new Date(wStart);
+                wEnd.setDate(wStart.getDate() + 6); // 周一+6天=周日
+                // 统计这一周的数据
+                let wOut = 0, wCost = 0;
+                for(let day=1; day<=31; day++){
+                    const dd = new Date(y, m, day);
+                    if(dd.getTime() < wStart.getTime() || dd.getTime() > wEnd.getTime()) continue;
+                    if(dd.getTime() > now.getTime()) break;
+                    const key = y+'-'+String(m+1).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+                    const rec = dMap[key];
+                    if(rec){
+                        wOut += rec.out_qty||0;
+                        wCost += rec.cost||0;
+                    }
+                }
+                const wAvg = wOut>0 ? wCost/wOut : null;
+                weekLabels.push('第'+(w+1)+'周');
+                weekBars.push(wOut);
+                weekLine.push(wAvg);
+            }
+            costChart('weeklyCompareSvg', weekLabels, weekBars, weekLine, {barColor:'rgba(255,171,64,.5)'});
+        }catch(e){ console.warn('weekly chart render fail:', e); }
+
+        // 人员明细
+        const persons = d.persons||[];
+        if(persons.length){
+            let html='';
+            persons.forEach(p=>{
+                html += `<tr>
+                    <td style="font-weight:500;color:#71717a;">${p.name}</td>
+                    <td><span class="tag" style="background:${p.shift==='BOSS'?'rgba(255,171,64,.14)':'rgba(0,229,255,.12)'};color:${p.shift==='BOSS'?'#ffab40':'#0a0a0a'};">${p.shift==='BOSS'?'老板':'班次'+p.shift}</span></td>
+                    <td style="color:#71717a;font-size:12px;">${p.shift_actual||''}</td>
+                    <td>${p.leave}</td>
+                    <td>${fmtMoney(p.daily)}</td>
+                    <td style="color:#71717a;">${p.ot_hours||0}h</td>
+                    <td>${fmtMoney(p.ot_pay)}</td>
+                    <td style="font-weight:700;color:#2affb2;">${fmtMoney(p.total)}</td>
+                    <td style="color:#71717a;font-size:12px;">${p.result||''}</td></tr>`;
+            });
+            document.getElementById('costPersonsTable').innerHTML = html;
+        } else {
+            document.getElementById('costPersonsTable').innerHTML = '<tr><td colspan="9" style="text-align:center;color:#6d8db0;">今日暂无人员成本数据（等待考勤录入或名单配置）</td></tr>';
+        }
+        // 管理岗保密成本提示
+        const hn = document.getElementById('costHiddenNote');
+        if(d.has_hidden_cost){
+            hn.style.display = 'block';
+            hn.textContent = '注：另含管理岗人力成本，已计入上方”今日人力总成本”，个人明细保密不展示。';
+        } else {
+            hn.style.display = 'none'; hn.textContent='';
+        }
+    }catch(e){ console.log(e); document.getElementById('costUpdateTime').textContent='加载失败'; }
+}
+loadCostData();
+setInterval(loadCostData, 60000);
+
+/* ============ 编辑数据 ============ */
+const GH_REPO = 'jie-2026erp/erp-kankan-data';
+const GH_FILE = 'cost_data.json';
+function getToken(){ return localStorage.getItem('gh_token')||''; }
+function setToken(t){ localStorage.setItem('gh_token', t); }
+// 员工班次配置：日薪=月薪4500/26天=173.08，BOSS=10000/26天=384.62
+const ROSTER = [
+  {name:'詹坤林', shift:'A',    stdOffMin:17*60+30, otRate:17, dailyBase:173.08, stdOff:'17:30'},
+  {name:'汪宗标', shift:'B',    stdOffMin:19*60+30, otRate:17, dailyBase:173.08, stdOff:'19:30'},
+  {name:'叶帆',   shift:'B',    stdOffMin:19*60+30, otRate:17, dailyBase:173.08, stdOff:'19:30'},
+  {name:'赵忠军', shift:'B',    stdOffMin:19*60+30, otRate:17, dailyBase:173.08, stdOff:'19:30'},
+  {name:'朱文亮', shift:'B',    stdOffMin:19*60+30, otRate:17, dailyBase:173.08, stdOff:'19:30'},
+  {name:'王梦吉', shift:'BOSS',  stdOffMin:17*60,    otRate:12, dailyBase:384.62, stdOff:'17:00'},
+];
+const MEAL = 8; // 餐补8元/人/天
+let _costDataCache = null;
+let _curEditDate = null;
+
+function minToStr(m){
+  if(m==null||isNaN(m)||m<0) return '';
+  const h = Math.floor(m/60), mm = m%60;
+  return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0');
+}
+function strToMin(s){
+  if(!s) return null;
+  const parts = s.split(':');
+  return parseInt(parts[0])*60 + parseInt(parts[1]);
+}
+
+async function openCostEditor(){
+  const msg = document.getElementById('costEditorMsg');
+  msg.textContent = '加载数据中...';
+  msg.style.color = '#ffcc4d';
+  document.getElementById('costEditorModal').style.display = 'block';
+  try{
+    const res = await fetch('https://jie-2026erp.github.io/erp-kankan-data/cost_data.json?t='+Date.now());
+    _costDataCache = await res.json();
+    const d = _costDataCache;
+    // 渲染本周日期按钮
+    const now0 = new Date();
+    const mon0 = new Date(now0.getFullYear(), now0.getMonth(), now0.getDate() - ((now0.getDay()+6)%7));
+    const weekNames = ['一','二','三','四','五','六','日'];
+    let dh = '';
+    for(let i=0;i<7;i++){
+      const dd = new Date(mon0.getFullYear(), mon0.getMonth(), mon0.getDate()+i);
+      const key = dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')+'-'+String(dd.getDate()).padStart(2,'0');
+      const isToday = key===d.today;
+      const isFuture = dd.getTime() > now0.getTime()+86400000;
+      dh += `<button data-date="${key}" onclick="selectEditDate('${key}')" style="padding:8px 14px;border-radius:8px;border:1px solid rgba(0,229,255,.2);background:${isToday?'rgba(255,122,217,.25)':'rgba(0,229,255,.06)'};color:${isToday?'#ff7ad9':'#71717a'};font-size:13px;cursor:pointer;font-weight:${isToday?'700':'400'};">${dd.getMonth()+1}/${dd.getDate()} 周${weekNames[i]}${isToday?'·今':''}</button>`;
+    }
+    document.getElementById('costEditorDays').innerHTML = dh;
+    // 默认选今天
+    selectEditDate(d.today);
+    msg.textContent = '';
+  }catch(e){
+    msg.textContent = '加载失败: '+e.message;
+  }
+}
+
+function selectEditDate(key){
+  _curEditDate = key;
+  // 高亮按钮
+  document.querySelectorAll('#costEditorDays button').forEach(b=>{
+    b.style.background = b.dataset.date===key ? 'rgba(255,122,217,.25)' : 'rgba(0,229,255,.06)';
+    b.style.color = b.dataset.date===key ? '#ff7ad9' : '#71717a';
+    b.style.fontWeight = b.dataset.date===key ? '700' : '400';
+  });
+  const d = _costDataCache;
+  const rec = (d.daily||{})[key] || {};
+  const offTimes = rec.off_times || {};
+  // 出库量
+  document.getElementById('edOutQty').value = rec.out_qty || '';
+  // 员工表格
+  let html = '';
+  ROSTER.forEach(p=>{
+    const saved = offTimes[p.name] || p.stdOff; // 默认标准下班
+    const badgeColor = p.shift==='BOSS' ? '#ffab40' : '#0a0a0a';
+    const isBoss = p.shift==='BOSS';
+    const nameShow = isBoss ? '管理岗(保密)' : p.name;
+    const payShow = isBoss ? '***' : (p.dailyBase+MEAL).toFixed(2);
+    const totShow = isBoss ? '***' : '';
+    const otShow = isBoss ? '***' : '0h';
+    const otpShow = isBoss ? '***' : '0.00';
+    const isRest = offTimes[p.name+'_rest'] === true; // 休息标记
+    const restBtnBg = isRest ? 'rgba(255,93,115,.2)' : 'rgba(0,229,255,.1)';
+    const restBtnColor = isRest ? '#ff5d73' : '#71717a';
+    html += `<tr style="border-bottom:1px solid rgba(148,190,220,.1);">
+      <td style="padding:8px;font-weight:500;color:${isBoss?'#ffab40':'#71717a'};">${nameShow}</td>
+      <td style="padding:8px;"><span style="font-size:12px;padding:2px 8px;border-radius:8px;background:${p.shift==='BOSS'?'rgba(255,171,64,.14)':'rgba(0,229,255,.12)'};color:${badgeColor};">${p.shift==='BOSS'?'老板':'班次'+p.shift}</span></td>
+      <td style="padding:8px;text-align:center;color:#71717a;font-size:12px;">${p.stdOff}</td>
+      <td style="padding:8px;text-align:center;">
+        <div style="display:flex;align-items:center;justify-content:center;gap:4px;">
+          <input type="time" data-name="${p.name}" value="${saved}" step="1800" style="width:80px;padding:4px 6px;background:rgba(255,122,217,.08);border:1px solid rgba(255,122,217,.25);border-radius:4px;color:#ff7ad9;font-size:13px;text-align:center;" oninput="recalcCost()" ${isRest?'disabled style="opacity:.4;"':''}>
+          <button onclick="toggleRest('${p.name}')" style="padding:3px 8px;font-size:11px;border-radius:6px;border:1px solid ${isRest?'rgba(255,93,115,.3)':'rgba(148,190,220,.2)'};background:${restBtnBg};color:${restBtnColor};cursor:pointer;font-weight:600;">休</button>
+        </div>
+      </td>
+      <td style="padding:8px;text-align:right;color:#ffcc4d;font-size:13px;" id="ot_${p.name}">${otShow}</td>
+      <td style="padding:8px;text-align:right;color:#ffcc4d;font-size:13px;" id="otp_${p.name}">${otpShow}</td>
+      <td style="padding:8px;text-align:right;color:#71717a;font-size:13px;">${payShow}</td>
+      <td style="padding:8px;text-align:right;font-weight:700;color:${isBoss?'#ffab40':'#2affb2'};font-size:13px;" id="tot_${p.name}">${payShow}</td>
+    </tr>`;
+  });
+  document.getElementById('edPersonsBody').innerHTML = html;
+  recalcCost();
+}
+
+function toggleRest(name){
+  if(!_curEditDate) return;
+  const d = _costDataCache;
+  const rec = (d.daily||{})[_curEditDate] || {};
+  const offTimes = rec.off_times = rec.off_times || {};
+  offTimes[name+'_rest'] = !offTimes[name+'_rest'];
+  selectEditDate(_curEditDate); // 重新渲染
+}
+
+function recalcCost(){
+  if(!_curEditDate) return;
+  let totalCost = 0;
+  const d = _costDataCache;
+  const rec = (d.daily||{})[_curEditDate] || {};
+  const offTimes = rec.off_times || {};
+  ROSTER.forEach(p=>{
+    const isRest = offTimes[p.name+'_rest'] === true;
+    const inp = document.querySelector(`#edPersonsBody input[data-name="${p.name}"]`);
+    const actualStr = inp ? inp.value : p.stdOff;
+    const actualMin = strToMin(actualStr);
+    let otMin = 0, otH = 0, otPay = 0, basePay = p.dailyBase + MEAL;
+    if(isRest){
+      basePay = 0; // 休息不算薪资
+    } else if(actualMin != null && actualMin > p.stdOffMin){
+      otMin = actualMin - p.stdOffMin;
+      otMin = Math.floor(otMin/30)*30; // 半小时取整
+      otH = otMin/60;
+      otPay = otH * p.otRate;
+    }
+    const personTotal = basePay + otPay;
+    totalCost += personTotal;
+    // BOSS行金额保密不显示
+    if(p.shift !== 'BOSS'){
+      document.getElementById('ot_'+p.name).textContent = isRest ? '休' : otH.toFixed(1)+'h';
+      document.getElementById('otp_'+p.name).textContent = isRest ? '休' : otPay.toFixed(2);
+      document.getElementById('tot_'+p.name).textContent = isRest ? '0.00' : personTotal.toFixed(2);
+    }
+  });
+  const oq = parseFloat(document.getElementById('edOutQty').value)||0;
+  document.getElementById('edTotalCost').textContent = totalCost.toFixed(2);
+  document.getElementById('edAvgCost').textContent = (oq>0 && totalCost>0) ? (totalCost/oq).toFixed(2) : '—';
+}
+
+function closeCostEditor(){
+  document.getElementById('costEditorModal').style.display = 'none';
+  _costDataCache = null;
+  _curEditDate = null;
+}
+
+/* 解析上传的考勤Excel文件 */
+function parseAttendance(input){
+  const file = input.files[0];
+  if(!file) return;
+  document.getElementById('attFileName').textContent = '正在解析: '+file.name;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, {type:'array', cellDates:true});
+      // 用当前编辑日期匹配sheet（比如编辑11/3就找11.3的sheet）
+      let targetMonth = 0, targetDay = 0;
+      if(_curEditDate){
+        const parts = _curEditDate.split('-');
+        if(parts.length === 3){
+          targetMonth = parseInt(parts[1]);
+          targetDay = parseInt(parts[2]);
+        }
+      }
+      if(!targetMonth){
+        const now = new Date();
+        targetMonth = now.getMonth()+1;
+        targetDay = now.getDate();
+      }
+      
+      // 第一步：优先找和编辑日期匹配的sheet
+      let targetSheet = null;
+      for(let sn of wb.SheetNames){
+        const m = sn.match(/^(\d{1,2})\.(\d{1,2})/);
+        if(m){
+          const sm = parseInt(m[1]), sd = parseInt(m[2]);
+          if(sm === targetMonth && sd === targetDay){
+            targetSheet = sn;
+            break;
+          }
+        }
+      }
+      
+      // 第二步：如果没找到匹配日期的，就用最后一个有考勤列的sheet（最新的）
+      if(!targetSheet){
+        let lastValidSheet = null;
+        for(let sn of wb.SheetNames){
+          const ws = wb.Sheets[sn];
+          const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
+          if(rows.length < 2) continue;
+          const header = rows[0].map(h=>String(h||'').trim());
+          let iName = header.findIndex(h=>h.indexOf('姓名')>=0);
+          let iOut = header.findIndex(h=>h.indexOf('下班')>=0 && h.indexOf('打卡时间')>=0);
+          if(iName>=0 && iOut>=0){
+            lastValidSheet = sn; // 一直更新到最后一个
+          }
+        }
+        targetSheet = lastValidSheet;
+      }
+      
+      if(!targetSheet){
+        document.getElementById('attFileName').textContent = '未找到考勤sheet';
+        return;
+      }
+      
+      // 只解析目标sheet
+      let found = {};
+      const ws = wb.Sheets[targetSheet];
+      const rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false});
+      if(rows.length < 2) return;
+      const header = rows[0].map(h=>String(h||'').trim());
+      let iName = header.findIndex(h=>h.indexOf('姓名')>=0);
+      let iOut = header.findIndex(h=>h.indexOf('下班')>=0 && h.indexOf('打卡时间')>=0);
+      let iOutRes = header.findIndex(h=>h.indexOf('下班')>=0 && h.indexOf('打卡结果')>=0);
+      let iRemark = header.findIndex(h=>h.indexOf('备注')>=0);
+      let iShift = header.findIndex(h=>h.indexOf('班次')>=0);
+      if(iName<0 || iOut<0) return;
+      
+      for(let r of rows.slice(1)){
+        if(!r || iName >= r.length) continue;
+        const name = String(r[iName]||'').trim();
+        if(!name || name==='姓名' || name.indexOf('离职')>=0) continue;
+        let shift = iShift>=0 && iShift<r.length ? String(r[iShift]||'').trim() : '';
+        let outRes = iOutRes>=0 && iOutRes<r.length ? String(r[iOutRes]||'').trim() : '';
+        let remark = iRemark>=0 && iRemark<r.length ? String(r[iRemark]||'').trim() : '';
+        if(remark.indexOf('请假')>=0 || outRes.indexOf('请假')>=0) continue;
+        if(shift.indexOf('休息')>=0 || remark==='休息') continue;
+        let outT = iOut<r.length ? r[iOut] : null;
+        if(outT==null || outT==='') continue;
+        outT = String(outT).trim();
+        if(outT==='0' || outT==='None' || outT==='-') continue;
+        if(outT.indexOf(':')<0){
+          const m = outT.match(/(\d{1,2}:\d{2})/);
+          if(m) outT = m[1];
+          else continue;
+        }
+        outT = outT.slice(0,5);
+        found[name] = outT;
+      }
+      if(Object.keys(found).length === 0){
+        document.getElementById('attFileName').textContent = '未识别到考勤数据';
+        return;
+      }
+      // 填充到编辑面板
+      let filled = 0;
+      ROSTER.forEach(p=>{
+        if(found[p.name]){
+          const inp = document.querySelector(`#edPersonsBody input[data-name="${p.name}"]`);
+          if(inp){
+            inp.value = found[p.name];
+            filled++;
+          }
+        }
+      });
+      recalcCost();
+      document.getElementById('attFileName').textContent = `✅ 识别到${filled}人下班时间（来自${targetSheet}）`;
+    }catch(err){
+      document.getElementById('attFileName').textContent = '解析失败: '+err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function saveCostData(){
+  const msg = document.getElementById('costEditorMsg');
+  const btn = document.getElementById('btnSaveCost');
+  if(!_costDataCache || !_curEditDate){ msg.textContent='数据未加载'; return; }
+  // 检查token
+  let token = getToken();
+  if(!token){
+    token = prompt('首次使用请输入GitHub Token（只存在本机浏览器，不会上传）：');
+    if(!token){ msg.textContent='需要Token才能保存'; return; }
+    setToken(token.trim());
+  }
+  btn.disabled = true; btn.textContent = '保存中...'; msg.style.color='#ffcc4d'; msg.textContent = '正在提交到GitHub...';
+  try{
+    const key = _curEditDate;
+    const d = _costDataCache;
+    const oq = parseFloat(document.getElementById('edOutQty').value)||0;
+    // 收集下班时间和总人力成本
+    const offTimes = {};
+    let totalCost = 0;
+    ROSTER.forEach(p=>{
+      const inp = document.querySelector(`#edPersonsBody input[data-name="${p.name}"]`);
+      const actualStr = inp ? inp.value : p.stdOff;
+      offTimes[p.name] = actualStr;
+      const actualMin = strToMin(actualStr);
+      let otMin = 0, otPay = 0;
+      if(actualMin != null && actualMin > p.stdOffMin){
+        otMin = Math.floor((actualMin-p.stdOffMin)/30)*30;
+        otPay = (otMin/60) * p.otRate;
+      }
+      totalCost += p.dailyBase + MEAL + otPay;
+    });
+    totalCost = Math.round(totalCost*100)/100;
+    const avg = (oq>0) ? Math.round(totalCost/oq*100)/100 : 0;
+
+    // 写入缓存
+    d.daily = d.daily||{};
+    if(!d.daily[key]) d.daily[key] = {};
+    d.daily[key].out_qty = oq;
+    d.daily[key].cost = totalCost;
+    d.daily[key].avg = avg;
+    d.daily[key].persons_count = 5;
+    d.daily[key].off_times = offTimes;
+    // 同步今天KPI
+    if(key === d.today){
+      d.today_out_qty = oq;
+      d.today_cost = totalCost;
+      d.today_avg = avg;
+    }
+    d.update_time = new Date().toLocaleString('zh-CN',{hour12:false});
+
+    // 获取当前文件sha
+    const ghRes = await fetch('https://api.github.com/repos/'+GH_REPO+'/contents/'+GH_FILE,{
+      headers:{'Authorization':'token '+token}
+    });
+    const ghInfo = await ghRes.json();
+    const sha = ghInfo.sha;
+
+    // PUT新文件
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(d,null,2))));
+    const putRes = await fetch('https://api.github.com/repos/'+GH_REPO+'/contents/'+GH_FILE,{
+      method:'PUT',
+      headers:{
+        'Authorization':'token '+token,
+        'Content-Type':'application/json'
+      },
+      body: JSON.stringify({
+        message: '手动编辑 '+key+' 出库'+oq+'件 成本'+totalCost+'元',
+        content: content,
+        sha: sha
+      })
+    });
+    if(putRes.ok){
+      msg.style.color = '#2affb2';
+      msg.textContent = '✅ 保存成功！页面将在2秒后刷新...';
+      setTimeout(()=>location.reload(), 2000);
+    } else {
+      const err = await putRes.json();
+      msg.style.color = '#ff5d73';
+      msg.textContent = '❌ 保存失败: '+(err.message||putRes.status);
+      btn.disabled = false; btn.textContent = '💾 保存并发布';
+    }
+  }catch(e){
+    msg.style.color = '#ff5d73';
+    msg.textContent = '❌ 出错: '+e.message;
+    btn.disabled = false; btn.textContent = '💾 保存并发布';
+  }
+}
+</script>
+</body>
+</html>
+
