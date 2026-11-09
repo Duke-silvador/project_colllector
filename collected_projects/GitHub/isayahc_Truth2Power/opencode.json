@@ -1,0 +1,34 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "amazon-bedrock": {
+      "env": ["AWS_BEARER_TOKEN_BEDROCK"],
+      "settings": { "region": "us-east-1" }
+    }
+  },
+  "mcp": {
+    "servers": {
+      "truth2power": {
+        "type": "local",
+        "command": ["python", "tools/live-audit/launch.py"],
+        "cwd": ".",
+        "environment": { "PYTHONUTF8": "1" },
+        "codemode": false,
+        "timeout": { "startup": 45000, "catalog": 120000, "execution": 240000 }
+      }
+    }
+  },
+  "agents": {
+    "hospital-auditor": {
+      "description": "Perform an assigned hospital-document audit using audit tools, save the result, and exit.",
+      "mode": "primary",
+      "steps": 32,
+      "model": "amazon-bedrock/us.amazon.nova-lite-v1:0",
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "truth2power_*", "resource": "*", "effect": "allow" }
+      ],
+      "system": "{file:tools/live-audit/agent.md}"
+    }
+  }
+}

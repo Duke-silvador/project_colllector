@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>糖尿病衛教課程報名表（示範）</title>
+<meta name="description" content="示範：表單放在 GitHub Pages，資料送進 Google Apps Script 寫入試算表。課堂練習用，請勿填寫真實個資。">
+<style>
+:root{--teal:#1F6F78;--teal-50:#E6F2F3;--orange:#E8590C;--ink:#12343B;--muted:#5C7378;--bg:#F6F9F8;--line:#D9E6E7}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;background:var(--bg);color:var(--ink);font-size:18px;line-height:1.7}
+.wrap{max-width:640px;margin:0 auto;padding:28px 20px 60px}
+header{background:linear-gradient(135deg,#12343B,#1F6F78);color:#fff;padding:36px 0 30px;text-align:center}
+header h1{margin:0 0 6px;font-size:30px}
+header p{margin:0;color:#D6E9E8;font-size:17px}
+.demo{display:inline-block;background:#F4A93C;color:#12343B;font-weight:700;padding:3px 12px;border-radius:999px;font-size:14px;margin-bottom:12px}
+label{display:block;font-weight:700;margin:18px 0 6px}
+label small{font-weight:400;color:var(--muted)}
+input,select{width:100%;font:inherit;font-size:19px;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff}
+input:focus,select:focus{outline:3px solid rgba(31,111,120,.3);border-color:var(--teal)}
+button{width:100%;margin-top:26px;font:inherit;font-size:21px;font-weight:700;padding:16px;border:0;border-radius:999px;background:var(--orange);color:#fff;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}
+.msg{margin-top:18px;padding:14px 16px;border-radius:12px;display:none;font-weight:700}
+.msg.ok{display:block;background:#E3F6EA;color:#1E6B3A}
+.msg.err{display:block;background:#FDE8E4;color:#A33A1E}
+.note{background:var(--teal-50);border-radius:12px;padding:14px 16px;font-size:15px;color:var(--muted);margin-top:28px;line-height:1.7}
+footer{text-align:center;color:var(--muted);font-size:14px;margin-top:30px}
+</style>
+</head>
+<body>
+<header><div class="wrap" style="padding:0 20px">
+  <span class="demo">課堂示範｜請填假資料</span>
+  <h1>糖尿病衛教課程報名表</h1>
+  <p>表單放在 GitHub Pages，送出後資料進 Google 試算表（Apps Script 後端）</p>
+</div></header>
+<main class="wrap">
+  <form id="f">
+    <label>姓名 <small>（必填，示範請用假名）</small></label>
+    <input name="name" required placeholder="例如：王小明">
+    <label>手機 <small>（必填，10 碼，示範請用 0912345678）</small></label>
+    <input name="phone" required inputmode="numeric" pattern="09[0-9]{8}" placeholder="09xxxxxxxx">
+    <label>Email <small>（選填）</small></label>
+    <input name="email" type="email" placeholder="選填">
+    <label>報名場次 <small>（必填）</small></label>
+    <select name="session" required>
+      <option value="">請選擇</option>
+      <option>11/21（五）上午</option>
+      <option>11/28（五）上午</option>
+    </select>
+    <label>陪同家屬人數</label>
+    <select name="family"><option>0</option><option>1</option><option>2</option><option>3</option></select>
+    <label>報名代碼 <small>（海報上有；示範代碼 TYH2026）</small></label>
+    <input name="code" required placeholder="TYH2026">
+    <label>附件 <small>（選填：jpg／png／pdf，5 MB 以內。示範請勿上傳真實報告）</small></label>
+    <input name="file" type="file" accept=".jpg,.jpeg,.png,.pdf">
+    <button id="btn" type="submit">送出報名</button>
+    <div class="msg" id="msg"></div>
+  </form>
+  <div class="note"><b>個資告知（示範文字）</b>：主辦單位為糖尿病中心，蒐集目的為課程報名與聯繫，資料類別為姓名、電話、Email，保存至課程結束後 1 個月刪除；您可隨時要求查詢、更正或刪除。本頁為課堂示範，請勿填寫真實個資。</div>
+  <footer>本頁使用 AI 協助製作｜前端：GitHub Pages｜後端：Google Apps Script｜最後更新 2026-11</footer>
+</main>
+<script>
+var APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxYfLDpwN7QLPYG5Mp1EISIVGMWBrG6ediFod96kgz0gQCXdZWDfKw5lTgCLx6cwx4x/exec";
+var f=document.getElementById('f'),btn=document.getElementById('btn'),msg=document.getElementById('msg');
+function show(t,ok){msg.textContent=t;msg.className='msg '+(ok?'ok':'err')}
+f.addEventListener('submit',async function(e){
+  e.preventDefault();
+  var fd=new FormData(f),d={};fd.forEach(function(v,k){if(k!=='file')d[k]=v});
+  var file=f.file.files[0];
+  if(file){
+    if(file.size>5*1024*1024){show('檔案超過 5 MB',false);return}
+    d.file={name:file.name,type:file.type,data:await new Promise(function(res){var r=new FileReader();r.onload=function(){res(r.result.split(',')[1])};r.readAsDataURL(file)})};
+  }
+  btn.disabled=true;btn.textContent='上傳中…';msg.className='msg';
+  try{
+    var r=await fetch(APPS_SCRIPT_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(d)});
+    var j=await r.json();
+    if(j.ok){show('報名成功！資料已寫入試算表。',true);f.reset()}else{show('沒有送出：'+(j.error||'未知錯誤'),false)}
+  }catch(err){show('連線失敗，請稍後再試：'+err.message,false)}
+  btn.disabled=false;btn.textContent='送出報名';
+});
+</script>
+<script src="https://mattsue1003.github.io/oth-report-button/report.js" data-site="q12345-form-demo" defer></script>
+</body>
+</html>

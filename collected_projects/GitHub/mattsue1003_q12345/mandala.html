@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>目標九宮格（曼陀羅計畫表）</title>
+<meta name="description" content="81 格目標達成表：中間寫大目標，周圍八格寫面向，外圈 64 格寫具體行動。自動儲存、可列印 A4、可下載圖片。">
+<style>
+:root{--orange:#E8552D;--teal:#028090;--ink:#12343B;--bg:#F7F9F9;--card:#fff;--line:#DCE6E7;--muted:#4F6B70;--teal-50:#E6F4F5;--orange-50:#FDEEE9;--amber-50:#FEF6E8;
+--font:"Microsoft JhengHei","PingFang TC","Noto Sans TC",system-ui,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;font-family:var(--font);background:var(--bg);color:var(--ink);line-height:1.5}
+header{background:linear-gradient(135deg,var(--ink),var(--teal));color:#fff;padding:18px 16px}
+header .wrap{max-width:1100px;margin:0 auto;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+header h1{margin:0;font-size:1.3rem}
+header p{margin:4px 0 0;opacity:.9;font-size:.92rem}
+.bar{max-width:1100px;margin:14px auto 0;padding:0 16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.btn{border:0;border-radius:999px;padding:9px 16px;font:inherit;font-weight:700;cursor:pointer;background:var(--teal);color:#fff}
+.btn.o{background:var(--orange)}
+.btn.g{background:#fff;color:var(--ink);border:1.5px solid var(--line)}
+select{font:inherit;padding:8px 12px;border-radius:999px;border:1.5px solid var(--line);background:#fff}
+.meta{max-width:1100px;margin:10px auto 0;padding:0 16px;font-size:.9rem;color:var(--muted)}
+.grid{max-width:1100px;margin:14px auto;padding:0 16px}
+.m{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.blk{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;background:var(--line);padding:3px;border-radius:10px}
+.blk.center{background:var(--orange)}
+.cell{position:relative;background:#fff;border-radius:6px;min-height:60px;display:flex;align-items:center}
+.cell textarea{width:100%;height:60px;min-height:60px;overflow:hidden;border:0;background:transparent;resize:none;font:inherit;font-size:.82rem;padding:5px 6px;color:var(--ink);text-align:center;line-height:1.3;display:block;outline:none}
+.cell textarea:focus{box-shadow:inset 0 0 0 2px var(--teal)}
+.cell.theme{background:var(--teal-50)}
+.cell.theme textarea{font-weight:700}
+.cell.goal{background:var(--orange)}
+.cell.goal textarea{color:#fff;font-weight:900;font-size:.95rem}
+.blk.center .cell.theme{background:var(--amber-50)}
+.cell.done{background:#E3F4EA}
+.cell .chk{position:absolute;right:3px;top:3px;width:16px;height:16px;border-radius:4px;border:1.5px solid var(--line);background:#fff;cursor:pointer;font-size:11px;line-height:13px;text-align:center;color:#1E8E5A;padding:0}
+.cell.done .chk{background:#1E8E5A;border-color:#1E8E5A;color:#fff}
+.cell.goal .chk,.cell.theme .chk{display:none}
+.tip{max-width:1100px;margin:0 auto 30px;padding:0 16px;font-size:.9rem;color:var(--muted)}
+.tip b{color:var(--ink)}
+footer{text-align:center;color:var(--muted);font-size:.82rem;padding:16px}
+@media (max-width:760px){.m{gap:5px}.blk{gap:2px;padding:2px}.cell{min-height:48px}.cell textarea{font-size:.62rem;padding:3px 2px;min-height:48px}.cell.goal textarea{font-size:.7rem}.cell .chk{width:12px;height:12px;font-size:8px;line-height:9px}}
+@media print{@page{size:A4 landscape;margin:10mm}header,.bar,.tip,footer,.meta .np{display:none}body{background:#fff}.grid{padding:0;margin:0}.cell .chk{display:none}.cell.done{background:#E3F4EA!important}.cell textarea{font-size:9pt}.cell.goal{-webkit-print-color-adjust:exact;print-color-adjust:exact}.blk,.cell{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div><h1>目標九宮格（曼陀羅計畫表）</h1><p>中間寫大目標 → 周圍 8 格寫面向 → 外圈 64 格寫做得到的小行動。輸入會自動存在這台裝置。</p></div>
+  <div id="prog" style="font-weight:700;background:rgba(255,255,255,.15);padding:8px 14px;border-radius:999px">已完成 0 / 64</div>
+</div></header>
+
+<div class="bar">
+  <select id="tpl" aria-label="套用範本">
+    <option value="">套用範本…</option>
+    <option value="dm">糖尿病自我管理（病人版）</option>
+    <option value="edu">衛教師年度成長（專業版）</option>
+    <option value="ohtani">大谷翔平高一原表（參考）</option>
+    <option value="blank">全部清空</option>
+  </select>
+  <button class="btn" id="print">列印 A4</button>
+  <button class="btn o" id="png">下載圖片</button>
+  <button class="btn g" id="share">複製分享文字</button>
+  <span id="saved" style="font-size:.85rem;color:var(--muted)"></span>
+</div>
+<div class="meta">填寫人／日期：<input id="who" placeholder="例如 王小姐・2026/11/09" style="font:inherit;border:0;border-bottom:1.5px solid var(--line);background:transparent;padding:4px;min-width:220px"> <span class="np">（不要寫病歷號或完整姓名）</span></div>
+
+<div class="grid"><div class="m" id="m"></div></div>
+
+<div class="tip"><b>怎麼用：</b>先只填中間 9 格，再和病人一起挑 2～3 個面向填外圈，不必一次填滿 64 格。每完成一件事，點格子右上角打勾。列印貼在冰箱上，回診時帶來一起看。</div>
+<footer>本頁使用 AI 協助製作｜衛福部桃園醫院糖尿病中心 AI 賦能工作坊 第 3 堂示範</footer>
+
+<script>
+(function(){
+var KEY='mandala-v1';
+var TPL={
+ dm:{goal:'3 個月後 HbA1c 7% 以下，而且沒有低血糖',
+  themes:['飲食','運動','用藥','血糖監測','足部照護','情緒與睡眠','回診與檢查','家人支持'],
+  acts:[
+   ['每餐先吃菜再吃飯','白飯用拳頭量','含糖飲料換無糖茶','外食選滷不選炸','水果一天 2 份','睡前不吃宵夜','每週一天記錄三餐','學看營養標示'],
+   ['飯後散步 15 分鐘','每週快走 3 次','看電視時抬腿','爬樓梯代替電梯','找一位運動夥伴','運動前測血糖','帶糖果出門','每週記錄步數'],
+   ['藥放在牙刷旁邊','手機設吃藥鬧鐘','用藥盒分裝一週','不自行停藥','忘記吃藥怎麼辦問衛教師','藥袋拍照存手機','回診前一週檢查藥量','寫下副作用問醫師'],
+   ['空腹血糖每週測 3 次','飯後 2 小時測 1 次','血糖紀錄本放桌上','低於 70 先吃 15 克糖','試紙保存期限檢查','機器對時','回診帶紀錄本','異常數字當天記下原因'],
+   ['每天看腳底','洗腳水先用手試溫','穿襪子穿鞋','指甲平剪','不赤腳走路','鞋子買下午去試','有傷口三天沒好就回診','每月足部檢查一次'],
+   ['晚上 11 點前睡','睡前手機放客廳','每天 5 分鐘深呼吸','心情差時打電話給朋友','寫下三件好事','午睡不超過 30 分鐘','壓力大時問衛教師','參加一次病友團體'],
+   ['回診日寫在月曆','抽血前空腹 8 小時','每年眼底檢查','每年腎功能檢查','帶問題清單看診','牙科每半年','流感疫苗','記下醫師說的目標'],
+   ['跟家人說我的目標','請家人一起吃少油餐','和孫子一起散步','家人學會低血糖處理','把紀錄本給家人看','邀家人參加衛教','請家人提醒吃藥','謝謝家人的支持']]},
+ edu:{goal:'一年內成為科內的 AI 衛教素材製作者',
+  themes:['提示語基本功','衛教單張轉譯','數據報表','多媒體素材','個人網頁與上架','知識庫助手','微工具開發','分享與推廣'],
+  acts:[
+   ['每天用 AI 處理一件小事','用六要素寫提示語','建立自己的範本庫','學會 AMA 反問法','去識別化再上傳','比較三家工具的回答','記錄好用的提示語','教一位同事'],
+   ['一份單張做白話版','做長者大字版','做越南語版並回譯','請 AI 當病人挑錯','用 Canva 排版','送院內審查一次','收集病人回饋','整理成科內範本'],
+   ['Excel 問 AI 寫公式','做一份品質指標表','學會分組平均與達標率','手動驗算一次','做個案回饋單','用 Google 試算表 + Gemini','圖表配色統一','每月自動產出'],
+   ['做 6 張風格一致圖卡','寫 30 秒微劇本','做一支字幕短影音','用 Lyria 做 30 秒配樂','Canva 魔法圖層改圖','學會參考風格提示語','肖像版權自檢','素材送審'],
+   ['註冊 GitHub','上傳自我介紹網頁','上傳 HTML 簡報','上傳九宮格網頁','做 QR code 貼衛教室','學會改字重上傳','網址放進衛教單','教同事上傳'],
+   ['整理可放的指引文件','建立 Gemini Gem 或專案','設定拒答未知問題','寫 20 題驗證題','測正確率','修正錯誤回答','訂使用規範','每季更新文件'],
+   ['寫需求四段結構','做一個碳水計算器','做低血糖處理小卡網頁','加上免責標示','手機測試','貼 QR 在衛教室','收集使用回饋','改版一次'],
+   ['科會分享一次','寫一篇院內電子報','帶一場同事小工作坊','把成果放粉專或社群','參加一次外部研討會','整理成果清單','找下一個場域','感謝幫過我的人']]},
+ ohtani:{goal:'8 球團第一指名',
+  themes:['體格','控球','球質','球速 160 km/h','變化球','運氣','人品','心志'],
+  acts:[
+   ['保養身體','吃營養補充品','FSQ 90 kg','柔軟度','RSQ 130 kg','體力','關節活動度','吃飯早三碗晚七碗'],
+   ['建立下半身軸心','身體不要開太早','放球點穩定','消除不安','不勉強','把球放進捕手手套','身體保養','強化下半身'],
+   ['角度','從上往下投','手腕加強','放球點放前面','球的轉速','下半身主導','用全身投球','增加轉數'],
+   ['軸心穩定','下半身強化','體重增加','肩膀周圍強化','球速提升','柔軟度','抬腿動作','增加揮臂速度'],
+   ['完成指叉球','滑球品質','慢速曲球','對左打的決勝球','控球穩定的變化球','想像從好球帶跑掉','深度','用同樣姿勢投'],
+   ['打招呼','撿垃圾','打掃房間','對裁判的態度','珍惜球具','正向思考','成為被支持的人','讀書'],
+   ['感性','被人愛的人','計畫性','感謝','禮貌','體貼','信賴','堅持'],
+   ['目標明確','不隨波逐流','贏球的執著','對危機冷靜','氣氛製造者','體諒隊友','不製造起伏','頭腦冷靜心火熱']]}
+};
+var m=document.getElementById('m');
+var state=load();
+function load(){try{var s=JSON.parse(localStorage.getItem(KEY)||'null');if(s&&s.cells)return s}catch(e){}return{goal:'',themes:Array(8).fill(''),cells:Array(64).fill(''),done:Array(64).fill(false),who:''}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state));document.getElementById('saved').textContent='已儲存 '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})}catch(e){}}
+// block order: themes index 0..7 arranged around center (TL,T,TR,L,R,BL,B,BR); block b has 9 cells, center is theme
+var POS=[0,1,2,3,5,6,7,8];
+function build(){
+  m.innerHTML='';
+  for(var b=0;b<9;b++){
+    var blk=document.createElement('div');blk.className='blk'+(b===4?' center':'');
+    for(var c=0;c<9;c++){
+      var cell=document.createElement('div');cell.className='cell';
+      var ta=document.createElement('textarea');
+      if(b===4){
+        if(c===4){cell.classList.add('goal');ta.placeholder='大目標';ta.value=state.goal;ta.oninput=function(){state.goal=this.value;syncGoal();save()}}
+        else{var t=POS.indexOf(c);cell.classList.add('theme');ta.placeholder='面向 '+(t+1);ta.value=state.themes[t];ta.dataset.t=t;ta.oninput=function(){state.themes[+this.dataset.t]=this.value;syncThemes();save()}}
+      }else{
+        var ti=POS.indexOf(b);
+        if(c===4){cell.classList.add('theme');ta.readOnly=true;ta.tabIndex=-1;ta.value=state.themes[ti];ta.dataset.mirror=ti;ta.placeholder='面向 '+(ti+1)}
+        else{var ai=ti*8+POS.indexOf(c);ta.dataset.a=ai;ta.placeholder='小行動';ta.value=state.cells[ai];ta.oninput=function(){state.cells[+this.dataset.a]=this.value;save()};
+          if(state.done[ai])cell.classList.add('done');
+          var k=document.createElement('button');k.className='chk';k.type='button';k.title='完成';k.textContent='✓';k.dataset.a=ai;
+          k.onclick=function(){var i=+this.dataset.a;state.done[i]=!state.done[i];this.parentNode.classList.toggle('done',state.done[i]);prog();save()};cell.appendChild(k)}
+      }
+      ta.addEventListener('input',function(){fitTA(this)});cell.appendChild(ta);blk.appendChild(cell);
+    }
+    m.appendChild(blk);
+  }
+  document.getElementById('who').value=state.who||'';prog();fitAll();
+}
+function syncGoal(){}
+function fitTA(t){t.style.height='auto';t.style.height=Math.max(t.scrollHeight,parseInt(getComputedStyle(t).minHeight))+'px'}
+function fitAll(){m.querySelectorAll('textarea').forEach(fitTA)}
+window.addEventListener('resize',fitAll);
+function syncThemes(){m.querySelectorAll('textarea[data-mirror]').forEach(function(t){t.value=state.themes[+t.dataset.mirror];fitTA(t)})}
+function prog(){var n=state.done.filter(Boolean).length;document.getElementById('prog').textContent='已完成 '+n+' / 64'}
+document.getElementById('who').oninput=function(){state.who=this.value;save()};
+document.getElementById('tpl').onchange=function(){
+  var v=this.value;this.value='';if(!v)return;
+  if(v==='blank'){if(!confirm('清空全部 81 格？'))return;state={goal:'',themes:Array(8).fill(''),cells:Array(64).fill(''),done:Array(64).fill(false),who:state.who};}
+  else{var t=TPL[v];if(state.goal||state.cells.some(Boolean)){if(!confirm('套用範本會覆蓋目前內容，確定？'))return}
+    state={goal:t.goal,themes:t.themes.slice(),cells:[].concat.apply([],t.acts),done:Array(64).fill(false),who:state.who}}
+  save();build();
+};
+document.getElementById('print').onclick=function(){window.print()};
+document.getElementById('share').onclick=function(){
+  var lines=['目標：'+state.goal];for(var i=0;i<8;i++){lines.push('\n【'+(state.themes[i]||'面向'+(i+1))+'】');for(var j=0;j<8;j++){var v=state.cells[i*8+j];if(v)lines.push((state.done[i*8+j]?'☑ ':'☐ ')+v)}}
+  var txt=lines.join('\n');
+  (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(function(){alert('已複製，可以貼到 LINE 或紀錄裡')},function(){prompt('手動複製：',txt)});
+};
+document.getElementById('png').onclick=function(){
+  var W=1800,H=1800,g=W/3,c=g/3,p=6;var cv=document.createElement('canvas');cv.width=W;cv.height=H;var x=cv.getContext('2d');
+  x.fillStyle='#fff';x.fillRect(0,0,W,H);
+  function wrap(text,cx,cy,w,size,color,bold){x.font=(bold?'700 ':'')+size+'px '+getComputedStyle(document.body).fontFamily;x.fillStyle=color;x.textAlign='center';x.textBaseline='middle';
+    var out=[],line='';for(var i=0;i<text.length;i++){var t=line+text[i];if(x.measureText(t).width>w-16&&line){out.push(line);line=text[i]}else line=t}if(line)out.push(line);
+    if(out.length>5){out=out.slice(0,5);out[4]=out[4].slice(0,-1)+'…'}
+    var lh=size*1.25,y0=cy-(out.length-1)*lh/2;out.forEach(function(l,i){x.fillText(l,cx,y0+i*lh)})}
+  for(var b=0;b<9;b++){var bx=(b%3)*g,by=Math.floor(b/3)*g;for(var k=0;k<9;k++){var cx=bx+(k%3)*c,cy=by+Math.floor(k/3)*c;
+    var fill='#fff',txt='',col='#12343B',bold=false,size=22;
+    if(b===4&&k===4){fill='#E8552D';txt=state.goal;col='#fff';bold=true;size=28}
+    else if(b===4){fill='#FEF6E8';txt=state.themes[POS.indexOf(k)];bold=true}
+    else if(k===4){fill='#E6F4F5';txt=state.themes[POS.indexOf(b)];bold=true}
+    else{var ai=POS.indexOf(b)*8+POS.indexOf(k);txt=state.cells[ai];if(state.done[ai])fill='#E3F4EA'}
+    x.fillStyle=fill;x.fillRect(cx+p/2,cy+p/2,c-p,c-p);x.strokeStyle=b===4?'#E8552D':'#DCE6E7';x.lineWidth=b===4?4:2;x.strokeRect(cx+p/2,cy+p/2,c-p,c-p);
+    if(txt)wrap(txt,cx+c/2,cy+c/2,c,size,col,bold)}}
+  var a=document.createElement('a');a.download='目標九宮格.png';a.href=cv.toDataURL('image/png');a.click();
+};
+build();
+})();
+</script>
+<script src="https://mattsue1003.github.io/oth-report-button/report.js" data-site="目標九宮格" defer></script>
+</body>
+</html>
