@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#f3eddf"><link rel="icon" type="image/png" sizes="256x256" href="./icon.png" ><meta name="application-name" content="Make Something"><meta name="apple-mobile-web-app-title" content="Make Something"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><link rel="apple-touch-icon" href="./icon.png" ><title>Make Something Worthwhile</title><style>:root{font-family:system-ui,sans-serif;color:#35382f;background:#f3eddf;font-synthesis:none}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;min-width:0;overflow:hidden}
+/* iOS samples a fixed top edge to replace its Home Screen blur with a colour.
+   The empty text clip supplies Canvas without painting over the game. 11px
+   clears WebKit's sampling threshold; iOS owns the actual status-bar height. */
+.status-bar-color{display:none}
+@supports (-webkit-touch-callout:none){
+  @media (display-mode:standalone){
+    .status-bar-color{
+      display:block;position:fixed;top:0;left:0;right:0;height:11px;
+      z-index:2147483647;pointer-events:none;color-scheme:light dark;
+      background-color:Canvas;-webkit-background-clip:text;background-clip:text;
+    }
+  }
+}
+/* The game owns presses and double-taps. Apply pan-y at every scroll surface,
+   including nested readers, so scrolling never opts back into browser zoom. */
+:where(#app, #app *, .mobile-debug, .mobile-debug *){
+  -webkit-user-select:none;user-select:none;
+  -webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
+  touch-action:pan-y;
+}
+/* Only authored chapter/wonder prose opts into native selection and copying.
+   Images, popup controls and the encyclopedia index retain the game defaults. */
+#app .reading-text,#app .reading-text :not(img){
+  -webkit-user-select:text;user-select:text;-webkit-touch-callout:default;
+}
+button,select{font:inherit;color:inherit}button{cursor:pointer}
+/* Focus is invisible throughout the player; gameplay feedback has its own states. */
+:where(#app, #app *, .mobile-debug, .mobile-debug *):focus{outline:none}
+#app{height:100dvh;position:relative;overflow:hidden;container:game / inline-size}
+/* The world is the whole viewport; the HUD never takes layout height. */
+.viewport{overflow-anchor:none;position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;overscroll-behavior:none}
+.board{position:relative;width:100%;max-width:600px;margin-inline:auto;min-height:100%;touch-action:pan-y;isolation:isolate}.location-label{position:absolute;left:5px;right:5px;pointer-events:none;border-top:1px solid #cfbfa5;color:#8b715b;font-size:10px;padding-top:3px}.thing,.hotspot{position:absolute;transform:translate(-50%,-50%);user-select:none;-webkit-user-select:none}.thing{width:96px;min-height:44px;border:1px solid #8d8068;border-radius:8px;padding:4px;background:#fffaf0;box-shadow:0 2px 4px #53422e15;font-size:12px;line-height:1.15;z-index:3;touch-action:none;-webkit-touch-callout:none;overflow-wrap:anywhere}.hotspot{width:104px;height:82px;border:1.5px solid #9a8b70;border-radius:0;background:transparent;font-size:11px;padding:5px;display:flex;align-items:flex-start;justify-content:center;z-index:1;touch-action:none}.thing .slot{display:block;height:18px;line-height:16px;border:1px dashed #b5a58a;border-radius:3px;margin-top:3px;font-size:9px;overflow:hidden;white-space:nowrap}.thing .slot.filled{border-style:solid;background:#ebe9dc}.pressed{outline:3px solid #163d46;outline-offset:3px;box-shadow:0 0 0 3px #fffaf0!important}.possible{border-color:#063e53!important;outline:2px dashed #fffaf0!important;outline-offset:4px;box-shadow:0 0 0 2px #fffaf0,0 0 0 5px #063e53,0 4px 12px #14252c88!important}.will-create,.will-place{outline:3px solid #6b2e04!important;outline-offset:3px;background:#ffe2a0!important;box-shadow:0 0 0 3px #fffaf0,0 0 0 6px #b25108,0 5px 16px #29190088!important}.goal-met{border-color:#b58b23;box-shadow:0 0 10px #d4aa5366;outline:2px solid #d6ad48;outline-offset:1px}.thing.goal-met{background:#fff1c6}.dragging{pointer-events:none;animation:none!important;transition:none!important}.born{animation:arrival .65s ease-out}@keyframes arrival{0%{transform:translate(calc(-50% + var(--birth-x,0px)),calc(-50% + var(--birth-y,0px))) scale(.75);background:#ffe3a3;box-shadow:0 0 18px #d58b36}55%{background:#ffecc1;box-shadow:0 0 12px #d58b36}100%{transform:translate(-50%,-50%) scale(1)}}
+/* Goals sit beneath objects; the debug control remains reachable above them. */
+.hud-stack{z-index:2}
+.debug-toggle{z-index:4}
+.hud-stack{position:fixed;left:50%;transform:translateX(-50%);bottom:max(20px,env(safe-area-inset-bottom));width:max-content;max-width:min(calc(100vw - 32px),358px);user-select:none;-webkit-user-select:none;display:flex;flex-direction:column;align-items:center;gap:0;pointer-events:none}
+.objective-dock{display:flex;flex-direction:column;align-items:flex-end;gap:0;max-width:100%;pointer-events:auto}
+.objective-overlay{max-width:100%;min-height:44px;border:0;border-radius:0;background:transparent;box-shadow:none;padding:3px 6px;text-align:left;font-size:11px;line-height:1.4;pointer-events:auto}
+.objectives{display:block;max-height:min(20dvh,140px);overflow-y:auto;overscroll-behavior:contain}
+.objective-line{display:flex;align-items:flex-start;gap:7px;overflow-wrap:anywhere}.objective-line+.objective-line{margin-top:3px}.objective-line.done{color:#805d11}
+/* Reserve pulse/glow space inside the scroll clip without moving the resting rows. */
+.objectives{padding:12px 36px;margin:-12px -36px;max-height:calc(min(20dvh,140px) + 24px)}.objective-line{transform-origin:center}
+.debug-toggle{position:absolute;right:max(4px,env(safe-area-inset-right));top:max(4px,env(safe-area-inset-top));width:44px;height:44px;display:grid;place-items:center end;padding:0 2px 0 0;border:0;border-radius:0;background:transparent;box-shadow:none;pointer-events:auto}
+.debug-toggle[data-debug="true"]::after{content:"";position:absolute;right:0;top:0;width:9px;height:9px;border-radius:50%;background:#b58b23;border:1px solid #fffaf0}
+.debug-toggle[data-save-error="true"]::after{content:"!";position:absolute;right:-2px;top:-3px;border-radius:50%;background:#96382c;color:white;font-weight:700;font-size:11px;line-height:16px;width:16px;height:16px}
+.save-alert{position:absolute;z-index:36;top:max(10px,env(safe-area-inset-top));right:max(10px,env(safe-area-inset-right));min-height:44px;max-width:220px;border:1px solid #96382c;border-radius:8px;background:#fff4e9;color:#96382c;font-size:12px;padding:8px 12px}
+.is-dragging .save-alert{opacity:.15;pointer-events:none}
+.is-dragging .debug-toggle,.is-dragging .hud-stack *{pointer-events:none!important}
+.feedback{position:absolute;top:max(10px,env(safe-area-inset-top));left:50%;transform:translateX(-50%);max-width:calc(100% - 20px);width:max-content;pointer-events:none;z-index:34;padding:6px 9px;background:#fff8e7ee;font-size:12px;border-radius:6px;margin:0}
+dialog{width:min(92vw,470px);border:1px solid #c6b99e;border-radius:12px;padding:22px;background:#fffaf0;color:inherit;max-height:88dvh;overflow:auto}dialog::backdrop{background:#26372f88}dialog .speaker{text-transform:uppercase;letter-spacing:.1em;font-size:10px;color:#6c735d}dialog h1{font-size:23px;margin:8px 0 15px}dialog p{line-height:1.55;font-size:14px}dialog ul{font-size:13px;line-height:1.6;padding-left:20px}dialog button{border:1px solid #718571;border-radius:7px;padding:9px 13px;background:#e6edde;font-size:14px}dialog .secondary{background:transparent;margin-left:7px;font-size:12px}.cache{border-left:3px solid #b8a781;padding-left:12px}
+dialog button,dialog select{min-height:44px}
+.dialog-actions{display:flex;flex-wrap:wrap;gap:8px}.dialog-actions button{max-width:100%;overflow-wrap:anywhere}dialog .dialog-actions .secondary{margin-left:0}
+.completion-story{line-height:1.5;white-space:pre-line;overflow-wrap:anywhere}
+.save-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#save-status{font-size:11px;line-height:1.4;max-width:100%;overflow-wrap:anywhere}#save-status[data-state="error"]{color:#96382c}
+/* The catalogue scrolls at the browser edge around its centered content. */
+#app.catalogue-page{overflow-y:auto;background:#f3eddf;overscroll-behavior:contain}
+.chooser{min-height:100%;width:min(100%,600px);margin:0 auto;padding:24px 12px 40px}
+.chooser .story-title{font:normal 24px/1.2 Georgia,serif;margin:0}
+.chooser .story-title img{display:inline;width:64px;height:64px;object-fit:contain;vertical-align:baseline}
+.chooser a{display:block;margin:10px 0;padding:14px;border:1px solid #b5a58a;border-radius:8px;color:inherit;text-decoration:none;background:#fffaf0}.chooser p{line-height:1.5;font-size:14px}.chooser a,.chooser p{overflow-wrap:anywhere}
+@media(max-height:420px){.hud-stack{max-width:min(calc(100vw - 32px),358px)}.objectives{max-height:18dvh}.objective-overlay{padding:3px 2px 3px 6px}dialog{max-height:94dvh;padding:16px}}
+@media(prefers-reduced-motion:reduce){.born{animation:none}}
+
+/* Source fragments stay ordinary rounded things. A small mark offers reading,
+   never a different object grammar or an automatic instructional popup. */
+.source-marker{display:block;height:12px;line-height:12px;text-align:right;color:#6c735d;pointer-events:none}
+#source-reader{width:min(92vw,430px);padding:18px;max-height:82dvh}
+.reader-dismiss{float:right;width:44px;min-width:44px;height:44px;padding:0;margin:-4px -4px 8px 12px;font-size:22px;background:transparent}
+#source-reader .reading-text{white-space:pre-wrap;overflow-wrap:anywhere;margin:14px 0;font-family:Georgia,serif;font-size:17px;line-height:1.65}
+
+
+/* Explicit long-label lines share the engine's 14px line box and 10px
+   padding/border allowance. Only real readings add a 12px source marker. */
+.text-thing{font-family:Arial,Helvetica,sans-serif;line-height:14px}
+.item-label,.item-label-line{display:block}.item-label-line{white-space:pre}
+
+/* Chapter-entry grouping is scenery, not a tile, goal, or interaction target. */
+.arrival-divider{position:absolute;left:8px;right:8px;height:1px;border-top:1px dotted #9a8b70;pointer-events:none;z-index:2;text-align:center;color:#716858;font-size:10px;line-height:16px}.arrival-divider span{position:relative;top:-9px;padding:0 8px;background:#f3eddf}
+/* Temporarily hide the divider; retain its markup, styling and layout calculations. */
+.arrival-divider{display:none}
+
+/* Rare invention celebrations step outside the board without replacing its object.
+   Native dialog supplies focus containment; the single explicit action is always available. */
+#milestone{position:fixed;inset:0;margin:0;width:100%;max-width:none;height:100%;height:100dvh;max-height:none;border:0;border-radius:0;padding:max(24px,env(safe-area-inset-top)) max(24px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(24px,env(safe-area-inset-left));background:radial-gradient(ellipse at 50% 32%,#fff5d7 0%,#f3eddf 60%);overflow:auto;overscroll-behavior:contain}
+#milestone::backdrop{background:#f3eddf}
+.milestone-content{min-height:100%;max-width:600px;margin:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+#milestone .milestone-eyebrow{text-transform:uppercase;letter-spacing:.17em;font-size:11px;color:#71634c;margin:0 0 26px}
+.milestone-object{width:clamp(144px,38vw,206px);max-width:100%;padding:18px;border:1px solid #a98b55;border-radius:12px;background:#fffaf0;box-shadow:0 8px 48px #ba92583d;animation:milestone-reveal 1.1s ease-out both}
+.milestone-item-label{font-size:19px;line-height:1.3;overflow-wrap:anywhere}
+.milestone-component{display:block;margin-top:8px;border:1px solid #b5a58a;border-radius:5px;padding:5px 8px;background:#ebe9dc;font-size:12px;line-height:1.3;overflow-wrap:anywhere;animation:milestone-fit .65s ease-out both;animation-delay:calc(.15s + var(--part)*.12s)}
+#milestone h1{font-family:Georgia,serif;font-weight:400;font-size:clamp(30px,7vw,46px);line-height:1.12;max-width:100%;overflow-wrap:anywhere;margin:30px 0 14px}
+#milestone #milestone-text{font-family:Georgia,serif;font-size:clamp(17px,4vw,21px);line-height:1.6;max-width:29em;margin:0 0 28px;overflow-wrap:anywhere}
+#milestone-continue{min-width:140px;min-height:48px;background:#52694f;color:#fffaf0;border-color:#52694f}
+@keyframes milestone-reveal{from{opacity:0;transform:scale(.78);box-shadow:0 0 0 #ba925800}to{opacity:1;transform:scale(1);box-shadow:0 8px 48px #ba92583d}}
+@keyframes milestone-fit{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){.milestone-object,.milestone-component{animation:none}}
+@media(max-height:480px){#milestone{padding:20px}.milestone-content{justify-content:flex-start}#milestone .milestone-eyebrow{margin-bottom:14px}#milestone h1{margin-top:20px}.milestone-object{padding:12px}}
+
+/* Scene geometry is shared by scenery and interactive objects. */
+.board.fixed-locations{max-width:none;min-height:0;isolation:isolate}
+.location-scene{position:absolute;left:0;right:0;overflow:hidden;pointer-events:none;z-index:-2;background:#e8dfcd}
+.location-scene img{display:block;width:100%;height:100%;object-fit:cover;pointer-events:none}
+.fixed-locations .location-label{z-index:0;background:#f3eddfc9;min-height:24px;padding:5px 7px;color:#665c4b;border-top:1px solid #b8aa91}
+.fixed-locations .hotspot{background:#f3eddf75}
+#mission[data-format="radio"]{border-left:4px solid #557574;background:#f5faf4}
+#mission[data-format="speech-bubble"]{border-radius:20px 20px 20px 4px}
+#mission[data-format="source-update-card"]{border-top:4px solid #9d8657}
+#mission .source-caption{font-size:11px;line-height:1.4;color:#756c5a;margin:8px 0 0}
+/* The source marker is a corner annotation in fixed panels, not an extra
+   blank text row on every manuscript. Double-tap opens the quotation without creating a selected state. */
+.fixed-locations .source-marker{position:absolute;right:-2px;top:-3px;width:12px;height:12px;line-height:12px;background:#fffaf0;border-radius:3px;opacity:.8;pointer-events:none}
+
+/* Ordinary story beats are a single tappable intertitle, not a second goals UI.
+   The prose itself is the native button: pointer, Enter, Space and Escape work. */
+#mission.intertitle{padding:0;border-radius:8px}
+#mission.intertitle .intertitle-dismiss{display:block;width:100%;min-height:100px;border:0;border-radius:8px;padding:30px 26px;background:transparent;text-align:center;font-family:Georgia,serif;font-size:clamp(18px,4.6vw,23px);line-height:1.55;white-space:pre-line}
+/* Solid object cards carry label contrast; art does not need a blanket wash. */
+.fixed-locations .thing{background:#fffaf0;box-shadow:0 2px 5px #302b2533}
+.fixed-locations .thing.goal-met{background:#fff1c6}
+.fixed-locations .hotspot{background:#f3eddfd9}
+.location-hud .objective-line{background:#f3eddfed;box-shadow:0 0 4px 2px #f3eddf80}
+.location-hud .debug-toggle{filter:drop-shadow(0 0 2px #fffaf0) drop-shadow(0 0 3px #fffaf0)}
+
+/* Only the optional discovery card uses raster artwork. Existing milestones
+   retain their component-led presentation and acknowledgement behavior. */
+#milestone.illustrated-milestone .milestone-content { gap: 12px; width: min(100%, 370px); min-height: 100%; max-height: none; overflow: visible; padding: 12px; }
+#milestone.illustrated-milestone .discovery-illustration { display: block; width: 100%; height: min(47dvh, 395px); min-height: 160px; object-fit: contain; border-radius: 12px; background: #17232a; }
+#milestone.illustrated-milestone .milestone-eyebrow { margin: 0; }
+#milestone.illustrated-milestone h1 { font-size: clamp(23px, 6.8vw, 30px); margin: 0; }
+#milestone.illustrated-milestone #milestone-text { font-size: 17px; line-height: 1.35; margin: 0; }
+#milestone.illustrated-milestone #milestone-continue { min-height: 44px; flex-shrink: 0; }
+@media (prefers-reduced-motion: reduce) { #milestone.illustrated-milestone *, #milestone.illustrated-milestone::backdrop { animation: none !important; transition: none !important; } }
+
+#milestone.illustrated-milestone { padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+
+.goal-checkbox{display:inline-grid;place-items:center;flex:0 0 13px;width:13px;height:13px;margin-top:2px;border:1px solid currentColor;border-radius:2px;font-size:11px;line-height:1}.objective-line.ending{justify-content:center}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}dialog .danger{background:#96382c;color:#fffaf0;border-color:#96382c}
+.objective-overlay,.objective-overlay *{user-select:none;-webkit-user-select:none}
+.context-heading{display:block;margin-bottom:1em;font-size:.82em;line-height:1.35;font-weight:400}
+/* Readiness is not navigation. The player chooses when to leave a creation. */
+.chapter-next{position:absolute;z-index:35;bottom:max(12px,env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);width:52px;height:52px;border:2px solid #334f45;border-radius:50%;padding:0;background:#fffaf0;color:#173e32;box-shadow:0 2px 9px #172b3366;font-size:35px;line-height:1;display:grid;place-items:center}
+.chapter-next span{display:block;animation:next-down 1.3s ease-in-out infinite}
+.chapter-next.right{border-radius:15px;animation:next-button 1.3s ease-in-out infinite}
+.chapter-next.right span{animation-name:next-right}
+@keyframes next-down{0%,100%{transform:translateY(-3px)}50%{transform:translateY(4px)}}
+@keyframes next-right{0%,100%{transform:translateX(-3px)}50%{transform:translateX(4px)}}
+@keyframes next-button{0%,100%{box-shadow:0 2px 9px #172b3366}50%{box-shadow:0 0 0 4px #fffaf0b3,0 2px 9px #172b3366}}
+@media(prefers-reduced-motion:reduce){.chapter-next,.chapter-next span{animation:none}}
+
+/* A note explains itself before naming the result. Its caption is the live item
+   label, not a second rhetorical title or a source attribution. */
+.result-caption{display:block;clear:both;font-family:Georgia,serif;font-size:16px;line-height:1.5;font-weight:400;font-style:italic;overflow-wrap:anywhere}
+#source-reader .result-caption{margin:18px 0 2px}
+#milestone.explanation-milestone .milestone-content{align-items:stretch;text-align:left;max-width:530px}
+#milestone.explanation-milestone #milestone-text{margin:0;font-size:clamp(18px,4vw,22px);line-height:1.6;max-width:none;white-space:pre-line}
+#milestone.explanation-milestone .result-caption{font-size:clamp(16px,3.8vw,20px);margin:22px 0 28px}
+#milestone.explanation-milestone #milestone-continue{align-self:center}
+#milestone.explanation-milestone .discovery-illustration{margin:0 auto 22px;max-width:100%}
+/* Markdown runtime: retain the successful workshop palette, card grammar and motion. */
+/* Each scene keeps reference coordinates; the frame crops it to one viewport.
+   Clip transformed overflow at the world boundary so it cannot add a scroll tail. */
+.world{position:relative;margin:0 auto;overflow:clip}
+.scene-layer,.board.fixed-locations{width:100%;height:100%;margin:0;isolation:isolate}
+.scene-layer{position:absolute;top:0;left:0;z-index:0;pointer-events:none}
+/* Transparent board space passes input through to goals and the debug control. */
+.board.fixed-locations{z-index:3;pointer-events:none}
+.chapter-panel .thing,.chapter-panel .hotspot{pointer-events:auto}
+.chapter-panel .thing.dragging{pointer-events:none}
+.scene-panel,.chapter-panel{position:absolute;transform:scale(var(--board-scale,1));transform-origin:top left;width:var(--panel-width,390px);height:var(--panel-height,844px);overflow:visible;isolation:isolate}
+.scene-art{
+  position:absolute;left:var(--scene-left,0px);top:0;width:390px;height:var(--scene-height,844px);
+  object-fit:cover;object-position:center top;z-index:-2;
+  clip-path:inset(0 calc(-1 * var(--scene-left,0px)) max(0px,calc(var(--scene-height,844px) - var(--panel-height,844px))));
+}
+.chapter-panel .thing{transform:none;width:112px;padding:7px 6px;line-height:1.2;min-height:44px;font-size:12px;overflow-wrap:normal}.thing .slot{font-size:9px;line-height:17px;height:19px;text-overflow:ellipsis}.item-label{white-space:normal}.chapter-panel .hotspot{width:108px;min-height:76px;height:auto;background:#f3eddfd9}.chapter-panel .thing.born{animation:markdown-arrival .6s ease-out}.reading-text{font-family:Georgia,serif;font-size:20px;line-height:1.55}.reading-text p{font-size:inherit;line-height:inherit}.reading-text img{max-width:100%;max-height:45dvh;object-fit:contain;border-radius:6px}.intertitle{text-align:center}.wonder{width:min(94vw,560px);padding:28px;background:#fff9e9}.wonder .reading-text{font-size:21px}.wonder .result-caption{margin:22px 0}.dialog-actions{justify-content:center;margin-top:22px}dialog details{font-size:12px;margin-top:24px}dialog details ul{padding-left:16px;max-height:40vh;overflow:auto}.eyebrow{text-transform:uppercase;letter-spacing:.16em;font-size:11px!important;color:#716858}.chooser{max-width:560px;padding:42px 20px}.chooser h1{font:normal 38px/1.13 Georgia,serif;letter-spacing:-.03em;margin:20px 0}.chooser nav{margin-top:28px}.chooser a{padding:20px;border-radius:10px}.chooser a strong{font:normal 24px Georgia,serif}.chooser a p{font-size:13px;margin-bottom:0;color:#666656}.debug-toggle{right:max(8px,calc((100vw - 390px)/2 + 8px),env(safe-area-inset-right));background:transparent;border-radius:0;width:44px;height:44px;padding:10px;color:#605b50b3;display:grid;place-items:center;filter:drop-shadow(0 1px 1px #fffaf0b3)}.debug-toggle svg{width:22px;height:22px}.debug-toggle:hover{color:#35382f}.hud-stack .objective-line{background:#fffaf0e8;padding:3px 5px;border-radius:3px}.objective-overlay{font-size:12px}.chapter-next{bottom:20px}.arrival-divider{z-index:0}.chapter-panel:has(.dragging){z-index:100}.is-dragging .hud-stack:not(.goals-leaving){opacity:1!important}.crowded::after{content:' ';display:block}@keyframes markdown-arrival{from{scale:.8;background:#ffe3a3;box-shadow:0 0 18px #d58b36}to{scale:1}}@media(prefers-reduced-motion:reduce){.thing.born{animation:none!important}}
+.chapter-panel .thing{width:calc(112px * var(--card-scale,1));font-size:calc(12px * var(--label-scale,1));min-height:calc(44px * var(--label-scale,1))}.chapter-panel .slot{font-size:calc(9px * var(--label-scale,1));height:calc(19px * var(--label-scale,1));line-height:calc(17px * var(--label-scale,1))}.chapter-panel .hotspot{font-size:calc(11px * var(--label-scale,1))}.scene-art{-webkit-user-drag:none;pointer-events:none}
+
+/* The goals are scenery rather than another opaque card. */
+.location-hud .objective-line{background:#fffaf08c;box-shadow:none;text-shadow:0 1px 2px #fffaf0cc}
+/* Reopened chapter prose has a quiet close control and a single compact footer. */
+.game-dialog-layer dialog.chapter-popup{display:flex;flex-direction:column;overflow:hidden;padding:12px 16px}
+.chapter-popup-header{display:flex;justify-content:flex-end;flex:none;margin:-6px -8px 0 0}
+.chapter-popup .reading-text{min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.chapter-popup .reading-text>:first-child{margin-top:0}
+.chapter-popup .reading-text>:last-child{margin-bottom:0}
+.chapter-actions{display:flex;align-items:center;flex:none;gap:8px;margin-top:12px}
+.chapter-actions .chapter-encyclopedia,.chapter-actions .recovery-action{border:0;background:transparent;box-shadow:none;color:#746b5c;font-size:12px;padding:4px 0}
+.chapter-encyclopedia{display:inline-flex;align-items:center;flex:none;gap:6px;text-decoration:none}
+.chapter-book-icon{display:grid;place-items:center;flex:none}
+.chapter-book-icon .open-book{width:20px;height:18px;filter:saturate(.45)}
+.chapter-actions .recovery-action{margin-left:auto;min-width:0;text-align:right}
+.chapter-book-label,.chapter-actions .recovery-action{text-decoration:underline;text-decoration-color:#746b5c66;text-underline-offset:3px}
+.chapter-encyclopedia:hover,.chapter-actions .recovery-action:hover{color:#35382f}
+.chapter-encyclopedia:hover .chapter-book-label,.chapter-actions .recovery-action:hover{text-decoration-color:currentColor}
+@container game (max-width:359px){.game-dialog-layer dialog.chapter-popup{padding-inline:12px}}
+/* The final goal stays anchored above the incoming arrow, fading without blocking it. */
+.goals-leaving{animation:goals-depart var(--goal-exit-duration) ease-out both;pointer-events:none}
+.goals-leaving *{pointer-events:none!important}
+.chapter-next.entering{z-index:1;animation:arrow-arrive .4s cubic-bezier(.2,.8,.2,1) both}
+.chapter-next.entering span{animation-delay:.4s}
+@keyframes goals-depart{0%,22%{opacity:1}100%{opacity:0}}
+@keyframes arrow-arrive{from{opacity:0;translate:0 16px;scale:.65}to{opacity:1;translate:0 0;scale:1}}
+@media(prefers-reduced-motion:reduce){.goals-leaving,.chapter-next.entering{animation:none}}
+
+/* Reading vocabulary is decorative; only the chapter's labelled button navigates. */
+.open-book{display:inline-block;width:25px;height:23px;vertical-align:middle;pointer-events:none}
+.reading-indicator{display:none;position:absolute;left:50%;top:-8px;transform:translateX(-50%);pointer-events:none;line-height:0;opacity:.7;filter:saturate(.3)}
+.reading-indicator .open-book{width:12.5px;height:11.5px}
+.thing.reading-selected .reading-indicator{display:block;animation:book-entrance .18s ease-out}
+/* Pointer feedback marks the hovered item, without marking its partners. */
+@media(hover:hover){.thing.pressed .reading-indicator{display:block;animation:book-entrance .18s ease-out}}
+@keyframes book-entrance{from{opacity:0;scale:.75;translate:0 3px}to{opacity:1;scale:1;translate:0 0}}
+@media(prefers-reduced-motion:reduce){.thing:is(.reading-selected,.pressed) .reading-indicator{animation:none}}
+
+/* The viewport reaches the game edges; only the complete moving book paints
+   paper and borders. Center one page while its neighbor continues offscreen. */
+.game-dialog-layer:has(>dialog.encyclopedia){padding-inline:0}
+.game-dialog-layer dialog.encyclopedia{--book-spread:0;--book-page-width:min(calc(100cqw - 54px),534px);width:100%;max-width:none;height:min(84dvh,680px);max-height:calc(100dvh - 28px);padding:0;border:0;overflow:hidden;display:flex;flex-direction:column;border-radius:0;background:transparent}
+.encyclopedia-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex:none;padding:14px 16px 10px;min-height:68px}
+.encyclopedia-header .encyclopedia-close,.chapter-popup .chapter-close{display:grid;place-items:center;flex:none;margin-left:auto;width:44px;height:44px;min-height:44px;padding:0;border:0;background:transparent;font:normal 28px/1 sans-serif}
+.encyclopedia-header h1{font:normal 25px/1.2 Georgia,serif;margin:0}
+.encyclopedia-pages{flex:1;min-height:0;overflow:hidden;isolation:isolate}
+.encyclopedia-track{display:flex;width:calc(2 * var(--book-page-width) + 14px);height:100%;margin-left:calc((100% - var(--book-page-width))/2 - 1px);border:1px solid #c6b99e;border-radius:8px;overflow:hidden;background:#fff;transform:translateX(0);transition:transform .24s ease-in-out}
+.encyclopedia-index,.encyclopedia-detail{flex:1;min-width:0;min-height:0;height:100%;background:#fff;position:relative}
+.encyclopedia-index{display:flex;flex-direction:column}
+.encyclopedia .encyclopedia-list{flex:1;min-height:0;touch-action:pan-y;margin:0;overflow-anchor:none;overflow-y:auto;padding:4px 16px 16px;scrollbar-gutter:stable;overscroll-behavior:contain}
+.encyclopedia-chapter h2{font:normal 17px/1.3 Georgia,serif;margin:16px 0 5px;color:#65553e}
+.encyclopedia-chapter:first-child h2{margin-top:0}
+.encyclopedia-chapter ul{padding:0 0 0 16px;margin:0;list-style:none}
+.encyclopedia-list a{display:block;color:inherit;text-decoration:none;overflow-wrap:anywhere;min-height:28px;padding:3px 4px;font-size:14px;line-height:22px;border-radius:2px}
+.encyclopedia-list a:hover{text-decoration:underline;text-underline-offset:3px}
+.encyclopedia-list a[aria-current]{background:#f3eddf;color:#4d3b18}
+.encyclopedia-detail{display:flex;flex-direction:column}
+/* A single crease, with soft page shading deepening toward it; no band borders. */
+.encyclopedia-spine{flex:0 0 12px;position:relative;z-index:1;background:#fff;pointer-events:none}
+.encyclopedia-spine::before{content:"";position:absolute;inset:0 -16px;background:linear-gradient(90deg,transparent 0%,#46392406 20%,#46392426 50%,#46392406 80%,transparent 100%)}
+.encyclopedia-spine::after{content:"";position:absolute;top:0;bottom:0;left:50%;width:1px;transform:translateX(-50%);background:#4e412d52}
+.encyclopedia-detail-toolbar{gap:8px}
+.encyclopedia-detail-toolbar [data-command="encyclopedia-back"]{background:transparent;border:0;padding:6px 0;min-height:44px}
+.encyclopedia-reading{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:0 20px 18px}
+.encyclopedia-reading .reading-text{font-size:19px;line-height:1.5;overflow-wrap:anywhere}
+.encyclopedia-reading .reading-text>:first-child{margin-top:8px}
+.encyclopedia-placeholder{color:#857b69;font:italic 17px/1.5 Georgia,serif;margin-top:16px}
+.encyclopedia-pages.show-detail .encyclopedia-track{transform:translateX(calc(-1 * (var(--book-page-width) + 12px)))}
+/* Two narrow (320px) mobile views fit in the available game area. The editor
+   can reduce that area independently of the browser window. */
+@container game (min-width:640px){
+  .game-dialog-layer dialog.encyclopedia{--book-spread:1;--book-page-width:calc((min(calc(100cqw - 28px),960px) - 14px)/2)}
+  .encyclopedia-pages .encyclopedia-track,.encyclopedia-pages.show-detail .encyclopedia-track{margin-left:calc((100% - 2 * var(--book-page-width) - 14px)/2);transform:translateX(0)}
+}
+@media(prefers-reduced-motion:reduce){.encyclopedia-track{transition:none}}
+/* The facing-page edge is paper, not an inactive scrollbar. Keep its gutter
+   allocated so hiding the thumb never changes wrapping or scroll position. */
+.encyclopedia-index[inert] .encyclopedia-list{scrollbar-color:transparent transparent}
+.encyclopedia-index[inert] .encyclopedia-list::-webkit-scrollbar-thumb,
+.encyclopedia-index[inert] .encyclopedia-list::-webkit-scrollbar-track{background:transparent}
+
+/* Covers share the same framing policy as chapters. */
+.story-landing{overflow:hidden}
+.story-start{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:3;min-width:112px;min-height:48px;padding:10px 24px;border:1px solid #718571;border-radius:8px;background:#fffaf0;color:#35382f;font:20px/1.3 Georgia,serif;box-shadow:0 2px 9px #302b2533}
+
+.chooser img{display:block;max-width:100%;height:auto}
+
+/* Fixed locations have a quieter outline than draggable items. */
+.chapter-panel .hotspot:not(.hotspot-icon):is(:hover,:active,.pressed,.possible):not(.will-create,.will-place){outline:2px dotted #000!important;outline-offset:2px;box-shadow:none!important}
+</style>  <script type="module" crossorigin src="./assets/index-ClwdDZ8a.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/modulepreload-polyfill-P2Xu9kJm.js">
+  <link rel="modulepreload" crossorigin href="./assets/home-screen-VfaZtfF1.js">
+</head><body><div class="status-bar-color" aria-hidden="true"></div><div id="app" class="catalogue-page"><main class="chooser"><h1>Make Something Worthwhile</h1><nav><a href="make-something.html?story=stories/cookbook/cookbook.md" data-story="stories/cookbook/cookbook.md"><h2 class="story-title"><img src="stories/cookbook/icon.png" alt="A mixing bowl with dough and a wooden spoon"> Cookbook</h2><p>Write a cookbook. Make doughs, sauces, fillings, pastries and cakes.</p></a><a href="make-something.html?story=stories/creation/creation.md" data-story="stories/creation/creation.md"><h2 class="story-title"><img src="stories/creation/icon.png" alt="Light, sea and living earth emerging in a mosaic"> Creation</h2><p>Create the world, and every living creature that moves upon it.</p></a><a href="make-something.html?story=stories/ideas/ideas.md" data-story="stories/ideas/ideas.md"><h2 class="story-title"><img src="stories/ideas/icon.png" alt="A brass armillary sphere on a book"> History of ideas</h2><p>Follow questions across centuries: what explains an eclipse, what makes a life good, and when should a rule change? Combine evidence, arguments and inventions to discover how ideas meet—and what each encounter makes possible.</p></a><a href="make-something.html?story=stories/mars/mars.md" data-story="stories/mars/mars.md"><h2 class="story-title"><img src="stories/mars/icon.png" alt="A repaired expedition lander"> Mission to Mars</h2><p>Your lander crashes badly onto the surface. Can you patch things up and complete your science mission?</p></a><a href="make-something.html?story=stories/settlement/settlement.md" data-story="stories/settlement/settlement.md"><h2 class="story-title"><img src="stories/settlement/icon.png" alt="An apple tree in front of a timber cottage"> Settlement</h2><p>You are a settler at the dawn of history. Found your land&#39;s first settlement.</p></a><a href="make-something.html?story=stories/theology/theology.md" data-story="stories/theology/theology.md"><h2 class="story-title"><img src="stories/theology/icon.png" alt="An open manuscript with a cross and quill"> Theology</h2><p>You are Augustine, Aquinas, Martin Luther. How will you respond to the arguments of your day? Why does evil exist? Can we do good without God’s help? What happens at Communion? Replay these great debates from their perspectives. Share their struggles to reconcile faith, reason, and the ideas of their time.</p></a></nav></main></div></body></html>
