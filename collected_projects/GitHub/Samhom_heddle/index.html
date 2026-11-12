@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Heddle 综</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M6 5h20M6 27h20M6 5v22M26 5v22" fill="none" stroke="currentColor" stroke-width="1.7"/>
+        <path d="M12 5v22M20 5v22" stroke="currentColor" stroke-width="1.2" opacity=".5"/>
+        <path d="M6 12.5h20M6 19.5h20" stroke="currentColor" stroke-width="1.7"/>
+      </svg>
+      <div>
+        <p class="brand-name">Heddle <span>综</span></p>
+        <p class="brand-sub">穿综、打结、踏板，布面自己出来</p>
+      </div>
+    </div>
+    <div class="presets" id="presets" role="group" aria-label="经典组织"></div>
+    <p class="face" id="face">经面 50%</p>
+    <p class="steps">点一格就改。方向键移动，数字键指定综片或踏板。颜色和「看两份」只改变布面怎么看。</p>
+  </header>
+  <main>
+    <div class="toolbar">
+      <div class="history" role="group" aria-label="撤回">
+        <button class="pill" type="button" id="undo" disabled>撤回</button>
+        <button class="pill" type="button" id="redo" disabled>重做</button>
+      </div>
+      <div class="history" role="group" aria-label="留底">
+        <button class="pill" type="button" id="keep" title="把现在的穿综、打结和踏板留在一边，颜色不留">留底</button>
+        <button class="pill" type="button" id="swap" title="把留着的换上来，现在这张留回去" disabled>换上</button>
+      </div>
+      <p class="msg" id="keep-msg" role="status"></p>
+      <div class="moves" role="group" aria-label="翻动组织">
+        <button class="pill" type="button" id="invert" title="每个结反过来，看布的另一面">反面</button>
+        <button class="pill" type="button" id="reverse" title="从最后一梭倒着踩，斜纹会换方向">倒踏</button>
+        <button class="pill" type="button" id="mirror" title="穿综左右对调，斜纹会换方向">倒穿</button>
+        <button class="pill" type="button" id="turn" title="穿综和踏板对调，打结转置">转图</button>
+        <button class="pill" type="button" id="roll-thread" title="穿综整组往后错一根，打结不动">错经</button>
+        <button class="pill" type="button" id="roll-tread" title="踏板整组往后错一梭，打结不动">错梭</button>
+      </div>
+      <div class="fills" role="group" aria-label="排法">
+        <button class="pill" type="button" id="straight" title="按 1、2、3… 接下去穿，打结不动">直穿</button>
+        <button class="pill" type="button" id="pointed" title="穿到最后一片再折回，打结不动">折返</button>
+        <button class="pill" type="button" id="as-drawn" title="每一梭踩和这一根经同一序号的踏板">顺踏</button>
+        <button class="pill" type="button" id="tabby-tie" title="单数综和双数综分开提，穿综和踏板不动">平结</button>
+        <button class="pill" type="button" id="twill-tie" title="每个踏板提起相邻的两片综，再错开一片">斜结</button>
+        <button class="pill" type="button" id="crop" title="收到穿综和踏板各自的一个循环，打结不动">收循环</button>
+      </div>
+      <form class="size" id="size">
+        <label>经线 <input id="ends" type="number" min="4" max="80" step="1" inputmode="numeric" aria-label="经线根数"></label>
+        <label>纬线 <input id="picks" type="number" min="4" max="80" step="1" inputmode="numeric" aria-label="纬线梭数"></label>
+        <label>综片 <input id="shafts" type="number" min="2" max="8" step="1" inputmode="numeric" aria-label="综片数"></label>
+        <label>踏板 <input id="treadles" type="number" min="2" max="8" step="1" inputmode="numeric" aria-label="踏板数"></label>
+        <label class="yarn">经色 <input id="warp" type="color" value="#1e2a4a" aria-label="经线颜色"></label>
+        <label class="yarn">经间 <input id="warp-alt" type="color" value="#8d3b32" aria-label="经线隔色"></label>
+        <label>经隔 <input id="warp-block" type="number" min="0" max="8" step="1" inputmode="numeric" value="0" aria-label="经线隔几根换色" title="0 是单色，2 是两根一换"></label>
+        <label class="yarn">纬色 <input id="weft" type="color" value="#f7f1e6" aria-label="纬线颜色"></label>
+        <label class="yarn">纬间 <input id="weft-alt" type="color" value="#c4b49a" aria-label="纬线隔色"></label>
+        <label>纬隔 <input id="weft-block" type="number" min="0" max="8" step="1" inputmode="numeric" value="0" aria-label="纬线隔几梭换色" title="0 是单色，2 是两梭一换"></label>
+        <button class="pill" type="button" id="repeat" aria-pressed="false">看两份</button>
+      </form>
+      <p class="msg" id="size-msg" role="status"></p>
+      <p class="note" id="loom" role="status"></p>
+    </div>
+    <section class="sheet" aria-label="组织图">
+      <figure class="pane threading">
+        <figcaption>穿综 <small>1 号综靠着布</small></figcaption>
+        <div class="block">
+          <div class="ruler v" id="thread-shafts" aria-hidden="true"></div>
+          <div class="stack">
+            <div class="cells" id="threading" role="group" aria-label="穿综"></div>
+            <div class="ruler h" id="thread-ends" aria-hidden="true"></div>
+          </div>
+        </div>
+      </figure>
+      <figure class="pane tie">
+        <figcaption>打结 <small>踏板提起哪几片综</small></figcaption>
+        <div class="block">
+          <div class="ruler v" id="tie-shafts" aria-hidden="true"></div>
+          <div class="stack">
+            <div class="cells" id="tieup" role="group" aria-label="打结"></div>
+            <div class="ruler h" id="tie-treadles" aria-hidden="true"></div>
+          </div>
+        </div>
+      </figure>
+      <figure class="pane cloth">
+        <figcaption>布面 <small id="cloth-size">16 经 × 16 纬</small></figcaption>
+        <div class="cloth-scroll">
+          <canvas id="cloth" width="288" height="288" aria-label="布面"></canvas>
+        </div>
+      </figure>
+      <figure class="pane tread">
+        <figcaption>踏板 <small>第一梭在上</small></figcaption>
+        <div class="block">
+          <div class="ruler v" id="pick-numbers" aria-hidden="true"></div>
+          <div class="stack">
+            <div class="cells" id="treadling" role="group" aria-label="踏板"></div>
+            <div class="ruler h" id="tread-numbers" aria-hidden="true"></div>
+          </div>
+        </div>
+      </figure>
+    </section>
+    <details class="script">
+      <summary>写成文字</summary>
+      <p class="hint">综片和踏板从 1 数。打结第一行是 1 号综，也就是页面上靠布的那一行。结用 1 和 0。</p>
+      <textarea id="script" spellcheck="false" autocomplete="off" aria-label="组织图文字"></textarea>
+      <div class="script-actions">
+        <button class="pill" type="button" id="copy-script">复制</button>
+        <button class="pill" type="button" id="download-script">下载</button>
+        <button class="pill" type="button" id="open-script">打开</button>
+        <input id="open-file" type="file" accept=".txt,text/plain" hidden>
+        <button class="pill" type="button" id="read-script">按这段排</button>
+      </div>
+      <p class="msg" id="script-msg" role="status"></p>
+    </details>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
