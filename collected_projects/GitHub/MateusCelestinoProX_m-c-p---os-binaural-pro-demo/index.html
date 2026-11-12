@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Binaural Labs Pro - Software Portfolio Demo</title>
+  <meta name="description" content="Instância demo interativa do MP3 Player Binaural Pro: Web Audio DSP multi-canal, aceleração 5.0x, 37 shaders WebGL e áudios 320 kbps.">
+  
+  <!-- Favicons & Apple Touch Icons (Liquid Glass Minimalist) -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+  <link rel="shortcut icon" href="favicon.ico">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+
+  <!-- PWA & Mobile Web App Settings -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#070709">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Binaural Pro">
+
+  <!-- OpenGraph / Social Meta Tags -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Binaural Labs Pro - Software Portfolio Demo">
+  <meta property="og:description" content="Instância demo interativa do MP3 Player Binaural Pro: Web Audio DSP multi-canal, aceleração 5.0x e 37 shaders WebGL.">
+  <meta property="og:image" content="icon-512.png">
+  
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link rel="stylesheet" href="style.css?v=2.4">
+
+  <script>
+    // Delegador Global de Suspensão de Segundo Plano e Economia de Hardware
+    window.suspendBinauralVisuals = function(suspend) {
+      if (typeof window._binauralSuspendHandler === 'function') {
+        window._binauralSuspendHandler(suspend);
+      }
+    };
+
+    document.addEventListener('visibilitychange', function() {
+      window.suspendBinauralVisuals(document.hidden);
+    });
+
+    window.addEventListener('pageshow', function() {
+      if (!document.hidden) {
+        window.suspendBinauralVisuals(false);
+      }
+    });
+
+    window.addEventListener('pagehide', function() {
+      window.suspendBinauralVisuals(true);
+    });
+  </script>
+</head>
+<body>
+
+  <!-- ========================================== -->
+  <!-- TELA BASE DE APRESENTAÇÃO DEMO (PORTFÓLIO) -->
+  <!-- ========================================== -->
+  <div id="demo-splash-screen" class="demo-splash-screen">
+    <div class="demo-splash-backdrop"></div>
+    <div class="demo-splash-ambient-glow"></div>
+    
+    <div class="demo-splash-card glass-panel">
+      <div class="demo-splash-badge">
+        <span class="demo-pulse-orb"></span>
+        <span>PORTFÓLIO DEMO • SOFTWARE SHOWCASE</span>
+      </div>
+      
+      <div class="demo-splash-brand">
+        <div class="demo-logo-wrap">
+          <i class="fa-solid fa-wand-magic-sparkles demo-logo-icon"></i>
+          <div class="demo-logo-ring"></div>
+        </div>
+        <h1 class="demo-splash-title">Binaural Labs <span>Pro</span></h1>
+        <p class="demo-splash-subtitle">Multi-Channel Web Audio DSP • 320 kbps High-Fidelity • WebGL 3D Shaders</p>
+      </div>
+
+      <!-- Highlights Grid -->
+      <div class="demo-features-grid">
+        <div class="demo-feat-item">
+          <i class="fa-solid fa-bolt-lightning"></i>
+          <div>
+            <strong>Web Audio DSP</strong>
+            <span>Gain & DynamicsCompressor</span>
+          </div>
+        </div>
+        <div class="demo-feat-item">
+          <i class="fa-solid fa-layer-group"></i>
+          <div>
+            <strong>6 Canais Paralelos</strong>
+            <span>Mixagem estéreo em tempo real</span>
+          </div>
+        </div>
+        <div class="demo-feat-item">
+          <i class="fa-solid fa-gauge-high"></i>
+          <div>
+            <strong>0.5x até 5.0x</strong>
+            <span>Time-stretch de alta precisão</span>
+          </div>
+        </div>
+        <div class="demo-feat-item">
+          <i class="fa-solid fa-compact-disc"></i>
+          <div>
+            <strong>320 kbps MP3</strong>
+            <span>Offline IndexedDB Ready</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Barra de Carregamento Dinâmica & Status -->
+      <div class="demo-loader-block">
+        <div class="demo-loader-status">
+          <span id="demo-loader-text"><i class="fa-solid fa-circle-notch fa-spin"></i> Inicializando motor Web Audio DSP...</span>
+          <span id="demo-loader-pct">0%</span>
+        </div>
+        <div class="demo-progress-track">
+          <div id="demo-progress-fill" class="demo-progress-fill"></div>
+        </div>
+      </div>
+
+      <!-- Botão de Entrada Interativa -->
+      <div class="demo-actions">
+        <button id="btn-enter-demo" class="btn-enter-demo">
+          <i class="fa-solid fa-play"></i>
+          <span>Entrar no Software Demo</span>
+          <small class="demo-auto-hint">(transição automática em 1.5s)</small>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tela de Desbloqueio do Cofre Master (Oculta na Versão Demo) -->
+  <div id="login-screen" class="login-screen authenticated-hidden" style="display: none !important;">
+    <div class="login-bg-layer" id="login-bg-layer"></div>
+    <div class="login-bg-overlay"></div>
+  </div>
+
+  <!-- Background Cinemático Slideshow (MCP OS Engine) -->
+  <div id="bg-slideshow" class="bg-slideshow">
+    <div id="bg-layer-active" class="bg-layer active"></div>
+    <div id="bg-layer-next" class="bg-layer"></div>
+    <video id="bg-video-1" class="bg-video-layer active" muted playsinline webkit-playsinline disablePictureInPicture disableremoteplayback x5-playsinline controlslist="nodownload noplaybackrate nofullscreen" style="pointer-events: none !important;"></video>
+    <video id="bg-video-2" class="bg-video-layer" muted playsinline webkit-playsinline disablePictureInPicture disableremoteplayback x5-playsinline controlslist="nodownload noplaybackrate nofullscreen" style="pointer-events: none !important;"></video>
+    <div id="bg-webgl-container"></div>
+    <div class="bg-overlay"></div>
+  </div>
+
+  <!-- Container Principal -->
+  <main class="app-container demo-hidden" id="app-main">
+    
+    <!-- Player Card Deck -->
+    <section class="player-deck" id="player-deck">
+      
+      <!-- Top Bar / Header -->
+      <header class="player-header">
+        <div class="brand">
+          <span class="brand-logo"><i class="fa-solid fa-wand-magic-sparkles"></i></span>
+          <div class="brand-text">
+            <h1>Binaural Labs <span class="demo-tag-mini">DEMO</span></h1>
+            <p>Engine DSP de Frequências Binaurais</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button id="btn-replay-demo-intro" class="btn-header-action" title="Rever Apresentação Demo" aria-label="Rever Apresentação Demo">
+            <i class="fa-solid fa-arrow-rotate-left"></i>
+          </button>
+          <button id="btn-open-settings" class="btn-header-action btn-bg-header apk-only" title="Configurar Fundo Dinâmico (Backgrounds)" aria-label="Configurar Backgrounds">
+            <i class="fa-solid fa-sliders"></i>
+          </button>
+          <button id="btn-floating-bubble" class="btn-header-action apk-only" title="Tela Sempre Ligada (Ícone Flutuante)">
+            <i class="fa-solid fa-window-restore"></i>
+          </button>
+          <button id="btn-lock" class="btn-header-action" title="Bloquear Cofre" style="display: none !important;">
+            <i class="fa-solid fa-lock"></i>
+          </button>
+          <span id="status-tag" class="status-tag idle">Demo Ready</span>
+        </div>
+      </header>
+
+      <!-- Painel Master (Controles Globais) -->
+      <div class="master-panel glass-panel">
+        <div class="master-header">
+          <h2>Painel Master</h2>
+          <div class="master-badges">
+            <span class="badge" id="badge-playing-count">0 Ativos</span>
+            <span class="badge badge-memory" id="badge-memory-count" style="display: none;" title="Faixas salvas no sistema de memória"><i class="fa-solid fa-brain"></i> Memória: 0</span>
+          </div>
+        </div>
+        
+        <div class="master-controls">
+          <button id="btn-play-all" class="btn btn-primary" title="Retomar Reprodução das Faixas em Memória (Resume)">
+            <i class="fa-solid fa-play"></i> Resume
+          </button>
+          <button id="btn-pause-all" class="btn btn-secondary" title="Pausar Todos os Áudios">
+            <i class="fa-solid fa-pause"></i> Pausar Todas
+          </button>
+        </div>
+
+        <!-- Controle Geral de Saída de Áudio Coletivo (Master Volume DSP) -->
+        <!-- WIDGET MASTER DE SOM (DESENHO DE SOM, VOLUME DE 5 EM 5% E AMPLIFICADOR INTELIGENTE COMPACTO) -->
+        <div class="sound-master-widget glass-panel" id="master-volume-card">
+          <!-- Linha 1: Controle de Volume (Desenho de Som, Mute, Botões +/- de 5%, Slider e % / dB) -->
+          <div class="widget-channel-row widget-vol-row">
+            <div class="widget-badge-sound">
+              <!-- Desenho de Som Animado Reativo -->
+              <div class="sound-drawing active" id="widget-sound-drawing" title="Desenho de Som (Frequências Binaurais)">
+                <span class="sound-bar bar-1"></span>
+                <span class="sound-bar bar-2"></span>
+                <span class="sound-bar bar-3"></span>
+                <span class="sound-bar bar-4"></span>
+                <span class="sound-bar bar-5"></span>
+              </div>
+              <button type="button" id="btn-master-mute" class="btn-widget-mute" title="Mutar / Desmutar Som" aria-label="Mutar saída">
+                <i class="fa-solid fa-volume-high" id="master-volume-icon"></i>
+              </button>
+              <span class="widget-row-title">Volume</span>
+            </div>
+
+            <div class="widget-stepper-track">
+              <button type="button" id="btn-master-dec" class="btn-step-mini" title="Diminuir 5% (-5%)" aria-label="Diminuir volume em 5%">
+                <i class="fa-solid fa-minus"></i>
+              </button>
+              <div class="widget-track-wrap">
+                <div class="widget-slider-fill fill-vol" id="master-slider-fill"></div>
+                <input type="range" id="master-volume-slider" min="0" max="1" step="0.05" value="1" class="widget-range-slider master-range-input" aria-label="Volume Master de 5 em 5%">
+              </div>
+              <button type="button" id="btn-master-inc" class="btn-step-mini" title="Aumentar 5% (+5%)" aria-label="Aumentar volume em 5%">
+                <i class="fa-solid fa-plus"></i>
+              </button>
+            </div>
+
+            <div class="widget-readout-col">
+              <span class="widget-pill-val pill-vol" id="master-volume-val" title="Volume Geral (Passo de 5%)">100%</span>
+              <span class="widget-readout-sub" id="master-db-display">0.0 dB</span>
+            </div>
+          </div>
+
+          <!-- Divisor Sutil de Vidro -->
+          <div class="widget-glass-sep"></div>
+
+          <!-- Linha 2: Amplificador Inteligente Coletivo (Compacto, Pouco Espaço) -->
+          <div class="widget-channel-row widget-gain-row" id="master-gain-circuit">
+            <div class="widget-badge-sound">
+              <div class="gain-icon-pill" id="master-gain-icon-wrap" title="Amplificador Coletivo DSP">
+                <i class="fa-solid fa-bolt-lightning" id="master-gain-icon"></i>
+              </div>
+              <span class="widget-row-title">Amplificador</span>
+            </div>
+
+            <div class="widget-stepper-track disabled" id="master-gain-slider-wrapper">
+              <button type="button" id="btn-gain-dec" class="btn-step-mini" title="Diminuir Ganho (-0.1x)" aria-label="Diminuir ganho">
+                <i class="fa-solid fa-minus"></i>
+              </button>
+              <div class="widget-track-wrap">
+                <div class="widget-slider-fill fill-gain" id="master-gain-fill"></div>
+                <input type="range" id="master-boost-slider" min="1.0" max="4.0" step="0.1" value="1.0" class="widget-range-slider master-range-input" disabled aria-label="Ganho do Amplificador">
+              </div>
+              <button type="button" id="btn-gain-inc" class="btn-step-mini" title="Aumentar Ganho (+0.1x)" aria-label="Aumentar ganho">
+                <i class="fa-solid fa-plus"></i>
+              </button>
+            </div>
+
+            <div class="widget-readout-col gain-readout">
+              <span class="widget-pill-val pill-gain" id="master-gain-val" title="Fator de Ganho">1.0x</span>
+              <label class="switch widget-switch-mini" title="Ligar / Desligar Amplificador">
+                <input type="checkbox" id="btn-toggle-master-boost" aria-label="Ativar Amplificador">
+                <span class="slider-round"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Canvas do Visualizador de Ondas Abstratas -->
+        <div class="visualizer-container">
+          <canvas id="master-visualizer" class="master-visualizer"></canvas>
+        </div>
+      </div>
+
+      <!-- Lista de Faixas -->
+      <div class="tracks-section">
+        <h3>Faixas Binaurais</h3>
+        
+        <div class="tracks-list" id="tracks-list">
+          <!-- As faixas serão renderizadas dinamicamente via JS -->
+        </div>
+      </div>
+
+      <!-- Footer Info -->
+      <footer class="player-footer">
+        <div class="footer-row-top">
+          <p><i class="fa-solid fa-database"></i> Sincronizado & Cacheado em IndexedDB (Offline Ready)</p>
+        </div>
+        <div class="footer-row-bottom">
+          <div class="wallpaper-selector-container">
+            <span class="wp-label"><i class="fa-solid fa-wand-magic-sparkles"></i> <span id="current-bg-indicator">Atmosfera</span></span>
+          </div>
+          <button id="btn-open-settings-footer" class="btn-bg-control btn-open-settings" title="Configurar Fundo Dinâmico">
+            <i class="fa-solid fa-sliders"></i> Backgrounds
+          </button>
+        </div>
+      </footer>
+
+    </section>
+  </main>
+
+  <!-- Modal de Configurações de Fundo do MCP OS -->
+  <div id="settings-modal" class="settings-modal">
+    <div class="modal-backdrop" id="settings-backdrop"></div>
+    <div class="modal-panel">
+      <button class="modal-close" id="settings-close">✕</button>
+      <h2>⚙️ Fundo Dinâmico</h2>
+      <p class="modal-subtitle">Escolha a atmosfera visual para a sua sessão binaural</p>
+      
+      <div class="setting-group">
+        <label class="setting-label"><i class="fa-solid fa-images"></i> Galeria ou Shader WebGL</label>
+        <select class="setting-select" id="gallery-select">
+          <option value="random">🎲 Aleatório (Sorteio a cada reload)</option>
+          <option value="soft">💿 Minimal Dark Glass</option>
+          <option value="red">🔴 Crimson Cyber</option>
+          <option value="nature">🌿 Zen Nature</option>
+          <option value="space">🌌 Deep Cosmos</option>
+                    <optgroup label="✨ Shaders WebGL Animados">
+            <option value="galaxybits">✨ Todos os 37 Shaders (Rotativo)</option>
+            <option value="softaurora">🌌 Soft Aurora</option>
+            <option value="particles">🟣 Particles OGL 3D</option>
+            <option value="ghostfibers">🌌 Ghost Fibers</option>
+            <option value="plasmawave">🌊 Plasma Wave</option>
+            <option value="strands">✨ Strands Ethereal</option>
+            <option value="siderays">⚡ Side Rays</option>
+            <option value="beams">💡 Beams 3D</option>
+            <option value="floatinglines">〰️ Floating Lines</option>
+            <option value="silk">🧣 Silk Cloth</option>
+            <option value="radar">🎯 Tactical Radar</option>
+            <option value="ripplegrid">🌐 Ripple Grid</option>
+            <option value="pixelblast">🔲 Pixel Blast</option>
+            <option value="magicrings">💍 Magic Rings</option>
+            <option value="gridscan">📐 Grid Scan</option>
+            <option value="liquidchrome">🪞 Liquid Chrome</option>
+            <option value="linewaves">〰️ Line Waves</option>
+            <option value="ferrofluid">🧲 Ferrofluid</option>
+            <option value="dither">👾 Dither Wave</option>
+            <option value="darkveil">🌑 Dark Veil</option>
+            <option value="webthreads">🕸️ Web Threads</option>
+            <option value="topography">🗺️ Topography</option>
+            <option value="balatro">🃏 Balatro Vortex</option>
+            <option value="faultyterminal">📺 Faulty Terminal</option>
+            <option value="morphslider">🔀 Morph Slider</option>
+            <option value="antigravity">🛸 Antigravity</option>
+            <option value="aurora">🌈 Aurora Borealis</option>
+            <option value="letterglitch">🔤 Letter Glitch</option>
+            <option value="plasma">🔮 Sine Plasma</option>
+            <option value="liquidether">💧 Liquid Ether</option>
+            <option value="orb">🔮 Energy Orb</option>
+            <option value="prism">💎 Prism Refraction</option>
+            <option value="prismaticburst">💥 Prismatic Burst</option>
+            <option value="lightning">⚡ Lightning Arc</option>
+            <option value="evileye">👁️ Evil Eye</option>
+            <option value="lighttunnel">🚀 Light Tunnel</option>
+            <option value="ancidsquares">🟩 Acid Squares</option>
+            <option value="moltenmetal">🌋 Molten Metal</option>
+          </optgroup>
+        </select>
+        
+        <button type="button" id="randomize-bg-btn" class="btn-subaction">
+          <i class="fa-solid fa-shuffle"></i> Sortear Novo Background Agora
+        </button>
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label" id="speed-label">
+          ⏱️ Tempo de Troca: <span id="speed-val-display" class="speed-highlight">10</span>s
+        </label>
+        <div class="slider-range-box">
+          <span class="range-min">5s</span>
+          <input type="range" id="custom-speed-slider" min="5" max="200" value="10" step="1" class="speed-range-input">
+          <span class="range-max">200s</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/vendor/three.min.js"></script>
+  <script type="module" src="js/webgl-backgrounds.js"></script>
+  <script src="app.js?v=2.4"></script>
+</body>
+</html>
