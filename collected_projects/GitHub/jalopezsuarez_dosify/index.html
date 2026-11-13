@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="viewport-fit=cover, width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="color-scheme" content="light dark">
+  <title>Dosify</title>
+  <!-- Icons: SVG for modern browsers, ICO (16/32/48) as fallback, apple-touch-icon for iOS and manifest for Android -->
+  <link rel="icon" href="favicon.ico" sizes="32x32">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="apple-mobile-web-app-title" content="Dosify">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@ionic/core@9.0.8/css/ionic.bundle.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@ionic/core@9.0.8/css/palettes/dark.system.css">
+  <style>
+    /* Main color (tint) through Ionic's theme variables */
+    :root {
+      --ion-color-primary: #6dd0f9;
+      --ion-color-primary-rgb: 109, 208, 249;
+      --ion-color-primary-contrast: #000000;
+      --ion-color-primary-contrast-rgb: 0, 0, 0;
+      --ion-color-primary-shade: #60b7db;
+      --ion-color-primary-tint: #7cd5fa;
+    }
+    /* Custom colors per Ionic's «Adding colors»: «teal» (#78b7af: info icon, costs and, in the assistant, your messages and the suggestions) and «rose» (#e47969: container with under 7 days left) */
+    :root {
+      --ion-color-teal: #78b7af;
+      --ion-color-teal-rgb: 120, 183, 175;
+      --ion-color-teal-contrast: #000000;
+      --ion-color-teal-contrast-rgb: 0, 0, 0;
+      --ion-color-teal-shade: #6aa19a;
+      --ion-color-teal-tint: #86beb7;
+      --ion-color-rose: #e47969;
+      --ion-color-rose-rgb: 228, 121, 105;
+      --ion-color-rose-contrast: #000000;
+      --ion-color-rose-contrast-rgb: 0, 0, 0;
+      --ion-color-rose-shade: #c96a5c;
+      --ion-color-rose-tint: #e78678;
+    }
+    .ion-color-rose {
+      --ion-color-base: var(--ion-color-rose) !important;
+      --ion-color-base-rgb: var(--ion-color-rose-rgb) !important;
+      --ion-color-contrast: var(--ion-color-rose-contrast) !important;
+      --ion-color-contrast-rgb: var(--ion-color-rose-contrast-rgb) !important;
+      --ion-color-shade: var(--ion-color-rose-shade) !important;
+      --ion-color-tint: var(--ion-color-rose-tint) !important;
+    }
+    .ion-color-teal {
+      --ion-color-base: var(--ion-color-teal) !important;
+      --ion-color-base-rgb: var(--ion-color-teal-rgb) !important;
+      --ion-color-contrast: var(--ion-color-teal-contrast) !important;
+      --ion-color-contrast-rgb: var(--ion-color-teal-contrast-rgb) !important;
+      --ion-color-shade: var(--ion-color-teal-shade) !important;
+      --ion-color-tint: var(--ion-color-teal-tint) !important;
+    }
+    /* Medium weight for titles (Ionic has no font-weight utility) */
+    :root .medium { font-weight: 500; }
+    /* Product list: check before the name of a product saved since Products was opened */
+    .saved { font-size: 18px; margin-right: 6px; vertical-align: -3px; }
+    /* Hides the scrollbar of the day picker (Ionic's own rule does not apply) */
+    #day { scrollbar-width: none; }
+    #day::-webkit-scrollbar { display: none; }
+    /* On mobile Ionic prevents text selection app-wide; the assistant's «Texto» screen allows it */
+    #text-body { -webkit-user-select: text; user-select: text; }
+    /* Keyboard in the browser (iOS): the app shrinks to the visible area (--keyboard is set by app.js with visualViewport),
+       so the input box sits above the keyboard without Safari scrolling the page and hiding the header */
+    ion-app { height: calc(100% - var(--keyboard, 0px)); bottom: var(--keyboard, 0px); }
+    /* While typing (app.js sets «keyboard»), no room for the home indicator under the input box: the keyboard covers it */
+    html.keyboard ion-footer { --ion-safe-area-bottom: 0px; } /* on the footer: modals set their own value */
+    /* Assistant: the icon row of each message, shorter than a normal row and with the first icon (or the last one, in
+       your messages) at the same indent as the text */
+    #chat-body .msg-actions { --min-height: 32px; }
+    #chat-body .msg-actions ion-buttons { margin: 0; gap: 16px; }
+    #chat-body .msg-actions ion-button { margin: 0; width: auto; min-width: 0; --padding-start: 0; --padding-end: 0; opacity: 0.5; }
+    #chat-body .msg-actions ion-icon { font-size: 20.5px; } /* one point under Ionic's in iOS (21.45px) */
+    /* Assistant: the input box, rounded with a clear border and a bit taller (Ionic only outlines it in md mode) */
+    #chat-input { --padding-start: 18px; --padding-end: 6px; --padding-top: 11px; --padding-bottom: 11px; --background: var(--ion-background-color, #fff); border: 1.5px solid var(--ion-color-step-300, #b3b3b3); border-radius: 28px; overflow: hidden; font-size: 17px; margin: 4px 10px; width: calc(100% - 20px); }
+    #chat-input, #chat-input .textarea-wrapper { min-height: 0; } /* only as tall as its text (Ionic sets 44px) */
+    #chat-input .textarea-end { align-self: center; }
+    /* API keys: text fields shown as dots, so the browser does not take them for passwords and autofill them */
+    .secret input { -webkit-text-security: disc; }
+    /* Assistant: «Hablar» / «Enviar» pill inside the input box, primary with white text */
+    #chat-send { --ion-color-contrast: #fff !important; --border-radius: 999px; --padding-start: 16px; --padding-end: 16px; height: 30px; font-size: 15px; margin: 0 0 0 8px; align-self: center; text-transform: none; font-weight: 600; letter-spacing: 0; }
+    /* Voice conversation: the transcript on top (two thirds) and the microphone below (one third) */
+    #voice-clock { font-variant-numeric: tabular-nums; } /* the running clock does not wobble */
+    #voice ion-content::part(scroll) { display: flex; flex-direction: column; }
+    #voice-transcript { flex: 2; overflow-y: auto; padding: 8px 0; }
+    #voice-controls { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; border-top: 1px solid var(--ion-color-step-150, #e3e3e3); }
+    #voice-mic { width: 136px; height: 136px; --border-radius: 50%; margin: 0; }
+    #voice-mic ion-icon { font-size: 56px; }
+    /* Markdown replies: tables with thin borders and horizontal scroll when they do not fit; charts with fixed height */
+    #chat-body table { display: block; overflow-x: auto; border-collapse: collapse; font-size: 0.9em; margin: 6px 0; }
+    #chat-body th, #chat-body td { border: 1px solid var(--ion-color-step-250, #d0d0d0); padding: 4px 8px; text-align: left; white-space: nowrap; }
+    #chat-body .md-chart { position: relative; height: 220px; margin: 6px 0; }
+    #chat-body .md-p { margin: 0 0 6px; }
+    /* Chips of the assistant's proposals, a bit larger (ion-chip has no size setting) */
+    #chat-body ion-chip, #proposal-body ion-chip { font-size: 15px; height: 36px; }
+    /* Proposal buttons («Descartar» / «Guardar», «todas»): outside the list, half width each, as wide as the lists */
+    #chat-body .proposal-actions, #voice-transcript .proposal-actions { display: flex; gap: 12px; margin: 0 16px 16px; }
+    #chat-body .proposal-actions ion-button, #voice-transcript .proposal-actions ion-button { flex: 1; margin: 0; height: 44px; font-size: 16px; }
+  </style>
+  <script type="module" src="https://cdn.jsdelivr.net/npm/@ionic/core@9.0.8/dist/ionic/ionic.esm.js"></script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+<ion-app>
+
+  <ion-header>
+    <ion-toolbar>
+      <ion-buttons slot="start">
+        <ion-button id="assistant"><ion-icon slot="start" name="sparkles-outline"></ion-icon>Asistente</ion-button>
+      </ion-buttons>
+      <ion-title>Dosify</ion-title>
+      <ion-buttons slot="end">
+        <ion-button id="manage"><ion-icon slot="start" name="list"></ion-icon>Productos</ion-button>
+      </ion-buttons>
+    </ion-toolbar>
+    <ion-toolbar>
+      <ion-segment id="day" scrollable="true"></ion-segment>
+    </ion-toolbar>
+    <ion-toolbar>
+      <ion-segment id="timing"></ion-segment>
+    </ion-toolbar>
+  </ion-header>
+  <ion-content id="home" color="light"></ion-content>
+
+  <ion-modal id="manager">
+    <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start"><ion-button id="close">Cerrar</ion-button></ion-buttons>
+        <ion-title>Productos</ion-title>
+        <ion-buttons slot="end">
+          <ion-button id="add"><ion-icon slot="start" name="add"></ion-icon>Añadir</ion-button>
+        </ion-buttons>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content color="light">
+      <ion-list-header>
+        <ion-label>Activos (<span id="list-count">0</span>)</ion-label>
+        <ion-button id="sort" fill="clear" aria-label="Ordenar"><ion-icon slot="icon-only" name="swap-vertical-outline"></ion-icon></ion-button>
+      </ion-list-header>
+      <ion-list inset="true">
+        <ion-reorder-group id="list"></ion-reorder-group>
+      </ion-list>
+      <ion-list inset="true" id="paused-row">
+        <ion-item button="true" id="open-paused"><ion-icon slot="start" name="archive-outline" color="medium"></ion-icon><ion-label>Pausados</ion-label><ion-note slot="end" id="paused-count"></ion-note></ion-item>
+      </ion-list>
+      <div id="costs"></div>
+      <ion-list-header><ion-label>Momentos</ion-label></ion-list-header>
+      <ion-list inset="true" id="timings"></ion-list>
+      <ion-list-header><ion-label>Datos</ion-label></ion-list-header>
+      <ion-list inset="true">
+        <ion-item button id="import"><ion-icon slot="start" name="cloud-upload-outline"></ion-icon><ion-label>Cargar Base de Datos (CSV)</ion-label></ion-item>
+        <ion-item button id="export"><ion-icon slot="start" name="cloud-download-outline"></ion-icon><ion-label>Exportar Base de Datos (CSV)</ion-label></ion-item>
+      </ion-list>
+      <ion-list-header><ion-label>Exportar</ion-label></ion-list-header>
+      <ion-list inset="true">
+        <ion-item><ion-select id="pdf-month" label="Seleccionar mes" placeholder="Sin tomas" interface="action-sheet" cancel-text="Cancelar"></ion-select></ion-item>
+        <ion-item button id="export-pdf"><ion-icon slot="start" name="document-text-outline"></ion-icon><ion-label>Exportar PDF</ion-label></ion-item>
+      </ion-list>
+      <ion-list-header><ion-label>Asistente</ion-label></ion-list-header>
+      <ion-list inset="true" id="assistant-settings">
+        <ion-item><ion-input name="url" type="url" inputmode="url" label="URL base (compatible con OpenAI)" label-placement="stacked" placeholder="https://api.openai.com/v1"></ion-input></ion-item>
+        <ion-item><ion-input name="key" type="text" class="secret" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" label="API key" label-placement="stacked" placeholder="sk-…"></ion-input></ion-item>
+        <ion-item><ion-input name="model" label="Modelo" label-placement="stacked" placeholder="gpt-4o-mini"></ion-input></ion-item>
+      </ion-list>
+      <ion-list inset="true" id="voice-settings">
+        <ion-item><ion-input name="voiceAgent" label="ID del agente de ElevenLabs" label-placement="stacked" placeholder="agent_…"></ion-input></ion-item>
+        <ion-item><ion-input name="voiceKey" type="text" class="secret" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" label="API key de ElevenLabs" label-placement="stacked" placeholder="sk_…"></ion-input></ion-item>
+        <ion-item button="true" detail="false" id="voice-setup"><ion-icon slot="start" name="mic-outline"></ion-icon><ion-label>Preparar el agente de voz</ion-label></ion-item>
+      </ion-list>
+      <ion-list-header><ion-label>Zona de peligro</ion-label></ion-list-header>
+      <ion-list inset="true">
+        <ion-item button detail="false" id="clear-records"><ion-label color="danger" class="ion-text-center">Borrar registro de tomas</ion-label></ion-item>
+      </ion-list>
+      <input type="file" id="file" accept=".csv,text/csv" hidden>
+    </ion-content>
+  </ion-modal>
+
+  <ion-modal id="editor">
+    <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start"><ion-button id="cancel">Cancelar</ion-button></ion-buttons>
+        <ion-title>Producto</ion-title>
+        <ion-buttons slot="end"><ion-button id="save" strong="true">Guardar</ion-button></ion-buttons>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content color="light">
+      <ion-list-header><ion-label>Producto</ion-label></ion-list-header>
+      <ion-list inset="true">
+        <ion-item><ion-input name="name" label="Nombre" label-placement="stacked" placeholder="Paracetamol"></ion-input></ion-item>
+        <ion-item><ion-input name="notes" label="Indicaciones" label-placement="stacked" placeholder="Con comida"></ion-input></ion-item>
+      </ion-list>
+      <ion-list-header><ion-label>Pautas</ion-label></ion-list-header>
+      <ion-list inset="true" id="schedule-list"></ion-list>
+      <ion-list-header><ion-label>Envases</ion-label></ion-list-header>
+      <ion-list inset="true" id="container-list"></ion-list>
+      <ion-list inset="true" id="container-purchase"></ion-list>
+      <ion-list-header><ion-label>Otros datos</ion-label></ion-list-header>
+      <ion-list inset="true">
+        <ion-item><ion-textarea name="refs" label="Referencias" label-placement="stacked" placeholder="Médico, enlaces…" auto-grow="true"></ion-textarea></ion-item>
+        <ion-item><ion-textarea name="memo" label="Notas" label-placement="stacked" placeholder="Otras anotaciones" auto-grow="true"></ion-textarea></ion-item>
+      </ion-list>
+      <div id="stats-section">
+        <ion-list-header><ion-label>Estadísticas</ion-label></ion-list-header>
+        <ion-list inset="true">
+          <ion-item button="true" id="open-history"><ion-label>Registro</ion-label><ion-note slot="end" id="history-count"></ion-note></ion-item>
+        </ion-list>
+        <ion-list inset="true"><ion-item id="updated"></ion-item></ion-list>
+      </div>
+      <ion-list-header id="delete-header"><ion-label>Zona de peligro</ion-label></ion-list-header>
+      <ion-list inset="true" id="delete">
+        <ion-item button detail="false"><ion-label color="danger" class="ion-text-center">Eliminar producto</ion-label></ion-item>
+      </ion-list>
+    </ion-content>
+  </ion-modal>
+
+
+  <ion-modal id="voice">
+    <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start"><ion-button id="voice-close">Cerrar</ion-button></ion-buttons>
+        <ion-title id="voice-clock">00:00</ion-title>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content color="light" scroll-y="false">
+      <div id="voice-transcript"></div>
+      <div id="voice-controls">
+        <ion-button id="voice-mic" color="rose" aria-label="Silenciar el micro"><ion-icon slot="icon-only" name="mic"></ion-icon></ion-button>
+        <ion-note id="voice-state">Conectando…</ion-note>
+      </div>
+    </ion-content>
+  </ion-modal>
+
+  <ion-modal id="chat">
+    <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start"><ion-button id="chat-close">Cerrar</ion-button></ion-buttons>
+        <ion-title>Asistente</ion-title>
+        <ion-buttons slot="end"><ion-button id="chat-new">Limpiar</ion-button></ion-buttons>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content id="chat-body" color="light"></ion-content>
+    <ion-footer>
+      <ion-toolbar>
+        <ion-textarea id="chat-input" aria-label="Mensaje" placeholder="Pregunta a Dosify" auto-grow="true" rows="1" enterkeyhint="send">
+          <ion-button slot="end" id="chat-send" color="primary" shape="round" size="small">Hablar</ion-button>
+        </ion-textarea>
+      </ion-toolbar>
+    </ion-footer>
+  </ion-modal>
+
+  <ion-modal id="proposal-editor">
+    <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start"><ion-button id="proposal-cancel">Cancelar</ion-button></ion-buttons>
+        <ion-title id="proposal-title">Propuesta</ion-title>
+        <ion-buttons slot="end"><ion-button id="proposal-save" strong="true">Guardar</ion-button></ion-buttons>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content id="proposal-body" color="light"></ion-content>
+  </ion-modal>
+
+  <ion-modal id="shopping">
+    <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start"><ion-button id="shopping-close">Cerrar</ion-button></ion-buttons>
+        <ion-title>Próximas compras</ion-title>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content id="shopping-body" color="light"></ion-content>
+  </ion-modal>
+
+  <ion-modal id="paused">
+    <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start"><ion-button id="paused-close">Cerrar</ion-button></ion-buttons>
+        <ion-title>Pausados</ion-title>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content color="light">
+      <ion-list inset="true" id="paused-list"></ion-list>
+    </ion-content>
+  </ion-modal>
+
+  <ion-modal id="history">
+    <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start"><ion-button id="history-close">Cerrar</ion-button></ion-buttons>
+        <ion-title id="history-title">Registro</ion-title>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content id="history-body" color="light"></ion-content>
+  </ion-modal>
+
+  <ion-modal id="view">
+    <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start"><ion-button id="view-close">Cerrar</ion-button></ion-buttons>
+        <ion-title id="view-title"></ion-title>
+        <ion-buttons slot="end"><ion-button id="view-edit">Editar</ion-button></ion-buttons>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content id="view-body" color="light"></ion-content>
+  </ion-modal>
+
+  <ion-modal id="container-editor">
+    <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start"><ion-button id="container-cancel">Cancelar</ion-button></ion-buttons>
+        <ion-title>Envase</ion-title>
+        <ion-buttons slot="end"><ion-button id="container-save" strong="true">Guardar</ion-button></ion-buttons>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content color="light">
+      <ion-list-header><ion-label>Envase</ion-label></ion-list-header>
+      <ion-list inset="true">
+        <ion-item><ion-input name="bought" type="date" label="Fecha de compra" label-placement="stacked"></ion-input></ion-item>
+        <ion-item><ion-input name="cost" type="number" min="0" inputmode="numeric" label="Coste del envase (€)" label-placement="stacked" placeholder="Sin coste"></ion-input></ion-item>
+        <ion-item><ion-input name="units" type="number" min="1" inputmode="numeric" label="Dosis por envase" label-placement="stacked" placeholder="60"></ion-input></ion-item>
+      </ion-list>
+      <ion-list-header><ion-label>Reajuste</ion-label></ion-list-header>
+      <ion-list inset="true">
+        <ion-item><ion-input name="adjust" type="number" label="Dosis de más (+) o de menos (−)" label-placement="stacked" placeholder="0"></ion-input></ion-item>
+      </ion-list>
+      <ion-list inset="true" id="container-delete">
+        <ion-item button detail="false"><ion-label color="danger" class="ion-text-center">Eliminar envase</ion-label></ion-item>
+      </ion-list>
+    </ion-content>
+  </ion-modal>
+
+  <ion-modal id="schedule-editor">
+    <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start"><ion-button id="schedule-cancel">Cancelar</ion-button></ion-buttons>
+        <ion-title>Pauta</ion-title>
+        <ion-buttons slot="end"><ion-button id="schedule-save" strong="true">Guardar</ion-button></ion-buttons>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content color="light">
+      <ion-list-header><ion-label>Pauta</ion-label></ion-list-header>
+      <ion-list inset="true">
+        <ion-item><ion-input name="dose" label="Dosis (empieza por un número)" label-placement="stacked" placeholder="1 comprimido"></ion-input></ion-item>
+        <ion-item><ion-input name="start" type="date" label="Fecha de inicio" label-placement="stacked"></ion-input></ion-item>
+        <ion-item><ion-input name="days" type="number" min="1" inputmode="numeric" label="Duración (días)" label-placement="stacked" placeholder="7"></ion-input></ion-item>
+      </ion-list>
+      <ion-list-header><ion-label>Momentos</ion-label></ion-list-header>
+      <ion-list inset="true" id="schedule-timings"></ion-list>
+      <ion-list inset="true" id="schedule-timings-error" class="ion-hide"><ion-item lines="none"><ion-label color="danger" class="ion-text-center">Marca al menos un momento</ion-label></ion-item></ion-list>
+      <ion-list inset="true" id="schedule-delete">
+        <ion-item button detail="false"><ion-label color="danger" class="ion-text-center">Eliminar pauta</ion-label></ion-item>
+      </ion-list>
+    </ion-content>
+  </ion-modal>
+
+  <ion-modal id="timing-editor">
+    <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start"><ion-button id="timing-cancel">Cancelar</ion-button></ion-buttons>
+        <ion-title>Momento</ion-title>
+        <ion-buttons slot="end"><ion-button id="timing-save" strong="true">Guardar</ion-button></ion-buttons>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content color="light">
+      <ion-list inset="true">
+        <ion-item><ion-input name="name" label="Nombre" label-placement="stacked" placeholder="Sin nombre"></ion-input></ion-item>
+        <ion-item><ion-input name="start" type="number" min="0" max="24" inputmode="numeric" label="Hora de inicio (de 0 a 24)" label-placement="stacked" placeholder="Sin hora"></ion-input></ion-item>
+        <ion-item><ion-input name="end" type="number" min="0" max="24" inputmode="numeric" label="Hora de fin (de 0 a 24)" label-placement="stacked" placeholder="Sin hora"></ion-input></ion-item>
+      </ion-list>
+    </ion-content>
+  </ion-modal>
+
+  <ion-modal id="text-view">
+    <ion-header>
+      <ion-toolbar>
+        <ion-buttons slot="start"><ion-button id="text-close">Cerrar</ion-button></ion-buttons>
+        <ion-title>Texto</ion-title>
+      </ion-toolbar>
+    </ion-header>
+    <ion-content id="text-body" color="light"></ion-content>
+  </ion-modal>
+
+  <ion-alert id="confirm"></ion-alert>
+  <ion-action-sheet id="sheet"></ion-action-sheet>
+
+</ion-app>
+</body>
+</html>
