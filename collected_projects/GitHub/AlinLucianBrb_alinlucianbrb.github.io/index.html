@@ -1,0 +1,682 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test TBD</title>
+<style>
+:root{--bg:#18211c;--panel:#233229;--line:#385043;--text:#ecf1e8;--muted:#9db3a3;--accent:#f2b84b;--bad:#e5645a;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden}
+body{background:var(--bg);color:var(--text);font:clamp(13px,1.7vh,16px)/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+[hidden]{display:none!important}
+h1{margin:0;font-size:1.7em}
+h2{margin:0}
+h3{margin:0 0 6px;font-size:1em}
+b{font-weight:700}
+button{font:inherit;background:var(--panel);color:var(--text);border:2px solid var(--line);border-radius:4px;padding:.45em .8em;cursor:pointer}
+button.on{border-color:var(--accent)}
+button.go{background:var(--accent);border-color:var(--accent);color:#1d1600;font-weight:700}
+button.relic{border-color:#b58cf0;color:#dcc6ff}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible{outline:3px solid #fff;outline-offset:2px}
+.linkbtn{background:none;border:none;color:var(--muted);text-decoration:underline;padding:.2em .4em}
+.muted{color:var(--muted);margin:6px 0 0;font-size:.9em}
+.warn{color:#ffb4a8}
+
+/* Every screen fills the window and never scrolls. */
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:12px;overflow:hidden}
+.topbar{display:flex;justify-content:space-between;align-items:flex-start;width:min(900px,100%);color:var(--muted)}
+.topbar b{color:var(--text)}
+.menuBtns{display:flex;flex-direction:column;gap:10px;width:min(260px,100%);margin-top:8px}
+.menuBtns button{padding:.7em .9em}
+.version{position:absolute;right:10px;bottom:8px;font-size:12px;color:var(--muted);opacity:.75;pointer-events:none;user-select:none}
+.menuRow{display:flex;gap:8px}
+.menuRow button{flex:1;padding:.7em .5em}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;justify-content:center}
+.tabs button{padding:.35em .8em}
+.fieldrow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+select{font:inherit;background:#101813;color:var(--text);border:2px solid var(--line);border-radius:4px;padding:.4em .6em}
+.joinrow{display:flex;gap:8px;width:min(420px,100%)}
+.joinrow input{flex:1;font:inherit;background:#101813;color:var(--text);border:2px solid var(--line);border-radius:4px;padding:.6em .8em;text-transform:uppercase;letter-spacing:.2em}
+#lbyList{padding-left:0;list-style:none}
+.lobbylist li{align-items:center}
+.lobbylist li button{padding:.3em .8em}
+.lobbycode{font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.18em;color:var(--accent)}
+.slots{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px;width:min(760px,100%)}
+.slots li{--pc:var(--line);background:var(--panel);border:2px solid var(--line);border-left:6px solid var(--pc);border-radius:6px;padding:10px;min-height:76px;display:flex;flex-direction:column;gap:3px}
+.slots li.empty{opacity:.55;border-style:dashed}
+.slots li small{color:var(--muted)}
+.lbyhost{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center}
+.lbyheroes{display:flex;gap:8px;align-items:baseline}
+#lbyRoom .hgrid{max-height:34vh;overflow:auto}
+#coopBar{position:absolute;top:58px;left:50%;transform:translateX(-50%);display:flex;gap:10px;padding:4px 10px;font-size:.9em;pointer-events:none;white-space:nowrap}
+#coopBar span{display:inline-flex;align-items:center;gap:5px}
+#coopBar i{width:10px;height:10px;border-radius:50%;background:var(--pc);display:inline-block}
+#coopBar .left{opacity:.45;text-decoration:line-through}
+#coopBar .rdy{color:#5fd46f}
+#netBanner{position:absolute;top:96px;left:50%;transform:translateX(-50%);padding:4px 12px;color:#ffb4a8;pointer-events:none}
+.resumebox{display:flex;flex-direction:column;gap:2px;align-items:stretch}
+.resumebox .linkbtn{padding:.2em;font-size:.85em}
+.field{display:flex;flex-direction:column;gap:10px;width:min(300px,100%)}
+.field input{font:inherit;background:#101813;color:var(--text);border:2px solid var(--line);border-radius:4px;padding:.6em .8em}
+.msg{min-height:1.3em;color:#ffb4a8;text-align:center;max-width:34ch}
+.xp{display:inline-block;width:90px;height:8px;background:var(--panel);border:1px solid var(--line);border-radius:4px;vertical-align:middle;overflow:hidden}
+.xp i{display:block;height:100%;width:0;background:#b58cf0}
+.list{width:min(420px,100%);max-height:62vh;overflow:auto;background:var(--panel);border:2px solid var(--line);border-radius:6px;padding:12px 14px}
+.list ol{margin:0;padding-left:1.6em}
+.list li{display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)}
+.list li b{color:var(--accent)}
+.levels{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;width:min(760px,100%)}
+.lvl{display:flex;flex-direction:column;gap:4px;padding:.9em;text-align:left}
+.lvl.done{border-color:#5fd46f}
+.lvl small{color:var(--muted)}
+
+/* Heroes screen */
+#screen-heroes{justify-content:flex-start;overflow:auto}
+.hgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;width:min(900px,100%)}
+.hcard{--hc:var(--line);display:flex;flex-direction:column;gap:6px;background:var(--panel);border:2px solid var(--line);border-top:6px solid var(--hc);border-radius:8px;padding:12px}
+.hcard.picked{border-color:var(--accent);border-top-color:var(--hc)}
+.hhead{display:flex;justify-content:space-between;align-items:baseline}
+.hhead b{font-size:1.2em}
+.hdesc{margin:0}
+.hstats{margin:0}
+.hslot{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px;border:1px dashed var(--line);border-radius:6px;margin-top:auto}
+.hslot small{width:100%}
+.itemname{font-weight:700}
+.hcard{font:inherit;color:inherit;text-align:left;cursor:pointer}
+.hcard:hover{border-color:var(--accent)}
+.hcard.pick .pickmark{font-weight:700;color:var(--muted)}
+.hcard.pick .pickfoot{margin-top:auto;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.hcard.pick .gearpath{font-size:.85em}
+/* Choosing heroes for a level: compact cards (picture on the left, two lines of description) so all of them fit on screen */
+#lvPick .hgrid .hcard{display:grid;grid-template-columns:60px 1fr;column-gap:10px;row-gap:3px;align-content:start;padding:8px 10px}
+#lvPick .hgrid .hcard > *{grid-column:2}
+#lvPick .hgrid .hcard .hcardart{grid-column:1;grid-row:1 / span 4;order:0;width:60px;height:60px;margin:0;align-self:center}
+#lvPick .hgrid .hcard .hdesc{margin:0;font-size:.85em;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+#lvPick .hgrid .hcard .pickfoot{margin-top:2px}
+#lvPick .hgrid .hcard.picked{outline:3px solid var(--accent);outline-offset:-7px}
+.hcard.pick.picked .pickmark{color:var(--accent)}
+#screen-levels{overflow:auto}
+.lvstep{display:flex;flex-direction:column;align-items:center;gap:12px;width:100%}
+.lvstep[hidden]{display:none}
+.warn{color:#ffb4a8}
+/* Hero page: Information (gear | picture | stats) and Evolutions (a tree). */
+.hpage{width:min(980px,100%);display:flex;flex-direction:column;gap:10px;min-height:0}
+.hpage[hidden],#hrList[hidden]{display:none}
+#hrList{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%}
+.hbody{--hc:var(--line);background:var(--panel);border:2px solid var(--line);border-top:6px solid var(--hc);border-radius:8px;padding:14px}
+.hbody.info{display:grid;grid-template-columns:minmax(180px,1fr) minmax(200px,1.2fr) minmax(220px,1.2fr);gap:16px;align-items:start}
+.hbody h3{margin:0 0 6px;font-size:1em;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.hgear{display:flex;flex-direction:column;gap:8px}
+.slotitem{display:flex;align-items:center;gap:8px;width:100%}
+.hpic{display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.hart{--hc:#888;width:min(220px,100%);aspect-ratio:3/4;border-radius:12px;display:grid;place-items:center;background:radial-gradient(circle at 50% 35%,color-mix(in srgb,var(--hc) 45%,transparent),#101813 75%);border:2px solid color-mix(in srgb,var(--hc) 60%,var(--line))}
+.hart span{font-size:5em;font-weight:800;color:var(--hc);opacity:.85}
+.hstatbox .srow{display:flex;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid var(--line)}
+.hstatbox .srow.main b,.hstatbox .srow.main span{color:#e8c9a0}
+.hstatbox .buff{color:#9db3a3;font-size:.85em;padding:2px 0 4px 10px}
+.evotree{display:flex;flex-direction:column;align-items:center;gap:0}
+.evonode{--hc:var(--line);display:flex;flex-direction:column;gap:4px;background:#101813;border:2px solid var(--hc);border-radius:8px;padding:10px 12px;width:min(300px,100%)}
+.evonode p{margin:0}
+.evonode.root{width:min(360px,100%)}
+.evolink{position:relative;padding:22px 0 18px;color:var(--muted);font-size:.85em}
+.evolink::before,.evolink::after{content:'';position:absolute;left:50%;width:2px;height:16px;background:var(--line)}
+.evolink::before{top:0}.evolink::after{bottom:0}
+.evorow{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;width:100%;padding-top:12px;border-top:2px solid var(--line)}
+.evorow .evonode{width:auto}
+.evonode.chosen{box-shadow:0 0 0 3px var(--hc),0 0 18px color-mix(in srgb,var(--hc) 45%,transparent)}
+.evonode .preview{font-size:.85em;color:#dcc6ff}
+.evonode .pathbtn{margin-top:auto;padding:.45em .7em}
+.evonode .preview{margin-bottom:6px}
+.evonode.chosen .pathbtn{background:var(--hc);color:#101813;border-color:var(--hc)}
+.pathline{color:#dcc6ff}
+@media (max-width:760px){.hbody.info{grid-template-columns:1fr}}
+/* Inventory: a grid of item icons. */
+#screen-inventory{justify-content:flex-start;overflow:auto}
+.invgrid{display:grid;grid-template-columns:repeat(8,minmax(0,64px));gap:6px;padding:10px;background:var(--panel);border:2px solid var(--line);border-radius:8px}
+.invcell{position:relative;aspect-ratio:1;border:1px solid var(--line);border-radius:6px;background:#101813;display:grid;place-items:center}
+.invcell.full{cursor:pointer}
+.invcell.picked{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
+.invsell{display:flex;gap:12px;align-items:center;justify-content:center;min-height:38px}
+.sellbtn.confirm{border-color:#f2b84b;color:#f2b84b}
+.invcell.full:hover,.invcell.full:focus{border-color:var(--accent)}
+.invcell .wornmark{position:absolute;top:2px;right:5px;font-size:.7em;color:#8be28b}
+.itemicon{--ic:#9db3a3;--rc:#ecf1e8;display:inline-grid;place-items:center;width:40px;height:40px;border-radius:8px;font-weight:800;font-size:.9em;color:#101813;background:var(--ic);border:3px solid var(--rc);box-shadow:inset 0 -3px 0 rgba(0,0,0,.25)}
+.slotpick{display:flex;flex-wrap:wrap;gap:4px;align-items:center;width:100%}
+.iconbtn{padding:2px;line-height:0;background:transparent;border:1px solid transparent}
+.iconbtn:hover{border-color:var(--accent)}
+.iconbtn .itemicon{width:34px;height:34px;font-size:.75em}
+.hslot .buff{color:#cfd8cf;font-size:.85em;width:100%}
+/* Hero page gear: one compact line per slot; clicking one opens its item chooser over the page */
+.hbody.info{position:relative}
+.hgear{display:flex;flex-direction:column;gap:6px}
+.hslot.compact{flex-wrap:nowrap;margin-top:0;padding:4px 8px;gap:10px;width:100%;text-align:left;cursor:pointer;font:inherit;color:inherit}
+.hslot.compact:hover,.hslot.compact.open{filter:brightness(1.18)}
+.hslot.compact .itemicon{width:34px;height:34px;flex:none}
+.hslot.compact .itemicon.emptyslot{background:#0d140f;border-color:#2c3a32;border-style:dashed}
+.hslot.compact .slottxt{display:grid;grid-template-columns:auto 1fr;column-gap:8px;flex:1;min-width:0;line-height:1.25}
+.hslot.compact .slottxt small{width:auto;white-space:nowrap}
+.hslot.compact .slottxt small:last-child{text-align:right;overflow:hidden;text-overflow:ellipsis;font-size:.8em;align-self:center}
+.hslot.compact .slottxt .itemname{grid-column:1 / -1}
+.hslot.compact .itemname{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.slotpop{position:absolute;z-index:5;left:14px;top:14px;width:min(420px,calc(100% - 28px));max-height:calc(100% - 28px);overflow:auto;padding:12px;background:#17211b;border:6px solid transparent;border-image:url(assets/ui_panel.png) 10 fill / 10px stretch;box-shadow:0 10px 30px rgba(0,0,0,.6)}
+.slotpophead{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px}
+.slotgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(44px,1fr));gap:6px;margin-bottom:8px}
+.slotitem .itemicon{width:32px;height:32px;font-size:.75em}
+/* Talent tree: the SVG scales to whatever space is left. */
+#screen-talents{justify-content:flex-start}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.tabs button.on{background:#2b4a38}
+.treebox{position:relative;flex:1;min-height:0;width:min(1200px,100%);background:#101813;border:2px solid var(--line);border-radius:6px;overflow:hidden}
+.treebox svg{display:block;width:100%;height:100%;cursor:grab;touch-action:none}
+.treebox svg.dragging{cursor:grabbing}
+.tlcam{position:absolute;left:8px;bottom:8px;display:flex;flex-direction:column;gap:4px}
+.tlcam button{min-width:34px;padding:.2em .4em}
+.tlhint{position:absolute;right:10px;bottom:8px;pointer-events:none}
+.tlink{stroke:#385043;stroke-width:5}
+.tlink.on{stroke:#f2b84b}
+.tbranch{fill:#9db3a3;font-size:28px;stroke:#101813;stroke-width:7px;paint-order:stroke;stroke-linejoin:round;font-weight:600;pointer-events:none;letter-spacing:.02em}
+.tnode circle{fill:#1d2f55;stroke:#4a6a58;stroke-width:3;cursor:pointer}
+.tnode.on circle{stroke:#fff}
+.tnode.avail circle{stroke:#f2b84b;stroke-width:4}
+.tnode.notable circle{stroke-width:5}
+.tnode.path circle{fill:#2a3a31;stroke-width:2}
+.tnode.path.avail circle{stroke-width:3}
+.tnode:focus-visible circle{stroke:#fff;stroke-width:6}
+
+/* Game screen: the map fills the window and the HUD floats on top of it. */
+.play{padding:0;display:block}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:crosshair;background:#243a2b}
+#c.blocked{cursor:not-allowed}
+#c.dragging{cursor:grabbing}
+#c.holding{cursor:move}
+.hud-layer{position:absolute;inset:0;pointer-events:none}
+.hud-layer>*{position:absolute;pointer-events:auto}
+/* Evolve prompt: a button pops up above a hero's card when that hero can evolve right now. */
+.hwrap{position:relative;display:flex}
+.hwrap[hidden]{display:none}
+.evoup{position:absolute;left:50%;bottom:100%;transform:translateX(-50%);margin-bottom:6px;z-index:2;pointer-events:auto;padding:.2em .6em;font-size:.82em;font-weight:700;border-radius:999px;border:2px solid #ffd84a;background:#3a3214;color:#ffe9a0;white-space:nowrap;box-shadow:0 0 12px rgba(255,216,74,.45);animation:evorise .5s ease-out both,evobob 1.4s ease-in-out .5s infinite}
+.evoup:hover{background:#56491a}
+.evoup.short{border-color:#6b6040;background:#24231a;color:#b8ac85;box-shadow:none;animation:evorise .5s ease-out both;opacity:.85}
+/* Hero panel: attributes under XP; the hero's own attribute in its colour. */
+.attrs{display:flex;gap:6px;margin:4px 0 6px}
+.attr{display:flex;align-items:baseline;gap:4px;padding:2px 8px;border:1px solid var(--line);border-radius:999px;color:var(--muted);cursor:help}
+.attr b{color:var(--text);font-variant-numeric:tabular-nums}
+.attr.main{border-color:currentColor;font-weight:700}
+.attr.main b{color:inherit}
+.lvl.energy{color:#5aa9ff}
+.evoup[hidden]{display:none}
+@keyframes evorise{from{opacity:0;margin-bottom:-6px}to{opacity:1;margin-bottom:6px}}
+@keyframes evobob{50%{margin-bottom:10px}}
+.evohead{color:#ffd84a;font-weight:700;margin:.4em 0 .2em}
+.glass{background:rgba(16,24,20,.9);border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.panel{background:var(--panel);border:2px solid var(--line);border-radius:6px;padding:8px 10px}
+#hud{top:10px;left:0;right:0;margin-inline:auto;width:fit-content;display:flex;padding:6px 4px}
+.stat{display:flex;flex-direction:column;align-items:center;min-width:62px;padding:0 8px;line-height:1.15}
+.stat+.stat{border-left:1px solid var(--line)}
+.stat small,.goldbox small{color:var(--muted);font-size:.7em;text-transform:uppercase;letter-spacing:.07em}
+.stat b{font-size:1.15em;font-variant-numeric:tabular-nums}
+.stat b.boss{color:#ffd84a}
+#relics{left:10px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;align-items:stretch;gap:4px;padding:8px;max-height:55%;max-width:210px;overflow:auto}
+#relics .relicchip{margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#hudTopRight{top:10px;right:10px;display:flex;gap:6px;align-items:center}
+#menuConfirm{display:flex;gap:6px;align-items:center;padding:4px 6px}
+#menuConfirm .q{font-weight:600;padding:0 4px}
+button.danger{border-color:#e5645a;color:#ffb4a8}
+#heroPanel{top:58px;right:10px;width:clamp(230px,21vw,290px);max-height:calc(68% - 70px);overflow:auto;padding:8px 10px}
+#meterPanel{right:10px;bottom:10px;width:var(--meterW);max-height:30%;overflow:auto;padding:8px 10px}
+.ph{background:none;border:none;padding:0;color:var(--text);font-weight:700;width:100%;display:flex;justify-content:space-between;cursor:pointer}
+.ph::after{content:'▾';color:var(--muted)}
+.ph[aria-expanded=false]::after{content:'▸'}
+#meter{margin-top:6px}
+#hudCam{left:10px;bottom:10px;display:flex;flex-direction:column;gap:4px}
+#hudCam button{min-width:40px;padding:.3em .4em;background:rgba(16,24,20,.9)}
+/* The bar is centred in the space between the camera buttons and the damage meter, so it never covers either. */
+.hud-layer{--meterW:clamp(200px,17vw,250px)}
+#hudBottom{left:62px;right:calc(var(--meterW) + 20px);margin-inline:auto;width:fit-content;max-width:calc(100% - var(--meterW) - 82px);bottom:10px;display:flex;gap:10px;align-items:stretch;padding:8px}
+.goldbox{display:flex;flex-direction:column;justify-content:center;align-items:center;min-width:76px;padding:0 10px 0 4px;border-right:1px solid var(--line)}
+.goldbox b{color:var(--accent);font-size:1.45em;font-variant-numeric:tabular-nums}
+.goldbox .interest{text-transform:none;letter-spacing:0;font-size:.72em;white-space:nowrap;margin-top:2px}
+.goldbox .interest.full{color:#8be28b}
+.heroes{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.herocard{--hc:var(--line);position:relative;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;min-width:70px;padding:.2em 1.3em .25em .5em;border-top:3px solid var(--hc);text-align:left;font-size:.88em}
+.herocard .nm{font-weight:600;white-space:nowrap}
+.herocard .nm small{color:#8fd3ff;font-weight:700;margin-left:.35em}
+.herocard .cost{color:var(--accent);font-size:.85em;font-variant-numeric:tabular-nums}
+.herocard .cost:empty{display:none}
+.herocard .key{position:absolute;top:3px;right:6px;font-size:.7em;color:var(--muted)}
+.herocard.on{border-color:var(--accent);border-top-color:var(--hc);background:#2b4a38}
+.herocard.poor,#relic.poor{opacity:.6}
+.herocard.poor .cost{color:#e5645a}
+.herocard.placed .cost{color:var(--muted)}
+.herocard:has(.hico){padding-left:40px}
+.herocard .hico{position:absolute;left:3px;top:50%;width:34px;height:34px;transform:translateY(-52%)}
+/* Ability icons on the hero buttons: a dark sweep over the part still to go (--p), clearing clockwise like an action bar. */
+.herocard .abil{display:flex;gap:4px;margin-top:3px}
+.herocard .abil.idle{filter:grayscale(.85);opacity:.55}
+.herocard .ab{position:relative;display:block;width:28px;height:28px;border-radius:3px;overflow:hidden}
+.herocard .ab img{display:block;width:100%;height:100%}
+.herocard .ab .sw{position:absolute;inset:0;background:conic-gradient(transparent calc((1 - var(--p, 0)) * 1turn), rgba(0,0,0,.66) 0)}
+.herocard .ab .cdt{position:absolute;inset:0;display:grid;place-items:center;font-weight:800;font-size:.95em;color:#fff;text-shadow:0 0 2px #000,0 0 3px #000}
+.herocard .ab.ready{overflow:visible;box-shadow:0 0 0 2px #ffd84a,0 0 8px 1px rgba(255,216,74,.8)}
+/* Pixel art: sprites from assets/, drawn with hard edges. */
+.pix{image-rendering:pixelated}
+.hcardart,.evoart{order:-1;align-self:center;width:72px;height:72px;margin:-6px 0 -8px}
+.hart.art span{display:none}
+.hart img{width:92%;height:auto}
+.itemicon.art{font-size:0;background:#101813;overflow:hidden}
+.itemicon img{width:100%;height:100%}
+.ebar{display:block;height:4px;width:100%;background:#101813;border-radius:2px;overflow:hidden;margin-top:3px}
+.ebar i{display:block;height:100%;width:0;background:#5aa9ff}
+.ebar.full i{background:#ffd84a}
+.ebar.wide{width:55%;height:7px;align-self:center}
+.xpbar i{background:#8fd3ff}
+.lvl{font-weight:700;color:#8fd3ff;white-space:nowrap}
+#inspect .srow .ebar.wide{flex:1;width:auto;min-width:50px;margin-left:12px}
+.actions{display:flex;flex-direction:column;gap:6px;justify-content:center;padding-left:10px;border-left:1px solid var(--line)}
+.waverow{display:flex;gap:6px;align-items:stretch}
+/* Start wave and Auto-start are one button: about 80% start, 20% auto. */
+.split{display:flex;flex:1;min-width:150px}
+.split #go{flex:4;border-radius:4px 0 0 4px;font-size:1.05em;padding:.5em .8em;white-space:nowrap}
+.split .autobtn{flex:1;min-width:46px;border-radius:0 4px 4px 0;border-left:1px solid rgba(0,0,0,.35);padding:.2em .3em;font-size:.68em;font-weight:700;letter-spacing:.05em;background:#5a1f1c;color:#ffb4a8;border-color:#e5645a}   /* red while off, so it is clear Auto-start is not on */
+.choose .pickkey{position:absolute;top:6px;right:8px;font-size:.75em;color:var(--muted)}
+.choose{position:relative}
+.split .autobtn.on{background:#8be28b;color:#10200f;border-color:#8be28b}
+.spdbtn{min-width:46px;font-weight:700}
+.spdbtn.on{border-color:var(--accent);color:var(--accent)}
+#pauseBanner{top:42%;left:50%;transform:translate(-50%,-50%);font-size:2em;font-weight:700;letter-spacing:.12em;padding:.25em 1em;pointer-events:none}
+.overlay.live{background:rgba(12,18,15,.6)}
+.pickopt{display:flex;gap:6px;align-items:center;font-size:.9em;color:var(--muted);cursor:pointer}
+.overlay{position:absolute;inset:0;z-index:5;background:rgba(12,18,15,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:16px;text-align:center;overflow:auto}
+.choices{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.card{display:flex;flex-direction:column;gap:2px;width:clamp(140px,22vw,210px)}
+.choose{text-align:left;height:100%}
+.choose small,.aff{display:block;color:var(--muted)}
+.choose .rar{font-weight:700}
+.pickbar{display:flex;gap:12px;align-items:center}
+.mrow{display:grid;grid-template-columns:100px 1fr auto;gap:8px;align-items:center;padding:2px 0;font-size:.9em}
+.mbar{height:8px;background:#101813;border-radius:4px;overflow:hidden}
+.mbar i{display:block;height:100%;width:0}
+.srow{display:flex;justify-content:space-between;gap:8px;font-size:.9em;margin-top:3px}
+.buff{font-size:.8em;padding-left:10px}
+.acts{display:flex;gap:6px;margin-top:8px}
+.acts.top{margin:6px 0 8px}
+.acts.top button{flex:1;white-space:nowrap;font-size:.92em;padding:.45em .5em}
+.evochoices{display:flex;flex-direction:column;gap:6px;margin-bottom:8px}
+.evochoice{text-align:left;display:flex;flex-direction:column;gap:2px;padding:.45em .6em}
+.evochoice small{color:var(--muted);font-size:.82em}
+.chip{display:inline-block;width:10px;height:10px;border-radius:2px;margin:0 4px 0 6px}
+.relicico{width:16px;height:16px;vertical-align:-3px;margin-right:4px;image-rendering:pixelated}
+.relicico.big{width:28px;height:28px;vertical-align:-8px;margin-right:6px}
+.relicchip{display:inline-block;border:1px solid;border-radius:4px;padding:1px 6px;margin:0 4px 4px 0;font-size:.85em;font-weight:600;cursor:default}
+/* Smaller screens: tighter HUD, relic strip moves under the stats. */
+@media (max-width:1000px){
+  .herocard{min-width:60px;font-size:.8em}
+  #relics{max-width:150px;font-size:.85em}
+  #heroPanel{width:min(250px,44vw)}
+  .hud-layer{--meterW:min(190px,30vw)}
+  .split{min-width:120px}
+}
+@media (max-width:640px){
+  #hudTopRight button{padding:.35em .5em;font-size:.85em}
+  .goldbox{min-width:58px}
+  #hudBottom{gap:6px;padding:6px}
+}
+.tip{position:fixed;z-index:50;max-width:260px;background:#0f1612;border:2px solid var(--line);border-radius:6px;padding:8px 10px;pointer-events:none;font-size:.9em;box-shadow:0 4px 14px rgba(0,0,0,.5)}
+.tip b{display:block;margin-bottom:2px}
+/* ===== Pixel UI kit (art/ui.py, art/font.py, art/scenes.py, art/icons.py) =====
+   Frames are 9-slice border images at 2 screen pixels per art pixel: panels and tooltips have a 5-art-pixel border (10 px),
+   buttons and tabs 4 (8 px), slots, inputs and bars 3 (6 px). TBD Pixel (our own font) is crisp at multiples of 9 px:
+   18 px for buttons, labels and numbers, 27 px for titles. Body text stays in the system font. */
+@font-face{font-family:'TBD Pixel';src:url(assets/tbd-pixel.woff) format('woff');font-display:swap}
+:root{--pixel:'TBD Pixel',ui-monospace,monospace}
+h1,h2,.hbody h3,h3{font-family:var(--pixel);font-weight:400;letter-spacing:.02em;text-shadow:0 2px 0 #0b100d,2px 0 0 #0b100d,-2px 0 0 #0b100d,0 -2px 0 #0b100d}
+h1{font-size:27px;line-height:36px;color:#ffe08a}
+h2{font-size:27px;line-height:36px;color:#ffe08a}
+h3,.hbody h3{font-size:18px;line-height:22px;color:#cfe0d2;text-transform:none;letter-spacing:.02em}
+.pix,.scene,.logo img{image-rendering:pixelated}
+/* Menu screens stand in front of the dusk valley; the login and main menu see more of it. */
+.screen.scene{background:linear-gradient(rgba(10,14,12,.78),rgba(10,14,12,.86)),url(assets/ui_scene.png) center bottom/cover;image-rendering:pixelated}
+.screen.scene.bright{background:linear-gradient(rgba(10,14,12,.15),rgba(10,14,12,.45)),url(assets/ui_scene.png) center bottom/cover}
+.logo{margin:0;line-height:0;text-shadow:none}
+.logo img{width:min(402px,86vw);height:auto;filter:drop-shadow(0 4px 0 rgba(0,0,0,.35))}
+#screen-menu{gap:8px}
+#screen-menu .logo img{width:min(320px,70vw)}
+#screen-menu .menuBtns{gap:6px;width:min(420px,100%)}
+#screen-menu .menuBtns button{padding:2px 10px 4px;white-space:nowrap}
+#screen-menu .menuRow button{min-width:0;padding:2px 4px 4px}
+#screen-menu .topbar{position:absolute;top:12px;left:50%;transform:translateX(-50%)}
+/* Text buttons */
+button{border:8px solid transparent;border-radius:0;border-image:url(assets/ui_button.png) 8 fill / 8px stretch;background:none;color:#ecf1e8;padding:2px 10px 4px;text-shadow:0 2px 0 rgba(0,0,0,.45)}
+button:not(.herocard):not(.choose):not(.hcard):not(.lvl):not(.iconbtn):not(.linkbtn):not(.evochoice):not(.ph):not(.invcell):not(.evoup){font-family:var(--pixel);font-size:18px;line-height:20px}
+button:hover:not(:disabled){border-image-source:url(assets/ui_button_hover.png)}
+button:active:not(:disabled){border-image-source:url(assets/ui_button_down.png);padding-top:4px;padding-bottom:2px}
+button.go{border-image-source:url(assets/ui_button_go.png);color:#2a1a00;text-shadow:0 1px 0 rgba(255,255,255,.35);font-weight:400}
+button.go:hover:not(:disabled){border-image-source:url(assets/ui_button_go_hover.png)}
+button.go:active:not(:disabled){border-image-source:url(assets/ui_button_go_down.png)}
+button.relic{border-image-source:url(assets/ui_button_relic.png);color:#f2e2ff}
+button.relic:hover:not(:disabled){border-image-source:url(assets/ui_button_relic_hover.png)}
+button.danger{border-image-source:url(assets/ui_button_bad.png);color:#fff0ec}
+button.danger:hover:not(:disabled){border-image-source:url(assets/ui_button_bad_hover.png)}
+button.on,.tabs button.on{border-image-source:url(assets/ui_button_on.png);color:#ffe08a}
+button:disabled{opacity:.55;filter:grayscale(.6)}
+.linkbtn{border:none;border-image:none;background:none;padding:.2em .4em;text-shadow:none}
+.ico{width:18px;height:18px;vertical-align:-3px;margin-right:6px;image-rendering:pixelated}
+button .ico{width:18px;height:18px;margin-right:8px}
+/* Panels */
+.panel,.glass,.list,.hbody,.slots li,.invgrid,.treebox,.evonode,.hcard,.levels .lvl,.who,.purse,#lvPick .hgrid .hcard{border:10px solid transparent;border-radius:0;border-image:url(assets/ui_panel.png) 10 fill / 10px stretch;background:none;box-shadow:none}
+.glass{border-image-source:url(assets/ui_panel.png)}
+.hcard,.evonode,.levels .lvl{border-image-source:url(assets/ui_panel_light.png)}
+.hcard{border-top:10px solid transparent;box-shadow:inset 0 4px 0 var(--hc)}
+.hcard:hover,.hcard.picked,.evonode.chosen,.levels .lvl:hover:not(:disabled){filter:brightness(1.12)}
+.hcard.picked{box-shadow:inset 0 4px 0 var(--hc),0 0 0 3px #f2b84b}
+.evonode{border-top-width:10px;box-shadow:inset 0 4px 0 var(--hc)}
+.evonode.chosen{box-shadow:inset 0 4px 0 var(--hc),0 0 0 3px var(--hc),0 0 18px color-mix(in srgb,var(--hc) 45%,transparent)}
+.hbody{border-top-width:10px;box-shadow:inset 0 4px 0 var(--hc)}
+.menuBtns.panel{padding:6px 8px;width:min(300px,100%)}
+.who,.purse{padding:2px 10px;color:#cfe0d2}
+.who b,.purse b{font-family:var(--pixel);font-size:18px;font-weight:400}
+.purse b{color:#ffe08a}
+.topbar{align-items:center}
+.tip{border:10px solid transparent;border-radius:0;border-image:url(assets/ui_tooltip.png) 10 fill / 10px stretch;background:none;padding:2px 4px}
+.tip b{font-family:var(--pixel);font-size:18px;font-weight:400;line-height:22px}
+/* Tabs */
+.tabs button{border-image-source:url(assets/ui_tab.png)}
+.tabs button.on{border-image-source:url(assets/ui_tab_on.png)}
+/* Inputs, slots and bars: sunken */
+input:not([type=checkbox]),select,.field input,.joinrow input{border:6px solid transparent;border-radius:0;border-image:url(assets/ui_input.png) 6 fill / 6px stretch;background:none;color:#ecf1e8;padding:.35em .5em}
+.invcell,.hslot{border:6px solid transparent;border-radius:0;border-image:url(assets/ui_slot.png) 6 fill / 6px stretch;background:none}
+.invcell.picked{box-shadow:0 0 0 3px var(--accent)}
+.xp,.ebar{border:6px solid transparent;border-radius:0;border-image:url(assets/ui_bar.png) 6 fill / 6px stretch;background:none;height:auto;min-height:16px;box-sizing:border-box;overflow:hidden}
+.xp i,.ebar i{min-height:4px;height:4px}
+.ebar{min-height:14px}
+.herocard .ebar{min-height:12px;border-width:4px;border-image-width:4px}
+/* HUD numbers in the pixel font */
+.stat b,.goldbox b,.levels .lvl b,.hhead b,#tlPoints,.relicname,.cost,.version,#pauseBanner{font-family:var(--pixel);font-weight:400}
+.stat b{font-size:18px;line-height:22px}
+.goldbox b{font-size:27px;line-height:30px}
+.stat small,.goldbox small{display:flex;align-items:center;gap:0}
+.stat small .ico,.goldbox small .ico{width:14px;height:14px;margin-right:4px}
+#pauseBanner{font-size:36px;letter-spacing:.08em;color:#ffe08a}
+.version{font-size:18px}
+/* In-game hero cards: framed buttons with the hero's colour along the top */
+.herocard{border-image-source:url(assets/ui_button.png);box-shadow:inset 0 3px 0 var(--hc);padding:.2em 1.3em .25em .5em}
+.herocard.on{border-image-source:url(assets/ui_button_on.png);background:none}
+.herocard:has(.hico){padding-left:40px}
+.split #go,.split .autobtn{border-radius:0}
+.split .autobtn{border-image-source:url(assets/ui_button_bad.png);background:none;color:#ffe0dc;font-family:var(--pixel);font-size:18px;min-width:70px;padding:2px 4px 4px;letter-spacing:0}
+.split .autobtn.on{border-image-source:url(assets/ui_button_on.png);background:none;color:#e0ffd8}
+.spdbtn.on{color:#ffe08a}
+.evoup{border:2px solid #ffd84a;border-image:none;border-radius:0;background:#3a3214;padding:.15em .55em;text-shadow:none}
+.evoup.short{border-color:#6b6040;background:#24231a}
+/* Relic picker and evolution cards */
+.choose{border-image-source:url(assets/ui_panel_light.png);border-width:10px;border-image-slice:10 fill;border-image-width:10px;padding:4px 6px}
+.choose:hover:not(:disabled){border-image-source:url(assets/ui_panel_light.png);filter:brightness(1.15)}
+.relicname{font-size:18px;line-height:28px}
+/* Hero window (in the match): sections with room between them; stats one line each with an icon, details on hover */
+#heroPanel{max-height:calc(100% - 200px)}   /* down to just above the damage meter: room for every section without scrolling */
+#inspect > .srow:not(.srt){margin-top:2px}
+#inspect > .srow .ebar.wide{min-height:12px}
+#inspect .tally{display:flex;gap:12px;flex-wrap:wrap;margin:2px 0 8px;color:var(--muted);font-size:.85em;cursor:help}
+#inspect .tally .tv{display:inline-flex;align-items:center;gap:4px}
+#inspect .tally b{color:var(--text);font-variant-numeric:tabular-nums}
+#inspect .ico{display:inline-block;width:14px;height:14px;flex:none;image-rendering:pixelated}
+#inspect .sec{margin:12px 0 4px;padding-top:6px;border-top:1px solid rgba(255,255,255,.12);font-family:var(--pixel);font-size:14px;line-height:16px;color:#ffe08a;letter-spacing:.5px}
+#inspect .srow.srt{margin-top:0;padding:2px 2px;cursor:help;border-radius:3px;font-size:.88em}
+#inspect .srow.srt:hover{background:rgba(255,255,255,.06)}
+#inspect .sname{display:inline-flex;align-items:center;gap:6px;color:#cfe0d2}
+#inspect .sval{font-variant-numeric:tabular-nums;white-space:nowrap}
+#inspect .sval.up{color:#8be28b}
+#inspect .gearrow{display:flex;gap:6px;flex-wrap:wrap}
+#inspect .gearicon{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;background:#101813;box-shadow:inset 0 0 0 2px var(--rc);cursor:help;font-size:.7em}
+#inspect .gearicon img{width:28px;height:28px;image-rendering:pixelated}
+/* Relic cards: a big icon above the name, the card tinted and outlined in the relic's rarity colour (--rc) */
+.choose.relicard{display:flex;flex-direction:column;align-items:stretch;gap:2px;padding:6px 12px 12px}
+.choose.relicard::after{content:'';position:absolute;inset:4px;pointer-events:none;box-shadow:inset 0 0 0 2px var(--rc);background:linear-gradient(to bottom,color-mix(in srgb,var(--rc) 30%,transparent),transparent 55%)}
+.choose.relicard .relicico.top{display:block;width:56px;height:56px;margin:6px auto 2px;image-rendering:pixelated}
+.choose.relicard .relicname,.choose.relicard .rar{text-align:center;color:var(--rc)}
+.choose.relicard .relicname{color:#ecf1e8}
+.relicchip{border:none;border-radius:0;background:rgba(0,0,0,.25);box-shadow:inset 0 0 0 2px currentColor;padding:2px 6px}
+/* Zones: a row of five, each with its picture; the chosen one's levels below */
+.zones{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;width:min(1100px,100%);margin-bottom:10px}
+.zones .zone{display:flex;flex-direction:column;align-items:stretch;padding:0;overflow:hidden;text-align:left;font-family:inherit;font-size:inherit;line-height:1.25;color:#ecf1e8;font-weight:400}
+.zones .zone img{display:block;width:100%;aspect-ratio:3/1;object-fit:cover;image-rendering:pixelated;border-bottom:2px solid #0e1410}
+.zones .zone b{font-family:var(--pixel);font-weight:400;font-size:16px;line-height:20px;color:#ffe08a;padding:4px 8px 0}
+.zones .zone small{color:#cfe0d2;padding:0 8px 6px}
+.zones .zone.on{outline:3px solid #ffe08a;outline-offset:-3px}
+.zones .zone:disabled{filter:grayscale(.8) brightness(.6)}
+@media (max-width:700px){.zones{grid-template-columns:repeat(3,minmax(0,1fr))}}
+/* Level cards: each level's scene on top */
+.levels{grid-template-columns:repeat(auto-fit,minmax(190px,1fr));width:min(1100px,100%)}
+.levels .lvl{color:#ecf1e8;font-weight:400}
+.levels .lvl span{color:#cfe0d2}
+.lvl .lvname{font-family:var(--pixel);font-size:18px;line-height:22px;color:#ffe08a!important}
+.levels .lvl{padding:0;overflow:hidden;text-align:left;font-family:inherit;font-size:inherit;line-height:1.3}
+.levels .lvl .lvart{display:block;width:100%;aspect-ratio:2/1;object-fit:cover;image-rendering:pixelated;border-bottom:2px solid #0e1410}
+.levels .lvl .lvtxt{display:flex;flex-direction:column;gap:2px;padding:6px 8px 8px}
+.levels .lvl b{font-size:18px;line-height:22px;color:#cfe0d2}
+.levels .lvl:disabled .lvart{filter:grayscale(1) brightness(.6)}
+.levels .lvl.done{box-shadow:0 0 0 3px #5fd46f}
+.attr{align-items:center}
+.attr::before{content:'';width:14px;height:14px;background:center/contain no-repeat;image-rendering:pixelated}
+.attr.a-strength::before{background-image:url(assets/icon_strength.png)}
+.attr.a-dexterity::before{background-image:url(assets/icon_dexterity.png)}
+.attr.a-intellect::before{background-image:url(assets/icon_intellect.png)}
+/* Talent tree: cluster icons on the notables */
+.tnode image{pointer-events:none;image-rendering:pixelated}
+.treebox{background:#0d1310}
+</style>
+</head>
+<body>
+
+<section id="screen-login" class="screen scene bright" hidden>
+  <h1 class="logo"><img class="pix" src="assets/ui_logo.png" alt="Test TBD" width="402" height="105"></h1>
+  <form id="loginForm" class="field">
+    <input id="liUser" placeholder="Username" autocomplete="username" aria-label="Username" required>
+    <input id="liPass" type="password" placeholder="Password" autocomplete="current-password" aria-label="Password" required>
+    <div id="liCaptcha"></div>
+    <button class="go" type="submit">Log in</button>
+    <button class="linkbtn" type="button" id="toSignup">Create a new account</button>
+  </form>
+  <form id="signupForm" class="field" hidden>
+    <input id="suUser" placeholder="Username" maxlength="16" autocomplete="username" aria-label="Username" required>
+    <input id="suEmail" type="email" placeholder="Email" autocomplete="email" aria-label="Email" required>
+    <input id="suPass" type="password" placeholder="Password (8+ characters)" autocomplete="new-password" aria-label="Password" required>
+    <div id="suCaptcha"></div>
+    <button class="go" type="submit">Create account</button>
+    <button class="linkbtn" type="button" id="toLogin">I already have an account</button>
+  </form>
+  <div class="msg" id="loginMsg" role="alert"></div>
+</section>
+
+<section id="screen-menu" class="screen scene bright" hidden>
+  <div class="topbar">
+    <div class="who panel"><b id="mName"></b><div><img class="ico pix" src="assets/icon_level.png" alt="">Level <b id="mLv"></b></div><div><span class="xp"><i id="mXpFill"></i></span> <span id="mXp"></span></div></div>
+    <div class="purse panel"><img class="ico pix" src="assets/icon_gold.png" alt="">Gold <b id="mGold"></b></div>
+  </div>
+  <h1 class="logo"><img class="pix" src="assets/ui_logo.png" alt="Test TBD" width="402" height="105"></h1>
+  <div class="menuBtns panel">
+    <div id="resumeBox" class="resumebox" hidden><button class="go" id="resumeRunBtn">Resume run</button><button class="linkbtn" id="resumeDrop">Give it up</button></div>
+    <button class="go" data-nav="levels"><img class="ico pix" src="assets/icon_play.png" alt="">Play solo</button>
+    <div class="menuRow"><button id="lobbyCreateBtn"><img class="ico pix" src="assets/icon_lobby.png" alt="">Create lobby</button><button id="lobbyJoinBtn"><img class="ico pix" src="assets/icon_join.png" alt="">Join lobby</button></div>
+    <button data-nav="heroes"><img class="ico pix" src="assets/icon_heroes.png" alt="">Heroes</button>
+    <button data-nav="inventory"><img class="ico pix" src="assets/icon_inventory.png" alt="">Inventory</button>
+    <button data-nav="talents" id="talentsBtn"><img class="ico pix" src="assets/icon_talents.png" alt=""><span id="talentsLbl">Talents</span></button>
+    <button data-nav="leaderboard"><img class="ico pix" src="assets/icon_leaderboard.png" alt="">Leaderboard</button>
+    <button data-nav="settings"><img class="ico pix" src="assets/icon_settings.png" alt="">Settings</button>
+    <button id="logoutBtn"><img class="ico pix" src="assets/icon_logout.png" alt="">Log out</button>
+  </div>
+  <div class="version" id="mVersion"></div>
+</section>
+
+<section id="screen-levels" class="screen scene" hidden>
+  <div id="lvChoose" class="lvstep">
+    <h1>Choose a level</h1>
+    <div class="zones" id="lvZones"></div>
+    <div class="levels" id="lvList"></div>
+  </div>
+  <div id="lvPick" class="lvstep" hidden>
+    <h1 id="lvPickTitle">Choose your heroes</h1>
+    <p class="muted">Bring up to three heroes (<b id="lvCount"></b>). Each one is placed once, for 150 gold (you start a match with 150).</p>
+    <div class="hgrid" id="lvHeroes"></div>
+    <button class="go big" id="lvStart">Start</button>
+  </div>
+  <p class="msg" id="lvMsg"></p>
+  <button id="lvBack">Back</button>
+</section>
+
+<section id="screen-lobby" class="screen scene" hidden>
+  <!-- Create: public or private (with a password), and the level. -->
+  <div id="lbyCreate" class="lvstep" hidden>
+    <h1>Create a lobby</h1>
+    <div class="field">
+      <div class="tabs"><button id="lbyPublic" class="on">Public</button><button id="lbyPrivate">Private</button></div>
+      <input id="lbyPass" type="password" placeholder="Password for your lobby" maxlength="32" autocomplete="new-password" hidden>
+      <label class="fieldrow">Level <select id="lbyStage"></select></label>
+      <button class="go" id="lbyCreateGo">Create lobby</button>
+    </div>
+  </div>
+  <!-- Join: by name, or from the list of open lobbies. -->
+  <div id="lbyJoin" class="lvstep" hidden>
+    <h1>Join a lobby</h1>
+    <div class="joinrow"><input id="lbyName" placeholder="Lobby name" maxlength="5" autocomplete="off" spellcheck="false"><button class="go" id="lbyJoinGo">Join</button></div>
+    <div class="list lobbylist"><ol id="lbyList"></ol></div>
+    <button class="linkbtn" id="lbyRefresh">Refresh</button>
+  </div>
+  <!-- A private lobby asks for its password. -->
+  <div id="lbyAsk" class="lvstep" hidden>
+    <h1 id="lbyAskTitle">Private lobby</h1>
+    <div class="field"><input id="lbyAskPass" type="password" placeholder="Password" maxlength="32" autocomplete="off"><button class="go" id="lbyAskGo">Join</button></div>
+  </div>
+  <!-- In a lobby: the 4 slots, the level, and Start for the host. -->
+  <div id="lbyRoom" class="lvstep" hidden>
+    <h1>Lobby <span id="lbyCode" class="lobbycode"></span> <button class="linkbtn" id="lbyCopy" title="Copy the lobby name">Copy</button></h1>
+    <p class="muted" id="lbyInfo"></p>
+    <ol class="slots" id="lbySlots"></ol>
+    <div class="lbyhost" id="lbyHostCtl" hidden><label class="fieldrow">Level <select id="lbyRoomStage"></select></label><button class="go big" id="lbyStart">Start match</button></div>
+    <p class="muted" id="lbyWait"></p>
+    <div class="lbyheroes"><span class="muted">Your heroes: <b id="lbyMine"></b></span> <button class="linkbtn" id="lbyChange">Change</button></div>
+    <div class="hgrid" id="lbyHeroes" hidden></div>
+  </div>
+  <p class="msg" id="lbyMsg"></p>
+  <button id="lbyBack">Back</button>
+</section>
+
+<section id="screen-heroes" class="screen scene" hidden>
+  <div class="topbar"><button id="hrBack">Back</button><span class="muted" id="hrMsg"></span><span></span></div>
+  <h1 id="hrTitle">Heroes</h1>
+  <div id="hrList">
+    <p class="muted">Click a hero to see its stats, gear and evolutions. You choose who to bring after picking a level.</p>
+    <div class="hgrid" id="hrGrid"></div>
+  </div>
+  <div id="hrPage" class="hpage" hidden>
+    <div class="tabs" id="hrTabs"><button data-tab="info">Information</button><button data-tab="evo">Evolutions</button></div>
+    <div id="hrBody" class="hbody"></div>
+  </div>
+</section>
+
+<section id="screen-inventory" class="screen scene" hidden>
+  <div class="topbar"><button id="invBack">Back</button><div>Items <b id="invCount"></b></div><span class="muted" id="invMsg"></span></div>
+  <h1>Inventory</h1>
+  <p class="muted" id="invEmpty">No items yet. Every win drops one, every boss you defeat drops one, and losses can too.</p>
+  <div class="invgrid" id="invGrid"></div>
+  <div class="invsell" id="invSell"></div>
+  <small class="muted">Hover an item to see what it does. Equip items on each hero's page (Heroes). Click one to sell it for gold.</small>
+</section>
+
+<section id="screen-leaderboard" class="screen scene" hidden>
+  <h1>Leaderboard</h1>
+  <div class="tabs" id="lbTabs" role="tablist"><button data-players="1" class="on">Solo</button><button data-players="2">2 players</button><button data-players="3">3 players</button><button data-players="4">4 players</button></div>
+  <div class="list"><ol id="lbList"></ol></div>
+  <button id="lbBack">Back</button>
+</section>
+
+<section id="screen-settings" class="screen scene" hidden>
+  <h1>Settings</h1>
+  <p class="muted">Nothing here yet.</p>
+  <button id="setBack">Back</button>
+</section>
+
+<section id="screen-talents" class="screen scene" hidden>
+  <div class="topbar">
+    <button id="tlBack">Back</button>
+    <div>Points available: <b id="tlPoints">0</b> <span class="muted" id="tlSave"></span></div>
+    <button id="tlReset">Respec</button>
+  </div>
+  <div class="tabs" id="tlTabs"></div>
+  <div class="treebox"><svg id="tlSvg" viewBox="-880 -880 1760 1760" role="group" aria-label="Talent tree"></svg>
+    <div class="tlcam"><button id="tlZoomIn" aria-label="Zoom in">+</button><button id="tlZoomOut" aria-label="Zoom out">−</button><button id="tlFit">Fit</button></div>
+    <small class="tlhint muted">Scroll to zoom, drag to move. Click a far node to take the whole path to it.</small></div>
+</section>
+
+<section id="screen-play" class="screen play" hidden>
+  <canvas id="c" aria-label="Game board. Click a tile to place the chosen hero; drag to move the map; scroll to zoom."></canvas>
+  <div class="hud-layer">
+    <!-- Top middle: level, wave and lives. -->
+    <div id="hud" class="glass">
+      <span class="stat"><small><img class="ico pix" src="assets/icon_level.png" alt="">Level</small><b id="stage"></b></span>
+      <span class="stat"><small><img class="ico pix" src="assets/icon_wave.png" alt="">Wave</small><b id="wave"></b></span>
+      <span class="stat"><small><img class="ico pix" src="assets/icon_lives.png" alt="">Lives</small><b id="lives"></b></span>
+    </div>
+    <!-- Co-op: everyone in the match, their colour, gold and whether they are ready. -->
+    <div id="coopBar" class="glass" hidden></div>
+    <div id="netBanner" class="glass" hidden></div>
+    <!-- Left middle: the relics you own, one under the other. -->
+    <div id="relics" class="glass" hidden></div>
+    <!-- Top right: Menu (pause), with the selected hero's details under it. -->
+    <div id="hudTopRight">
+      <button id="menuBtn">Menu</button>
+      <span id="menuConfirm" class="glass" hidden><span class="q" id="quitQ">Quit this match?</span><button id="quitYes" class="danger">Quit</button><button id="resumeBtn" class="go">Resume</button></span>
+    </div>
+    <div id="heroPanel" class="glass" hidden><div id="inspect"></div></div>
+    <!-- Bottom right: the damage meter. -->
+    <div id="meterPanel" class="glass"><button class="ph" id="meterToggle" aria-expanded="true">Damage meter</button><div id="meter"></div></div>
+    <div id="hudCam">
+      <button id="camIn" aria-label="Zoom in" title="Zoom in (+)">+</button>
+      <button id="camOut" aria-label="Zoom out" title="Zoom out (−)">−</button>
+      <button id="camFit" title="Fit the map to the screen (F)">Fit</button>
+    </div>
+    <!-- Bottom: gold, heroes, Relic, then Start wave with Auto-start built in, and Speed beside it. -->
+    <div id="hudBottom" class="glass">
+      <div class="goldbox"><small><img class="ico pix" src="assets/icon_gold.png" alt="">Gold</small><b id="gold"></b><small id="interest" class="interest" hidden></small></div>
+      <div class="heroes" id="tbtns"></div>
+      <div class="actions">
+        <button id="relic" class="relic">Relic</button>
+        <div class="waverow">
+          <div class="split">
+            <button id="go" class="go big" title="Start the next wave (Enter)">Start wave</button>
+            <button id="auto" class="autobtn" aria-pressed="false" aria-label="Auto-start">AUTO</button>
+          </div>
+          <button id="spd" class="spdbtn" aria-label="Game speed">1x</button>
+        </div>
+      </div>
+    </div>
+    <div id="pauseBanner" class="glass" hidden>Paused</div>
+  </div>
+  <div class="overlay" id="pick" hidden>
+    <h2>Choose a relic</h2>
+    <div class="choices" id="choices"></div>
+    <div class="pickbar"><button id="reroll">Reroll all</button></div>
+    <div class="muted" id="pickOdds"></div>
+    <label class="pickopt" id="playOnPickRow"><input type="checkbox" id="playOnPick"> Keep playing while choosing</label>
+  </div>
+  <div class="overlay" id="evoPick" hidden>
+    <h2 id="evoTitle">Evolve</h2>
+    <div class="choices" id="evoChoices"></div>
+    <div class="pickbar"><button id="evoCancel">Cancel</button><span class="muted" id="evoGold"></span></div>
+    <div class="muted">The game is paused while you choose.</div>
+  </div>
+  <div class="overlay" id="over" hidden>
+    <h2 id="overTitle">The gate has fallen</h2>
+    <p id="overText"></p>
+    <p class="muted" id="subMsg"></p>
+    <button class="go" id="overNext" hidden>Next level</button>
+    <button id="newRun">Retry level</button>
+    <button id="overMenu">Back to menu</button>
+  </div>
+</section>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

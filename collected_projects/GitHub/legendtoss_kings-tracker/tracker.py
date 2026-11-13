@@ -1,0 +1,3657 @@
+#!/usr/bin/env python3
+"""
+King's Resort Rozvadov - cash game tracker
+==========================================
+Runs on GitHub Actions about every 10 minutes. Each run:
+  1. reads the running cash tables from King's own data feed (the one their live page uses);
+     if that ever fails, it opens the live page in a headless browser and reads it like a visitor,
+  2. also reads King's tournament clocks, to see how many tournament players are in action,
+  3. adds one line to data/YYYY-MM.csv (Czech local time),
+  4. rebuilds README.md with statistics per game and a cash-vs-tournament comparison,
+  5. also reads Card Casino Šamorín's live list (data/cardcasino/ + CARD_CASINO.md), Grand Casino
+     Aš's cash games and tournaments (data/grandcasinoas/ + GRAND_CASINO_AS.md) and Banco Casino
+     Bratislava's website (data/banco/ + BANCO.md), King's Casino Prague from the same King's feed
+     (data/kings-prague/ + KINGS_PRAGUE.md), plus Olympic Park Tallinn, Olympic Voodoo Riga and
+     Olympic Casino Vilnius from OlyBet's poker site (every 30 minutes). Those are kept fully
+     separate, so a problem with their websites can never affect the King's data,
+  6. marks festival weeks (calendar.csv), the tournament schedule (hendonmob.txt, a copied Hendon
+     Mob page) and public holidays in the players' home countries, so the statistics can show
+     normal days separately from festivals and holidays,
+  7. puts the Omaha games of all rooms side by side on README.md (right now, and on each evening
+     of the week), with a health table showing which rooms are being read fine.
+
+Games are named the way the poker room's own system names them (NLH, PLO5, ...), so different
+games are never mixed together. If checks keep failing, the run reports an error and GitHub
+emails you (after about an hour, then once a day). Nothing here needs editing.
+"""
+
+import base64
+import csv
+import gzip
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections import Counter, defaultdict
+from functools import lru_cache
+from html import unescape
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+# ---------------------------------------------------------------- settings
+
+VERSION = "v37"
+
+PAGE_URL = os.environ.get("KINGS_URL", "https://kings-resort.com/poker/live")
+FEED_URL = os.environ.get("KINGS_FEED_URL", "https://admin.kings-resort.com/zeus/?data=cash_games_by_venue")
+CLOCKS_URL = os.environ.get("KINGS_CLOCKS_URL", "https://admin.kings-resort.com/zeus/?data=poker_clocks&venue=1")
+VENUE = "1"                     # Rozvadov's number in the feed (Prague has another one)
+TZ = ZoneInfo("Europe/Prague")  # Rozvadov time = Warsaw time
+ALERT_AFTER = 6                 # failed checks in a row before GitHub emails you (about 1 hour)
+
+DATA_DIR = Path("data")
+MONTH_FILES = "[0-9][0-9][0-9][0-9]-[0-9][0-9].csv"  # King's data: one file per month, e.g. data/2026-10.csv
+SITE_FIELDS = ["time", "weekday", "hour", "status", "tables", "players", "games", "cash_text", "tournament_text"]
+# Slovak rooms read from their web pages: (folder name, display name, page address, results page)
+# Slovak rooms read from their websites with a browser. "reader" says where the list is on the page.
+SITES = (
+    {"key": "banco", "name": "Banco Casino Bratislava", "url": os.environ.get("BANCO_URL", "https://bancocasino.sk/ba/en"),
+     "page": Path("BANCO.md"), "age_button": "Confirm", "reader": "banco-popup"},
+)
+# Card Casino Šamorín: its page loads the live list from a small file, which is read directly.
+# The page itself (in a browser) is only the backup if that ever fails.
+CARD_SITE = {"key": "cardcasino", "name": "Card Casino Šamorín",
+             "url": os.environ.get("CARD_URL", "https://www.cardcasino.sk/en/cashgames/"),
+             "page": Path("CARD_CASINO.md"), "age_button": "I am over 18 years old", "reader": "section"}
+CARD_FEED_URL = os.environ.get("CARD_FEED_URL", "https://www.cardcasino.sk/ajax/cashgames.php?lang=EN")
+CARD_DIR = DATA_DIR / "cardcasino"
+CARD_TRIES = (1, 2, 3)  # its site misses about one request in six (timeouts), mostly answering the next one
+CARD_FIELDS = ["time", "weekday", "hour", "status", "source", "tables", "players", "games", "raw"]
+CARD_SOURCES = {"feed": "live list", "page table": "page, via browser"}
+# Grand Casino Aš: both pages are plain HTML. The tournament page is big (full schedule), so it's
+# read every 30 minutes rather than every 10, to go easy on their website.
+GAS_CASH_URL = os.environ.get("GAS_CASH_URL", "https://www.grandcasinoas.eu/en/poker/poker-live")
+GAS_TOURNEY_URL = os.environ.get("GAS_TOURNEY_URL", "https://www.grandcasinoas.eu/en/poker")
+GAS_DIR = DATA_DIR / "grandcasinoas"
+GAS_FIELDS = ["time", "weekday", "hour", "status", "tables", "waiting", "games",
+              "tourneys", "tourney_players", "tourney_details", "raw"]
+GAS_PAGE = Path("GRAND_CASINO_AS.md")
+# King's Casino Prague: its tables come in the same King's feed as Rozvadov's (so no extra visits), under another
+# venue number. That number is learnt from the feed and remembered in data/kings_venues.json; KINGS_PRAGUE_VENUE
+# can set it, should King's ever add a third casino. Prague's tournament clocks are read with the same number.
+PRAGUE_KEY = "kings-prague"
+PRAGUE_DIR = DATA_DIR / PRAGUE_KEY
+PRAGUE_PAGE = Path("KINGS_PRAGUE.md")
+PRAGUE_VENUE = os.environ.get("KINGS_PRAGUE_VENUE", "").strip()
+PRAGUE_CLOCKS_URL = os.environ.get("KINGS_PRAGUE_CLOCKS_URL",
+                                   "https://admin.kings-resort.com/zeus/?data=poker_clocks&venue={venue}")
+PRAGUE_FIELDS = ["time", "weekday", "hour", "status", "tables", "players", "games",
+                 "tourneys", "tourney_players", "tourney_list", "tourney_details"]
+VENUES_FILE = DATA_DIR / "kings_venues.json"
+PRAGUE_NOT_SEEN = "error: Prague's tables haven't appeared in King's feed yet"
+KINGS_FEED = {"data": None, "trusted": False}  # King's feed as read in this run (shared with the Prague check)
+# Olympic Casino rooms on OlyBet's poker site. That site has bot protection: the tracker only ever
+# makes ordinary page requests every 30 minutes, and if the site refuses one it records "blocked"
+# instead of trying to get around it.
+OLY_SITES = (
+    {"key": "olympic-tallinn", "name": "Olympic Park Casino Tallinn", "city": "Tallinn", "club": "olympic park",
+     "urls": [os.environ.get("OLY_EE_URL", "https://olybetpoker.com/ee/en/cash-games/")],
+     "home": os.environ.get("OLY_EE_HOME", "https://olybetpoker.com/ee/en/"), "page": Path("OLYMPIC_TALLINN.md")},
+    # Riga: club names are tried in this order, so the Voodoo room wins over any other Riga club on the list
+    {"key": "olympic-riga", "name": "Olympic Voodoo Casino Riga", "city": "Riga", "club": ("voodoo", "rīga", "riga"),
+     "urls": [os.environ.get("OLY_LV_URL", "https://olybetpoker.com/lv/en/cash-games/"), "https://olybetpoker.com/lv/cash-games/"],
+     "home": os.environ.get("OLY_LV_HOME", "https://olybetpoker.com/lv/"), "page": Path("OLYMPIC_RIGA.md")},
+    {"key": "olympic-vilnius", "name": "Olympic Casino Vilnius", "city": "Vilnius", "club": "vilni",
+     "urls": [os.environ.get("OLY_LT_URL", "https://olybetpoker.com/lt/en/cash-games/"), "https://olybetpoker.com/lt/cash-games/"],
+     "home": os.environ.get("OLY_LT_HOME", "https://olybetpoker.com/lt/"), "page": Path("OLYMPIC_VILNIUS.md")},
+)
+OLY_FIELDS = ["time", "weekday", "hour", "status", "club", "tables", "players", "waiting", "games", "listed",
+              "tournaments_text", "raw"]
+OLY_CLUBS_FILE = DATA_DIR / "olympic_clubs.json"  # remembers each site's club page address
+
+# GitHub stops a run after 10 minutes and then nothing gets saved, so once a run has taken this long
+# the slower extras (other rooms, browser backups) are skipped and King's data is saved in good time.
+RUN_BUDGET = 300  # seconds
+RUN = {"start": time.monotonic(), "timings": []}
+
+# Festivals, tournament schedule and public holidays (see "festivals, schedule and holidays" below)
+CALENDAR_FILE = Path("calendar.csv")          # festival / series / cash-game-event dates, edited by hand
+HENDONMOB_FILE = Path("hendonmob.txt")        # a copied Hendon Mob "upcoming events" page
+SCHEDULE_FILE = DATA_DIR / "schedule" / "events.csv"  # every event read from it so far (older ones are kept)
+SCHEDULE_FIELDS = ["room", "date", "end", "time", "kind", "game", "buyin", "title", "restricted"]
+PASTE_STATE = DATA_DIR / "schedule" / "paste.json"  # which copy of hendonmob.txt was read, and from when
+HOLIDAY_FILE = DATA_DIR / "holidays.json"     # worked out once a day
+SAMPLE_DIR = Path("debug/samples")            # a few raw feed records a day, to spot unused details
+FESTIVAL_TYPES = ("festival", "cash event")   # these days are kept apart from normal days in the stats
+ROOMS = {  # key: (name, page, the countries most players come from - their public holidays matter)
+    "kings": ("King's Rozvadov", "README.md", (("CZ", None, "Czechia"), ("DE", "BY", "Bavaria"))),
+    PRAGUE_KEY: ("King's Prague", PRAGUE_PAGE.name, (("CZ", None, "Czechia"), ("DE", None, "Germany"))),
+    "grandcasinoas": ("Grand Casino Aš", "GRAND_CASINO_AS.md",
+                      (("CZ", None, "Czechia"), ("DE", "BY", "Bavaria"), ("DE", "SN", "Saxony"))),
+    "cardcasino": ("Card Casino Šamorín", "CARD_CASINO.md",
+                   (("SK", None, "Slovakia"), ("AT", None, "Austria"), ("HU", None, "Hungary"))),
+    "banco": ("Banco Casino Bratislava", "BANCO.md",
+              (("SK", None, "Slovakia"), ("AT", None, "Austria"), ("HU", None, "Hungary"))),
+    "olympic-tallinn": ("Olympic Park Tallinn", "OLYMPIC_TALLINN.md", (("EE", None, "Estonia"), ("FI", None, "Finland"))),
+    "olympic-riga": ("Olympic Voodoo Riga", "OLYMPIC_RIGA.md", (("LV", None, "Latvia"), ("LT", None, "Lithuania"))),
+    "olympic-vilnius": ("Olympic Casino Vilnius", "OLYMPIC_VILNIUS.md",
+                        (("LT", None, "Lithuania"), ("LV", None, "Latvia"), ("PL", None, "Poland"))),
+}
+HM_ROOMS = (("King's Resort Live, Rozvadov", "kings"), ("Grand Casino Asch ( Aš ), Asch", "grandcasinoas"),
+            ("Card Casino Šamorín, Šamorín", "cardcasino"), ("Banco Casino, Bratislava", "banco"),
+            ("Olympic Park Casino, Tallinn", "olympic-tallinn"), ("Olympic Casino Vilnius, Vilnius", "olympic-vilnius"),
+            ("King's Casino Prague (Formerly Casino Atrium - Hilton Hotel), Prague", PRAGUE_KEY),
+            ("King's Casino Prague, Prague", PRAGUE_KEY),  # in case Hendon Mob drops the old name one day
+            ("Olympic Voodoo Casino, Riga", "olympic-riga"), ("Olympic Voodoo Casino Riga, Riga", "olympic-riga"))
+RETIRED_SITES = (("samorin", Path("SAMORIN.md")),)  # an earlier attempt via Banco's site, which had no live data
+# Tracking/advertising services skipped during browser visits. Exact domains on purpose: matching
+# just "google" would also block Google's code-library servers, which many sites need to work.
+TRACKER_DOMAINS = ("google-analytics.com", "googletagmanager.com", "doubleclick.net", "googleadservices.com",
+                   "googlesyndication.com", "facebook.net", "facebook.com", "hotjar.com", "clarity.ms",
+                   "bing.com", "tiktok.com", "instagram.com", "youtube.com", "ytimg.com", "twitch.tv", "smartlook.com")
+
+
+def is_tracker(host):
+    host = (host or "").lower()
+    return any(host == domain or host.endswith("." + domain) for domain in TRACKER_DOMAINS)
+README = Path("README.md")
+PROBLEM_FILE = Path("debug/last_problem.json")
+OLD_DEBUG_FILE = Path("debug/last_page.json")  # written by earlier versions
+
+FIELDS = ["time", "weekday", "hour", "status", "source", "tables", "players", "games",
+          "tourneys", "tourney_players", "tourney_list", "tourney_details", "page_text"]
+DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+      "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36")
+GAME_NAMES = {"NLH": "No-Limit Hold'em (NLH)", "PLO": "Pot-Limit Omaha (PLO)",
+              "PLO5": "5-card Pot-Limit Omaha (PLO5)", "PLO6": "6-card Pot-Limit Omaha (PLO6)"}
+SOURCES = {"feed": "data feed", "browser feed": "data feed, via browser", "page table": "page table, via browser"}
+
+
+# ---------------------------------------------------------------- understanding the data
+# Every table is stored as an "entry" like  NLH €2/4 7/8  (game, stakes, seated/seats),
+# sometimes followed by the room's status, e.g. [WAITING]. One check = entries joined by "; ".
+
+ENTRY_RE = re.compile(r"^(.+?) €([\d/.]+) (\d+)/(\d+)(?: \[[A-Z_]+\])?$")
+UNSAFE = re.compile(r"[^\w\s'’()+\-/.,:&]")
+STAKES_IN_NAME = re.compile(r"\d+(?:[.,]\d+)?(?:\s*[-/]\s*\d+(?:[.,]\d+)?)+")
+
+
+def clean(text, limit=40):
+    """Plain text that can't break the CSV or the README tables (no | ; [ ] < > ` * #)."""
+    return " ".join(UNSAFE.sub(" ", str(text or "")).split())[:limit]
+
+
+def shown(text, limit=80):
+    """Like clean(), but keeps € signs - for text that is only displayed, never parsed."""
+    return " ".join(re.sub(r"[^\w\s'’()+\-/.,:&€]", " ", str(text or "")).split())[:limit]
+
+
+def as_dict(value):
+    """The value if it's a dictionary, otherwise an empty one (for feeds that send something else now and then)."""
+    return value if isinstance(value, dict) else {}
+
+
+def as_int(value):
+    try:
+        return max(0, int(float(value)))
+    except (TypeError, ValueError, OverflowError):
+        return 0
+
+
+def norm_game(name):
+    """One spelling per game, also for data saved by older versions ('MIX NLH /PLO' -> 'MIX NLH/PLO')."""
+    return re.sub(r"\s*/\s*", "/", name).strip()
+
+
+def feed_game(t):
+    """The room's own name for a game, minus the stakes:
+    'NLH 2-4' -> 'NLH', 'PLO 5-5 5cards' -> 'PLO5', 'SD 25-50' -> 'SD (Short Deck)'."""
+    name = STAKES_IN_NAME.sub(" ", str((t.get("gameProfile") or {}).get("name") or ""))
+    name = re.sub(r"(?i)\bPLO\s*(\d)[\s-]*cards?\b",
+                  lambda m: "PLO" + ("" if m.group(1) == "4" else m.group(1)), name)
+    name = norm_game(clean(name))
+    gtype = clean((t.get("gameType") or {}).get("name"))
+    if name and len(name) <= 4 and name not in GAME_NAMES and gtype and gtype.lower() not in name.lower():
+        name = clean(f"{name} ({gtype})")  # spell out short codes
+    return name or gtype or "Game"
+
+
+def feed_stakes(t):
+    prof = t.get("gameProfile") or {}
+    m = re.search(r"\d+(?:[.,]\d+)?(?:\s*/\s*\d+(?:[.,]\d+)?)+", str(prof.get("blindsFormatted") or ""))
+    if m:
+        return re.sub(r"\s+", "", m.group(0)).replace(",", ".")
+    params = prof.get("params") or {}
+    sb, bb = params.get("smallBlind"), params.get("bigBlind")
+    if isinstance(sb, (int, float)) and isinstance(bb, (int, float)):
+        return f"{sb:g}/{bb:g}"
+    return ""
+
+
+def feed_entries(data, venue=VENUE):
+    """Entries for one casino's tables in the feed (Rozvadov unless another venue number is given),
+    or None if the feed doesn't look right."""
+    if not isinstance(data, list):
+        return None
+    entries = []
+    for t in data:
+        if not isinstance(t, dict) or str(t.get("venue")) != str(venue):
+            continue
+        stakes = feed_stakes(t)
+        if not stakes:
+            continue
+        entry = f"{feed_game(t)} €{stakes} {as_int(t.get('playerCount'))}/{as_int(t.get('seatCount'))}"
+        status = re.sub(r"[^A-Z_]", "", str(t.get("status") or "").upper())
+        entries.append(entry + (f" [{status}]" if status and status != "PLAYING" else ""))
+    return entries
+
+
+@lru_cache(maxsize=None)
+def parse_games(games):
+    """'NLH €2/4 8/8; PLO5 €5/5 7/8' -> (('NLH', '2/4', 8, 8), ('PLO5', '5/5', 7, 8))"""
+    tables = []
+    for entry in (games or "").split("; "):
+        m = ENTRY_RE.match(entry.strip())
+        if m:
+            tables.append((norm_game(m.group(1)), m.group(2), int(m.group(3)), int(m.group(4))))
+    return tuple(tables)
+
+
+# Tournaments in play are stored like  Daily Deepstack 40/62  (players still in / entries),
+# sometimes followed by the clock's status, e.g. [PAUSED].
+TOURNEY_RE = re.compile(r"^(.+?) (\d+)/(\d+)(?: \[[A-Z_]+\])?$")
+FINISHED = {"FINISHED", "ENDED", "CLOSED", "CANCELLED", "CANCELED", "COMPLETED"}
+LONG_PAUSE = timedelta(hours=2)  # a clock paused longer than this has stopped for the day
+
+
+def local_time(value):
+    """A time from a feed as Czech time without a zone (times given with a zone are converted first)."""
+    try:
+        t = datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+    return t.astimezone(TZ).replace(tzinfo=None) if t.tzinfo else t
+
+
+def paused_since(t):
+    """When the clock's current pause began (the earliest of nested pauses), or None."""
+    since, pause = None, t.get("activePause")
+    for _ in range(10):
+        if not isinstance(pause, dict):
+            break
+        start = local_time(pause.get("sinceTime"))
+        if start and (since is None or start < since):
+            since = start
+        pause = pause.get("previousPause")
+    return since
+
+
+def number(value):
+    try:
+        x = float(value)
+    except (TypeError, ValueError):
+        return None
+    return int(x) if x == int(x) else round(x, 2)
+
+
+def tourney_details(t, name, game, status, active):
+    """Everything useful King's clock shows about one tournament, as a small dictionary."""
+    level = as_dict(t.get("currentLevel"))
+    sb, bb, ante = number(level.get("sb")), number(level.get("bb")), number(level.get("ante"))
+    details = {"name": name, "game": game, "status": status or "RUNNING", "left": active,
+               "entries": as_int(t.get("totalEntries")), "buyin": number(t.get("entryValue")),
+               "fee": number(t.get("serviceFee")), "bounty": number(t.get("bountyValue")),
+               "prizepool": number(t.get("effectivePrizePool")), "currency": clean(t.get("currency"), 5),
+               "level": number(level.get("number")),
+               "blinds": f"{sb}/{bb}" + (f"/{ante}" if ante else "") if sb is not None and bb is not None else None,
+               "avg_stack": number(t.get("averageStack")), "start_stack": number(t.get("startingStack")),
+               "late_reg_open": bool(t.get("openRegistration")), "late_reg_until_level": number(t.get("lateRegistrationUntilLevel")),
+               "reentries": number(t.get("reEntryMaxCount")), "start": str(t.get("start") or "")[:16]}
+    return {k: v for k, v in details.items() if v not in (None, "")}
+
+
+def tournament_entries(data, now, with_details=False):
+    """Tournaments in play right now (started, not finished, players still in), or None if
+    the clock feed doesn't look right. Scheduled-but-not-started ones are left out.
+    with_details=True returns (entries, details) instead."""
+    if not isinstance(data, list):
+        return None
+    local_now = now.replace(tzinfo=None)
+    entries, all_details = [], []
+    for t in data:
+        if not isinstance(t, dict):
+            continue
+        status = re.sub(r"[^A-Z_]", "", str(t.get("status") or "").upper())
+        active = as_int(t.get("activePlayers"))
+        start = local_time(t.get("start"))
+        if status in FINISHED or active == 0 or (start and start > local_now):
+            continue
+        since = paused_since(t) if (status == "PAUSED" or t.get("isPaused")) else None
+        if since and local_now - since > LONG_PAUSE:
+            continue  # e.g. Day 1 finished and chips bagged: nobody is playing
+        name = clean(t.get("fullName") or t.get("name") or "Tournament", 60)
+        game = tourney_game(" ".join(str(t.get(k) or "") for k in ("fullName", "name", "tournamentName", "subName")))
+        entries.append(f"{name} {active}/{as_int(t.get('totalEntries'))}"
+                       + (f" [{status}]" if status and status != "RUNNING" else ""))
+        all_details.append(tourney_details(t, name, game, status, active))
+    return (entries, all_details) if with_details else entries
+
+
+OTHER_GAMES = re.compile(r"\bstud\b|\brazz\b|badugi|baducey|badacey|triple draw|lowball|\b2-7\b|sviten|drawmaha|"
+                         r"h\.?o\.?r\.?s\.?e|\b\d+[- ]?game\b|s\.o\.r\.b\.e\.t|t\.o\.r\.s\.e|torses|\bt\.o\.e\b|"
+                         r"h\.e\.t\.r\.o\.s|big bet mix|pickem|courchevel")
+
+
+def tourney_game(name):
+    """Which poker game a tournament is, read from its name: rooms put PLO/Omaha, Mix, Short Deck,
+    Pineapple etc. in the title of every non-Hold'em event, and everything else is No-Limit Hold'em.
+    'PLO mix' = several Omaha variants (PLO4/PLO5/PLO6); 'Mixed' = Omaha mixed with other games."""
+    n = " ".join(name.lower().replace("’", "'").split())
+    omaha = re.search(r"\bplo\d?\b|omaha|\bbig o\b", n)
+    holdem = re.search(r"hold'?em|\bnlh\b", n)
+    if OTHER_GAMES.search(n) or (omaha and holdem):
+        return "Mixed"
+    if re.search(r"dealer'?s choice", n):
+        return "PLO mix" if omaha else "Mixed"
+    if re.search(r"\bmix(ed)?\b", n) and not omaha:
+        return "Mixed"
+    if "pineapple" in n:
+        return "Pineapple"
+    if re.search(r"short ?deck|\b6\+|six plus", n):
+        return "Short Deck"
+    if not omaha:
+        return "NLH"
+    if re.search(r"\bbig o\b", n):
+        return "PLO5 Hi-Lo"
+    if re.search(r"hi[ -/]?lo|8 or better|\bo8\b|\bplo8\b", n):
+        return "PLO Hi-Lo"
+    sizes = set(re.findall(r"\bplo\s*([456])\b", n)) | set(re.findall(r"\b([56])[ -]?cards?\b", n))
+    for group in re.findall(r"\b[456](?:\s*[/-]\s*[456])+\b", n):
+        sizes |= set(re.findall(r"[456]", group))
+    if len(sizes) > 1 or re.search(r"\bmix\b", n):
+        return "PLO mix"
+    size = sizes.pop() if sizes else ""
+    return "PLO" + (size if size in ("5", "6") else "")
+
+
+def tourney_family(game):
+    return "PLO" if game.startswith("PLO") else "NLH" if game == "NLH" else "Other"
+
+
+def family(game):
+    """Cash game family: NLH, PLO (any Omaha) or Other. A game with both in its name ('NLH/PLO', 'MIX NLH/PLO') is a
+    mix, so Other; dealer's choice counts as Omaha only when its name says it's Omaha only ('PLO4/PLO5 DC').
+    The game code is found anywhere in the name ('SUNDAY CASH GAME NLH'). Until v36 'NLH/PLO' counted as NLH."""
+    name = str(game or "").upper()
+    omaha = bool(re.search(r"PLO|OMAHA|\bBIG O\b", name))
+    holdem = bool(re.search(r"NLH|HOLD", name))
+    if omaha and holdem:
+        return "Other"
+    if re.search(r"DEALER|\bDCH?\b|\bMIX", name) and not omaha:
+        return "Other"
+    return "PLO" if omaha else "NLH" if holdem else "Other"
+
+
+@lru_cache(maxsize=None)
+def parse_tourneys(text):
+    """'Daily Deepstack 40/62; Day 1 84/565 [PAUSED]' -> (('Daily Deepstack', 40, 62), ('Day 1', 84, 565))"""
+    found = []
+    for entry in (text or "").split("; "):
+        m = TOURNEY_RE.match(entry.strip())
+        if m:
+            found.append((m.group(1), int(m.group(2)), int(m.group(3))))
+    return tuple(found)
+
+
+# The page's own table, used only when the feed can't be read:
+#   NO LIMIT TEXAS HOLD'EM | € 2/4 | 7/8 PLAYERS
+BOX_START = "running cash games in rozvadov"
+BOX_ENDS = ("running cash games in", "cash game action", "twitch", "youtube")
+TABLE_RE = re.compile(r"([^|]*?)\s*\|\s*€\s*([\d/.,]+)\s*\|\s*(\d+)\s*/\s*(\d+)\s*players?", re.I)
+EMPTY_BOX = re.compile(r"waiting for more players|no (?:cash )?games", re.I)
+
+
+def cut_box(text):
+    """Text between 'Running Cash Games in Rozvadov' and the next section, lines joined by ' | '."""
+    low = text.lower()
+    a = low.find(BOX_START)
+    if a < 0:
+        return None
+    a += len(BOX_START)
+    end = min([i for i in (low.find(k, a) for k in BOX_ENDS) if i != -1] + [a + 4000])
+    lines = (ln.strip() for ln in re.split(r"[\n\t]+", text[a:end]))
+    return " | ".join(ln for ln in lines if ln)
+
+
+def short_game(name):
+    """Page names: 'NLH' / 'PLO5' for the two standard games; any other game keeps its own name."""
+    words = clean(name)
+    n = words.lower().replace("’", "'").replace("-", " ")
+    if re.fullmatch(r"no limit (texas )?hold'?em", n):
+        return "NLH"
+    m = re.fullmatch(r"pot limit omaha(?: (\d) cards?)?", n)
+    if m:
+        return "PLO" + ("" if m.group(1) in (None, "4") else m.group(1))
+    return " ".join(w[:1].upper() + w[1:] for w in words.lower().split()) or "Game"
+
+
+def box_entries(box):
+    """Entries from the page's table: [] if it says nothing is running, None if unreadable."""
+    rows = TABLE_RE.findall(box or "")
+    if rows:
+        return [f"{short_game(g)} €{s.replace(',', '.')} {a}/{b}" for g, s, a, b in rows]
+    return [] if not box or EMPTY_BOX.search(box) else None
+
+
+def strip_tags(fragment):
+    return " ".join(unescape(re.sub(r"<[^>]+>", " ", fragment or "")).split())
+
+
+def plo_digits(text):
+    """'PLO/PLO 5' -> 'PLO/PLO5': OlyBet writes the same game both ways, which split it in two in the stats."""
+    return re.sub(r"\bPLO\s+(\d)\b", r"PLO\1", text or "")
+
+
+def card_game(name):
+    """Card Casino's game names: 'NLH', 'PLO', 'PLO5'... anything else keeps its own name."""
+    n = clean(name).upper().replace(" ", "")
+    if n in ("NLH", "NL", "NLHE"):
+        return "NLH"
+    m = re.fullmatch(r"PLO(\d)?", n)
+    if m:
+        return "PLO" + ("" if m.group(1) in (None, "4") else m.group(1))
+    return norm_game(clean(name)) or "Game"
+
+
+CARD_STAKES_RE = re.compile(r"\d+(?:[.,]\d+)?(?:\s*/\s*\d+(?:[.,]\d+)?)+")
+
+
+def card_entry(cells):
+    """['NLH', '1/3 €', '8/8'] -> 'NLH €1/3 8/8', or None if the cells don't look like that."""
+    if len(cells) < 3:
+        return None
+    stakes = CARD_STAKES_RE.fullmatch(cells[1].replace("€", "").strip())
+    seats = re.fullmatch(r"(\d+)\s*/\s*(\d+)", cells[2].strip())
+    if not stakes or not seats or not re.search(r"[A-Za-z]", cells[0]):
+        return None
+    return f"{card_game(cells[0])} €{re.sub(r'\s+', '', stakes.group(0)).replace(',', '.')} {seats.group(1)}/{seats.group(2)}"
+
+
+CARD_BLOCK_RE = re.compile(r'<div[^>]*class="[^"]*\bcash-game\b[^"]*"[^>]*>(.*?)</div>', re.S | re.I)
+H4_RE = re.compile(r"<h4[^>]*>(.*?)</h4>", re.S | re.I)
+
+
+def card_entries(fragment):
+    """Entries from Card Casino's live list (a small piece of HTML): one per table.
+    [] if nothing is running, None if the list doesn't look the way it should."""
+    blocks = CARD_BLOCK_RE.findall(fragment or "")
+    if not blocks:  # only their own "no games" message means 0 tables - an empty answer is an error, not a zero
+        return [] if re.search(r"\bno (?:cash )?games?\b", strip_tags(fragment), re.I) else None
+    if all("no games" in strip_tags(block).lower() for block in blocks):
+        return []  # their list says "No games currently"
+    entries = [card_entry([strip_tags(c) for c in H4_RE.findall(block)]) for block in blocks]
+    return None if None in entries else entries
+
+
+def card_text_entries(text):
+    """The same list read from the page's text ('NLH | 1/3 € | 8/8 | PLO | ...')."""
+    tokens = [t.strip() for t in (text or "").split(" | ") if t.strip()]
+    entries, i = [], 0
+    while i + 2 < len(tokens):
+        entry = card_entry(tokens[i:i + 3])
+        if entry:
+            entries.append(entry)
+            i += 3
+        else:
+            i += 1
+    return entries
+
+
+# Grand Casino Aš cash games: a table of Game | Blinds | Buy-in | Status (Running / Waiting).
+# Saved per table as an entry like  NLH €1/2 [RUNNING]  (no player counts: the site doesn't show them).
+GAS_ENTRY_RE = re.compile(r"^(.+?)(?: €([\d/.]+))? \[([A-Z_]+)\]$")
+GAS_BLINDS_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*€?\s*[-–/]\s*(\d+(?:[.,]\d+)?)(?:\s*€?\s*[-–/]\s*(\d+(?:[.,]\d+)?))?")
+
+
+def gas_cash_entries(html):
+    """Entries from Grand Casino Aš's 'Current cash game' table; None if the table isn't there."""
+    start = (html or "").lower().find("current cash game")
+    if start < 0:
+        return [] if "no cash game table is open" in strip_tags(html).lower() else None
+    end = html.lower().find("</table>", start)
+    if end < 0:
+        return None
+    entries = []
+    for row in re.findall(r"<tr[^>]*>(.*?)</tr>", html[start:end], re.S | re.I):
+        cells = [strip_tags(c) for c in re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", row, re.S | re.I)]
+        if len(cells) < 4 or cells[0].lower() == "game":
+            continue
+        blinds = GAS_BLINDS_RE.search(cells[1])
+        stakes = "/".join(x.replace(",", ".") for x in blinds.groups() if x) if blinds else ""
+        status = re.sub(r"[^A-Z_]", "", cells[3].upper().replace(" ", "_")) or "UNKNOWN"
+        entries.append(f"{card_game(cells[0])}" + (f" €{stakes}" if stakes else "") + f" [{status}]")
+    return entries
+
+
+def parse_gas_games(games):
+    """'NLH €1/2 [RUNNING]; PLO/NLH [WAITING]' -> [('NLH', '1/2', 'RUNNING'), ('PLO/NLH', '', 'WAITING')]"""
+    found = []
+    for entry in (games or "").split("; "):
+        m = GAS_ENTRY_RE.match(entry.strip())
+        if m:
+            found.append((norm_game(m.group(1)), m.group(2) or "", m.group(3)))
+    return found
+
+
+# Grand Casino Aš 'Current Tournaments' box, as text: per tournament its name, then e.g.
+#   Start 16.10. 16:00 11:19 LVL 7 Level 2000/4000/4000 300 € Buy-In Closed Late Reg. 30 000 Starting Stack
+#   55 500 Average Stack 34 (47) Players € 100 000 Prizepool Next level 2500/5000/5000
+# (one not started yet shows 'Countdown Level Countdown' instead of the level). Each detail is read on its own, so
+# a tournament shown a little differently - e.g. during a break - is still counted.
+GAS_START_RE = re.compile(r"Start\s+(?P<date>(?P<day>\d{1,2})\.(?P<month>\d{1,2})\.)\s+"
+                          r"(?P<time>(?P<hh>\d{1,2}):(?P<mm>\d{2}))", re.I)
+GAS_NUMBER = r"(?<![\d/])(\d{1,3}(?: \d{3})*)"  # '30 000' - not the end of the blinds before it ('.../1500 70')
+GAS_FIELD_RES = {"level": re.compile(r"LVL\s+(\d+)\s+Level\s+(\d+(?:/\d+)+)"), "lvl": re.compile(r"LVL\s+(\d+)"),
+                 "buyin": re.compile(GAS_NUMBER + r"\s*€\s*Buy-In", re.I),
+                 "late": re.compile(r"(\S+)\s+Late Reg\.", re.I),
+                 "sstack": re.compile(GAS_NUMBER + r"\s+Starting Stack", re.I),
+                 "avg": re.compile(GAS_NUMBER + r"\s+Average Stack", re.I),
+                 "players": re.compile(r"(\d+)\s*\((\d+)\)\s*Players", re.I),
+                 "pool": re.compile(r"€\s*(\d{1,3}(?: \d{3})*)\s*Prizepool", re.I)}
+
+
+GAS_BREAK_RE = re.compile(r"\bBreak\s+Level\s+Break\b", re.I)
+
+
+def gas_start(m, now):
+    """A tournament's start ('16.10.' '16:00') as Czech time without a zone, in the year nearest to now."""
+    day, month = int(m.group("day")), int(m.group("month"))
+    year = now.year + (1 if month < now.month - 6 else -1 if month > now.month + 6 else 0)
+    try:
+        return datetime(year, month, day, int(m.group("hh")), int(m.group("mm")))
+    except ValueError:
+        return None
+
+
+def gas_tournaments(html, now, unread=None):
+    """Tournaments in play in Grand Casino Aš's 'Current Tournaments' box: (entries, details), or None if the box
+    isn't there or isn't laid out as expected. Every tournament is found by its 'Start dd.mm. hh:mm', so one shown
+    differently can't hide the next one, and one that has started but shows no level is counted as on a break
+    (until v35 it was left out then, so Aš's tournament players dipped at every break).
+    unread: a list that gets the text of such tournaments - kept in debug/ to see exactly how a break looks."""
+    text = strip_tags(html).replace("\xa0", " ")
+    low = text.lower()
+    a = low.find("current tournaments")
+    if a < 0:
+        return None
+    b = low.find("all tournaments", a)
+    section = text[a + len("current tournaments"): b if b > 0 else a + 20000]
+    starts = list(GAS_START_RE.finditer(section))
+    if not starts and GAS_FIELD_RES["players"].search(section):
+        return None  # tournaments listed, but not in a way this version understands
+    local_now = now.replace(tzinfo=None)
+    entries, details = [], []
+    for i, m in enumerate(starts):
+        before = section[starts[i - 1].end() if i else 0:m.start()]
+        cut = max((x.end() for x in re.finditer(r"Prizepool|Next level\s+\S+", before, re.I)), default=0)
+        name = clean(before[cut:], 60) or "Tournament"
+        body = section[m.start():starts[i + 1].start() if i + 1 < len(starts) else len(section)]
+        end = re.search(r"Prizepool", body, re.I)
+        body = body[:end.end()] if end else body  # not the next level's blinds that follow it
+        players = GAS_FIELD_RES["players"].search(body)
+        left = as_int(players.group(1)) if players else 0
+        start = gas_start(m, now)
+        level = GAS_FIELD_RES["level"].search(body)
+        page_break = bool(GAS_BREAK_RE.search(body))  # how the page shows a break (seen on 17 Oct)
+        on_break = page_break or bool(start and timedelta(minutes=2) <= local_now - start <= timedelta(hours=18))
+        if not (players and left and (level or on_break)):
+            continue  # not started yet (still counting down), long over, or nobody left
+        if not level and not page_break and unread is not None:
+            unread.append(shown(f"{name} {body}", 700))  # shown some other way: kept to check it's read right
+
+        def amount(key):
+            found = GAS_FIELD_RES[key].search(body)
+            return number(found.group(1).replace(" ", "")) if found else None
+        late, lvl = GAS_FIELD_RES["late"].search(body), GAS_FIELD_RES["lvl"].search(body)
+        d = {"name": name, "game": tourney_game(name), "status": "RUNNING" if level else "BREAK", "left": left,
+             "entries": as_int(players.group(2)), "buyin": amount("buyin"), "prizepool": amount("pool"), "currency": "EUR",
+             "level": number((level or lvl).group(1)) if (level or lvl) else None, "blinds": level.group(2) if level else None,
+             "avg_stack": amount("avg"), "start_stack": amount("sstack"),
+             "late_reg_open": late.group(1).lower() != "closed" if late else None, "start": f"{m.group('date')} {m.group('time')}"}
+        details.append({k: v for k, v in d.items() if v not in (None, "")})
+        entries.append(f"{name} {left}/{as_int(players.group(2))}" + ("" if level else " [BREAK]"))
+    return entries, details
+
+
+# OlyBet cash games: per club a table of Game | Blinds | Buy-in | Tables | Players | Open seats | Waiting,
+# read from the page text, e.g. "CLOSED Select NLH 1/3 Tables 0 €1/3 €200.00 0 0/0 (1 waiting) 0 1"
+OLY_CLUB_RE = re.compile(r'href="([^"]*cash-games/?\?club=(\d+))"[^>]*>(.*?)</a>', re.S | re.I)
+BLOCK_SIGNS = ("cf-chl", "just a moment", "attention required", "cf_chl_opt", "challenge-platform")
+OLY_STATUS_RE = re.compile(r'row-status-badge[^"]*"[^>]*>([^<]*)<', re.I)
+
+
+def oly_cell(chunk, cls):
+    """The text of one cell of an OlyBet table row, e.g. 'col-players' -> '9 /9 (3 waiting)'."""
+    m = re.search(r'class="' + cls + r'"[^>]*>(.*?)</div>', chunk, re.S)
+    return " ".join(strip_tags(m.group(1)).split()) if m else ""
+
+
+def oly_attr(chunk, name):
+    m = re.search(name + r'="([^"]*)"', chunk)
+    return unescape(m.group(1)).strip() if m else ""
+
+
+def oly_cash_rows(html):
+    """Every game listed for the club shown on an OlyBet cash games page. Each game is one row of the
+    page's table, with its status (OPENED / CLOSED / WAITING TO START), blinds (written '€1/€3' or
+    '€1/2€'), buy-in, tables, players/seats ('9 /9'), open seats and waiting list.
+    [] if the table is there but lists no games; None if it can't be read (never a guessed zero)."""
+    body = (html or "").split('id="cash-games-row-template"')[0]  # an empty row the page keeps for its own updates
+    if "table-header-row" not in body and "table-data-row" not in body:
+        return None
+    rows = []
+    for chunk in body.split('class="table-data-row"')[1:]:
+        name = oly_attr(chunk, "data-game-name") or oly_cell(chunk, "col-game")
+        if not name:
+            continue
+        stakes = "/".join(re.findall(r"\d+(?:[.,]\d+)?", oly_attr(chunk, "data-blinds") or oly_cell(chunk, "col-blinds")))
+        players = re.search(r"(\d+)\s*/\s*(\d+)", oly_cell(chunk, "col-players"))
+        if not stakes or not players:
+            return None  # a row has changed shape: better an error than a wrong number
+        status = OLY_STATUS_RE.search(chunk)
+        name = plo_digits(STAKES_IN_NAME.sub(" ", name))
+        rows.append({"game": card_game(name), "stakes": stakes.replace(",", "."),
+                     "buyin": number(re.sub(r"[^\d.]", "", oly_attr(chunk, "data-buyin") or oly_cell(chunk, "col-buyin"))),
+                     "tables": as_int(oly_cell(chunk, "col-tables")), "players": as_int(players.group(1)),
+                     "seats": as_int(players.group(2)), "open": as_int(oly_cell(chunk, "col-seats")),
+                     "waiting": as_int(oly_cell(chunk, "col-waiting")),
+                     "status": " ".join((status.group(1) if status else "").split()).upper()})
+    return rows
+
+
+def oly_summary(rows):
+    """Totals and per-table entries for one OlyBet check. A game counts as running when it has a table
+    with players at it (or is marked OPENED); a table still waiting to start is marked [WAITING].
+    Waiting lists are counted for every game, running or not - they show demand."""
+    running = [r for r in rows if r["tables"] > 0 and (r["players"] > 0 or "OPEN" in r["status"])]
+    entries = []
+    for r in running:  # one entry per table; the site gives totals per game, so they're shared out evenly
+        players, seats = divmod(r["players"], r["tables"]), divmod(r["seats"], r["tables"])
+        mark = " [WAITING]" if "WAIT" in r["status"] else ""
+        entries += [f"{r['game']} €{r['stakes']} {players[0] + (i < players[1])}/{seats[0] + (i < seats[1])}{mark}"
+                    for i in range(r["tables"])]
+    listed = "; ".join(f"{r['game']} €{r['stakes']} ({r['status'].lower() or 'listed'}): {count_text(r['tables'], 'table')}, "
+                       f"{r['players']}/{r['seats']} players, {r['waiting']} waiting" for r in rows)
+    return (sum(r["tables"] for r in running), sum(r["players"] for r in running), sum(r["waiting"] for r in rows),
+            entries, listed or "no games listed")
+
+
+def club_keys(site):
+    """The words a site's club name is found by, in order of preference."""
+    return (site["club"],) if isinstance(site["club"], str) else tuple(site["club"])
+
+
+def oly_find_club(links, base, keys):
+    """(page address, name) of the club on an OlyBet cash games page: the first word (in order) that a club's name
+    contains wins, so for Riga the Voodoo room is chosen over any other club with Riga in its name."""
+    for key in keys:
+        for link, _, name in links:
+            if key in strip_tags(name).lower():
+                return urllib.parse.urljoin(base, unescape(link)), strip_tags(name)
+    return None
+
+
+def oly_tournament_text(html, club):
+    """The 'Live' and 'Today' tournament lines on OlyBet's home page for one club (kept as text).
+    club: a word of the club's name, or several (any of them)."""
+    text = strip_tags(html)
+    low = text.lower()
+    a = low.find("tournaments", low.find("live cash games") if "live cash games" in low else 0)
+    if a < 0:
+        return ""
+    b = min([i for i in (low.find(k, a) for k in ("view more", "latest winners")) if i != -1] + [a + 4000])
+    section = text[a:b]
+    lines = re.split(r"(?=\b\d{1,2}:\d{2}\b)", section)
+    keys = (club,) if isinstance(club, str) else tuple(club)
+    keep = [ln.strip() for ln in lines[1:] if any(k in ln.lower() for k in keys)] or [ln.strip() for ln in lines[1:]]
+    head = lines[0]
+    live = "live" if re.search(r"\blive\b", head, re.I) else ""
+    return shown(" | ".join(([live] if live else []) + keep), 1500)
+
+
+# ---------------------------------------------------------------- reading King's
+
+def fetch_feed(url=None):
+    """King's own data (cash games by default): the small JSON files their live page loads."""
+    request = urllib.request.Request(url or FEED_URL, headers={
+        "User-Agent": UA, "Accept": "application/json, text/plain, */*",
+        "Origin": "https://kings-resort.com", "Referer": "https://kings-resort.com/"})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def short_on_time():
+    """True once this run has used its time budget (see RUN_BUDGET)."""
+    return time.monotonic() - RUN["start"] > RUN_BUDGET
+
+
+def timed(label, func, *args):
+    """Runs one check and notes how long it took (printed at the end, to spot slow sites in GitHub's log)."""
+    start = time.monotonic()
+    try:
+        return func(*args)
+    finally:
+        RUN["timings"].append(f"{label} {time.monotonic() - start:.0f}s")
+
+
+BANCO_NOW_PLAYING_URL = os.environ.get("BANCO_NOW_PLAYING_URL", "https://bancocasino.sk/ba/getNowPlaying")
+BANCO_API_URL = os.environ.get("BANCO_API_URL", "https://bancocasino.sk/ba/kholdem/apiCall/")
+BANCO_DIRECT_SINCE = "2026-10-13 11:40"  # first direct read; before this, the tracker couldn't see Banco's cash list
+
+
+def post_form(url, fields, referer, timeout=20):
+    """A form sent the way a casino's own page sends it (for Banco's poker system)."""
+    request = urllib.request.Request(url, data=urllib.parse.urlencode(fields).encode(), headers={
+        "User-Agent": UA, "Accept": "application/json, text/javascript, */*; q=0.01", "X-Requested-With": "XMLHttpRequest",
+        "Referer": referer, "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8", "Accept-Encoding": "gzip"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        data = response.read()
+        if response.headers.get("Content-Encoding", "").lower() == "gzip":
+            data = gzip.decompress(data)
+        return data.decode("utf-8", errors="replace")
+
+
+BANCO_ROOM = "Bratislava"  # Banco's list also shows its Košice casino; Bratislava is the room tracked
+BANCO_NONE = re.compile(r"nehraj|žiadne cash|no cash games", re.I)  # its "no cash games right now" message
+
+
+def banco_game(text, room, buyin, players):
+    """One table of Banco's list: 'PLO 4/5c 2/2€' -> PLO 4/5 at €2/2 (game names made to match the others)."""
+    m = re.match(r"^(.*?)\s*(\d+(?:[.,]\d+)?/\d+(?:[.,]\d+)?)\s*€?\s*$", " ".join(unescape(text).split()))
+    if not m:
+        return None
+    name = re.sub(r"(\d)c\b", r"\1", m.group(1).strip(), flags=re.I)  # '4/5c' (cards) -> '4/5'
+    name = "Dealer's Choice" if name.upper() in ("DCH", "DC") else card_game(name)
+    return {"room": room, "game": name, "stakes": m.group(2).replace(",", "."), "buyin": as_int(re.sub(r"\D", "", buyin or "")),
+            "players": as_int(re.sub(r"\D", "", players or ""))}
+
+
+def banco_games(fragment):
+    """Every table in Banco's list: each room's name, then one 'game-info' block per table with its
+    game and stakes, buy-in and players (no seat count)."""
+    games, room = [], ""
+    for part in re.split(r"(<div class=['\"]title['\"]>.*?</div>)", fragment or "", flags=re.S):
+        title = re.match(r"<div class=['\"]title['\"]>(.*?)</div>", part, re.S)
+        if title:
+            room = " ".join(unescape(strip_tags(title.group(1))).split())
+            continue
+        for chunk in part.split('class="game-info"')[1:]:
+            cells = {name: re.search(r'class="' + name + r'[^"]*"[^>]*>(.*?)</(?:div|span)>', chunk, re.S)
+                     for name in ("game-type", "buy-in", "players")}
+            if cells["game-type"]:
+                game = banco_game(strip_tags(cells["game-type"].group(1)), room,
+                                  strip_tags(cells["buy-in"].group(1)) if cells["buy-in"] else "",
+                                  strip_tags(cells["players"].group(1)) if cells["players"] else "")
+                if game:
+                    games.append(game)
+    return games
+
+
+def banco_old_text_games(text):
+    """The same tables from a check saved by the first direct reader, which kept the list as text like
+    'Bratislava | PLO 4/5c 2/2€ | <!-- | --> 100€ | 6 | Košice | DCH 1/2€ | <!-- | --> 50€ | 4'."""
+    games, room = [], ""
+    for token in (t.strip() for t in (text or "").split(" | ")):
+        if re.search(r"\d+(?:[.,]\d+)?/\d+(?:[.,]\d+)?\s*€$", token):
+            game = banco_game(token, room, "", "")
+            if game:
+                games.append(game)
+        elif token.startswith("-->") and games:
+            games[-1]["buyin"] = as_int(re.sub(r"\D", "", token))
+        elif token.isdigit() and games:
+            games[-1]["players"] = int(token)
+        elif token and token not in ("<!--",) and not re.search(r"\d", token):
+            room = token
+    return games
+
+
+def banco_row_numbers(r):
+    """Tables, players and games for a check saved as text by the first direct reader (13 Oct 11:40 and 11:50)."""
+    tables, players, games, text = banco_summary(banco_old_text_games(r["cash_text"]))
+    return {"tables": tables, "players": players, "games": games, "cash_text": text}
+
+
+def banco_summary(games):
+    """(tables, players, entries for the stats, readable text) - the stats count the tracked room only."""
+    mine = [g for g in games if g["room"] == BANCO_ROOM]
+    entries = [f"{g['game']} €{g['stakes']} {g['players']}/0" for g in mine]
+    rooms = {}
+    for g in games:
+        rooms.setdefault(g["room"] or "?", []).append(f"{g['game']} €{g['stakes']} {g['players']} players"
+                                                       + (f" (buy-in €{g['buyin']})" if g["buyin"] else ""))
+    text = " · ".join(f"{room}: {', '.join(tables)}" for room, tables in rooms.items())
+    return len(mine), sum(g["players"] for g in mine), "; ".join(entries), text
+
+
+def banco_cash_text(fragment):
+    """Banco's 'now playing' list (the piece of HTML its page shows) as 'cell ; cell | next game'.
+    Header rows and its 'updated ...' line are left out, so an empty list gives ''."""
+    fragment = re.sub(r'<(\w+)[^>]*class="[^"]*\bupdated\b[^"]*"[^>]*>.*?</\1>', " ", fragment or "", flags=re.S | re.I)
+    rows = []
+    for tr in re.findall(r"<tr\b.*?</tr>", fragment, re.S | re.I):
+        cells = [" ".join(strip_tags(c).split()) for c in re.findall(r"<td\b.*?</td>", tr, re.S | re.I)]
+        if any(cells):
+            rows.append(" ; ".join(c for c in cells if c))
+    if rows or re.search(r"<tr\b", fragment, re.I):
+        return " | ".join(rows)
+    lines = re.sub(r"<(?:br|/div|/p|/li|/h\d)\b[^>]*>", "\n", fragment, flags=re.I)
+    return " | ".join(x for x in (" ".join(strip_tags(line).split()) for line in lines.splitlines()) if x)
+
+
+def banco_tournaments(referer):
+    """Today's running tournaments from Banco's poker system - the same two calls its own tournament
+    clock makes. Returns (text, details)."""
+    found = json.loads(post_form(BANCO_API_URL, {"endPoint": "event/search", "method": "POST", "data[status]": "running"}, referer))
+    if not isinstance(found, dict):
+        return "", {"search": str(found)[:300]}
+    parts, first = [], ""
+    for event in (found.get("results") or [])[:4]:
+        try:
+            e = json.loads(post_form(BANCO_API_URL, {"endPoint": f"event/{event.get('id')}", "method": "GET"}, referer))
+            text, current = banco_event_line(e, event.get("name"))
+            first = first or banco_event_extract(e, current)
+            parts.append(text)
+        except Exception as ex:
+            parts.append(f"tournament {event.get('id')}: details couldn't be read ({short_error(ex)})")
+    return "; ".join(parts), {"running": len(found.get("results") or []), "first": first}
+
+
+def banco_event_line(e, name=None):
+    """One running Banco tournament as text, plus its current level. Before the start, Banco's clock
+    counts down in its first level, which looks like a break (breaks have index 0 too), so that one is
+    shown as the start time."""
+    stats = as_dict(e.get("stats"))
+    levels = [as_dict(x) for x in e.get("levels")] if isinstance(e.get("levels"), list) else []
+    level_id = as_int(as_dict(as_dict(e.get("status")).get("level")).get("id"))
+    current = levels[level_id - 1] if 0 < level_id <= len(levels) else {}
+    details = as_dict(e.get("dailyDetails"))
+    text = str(details.get("fullname") or name or "tournament")
+    if stats.get("totalPlayers"):
+        text += f": {stats['totalPlayers']}/{stats.get('totalEntries', '?')} players"
+    if current.get("type") == 1:
+        text += f", level {current.get('index')}, blinds {current.get('smallBlind')}/{current.get('bigBlind')}"
+    elif level_id == 1:  # the countdown before the first level
+        start = str(details.get("startDate") or "")[11:16]
+        text += f", starts at {start}" if re.fullmatch(r"\d\d:\d\d", start) else ", not started yet"
+    elif current:
+        text += ", on a break"
+    fee = as_dict(as_dict(e.get("subscription")).get("buyin")).get("buyinFee")
+    text += f", buy-in €{fee}" if fee else ""
+    text += f", €{stats['guaranteedAmount']} GTD" if stats.get("guaranteedAmount") else ""
+    return text, current
+
+
+BANCO_BREAK_AS_START = re.compile(r"(\d+)/(\d+) players, starts at \d\d:\d\d")
+
+
+def banco_break_text(text):
+    """v30 showed breaks as 'starts at …'. Where players had already been knocked out it was a break."""
+    return BANCO_BREAK_AS_START.sub(lambda m: f"{m[1]}/{m[2]} players, on a break" if int(m[1]) < int(m[2]) else m[0],
+                                    text or "")
+
+
+def banco_event_extract(e, current):
+    """The parts of one Banco tournament its line is made from (status, numbers, current level), for debug."""
+    return json.dumps({"status": e.get("status"), "stats": e.get("stats"), "level": current,
+                       "levels": len(e.get("levels") or []), "dailyDetails": e.get("dailyDetails")},
+                      ensure_ascii=False, default=str)[:3000]
+
+
+def banco_direct(site):
+    """Banco's cash list and running tournaments read straight from their sources (no browser).
+    Raises if the cash list address doesn't answer with the list, so the browser backup takes over."""
+    fragment = fetch_text(BANCO_NOW_PLAYING_URL, site["url"], timeout=20)
+    if re.search(r"<html|<body", fragment, re.I):
+        raise ValueError("the cash list address answered with a whole page")
+    games = banco_games(fragment)
+    if games or "game-info" in fragment or not fragment.strip() or BANCO_NONE.search(strip_tags(fragment)):
+        tables, players, entries, cash = banco_summary(games)
+        stats = {"tables": tables, "players": players, "games": entries}
+    else:  # the list has changed shape: keep its text, leave the numbers out
+        cash, stats = banco_cash_text(fragment), {}
+    try:
+        tournaments, info = banco_tournaments(site["url"])
+    except Exception as e:
+        tournaments, info = "", {"error": short_error(e)}
+    details = {"source": "direct", "now_playing_html": fragment[:20000], "tournaments": info, "stats": stats}
+    if tournaments:  # its own entry, so debug/banco_page.json is saved again when a tournament first shows up
+        details["tournament_event"] = info.get("first", "")
+    if not fragment.strip():  # counted as no games; noted, so a saved copy shows whether that ever happens
+        details["empty_answer"] = True
+    return cash, tournaments, details
+
+
+def fetch_text(url, referer, timeout=30):
+    """A small piece of a casino's web page, fetched the way their page itself fetches it."""
+    request = urllib.request.Request(url, headers={
+        "User-Agent": UA, "Accept": "text/html, */*; q=0.01", "X-Requested-With": "XMLHttpRequest",
+        "Referer": referer, "Accept-Encoding": "gzip"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        data = response.read()
+        if response.headers.get("Content-Encoding", "").lower() == "gzip":
+            data = gzip.decompress(data)
+        return data.decode("utf-8", errors="replace")
+
+
+BOX_READY_JS = """() => {
+  const t = (document.body ? document.body.innerText : '').toLowerCase();
+  const a = t.indexOf('%s');
+  if (a < 0) return false;
+  const box = t.slice(a + %d, a + 4000).split('running cash games in')[0];
+  return !box.includes('loading');
+}""" % (BOX_START, len(BOX_START))
+
+BOX_HTML_JS = r"""() => {
+  const re = /running cash games in rozvadov/i;
+  const head = Array.from(document.querySelectorAll('body *')).find(
+    e => re.test(e.textContent || '') && !Array.from(e.children).some(c => re.test(c.textContent || '')));
+  if (!head) return null;
+  let box = head;
+  for (let i = 0; i < 4 && box.parentElement; i++) {
+    if (/running cash games in prague/i.test(box.parentElement.textContent || '')) break;
+    box = box.parentElement;
+  }
+  return box.outerHTML.slice(0, 60000);
+}"""
+
+
+def load_playwright():
+    """The browser tools, installed only when they're actually needed."""
+    try:
+        from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+    except ImportError:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "playwright"], check=True, timeout=180)
+        from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+    return sync_playwright, PWTimeout
+
+
+def open_browser(p):
+    try:
+        return p.chromium.launch(channel="chrome")  # GitHub's machines already have Chrome
+    except Exception:
+        subprocess.run([sys.executable, "-m", "playwright", "install", "--with-deps", "chromium"], check=True, timeout=240)
+        return p.chromium.launch()
+
+
+BLANK_GIF = base64.b64decode("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")
+
+
+def skip_extras(page):
+    """Don't download pictures, fonts, videos or tracking scripts: faster, and our checks don't
+    show up as visits in the casinos' website statistics. Pictures get a tiny blank stand-in
+    rather than an error, because some pages' scripts stop working when an image fails."""
+    def handle(route):
+        request = route.request
+        host = urllib.parse.urlparse(request.url).hostname or ""
+        if is_tracker(host):
+            return route.abort()
+        if request.resource_type == "image":
+            return route.fulfill(status=200, content_type="image/gif", body=BLANK_GIF)
+        if request.resource_type in ("media", "font"):
+            return route.fulfill(status=200, body=b"")
+        return route.continue_()
+    page.route("**/*", handle)
+
+
+def browser_check():
+    """Open the live page like a visitor (slow, so only used when the feed fails).
+    Returns (entries or None, source, box text, details for debugging)."""
+    sync_playwright, PWTimeout = load_playwright()
+
+    responses = []
+
+    def remember_feed(response):
+        if "cash_games" in response.url and len(responses) < 5:
+            responses.append(response)
+
+    with sync_playwright() as p:
+        browser = open_browser(p)
+        page = browser.new_page(user_agent=UA, locale="en-US", viewport={"width": 1366, "height": 900})
+        skip_extras(page)
+        page.on("response", remember_feed)
+        for attempt in (1, 2):
+            try:
+                page.goto(PAGE_URL, wait_until="domcontentloaded", timeout=60_000)
+                break
+            except Exception:
+                if attempt == 2:
+                    raise
+                page.wait_for_timeout(10_000)
+        loaded = True
+        try:
+            page.wait_for_function(BOX_READY_JS, timeout=45_000, polling=1000)
+        except PWTimeout:
+            loaded = False
+        page.wait_for_timeout(1_500)
+        text = page.inner_text("body")
+        box_html = page.evaluate(BOX_HTML_JS)
+        bodies = []
+        for response in responses:
+            try:
+                bodies.append(response.text())
+            except Exception:
+                pass
+        browser.close()
+
+    box = cut_box(text)
+    details = {"page_text_start": text[:4000], "box_html": box_html,
+               "feed_seen_by_page": [b[:20000] for b in bodies]}
+    for body in reversed(bodies):  # the feed as the page received it, newest first
+        try:
+            data = json.loads(body)
+            entries = feed_entries(data)
+        except ValueError:
+            continue
+        if entries:
+            KINGS_FEED.update(data=data, trusted=True)  # for the Prague check
+            return entries, "browser feed", box, details
+    if box is None or not loaded:
+        return None, "page table", box, details
+    return box_entries(box), "page table", box, details
+
+
+def page_section(text, start, ends, limit=3000):
+    """Text of one section of a page (from a heading to the next one), lines joined by ' | '."""
+    low = text.lower()
+    a = low.find(start)
+    if a < 0:
+        return None
+    a += len(start)
+    end = min([i for i in (low.find(k, a) for k in ends) if i != -1] + [a + limit])
+    lines = (ln.strip() for ln in re.split(r"[\n\t]+", text[a:end]))
+    return " | ".join(ln for ln in lines if ln)
+
+
+SECTION_HTML_JS = r"""(title) => {
+  const head = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5'))
+    .find(e => (e.textContent || '').trim().toLowerCase() === title);
+  const box = head && (head.closest('section') || head.parentElement);
+  return box ? box.outerHTML.slice(0, 20000) : null;
+}"""
+
+def browser_read(site):
+    """Open one site in the browser (the backup route for Card Casino)."""
+    sync_playwright, PWTimeout = load_playwright()
+    with sync_playwright() as p:
+        browser = open_browser(p)
+        try:
+            return read_site(browser, site, PWTimeout)
+        finally:
+            browser.close()
+
+
+def read_site(browser, site, PWTimeout):
+    """Card Casino's cash games page in the browser: the live list under its 'Cash games' heading.
+    Returns (list text or None, '', details for debugging)."""
+    responses = []
+
+    def remember(response):
+        host = urllib.parse.urlparse(response.url).hostname or ""
+        if response.request.resource_type in ("xhr", "fetch") and len(responses) < 10 and not is_tracker(host):
+            responses.append(response)
+
+    page = browser.new_page(user_agent=UA, locale="en-US", viewport={"width": 1366, "height": 900})
+    try:
+        skip_extras(page)
+        page.on("response", remember)
+        page.goto(site["url"], wait_until="domcontentloaded", timeout=60_000)
+        try:
+            page.get_by_text(site["age_button"], exact=True).first.click(timeout=3_000)  # the 18+ notice
+        except Exception:
+            pass
+        try:
+            page.wait_for_load_state("networkidle", timeout=20_000)
+        except PWTimeout:
+            pass
+        page.wait_for_timeout(2_000)
+        section_html = page.evaluate(SECTION_HTML_JS, "cash games")
+        text = page.inner_text("body")
+        bodies = []
+        for response in responses:
+            try:
+                bodies.append({"url": response.url, "status": response.status, "body": response.text()[:10000]})
+            except Exception:
+                pass
+    finally:
+        page.close()
+
+    details = {"page_text_start": text[:6000], "data_requests": bodies, "cash_section_html": section_html}
+    cash = page_section(text, "cash games", ("current tournaments",), 3000)
+    if cash is not None:  # drop the fixed "Game limits" link and rake note, keep the live list
+        cash = " | ".join(part for part in cash.split(" | ")
+                          if part.lower() != "game limits" and not part.lower().startswith("rake "))
+    return cash, "", details
+
+
+def short_error(e):
+    return clean(f"{type(e).__name__}: {(str(e).strip().splitlines() or [''])[0]}", 160)
+
+
+def empty_feed_confirmed(now):
+    """True when an empty feed can be taken at its word (no tables running). One check an hour still
+    double-checks on the page, so a feed that breaks quietly can't hide running tables for long."""
+    if now.minute < 10:
+        return False
+    try:
+        with (DATA_DIR / f"{now:%Y-%m}.csv").open(newline="", encoding="utf-8-sig") as fh:
+            recent = list(csv.DictReader(fh))[-14:]
+    except OSError:
+        return False
+    return trusted_empty(recent, now)
+
+
+def trusted_empty(recent, now):
+    """The rule for an empty feed, given the latest checks: the page itself showed no tables within the
+    last two hours, and no check since then has seen a table. (Until v28 a table that came and went
+    in between didn't count, so a feed that briefly showed nothing was recorded as 0 tables.)"""
+    pages = [i for i, r in enumerate(recent) if r["status"] == "ok" and r["source"] in ("page table", "browser feed")]
+    if not pages:
+        return False
+    last = recent[pages[-1]]
+    return (last["tables"] in ("0", "") and last["time"] >= f"{now - timedelta(hours=2):%Y-%m-%d %H:%M}"
+            and all(r["tables"] in ("0", "") for r in recent[pages[-1] + 1:]))
+
+
+UNCHECKED_EMPTY = "error: the feed showed no tables and the page wasn't re-checked"
+
+
+def unchecked_empties(rows):
+    """Rows (by position) where an empty feed was recorded as 0 tables although a table had been seen
+    since the page last showed none - the checks the current rule sends to the page first."""
+    found = []
+    for i, r in enumerate(rows):
+        if r["status"] == "ok" and r["source"] == "feed" and r["tables"] == "0":
+            if not trusted_empty(rows[max(0, i - 14):i], datetime.strptime(r["time"], "%Y-%m-%d %H:%M")):
+                found.append(i)
+    return found
+
+
+def check():
+    """Read the tables now. Returns (status, source, entries or None, page text, problem details)."""
+    problem = {}
+    KINGS_FEED.update(data=None, trusted=False)
+    for attempt in (1, 2):
+        try:
+            data = fetch_feed()
+            save_sample("kings_cash_feed", data, lambda t: str(t.get("venue")) == VENUE)
+            entries = feed_entries(data)
+        except Exception as e:
+            problem["feed"] = short_error(e)
+            time.sleep(5)
+            continue
+        # Prague's tables come in the same feed. It counts as working when it shows Rozvadov's tables, or when
+        # Rozvadov's empty answer is confirmed (here, or by the page below).
+        KINGS_FEED.update(data=data if isinstance(data, list) else None, trusted=bool(entries))
+        if entries:
+            return "ok", "feed", entries, "", None
+        if entries == [] and empty_feed_confirmed(datetime.now(TZ)):
+            KINGS_FEED["trusted"] = True
+            return "ok", "feed", [], "", None
+        problem["feed"] = "no Rozvadov tables in the feed" if entries == [] else "the feed had an unexpected format"
+        break  # an empty answer is double-checked on the page below
+    try:
+        entries, source, box, details = browser_check()
+    except Exception as e:
+        problem["browser"] = short_error(e)
+        return f"error: {problem['browser']}", "", None, "", problem
+    problem.update(details)
+    if entries is None:
+        return "error: couldn't read the tables on the page", source, None, box or "", problem
+    if entries == [] and KINGS_FEED["data"] is not None:
+        KINGS_FEED["trusted"] = True  # the page agrees there are no tables at Rozvadov: the feed was right
+    return "ok", source, entries, (box or "") if source == "page table" else "", problem
+
+
+def check_tournaments(now, were_running=False, url=None, sample="kings_clocks_feed"):
+    """(tournaments in play or None, their details, error text). Tournament info is extra: if it
+    can't be read, the cash check still counts and the tournament columns are just left empty.
+    were_running: tournaments were in play at the last check - if none are now, the clock feed is read
+    once more, because it occasionally leaves them out for a moment. url: another casino's clocks (Prague)."""
+    error = ""
+    for attempt in (1, 2):
+        try:
+            data = fetch_feed(url or CLOCKS_URL)
+            save_sample(sample, data)
+            result = tournament_entries(data, now, with_details=True)
+        except Exception as e:
+            error = short_error(e)
+            time.sleep(3)
+            continue
+        if result is None:
+            error = "the tournament feed had an unexpected format"
+            break
+        if attempt == 1 and were_running and not result[0]:
+            time.sleep(5)
+            continue
+        return result[0], result[1], ""
+    return None, [], error
+
+
+def feed_venues(data):
+    """How many tables each casino has in King's feed, by venue number: {'1': 12, '2': 7}."""
+    if not isinstance(data, list):
+        return {}
+    return dict(Counter(str(t.get("venue")) for t in data if isinstance(t, dict) and t.get("venue") not in (None, "")))
+
+
+def load_venues():
+    try:
+        seen = json.loads(VENUES_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {str(k): v for k, v in seen.items() if isinstance(v, dict)} if isinstance(seen, dict) else {}
+
+
+def remember_venues(counts, now):
+    """The venue numbers seen in King's feed so far (data/kings_venues.json): first and last seen, in how many
+    checks, and the most tables at once - which is how Prague's number is known even while it has no tables."""
+    seen = load_venues()
+    stamp = f"{now:%Y-%m-%d %H:%M}"
+    for venue, tables in counts.items():
+        item = seen.setdefault(venue, {"first": stamp, "checks": 0, "most_tables": 0})
+        item.update(last=stamp, checks=as_int(item.get("checks")) + 1, most_tables=max(as_int(item.get("most_tables")), tables))
+    if counts:
+        VENUES_FILE.parent.mkdir(parents=True, exist_ok=True)
+        VENUES_FILE.write_text(json.dumps(seen, indent=1, sort_keys=True), encoding="utf-8")
+    return seen
+
+
+def prague_venue(seen):
+    """Prague's number in King's feed: KINGS_PRAGUE_VENUE if set, otherwise the casino other than Rozvadov that the
+    feed has shown (the one seen in most checks, should there ever be more). None until the feed has shown it."""
+    if PRAGUE_VENUE:
+        return PRAGUE_VENUE
+    others = sorted((v for v in seen if v != VENUE), key=lambda v: (len(v), v))
+    return max(others, key=lambda v: as_int(seen[v].get("checks"))) if others else None
+
+
+def prague_reading(data, venue, trusted):
+    """(status, entries or None) for Prague from King's feed as read in this run. No Prague tables only counts as
+    'none running' when the feed was working this time (it showed Rozvadov's tables, or Rozvadov's empty answer was
+    confirmed) - a feed that came back empty by mistake is recorded as a problem, never as 0 tables."""
+    if not isinstance(data, list):
+        return "error: King's feed couldn't be read", None
+    if not venue:
+        return PRAGUE_NOT_SEEN, None
+    entries = feed_entries(data, venue)
+    if entries:
+        return "ok", entries
+    if trusted:
+        return "ok", []
+    return "error: King's feed came back empty and that couldn't be confirmed, so it wasn't counted as 0 tables", None
+
+
+def record_prague(now):
+    """One King's Casino Prague check, from the King's feed already read for Rozvadov (read again only if that
+    failed), plus Prague's tournament clocks. Saved to data/kings-prague/YYYY-MM.csv. Never raises."""
+    row = {"time": f"{now:%Y-%m-%d %H:%M}", "weekday": DAYS[now.weekday()], "hour": now.hour, "status": "", "tables": "",
+           "players": "", "games": "", "tourneys": "", "tourney_players": "", "tourney_list": "", "tourney_details": ""}
+    details = {}
+    try:
+        data, trusted = KINGS_FEED["data"], KINGS_FEED["trusted"]
+        if data is None:  # Rozvadov's check didn't get the feed: one more try, just for Prague
+            try:
+                data = fetch_feed()
+                trusted = bool(feed_entries(data))  # it shows Rozvadov's tables, so it's working
+            except Exception as e:
+                details["feed"] = short_error(e)
+        counts = feed_venues(data)
+        seen = remember_venues(counts, now) if counts else load_venues()
+        venue = prague_venue(seen)
+        if venue and counts.get(venue):
+            save_sample("kings_prague_feed", data, lambda t: str(t.get("venue")) == venue)
+        status, entries = prague_reading(data, venue, trusted)
+        row["status"] = status
+        if entries is not None:
+            row.update(tables=len(entries), players=sum(t[2] for t in parse_games("; ".join(entries))), games="; ".join(entries))
+        else:
+            details.update(venues_in_feed=counts, venues_seen=seen, feed_trusted=trusted)
+        if venue and not short_on_time():
+            previous = load_csv_rows(PRAGUE_DIR)[-1:]
+            tourneys, info, error = check_tournaments(now, bool(previous and as_int(previous[0].get("tourneys"))),
+                                                      PRAGUE_CLOCKS_URL.format(venue=venue), "kings_prague_clocks_feed")
+            if tourneys is not None:
+                row.update(tourneys=len(tourneys), tourney_players=sum(a for _, a, _ in parse_tourneys("; ".join(tourneys))),
+                           tourney_list="; ".join(tourneys),
+                           tourney_details=json.dumps(info, ensure_ascii=False, separators=(",", ":")) if tourneys else "")
+            elif error:
+                details["tournaments"] = error
+    except Exception as e:
+        row["status"] = f"error: {short_error(e)}"
+    try:
+        append_csv(PRAGUE_DIR, PRAGUE_FIELDS, now, row)
+        save_debug_copy(Path(f"debug/{PRAGUE_KEY}_feed.json"), now, row["status"], FEED_URL, details)
+        write_prague_page(now)
+    except Exception as e:
+        print(f"King's Prague could not be saved: {short_error(e)}")
+    return row
+
+
+def write_prague_page(now):
+    rows = load_csv_rows(PRAGUE_DIR)
+    ok = [r for r in rows if r["status"] == "ok" and r["players"] != ""]
+    checks = [(r, players_per_game(r)) for r in ok]
+    venue = prague_venue(load_venues())
+    out = ["# 🃏 King's Casino Prague — cash game tracker", "",
+           "Prague's tables come in the same King's data feed as Rozvadov's, so they're read at every check (about every "
+           "10 minutes) without any extra visits, together with Prague's tournament clocks. All times are **Czech time** "
+           "(same as Poland). Back to [King's Rozvadov](README.md).", ""]
+    out += health_lines(rows, now, {}, f"debug/{PRAGUE_KEY}_feed.json")
+    if ok:
+        latest = ok[-1]
+        out += snapshot_lines(latest)
+        if latest.get("tourneys", "") != "":
+            running = tourney_info_of(latest)
+            out += ["**Tournaments in play:** " + (" · ".join(tourney_text(d) for d in running) if running else "none"), ""]
+        else:
+            out += ["**Tournaments:** couldn't be read at this check (cash data is unaffected).", ""]
+    out += calendar_lines(PRAGUE_KEY, now)
+    out += busy_sections(ok, checks, PRAGUE_KEY)
+    out += day_type_lines(PRAGUE_KEY, ok)
+    out += all_games_lines(ok)
+    out += tournaments_seen_lines(rows)
+    out += ["---", f"Raw data: `data/{PRAGUE_KEY}` (one CSV file per month). Prague is "
+            + (f"venue {venue} in King's feed" if venue else "not in King's feed yet") + " (`data/kings_venues.json`)."]
+    PRAGUE_PAGE.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+# ---------------------------------------------------------------- saving
+
+def convert_old_row(r):
+    """A row written by an earlier version, converted to the current columns."""
+    if "games" in r and "source" in r:
+        return r
+    entries = [e for e in (r.get("tables") or "").split("; ") if ENTRY_RE.match(e)]
+    source = "browser feed" if entries else "page table"
+    if not entries:
+        entries = box_entries(r.get("box_text") or "")
+    status = r.get("status") or ""
+    if status == "ok" and entries is None:
+        status = "error: couldn't read the tables on the page"
+    good = status == "ok"
+    return {"time": r.get("time", ""), "weekday": r.get("weekday", ""), "hour": r.get("hour", ""),
+            "status": status, "source": source if good else "",
+            "tables": len(entries) if good else "",
+            "players": sum(t[2] for t in parse_games("; ".join(entries))) if good else "",
+            "games": "; ".join(entries) if good else "",
+            "page_text": (r.get("box_text") or "") if source == "page table" else ""}
+
+
+def migrate_old_files():
+    """Bring CSV files from earlier versions up to date. Nothing is lost: old rows are converted
+    and each file is replaced in one step, so a crash can't leave it half-written."""
+    for leftover in DATA_DIR.glob("*.tmp"):  # from a run that crashed mid-way
+        leftover.unlink()
+    for path in sorted(DATA_DIR.glob(MONTH_FILES)):
+        has_marker = path.read_bytes()[:3] == b"\xef\xbb\xbf"
+        with path.open(newline="", encoding="utf-8-sig") as fh:
+            reader = csv.DictReader(fh)
+            if reader.fieldnames == FIELDS and has_marker:
+                continue
+            rows = [convert_old_row(r) for r in reader]
+        tmp = path.with_suffix(".tmp")
+        with tmp.open("w", newline="", encoding="utf-8-sig") as fh:
+            writer = csv.DictWriter(fh, fieldnames=FIELDS, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+        tmp.replace(path)
+    OLD_DEBUG_FILE.unlink(missing_ok=True)
+
+
+def append_row(now, row):
+    append_csv(DATA_DIR, FIELDS, now, row)
+
+
+def open_for_append(path):
+    """A month file opened for adding a row (new files start with the marker Excel needs). A row left
+    half-written by a run that was cut off gets its line ended first, so the new row can't be glued onto it."""
+    new_file = not path.exists()
+    if not new_file and path.stat().st_size:
+        with path.open("rb+") as fh:
+            fh.seek(-1, os.SEEK_END)
+            if fh.read(1) != b"\n":
+                fh.write(b"\r\n")
+    return path.open("a", newline="", encoding="utf-8-sig" if new_file else "utf-8"), new_file
+
+
+def save_problem(now, row, problem):
+    """Details of the latest problem or fallback, for diagnosis. Normal runs write nothing;
+    a repeating problem is re-saved at most every 6 hours to keep the history small."""
+    if not problem:
+        return
+    try:
+        old = json.loads(PROBLEM_FILE.read_text(encoding="utf-8"))
+        same = (old.get("status"), old.get("source")) == (row["status"], row["source"])
+        if same and now - datetime.fromisoformat(old["saved_at"]) < timedelta(hours=6):
+            return
+    except (OSError, ValueError, KeyError):
+        pass
+    PROBLEM_FILE.parent.mkdir(exist_ok=True)
+    payload = {"saved_at": now.isoformat(timespec="seconds"), "status": row["status"],
+               "source": row["source"], **problem}
+    PROBLEM_FILE.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def load_csv_rows(folder):
+    rows = []
+    for path in sorted(folder.glob("*.csv")):
+        with path.open(newline="", encoding="utf-8-sig") as fh:
+            rows.extend(csv.DictReader(fh))
+    return rows
+
+
+def append_csv(folder, fields, now, row):
+    folder.mkdir(parents=True, exist_ok=True)
+    fh, new_file = open_for_append(folder / f"{now:%Y-%m}.csv")
+    with fh:
+        writer = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
+        if new_file:
+            writer.writeheader()
+        writer.writerow(row)
+
+
+def save_debug_copy(path, now, status, url, details):
+    """Raw copy of what a site sent, for diagnosis: first time, then once a day or when the status changes."""
+    if not details:
+        return
+    try:
+        old = json.loads(path.read_text(encoding="utf-8"))
+        if (old.get("status") == status and now - datetime.fromisoformat(old["saved_at"]) < timedelta(hours=24)
+                and set(details) <= set(old)):
+            return
+    except (OSError, ValueError, KeyError):
+        pass
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(json.dumps({"saved_at": now.isoformat(timespec="seconds"), "status": status, "url": url,
+                                **details}, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def check_card():
+    """Card Casino's live list. Returns (status, source, entries or None, raw text, details)."""
+    problem, no_answer = {}, 0
+    for attempt in CARD_TRIES:
+        try:
+            fragment = fetch_text(CARD_FEED_URL, CARD_SITE["url"], timeout=20)
+        except Exception as e:
+            problem["feed"] = short_error(e)
+            no_answer += isinstance(e, (TimeoutError, ConnectionError)) or "timed out" in str(e) or "refused" in str(e)
+            time.sleep(4)
+            continue
+        entries = card_entries(fragment)
+        if entries is not None:
+            return "ok", "feed", entries, "" if entries else shown(strip_tags(fragment), 300), None
+        problem.update(feed="the list had an unexpected format", feed_body=fragment[:5000])
+        break
+    if no_answer == len(CARD_TRIES):  # the site isn't answering at all, so the browser would only wait another minute
+        return "error: Card Casino's site didn't answer", "", None, "", problem
+    if short_on_time():
+        return "error: the feed failed and there was no time left for the browser backup", "", None, "", problem
+    try:  # backup: the cash games page in a browser
+        cash, _, details = browser_read(CARD_SITE)
+    except Exception as e:
+        return f"error: {short_error(e)}", "", None, "", {**problem, "browser": short_error(e)}
+    problem.update(details)
+    if cash is None:
+        return "error: the cash games list wasn't found on the page", "page table", None, "", problem
+    entries = [] if "no games" in cash.lower() else card_text_entries(cash)
+    if not entries and cash.strip() and "no games" not in cash.lower():
+        return "error: couldn't read the cash games list", "page table", None, cash[:1000], problem
+    return "ok", "page table", entries, "", problem
+
+
+def record_card(now):
+    """One Card Casino check, saved to data/cardcasino/YYYY-MM.csv. Never raises."""
+    row = {"time": f"{now:%Y-%m-%d %H:%M}", "weekday": DAYS[now.weekday()], "hour": now.hour,
+           "status": "", "source": "", "tables": "", "players": "", "games": "", "raw": ""}
+    try:
+        status, source, entries, raw, details = check_card()
+        row.update(status=status, source=source, raw=raw[:1000])
+        if entries is not None:
+            row.update(tables=len(entries), players=sum(t[2] for t in parse_games("; ".join(entries))),
+                       games="; ".join(entries))
+        save_debug_copy(Path("debug/cardcasino_page.json"), now, status, CARD_FEED_URL, details)
+    except Exception as e:
+        row["status"] = f"error: {short_error(e)}"
+    try:
+        append_csv(CARD_DIR, CARD_FIELDS, now, row)
+        write_card_page(now)
+    except Exception as e:
+        print(f"Card Casino could not be saved: {short_error(e)}")
+    return row
+
+
+def migrate_site_files():
+    """Banco's files from before tables/players/games were columns: add them, and fill them in for
+    the checks already read straight from Banco's list (their text holds the tables)."""
+    for site in SITES:
+        for path in sorted((DATA_DIR / site["key"]).glob("*.csv")):
+            with path.open(newline="", encoding="utf-8-sig") as fh:
+                reader = csv.DictReader(fh)
+                if reader.fieldnames == SITE_FIELDS:
+                    continue
+                rows = list(reader)
+            for r in rows:
+                games = banco_old_text_games(r["cash_text"]) if r["status"] == "ok" and r["time"] >= BANCO_DIRECT_SINCE else []
+                if games or (r["status"] == "ok" and r["time"] >= BANCO_DIRECT_SINCE
+                             and (not r["cash_text"] or BANCO_NONE.search(r["cash_text"]))):
+                    r["tables"], r["players"], r["games"], r["cash_text"] = banco_summary(games)
+            rewrite_csv(path, SITE_FIELDS, rows)
+
+
+def migrate_card_files():
+    """Card Casino rows saved by the previous version (as page text) converted to the current columns."""
+    for path in sorted(CARD_DIR.glob("*.csv")):
+        with path.open(newline="", encoding="utf-8-sig") as fh:
+            reader = csv.DictReader(fh)
+            if reader.fieldnames == CARD_FIELDS:
+                continue
+            rows = []
+            for r in reader:
+                if "games" in r:
+                    rows.append(r)
+                    continue
+                text = r.get("cash_text") or ""
+                entries = card_text_entries(text) if r.get("status") == "ok" else None
+                if r.get("status") == "ok" and not entries and text.strip():
+                    status, entries = "error: couldn't read the cash games list", None
+                else:
+                    status = r.get("status", "")
+                rows.append({"time": r.get("time", ""), "weekday": r.get("weekday", ""), "hour": r.get("hour", ""),
+                             "status": status, "source": "page table" if entries is not None else "",
+                             "tables": len(entries) if entries is not None else "",
+                             "players": sum(t[2] for t in parse_games("; ".join(entries))) if entries is not None else "",
+                             "games": "; ".join(entries or []), "raw": text[:1000] if entries is None else ""})
+        tmp = path.with_suffix(".tmp")
+        with tmp.open("w", newline="", encoding="utf-8-sig") as fh:
+            writer = csv.DictWriter(fh, fieldnames=CARD_FIELDS, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(rows)
+        tmp.replace(path)
+
+
+def write_card_page(now):
+    rows = load_csv_rows(CARD_DIR)
+    ok = [r for r in rows if r["status"] == "ok" and r["players"] != ""]
+    checks = [(r, players_per_game(r)) for r in ok]
+    out = ["# 🃏 Card Casino Šamorín — cash game tracker", "",
+           f"Reads [Card Casino's live cash-game list]({CARD_SITE['url']}) together with King's, about every 10 minutes. "
+           "All times are **Czech time** (same as Poland and Slovakia). Back to [King's](README.md).", ""]
+    out += health_lines(rows, now, CARD_SOURCES, "debug/cardcasino_page.json")
+    if ok:
+        out += snapshot_lines(ok[-1])
+    out += calendar_lines("cardcasino", now)
+    out += busy_sections(ok, checks, "cardcasino")
+    out += day_type_lines("cardcasino", ok)
+    out += all_games_lines(ok)
+    out += ["---", "Raw data: `data/cardcasino` (one CSV file per month). Card Casino lists seated players per table; "
+            "it doesn't show waiting lists."]
+    CARD_SITE["page"].write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+def record_gas(now):
+    """One Grand Casino Aš check, saved to data/grandcasinoas/YYYY-MM.csv. Never raises."""
+    row = {"time": f"{now:%Y-%m-%d %H:%M}", "weekday": DAYS[now.weekday()], "hour": now.hour, "status": "",
+           "tables": "", "waiting": "", "games": "", "tourneys": "", "tourney_players": "", "tourney_details": "", "raw": ""}
+    details = {}
+    try:
+        html = fetch_text(GAS_CASH_URL, "https://www.grandcasinoas.eu/en/poker")
+        entries = gas_cash_entries(html)
+        if entries is None:
+            row["status"] = "error: the 'Current cash game' table wasn't found"
+            details["cash_page"] = html[:20000]
+        else:
+            games = parse_gas_games("; ".join(entries))
+            row.update(status="ok", games="; ".join(entries),
+                       tables=sum(1 for g in games if g[2] == "RUNNING"), waiting=sum(1 for g in games if g[2] == "WAITING"))
+    except Exception as e:
+        row["status"] = f"error: {short_error(e)}"
+    if now.minute % 30 < 10:  # tournaments every 30 minutes
+        try:
+            html = fetch_text(GAS_TOURNEY_URL, "https://www.grandcasinoas.eu/en/")
+            unread = []
+            result = gas_tournaments(html, now, unread)
+            if result is None:
+                lower = html.lower()
+                box = lower.find("current tournaments")
+                details["tournament_page_start"] = html[:20000] if box < 0 else html[max(0, box - 2000):box + 18000]
+            else:
+                row.update(tourneys=len(result[0]), tourney_players=sum(d["left"] for d in result[1]),
+                           tourney_details=json.dumps(result[1], ensure_ascii=False, separators=(",", ":")))
+                if unread:  # how the page shows a tournament on a break (to be sure it's read right)
+                    details["tournaments_without_level"] = unread[:5]
+        except Exception as e:
+            details["tournaments"] = short_error(e)
+    try:
+        append_csv(GAS_DIR, GAS_FIELDS, now, row)
+        save_debug_copy(Path("debug/grandcasinoas_page.json"), now, row["status"], GAS_CASH_URL, details)
+        write_gas_page(now)
+    except Exception as e:
+        print(f"Grand Casino Aš could not be saved: {short_error(e)}")
+    return row
+
+
+def write_gas_page(now):
+    rows = load_csv_rows(GAS_DIR)
+    ok = [r for r in rows if r["status"] == "ok"]
+    out = ["# 🃏 Grand Casino Aš — cash game tracker", "",
+           f"Reads [Grand Casino Aš's live cash games]({GAS_CASH_URL}) every 10 minutes and its "
+           f"[current tournaments]({GAS_TOURNEY_URL}) every 30 minutes. All times are **Czech time** (same as Poland). "
+           "Back to [King's](README.md).", ""]
+    out += health_lines(rows, now, {}, "debug/grandcasinoas_page.json")
+    if ok:
+        latest = ok[-1]
+        games = sorted(parse_gas_games(latest["games"]), key=lambda g: (g[2] != "RUNNING", game_order(g[0]), stake_key(g[1])))
+        out += [f"## Cash games at {latest['time']}", ""]
+        out += (["```", *(f"{g:<9}{('€' + s) if s else '':<9}{status.lower()}" for g, s, status in games), "```", ""]
+                if games else ["No cash games listed.", ""])
+    with_t = [r for r in rows if r.get("tourneys", "") != ""]
+    if with_t:
+        running = tourney_info_of(with_t[-1])
+        out += [f"**Tournaments in play at {with_t[-1]['time']}:** "
+                + (" · ".join(tourney_text(d) for d in running) if running else "none"), ""]
+
+    out += calendar_lines("grandcasinoas", now)
+    all_ok = ok
+    ok, note = split_days("grandcasinoas", ok)
+
+    # running tables by hour and weekday
+    total, count = defaultdict(float), defaultdict(int)
+    for r in ok:
+        for key in ((int(r["hour"]), r["weekday"]), (int(r["hour"]), "All")):
+            total[key] += as_int(r["tables"])
+            count[key] += 1
+    out += ["## Running cash tables by hour", "", *([note, ""] if note else []),
+            "Average number of running tables (Grand Casino Aš shows which games run, not how many players).", "",
+            "| Hour | " + " | ".join(DAYS) + " | All days |", "|:--|" + "--:|" * (len(DAYS) + 1)]
+    for h in range(24):
+        cells = [f"{total[(h, d)] / count[(h, d)]:.1f}" if count[(h, d)] else "·" for d in DAYS + ["All"]]
+        out.append(f"| {h:02d}:00 | " + " | ".join(cells) + " |")
+    out.append("")
+
+    # how often each game + stake was running
+    def running_labels(r):
+        return {f"{g} €{s}" if s else g for g, s, status in parse_gas_games(r["games"]) if status == "RUNNING"}
+    labelled = [(r, running_labels(r)) for r in ok]
+    freq = Counter(label for _, labels in labelled for label in labels)
+    top = sorted((label for label, _ in freq.most_common(8)), key=label_key)
+    out += ["## How often each game was running, by hour (all days)", ""]
+    if top:
+        total_h, seen = defaultdict(int), defaultdict(int)
+        for r, labels in labelled:
+            total_h[int(r["hour"])] += 1
+            for label in labels:
+                seen[(int(r["hour"]), label)] += 1
+        out += ["🟩 most of the time · 🟨 sometimes · 🟥 rarely", "",
+                "| Hour | " + " | ".join(top) + " | Checks |", "|:--|" + "--:|" * (len(top) + 1)]
+        for h in range(24):
+            out.append(f"| {h:02d}:00 | " + " | ".join(pct_cell(seen[(h, label)], total_h[h]) for label in top)
+                       + f" | {total_h[h]} |")
+    else:
+        out.append("No running games seen yet.")
+    out.append("")
+    out += day_type_lines("grandcasinoas", all_ok, measure="tables")
+    out += tournaments_seen_lines(with_t)
+    out += ["---", "Raw data: `data/grandcasinoas` (one CSV file per month)."]
+    GAS_PAGE.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+def oly_fetch(url, referer):
+    """One ordinary page request. Returns (html, None) or (None, reason) - 'blocked' when the
+    site's bot protection refuses it. Nothing is done to get around a refusal."""
+    try:
+        html = fetch_text(url, referer, timeout=20)
+    except urllib.error.HTTPError as e:
+        return None, "blocked by the site's bot protection" if e.code in (403, 429, 503) else f"HTTP error {e.code}"
+    except Exception as e:
+        return None, short_error(e)
+    if any(sign in html[:20000].lower() for sign in BLOCK_SIGNS):
+        return None, "blocked by the site's bot protection"
+    return html, None
+
+
+def page_details(html):
+    """Everything needed to work out why a page couldn't be read: its text, the scripts it loads (the
+    list may be filled in by one of them) and the whole page, compressed (debug/ only)."""
+    lower = html.lower()
+    body = html[lower.find("<body"):] if "<body" in lower else html
+    body = re.sub(r"<(script|style)\b[^>]*>.*?</\1>", " ", body, flags=re.S | re.I)
+    inline = [" ".join(x.split())[:800] for x in re.findall(r"<script\b[^>]*>(.*?)</script>", html, re.S | re.I)
+              if re.search(r"ajax|cash|club|nonce|api|table|json", x, re.I)]
+    return {"page_text": strip_tags(body)[:15000],
+            "scripts": re.findall(r"<script\b[^>]*\bsrc=[\"']([^\"']+)", html, re.I)[:50],
+            "inline_scripts": inline[:25],
+            "page_gz_base64": base64.b64encode(gzip.compress(html.encode("utf-8"))).decode("ascii")}
+
+
+def record_olympic(now):
+    """One check of each Olympic room (every 30 minutes). Never raises. Returns {key: row} for the
+    rooms checked in this run (none on the in-between runs)."""
+    if now.minute % 30 >= 10:
+        return {}
+    try:
+        clubs = json.loads(OLY_CLUBS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        clubs = {}
+    clubs = {k: v for k, v in clubs.items() if isinstance(v, dict) and "://" in v.get("url", "")}
+    results = {}
+    for site in OLY_SITES:
+        row = {"time": f"{now:%Y-%m-%d %H:%M}", "weekday": DAYS[now.weekday()], "hour": now.hour, "status": "",
+               "club": "", "tables": "", "players": "", "waiting": "", "games": "", "listed": "",
+               "tournaments_text": "", "raw": ""}
+        details = {}
+        try:
+            known = clubs.get(site["key"])
+            urls = ([known["url"]] if known else []) + site["urls"]
+            html = rows = None
+            for url in urls:
+                html, problem = oly_fetch(url, site["home"])
+                if html is None:
+                    row["status"] = f"error: {problem}"
+                    if "blocked" in problem:
+                        break  # respect the refusal: no more requests to this site in this run
+                    continue
+                if not known:  # first time: find the club in the site's list and open its page
+                    match = oly_find_club(OLY_CLUB_RE.findall(html), url, club_keys(site))
+                    if not match:
+                        row["status"] = f"error: no club matching '{' / '.join(club_keys(site))}' on the page"
+                        details.update(page_details(html))
+                        break
+                    known = clubs[site["key"]] = {"url": match[0], "name": match[1]}
+                    html, problem = oly_fetch(known["url"], site["home"])
+                    if html is None:
+                        row["status"] = f"error: {problem}"
+                        break
+                shown_club = re.search(r"<h2[^>]*>\s*" + re.escape(known["name"]) + r"\s*</h2>", html, re.I)
+                if not shown_club:
+                    row["status"] = "error: couldn't confirm the page shows the right club"
+                    details.update(page_details(html))
+                    clubs.pop(site["key"], None)  # look it up again next time
+                    break
+                rows = oly_cash_rows(html)
+                if rows is not None:
+                    row["club"] = shown(known["name"], 60)
+                    break
+                details.update(page_details(html))
+                row["status"] = "error: couldn't read the cash games table (page saved for a closer look)"
+                break
+            if rows is not None:
+                tables, players, waiting, entries, listed = oly_summary(rows)
+                row.update(status="ok", tables=tables, players=players, waiting=waiting, games="; ".join(entries), listed=listed)
+            if now.minute < 10 and "blocked" not in row["status"]:  # tournaments once an hour
+                home, problem = oly_fetch(site["home"], site["home"])
+                if home is not None:
+                    row["tournaments_text"] = oly_tournament_text(home, club_keys(site))
+                elif problem:
+                    details["tournaments"] = problem
+        except Exception as e:
+            row["status"] = f"error: {short_error(e)}"
+        try:
+            append_csv(DATA_DIR / site["key"], OLY_FIELDS, now, row)
+            save_debug_copy(Path(f"debug/{site['key']}_page.json"), now, row["status"], site["urls"][0], details)
+            write_olympic_page(site, now)
+        except Exception as e:
+            print(f"{site['name']} could not be saved: {short_error(e)}")
+        results[site["key"]] = row
+    try:
+        OLY_CLUBS_FILE.write_text(json.dumps(clubs, indent=1), encoding="utf-8")
+    except OSError:
+        pass
+    return results
+
+
+def write_olympic_page(site, now):
+    rows = load_csv_rows(DATA_DIR / site["key"])
+    ok = [r for r in rows if r["status"] == "ok" and r["players"] != ""]
+    checks = [(r, players_per_game(r)) for r in ok]
+    try:  # the club's own page once it has been found, otherwise the site's list of clubs
+        url = json.loads(OLY_CLUBS_FILE.read_text(encoding="utf-8")).get(site["key"], {}).get("url") or site["urls"][0]
+    except (OSError, ValueError, AttributeError):
+        url = site["urls"][0]
+    out = [f"# 🃏 {site['name']} — cash game tracker", "",
+           f"Reads [OlyBet's live cash games page]({url}) every 30 minutes (their site has bot protection, so "
+           "the tracker checks gently and simply records it when a check is refused). All times are **Czech time** "
+           f"({site.get('city', 'the room')} is one hour ahead). Back to [King's](README.md).", ""]
+    out += health_lines(rows, now, {}, f"debug/{site['key']}_page.json")
+    if ok:
+        latest = ok[-1]
+        out += [f"**Club:** {latest['club']}", ""]
+        out += snapshot_lines(latest)
+        out += [f"**Waiting lists:** {latest['waiting'] or 0} players · **All games listed:** {shown(latest['listed'], 600)}", ""]
+    with_t = [r for r in rows if r.get("tournaments_text")]
+    if with_t:
+        out += [f"**Tournaments on their site at {with_t[-1]['time']}:** {with_t[-1]['tournaments_text']}", ""]
+    out += calendar_lines(site["key"], now)
+    out += busy_sections(ok, checks, site["key"])
+    out += day_type_lines(site["key"], ok)
+    out += all_games_lines(ok)
+    out += ["---", f"Raw data: `data/{site['key']}` (one CSV file per month)."]
+    site["page"].write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+def rewrite_csv(path, fields, rows):
+    tmp = path.with_suffix(".tmp")
+    with tmp.open("w", newline="", encoding="utf-8-sig") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+    tmp.replace(path)
+
+
+def repair_history():
+    """Fix rows earlier versions recorded wrongly. Safe to run every time: it only touches rows
+    that match one of the known mistakes, and leaves everything else as it was."""
+    fixes = [
+        # Card Casino said "No games currently": that's 0 tables, not an error
+        (CARD_DIR, CARD_FIELDS, lambda r: r["status"] == "error: couldn't read the cash games list" and "no games" in r["raw"].lower(),
+         {"status": "ok", "source": "page table", "tables": 0, "players": 0, "games": "", "raw": ""}),
+        # Grand Casino Aš showed "No Cash Game table is open": 0 tables, not an error - for rows from before the
+        # reader understood that message only (until v32 this also turned every later real error into 0 tables)
+        (GAS_DIR, GAS_FIELDS, lambda r: r["status"] == "error: the 'Current cash game' table wasn't found"
+         and r["time"] < "2026-10-13",
+         {"status": "ok", "tables": 0, "waiting": 0, "games": ""}),
+    ]
+    # King's Prague before its first table was seen (v36's first evening): the feed was working then (it showed
+    # Rozvadov's tables), so 'not in the feed yet' meant Prague had no tables
+    feed_ok = {r["time"] for r in load_rows() if r["status"] == "ok" and r.get("source") in ("feed", "browser feed")}
+    prague_known = prague_venue(load_venues()) is not None
+    fixes.append((PRAGUE_DIR, PRAGUE_FIELDS, lambda r: prague_known and r["status"] == PRAGUE_NOT_SEEN and r["time"] in feed_ok,
+                  {"status": "ok", "tables": 0, "players": 0, "games": ""}))
+    fixes.append((DATA_DIR / "banco", SITE_FIELDS,
+                  lambda r: r["status"] == "ok" and not r["cash_text"] and r["time"] < BANCO_DIRECT_SINCE,
+                  {"status": "error: the cash list wasn't visible to the tracker yet"}))
+    fixes.append((DATA_DIR / "banco", SITE_FIELDS,  # v30 showed some breaks as the start time
+                  lambda r: banco_break_text(r["tournament_text"]) != r["tournament_text"],
+                  lambda r: {"tournament_text": banco_break_text(r["tournament_text"])}))
+    # Banco's first two direct reads (13 Oct 11:40, 11:50) were kept as text only: fill in their numbers
+    fixes.append((DATA_DIR / "banco", SITE_FIELDS,
+                  lambda r: r["status"] == "ok" and r["tables"] == "" and "<!--" in r["cash_text"]
+                  and banco_old_text_games(r["cash_text"]), banco_row_numbers))
+    for site in OLY_SITES:  # the first Olympic version reported 0 tables without actually reading the table
+        fixes.append((DATA_DIR / site["key"], OLY_FIELDS, lambda r: r["status"] == "ok" and not r["listed"],
+                      {"status": "error: table not read (first version)", "tables": "", "players": "", "waiting": "", "games": ""}))
+        # before v27, 'PLO/PLO 5' was saved as written by the site, so the same game showed up twice in the stats
+        fixes.append((DATA_DIR / site["key"], OLY_FIELDS,
+                      lambda r: plo_digits(r["games"]) != r["games"] or plo_digits(r["listed"]) != r["listed"],
+                      lambda r: {"games": plo_digits(r["games"]), "listed": plo_digits(r["listed"])}))
+    for folder, fields, is_wrong, correction in fixes:
+        for path in sorted(folder.glob("*.csv")):
+            with path.open(newline="", encoding="utf-8-sig") as fh:
+                rows = list(csv.DictReader(fh))
+            changed = False
+            for r in rows:
+                if is_wrong(r):
+                    r.update(correction(r) if callable(correction) else correction)
+                    changed = True
+            if changed:
+                rewrite_csv(path, fields, rows)
+    for path in sorted(DATA_DIR.glob(MONTH_FILES)):  # King's: 0-table readings that skipped the page check
+        with path.open(newline="", encoding="utf-8-sig") as fh:
+            rows = list(csv.DictReader(fh))
+        wrong = unchecked_empties(rows)
+        for i in wrong:
+            rows[i].update(status=UNCHECKED_EMPTY, tables="", players="", games="")
+        if wrong:
+            rewrite_csv(path, FIELDS, rows)
+
+
+def remove_retired_sites():
+    for key, page_path in RETIRED_SITES:
+        folder = DATA_DIR / key
+        rows = []
+        for path in folder.glob("*.csv"):
+            with path.open(newline="", encoding="utf-8-sig") as fh:
+                rows.extend(csv.DictReader(fh))
+        if any(r.get("status") == "ok" for r in rows):
+            continue  # it did collect something: keep it
+        for path in folder.glob("*.csv"):
+            path.unlink()
+        if folder.exists() and not any(folder.iterdir()):
+            folder.rmdir()
+        page_path.unlink(missing_ok=True)
+        Path(f"debug/{key}_page.json").unlink(missing_ok=True)
+
+
+def record_sites(now):
+    """Banco's check, saved to data/banco/YYYY-MM.csv. Never raises: it can't break the King's tracking."""
+    results = {}
+    for site in SITES:  # no browser backup: Banco's page scripts don't run in a browser, so it would only lose time
+        try:
+            results[site["key"]] = banco_direct(site)
+        except Exception as e:
+            results[site["key"]] = e
+    return {site["key"]: record_site(now, site["key"], site["name"], site["url"], site["page"], results.get(site["key"]))
+            for site in SITES}
+
+
+def record_site(now, key, name, url, page_path, result):
+    row = {"time": f"{now:%Y-%m-%d %H:%M}", "weekday": DAYS[now.weekday()], "hour": now.hour, "status": "",
+           "tables": "", "players": "", "games": "", "cash_text": "", "tournament_text": ""}
+    details = {}
+    if isinstance(result, Exception) or result is None:
+        row["status"] = f"error: {short_error(result)}" if result else "error: not checked"
+    else:
+        cash, tournaments, details = result
+        row["status"] = "ok" if cash is not None else "error: the 'Cash games' list wasn't found on the page"
+        row["cash_text"] = (cash or "")[:3000]
+        row["tournament_text"] = (tournaments or "")[:1500]
+        row.update(details.pop("stats", None) or {})
+    try:
+        append_csv(DATA_DIR / key, SITE_FIELDS, now, row)
+        save_debug_copy(Path(f"debug/{key}_page.json"), now, row["status"], url, details)
+        write_site_page(key, name, url, page_path)
+    except Exception as e:
+        print(f"{name} could not be saved: {short_error(e)}")
+    return row
+
+
+def write_site_page(key, name, url, page_path):
+    rows = load_csv_rows(DATA_DIR / key)
+    ok = [r for r in rows if r["status"] == "ok"]
+    out = [f"# 🃏 {name} — cash game tracker", "",
+           f"Checks [its website]({url}) together with King's, about every 10 minutes. "
+           "All times are **Czech time** (same as Poland and Slovakia). Back to [King's](README.md).", ""]
+    if rows:
+        last = rows[-1]
+        state = "✅ OK" if last["status"] == "ok" else f"⚠️ {clean(last['status'], 160)}"
+        out += [f"**Last check:** {last['time']} — {state}  ",
+                f"**Checks so far:** {len(ok)} successful out of {len(rows)} (since {rows[0]['time'][:10]})", ""]
+    direct = [r for r in ok if r["time"] >= BANCO_DIRECT_SINCE]
+    counted = [r for r in direct if r.get("players", "") != ""]
+    if counted:  # Bratislava's tables as numbers; the whole list (Košice too) in words below them
+        latest = counted[-1]
+        out += snapshot_lines(latest)
+        out += [f"*The whole list (Banco also shows its Košice casino; the numbers above are {BANCO_ROOM} only):* "
+                f"{shown(latest['cash_text'], 400) or 'no games listed'}  ",
+                f"**Tournaments running:** {shown(latest['tournament_text'], 300) or 'none'}", ""]
+    elif ok:
+        latest = ok[-1]
+        lines = [shown(x.replace(" ; ", " · ")) for x in latest["cash_text"].split(" | ") if x][:40] \
+            or ["(no cash games listed)"]
+        out += [f"## Cash games on the site at {latest['time']}", "", "```", *lines, "```", "",
+                f"**Tournaments:** {shown(latest['tournament_text'], 300) or 'none listed'}", ""]
+    if key == "banco":
+        note = ("Since 13 Oct the tracker reads Banco's cash list and its live tournaments straight from where its page "
+                "gets them; before that, its page's scripts didn't run in the tracker's browser, so those checks show as errors.")
+        if len(direct) >= 30 and not any(r["cash_text"] for r in direct):
+            weekend = sum(1 for r in direct if r["weekday"] in ("Fri", "Sat") and int(r["hour"]) >= 18)
+            note += (f" The list has been empty in all {len(direct)} checks since then, including {weekend} on Friday and "
+                     "Saturday evenings - Banco doesn't seem to run cash games outside its festivals.")
+        out += [f"**Note:** {note}", ""]
+    if key in ROOMS:
+        out += calendar_lines(key, datetime.now(TZ))
+    if counted:
+        checks = [(r, players_per_game(r)) for r in counted]
+        out += busy_sections(counted, checks, key)
+        out += day_type_lines(key, counted)
+        out += all_games_lines(counted)
+    footer = (f"The numbers count {BANCO_ROOM} only (Banco's list also shows Košice, kept in words above). "
+              "Banco shows no seat counts, so tables show players only.") if counted else (
+        "First version: the lists are saved exactly as the site shows them. Statistics per game "
+        "and hour (like on the King's page) are added once a day of data shows the site's format.")
+    out += ["---", footer, f"Raw data: `data/{key}` (one CSV file per month)."]
+    page_path.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+def load_rows():
+    rows = []
+    for path in sorted(DATA_DIR.glob(MONTH_FILES)):
+        with path.open(newline="", encoding="utf-8-sig") as fh:
+            rows.extend(csv.DictReader(fh))
+    return rows
+
+
+# ---------------------------------------------------------------- festivals, schedule and holidays
+
+MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+_WD, _MON = "(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)", "(?:" + "|".join(MONTHS) + ")"
+# The day(s) and time that start an event in a copied Hendon Mob page: 'Fri 16 Oct at 4:00pm', 'Wed 14 - Mon 19 Oct',
+# 'Fri 23 Oct - Tue 3 Nov at 2:00pm'. Found anywhere, not only at the start of a line: the GitHub editor can squash a
+# copy together, without line breaks or tabs ('...Rozvadov' + 'Fri 16 Oct at 3:00pm' + 'Czech Republic€ 120 ...').
+HM_START = re.compile(rf"(?P<d1>{_WD}) (?P<n1>\d{{1,2}})(?: (?P<m1>{_MON}))?(?: - (?P<d2>{_WD}) (?P<n2>\d{{1,2}}) (?P<m2>{_MON}))?"
+                      rf"(?: at (?P<t>\d{{1,2}}:\d{{2}} ?[ap]m))?")
+HM_LOGO = re.compile(r"^(?:[A-Z][A-Z0-9]{1,5} ){1,2}(?=[€$£])")  # a series logo's name before the buy-in: 'KOT € 1,100'
+HM_MISREAD = re.compile(r"^at \d{1,2}:\d{2} ?[ap]m")  # a title misread from a squashed copy by v34 and older
+HM_COUNTRIES = ("Czech Republic", "Slovakia", "Estonia", "Latvia", "Lithuania")
+HM_ROOM_RES = [(re.compile(r"\s*".join(re.escape(part) for part in name.replace("(", " ( ").replace(")", " ) ")
+                                         .replace(",", " , ").split()), re.I), key) for name, key in HM_ROOMS]
+BUYIN_RE = re.compile(r"^(?:[A-Z]{2,6} )?€\s*(\d[\d,]*(?:\s*\+\s*\d[\d,]*)*)")
+TYPE_ICON = {"festival": "🎪", "cash event": "💵", "series": "🎟️", "nearby": "📍"}
+CONTEXT = {"calendar": [], "schedule": [], "holidays": {}}  # filled once per run by setup_context()
+
+
+def cal_text(text, limit=200):
+    """Calendar and schedule text for the pages: only characters that could break a markdown table go."""
+    text = " ".join(re.sub(r"[|`<>*\[\]]", " ", str(text or "")).split())
+    return text if len(text) <= limit else text[:limit - 1].rsplit(" ", 1)[0] + " …"
+
+
+def event_name(title):
+    """A schedule title without its buy-in prefix ('€ 300 + 40 Pot Limit Omaha - Main Event' -> 'Pot Limit Omaha - Main Event')."""
+    buy = BUYIN_RE.match(title)
+    return title[buy.end():].strip(" -") if buy else title
+
+
+def day_icon(room, day):
+    for c in CONTEXT["calendar"]:
+        if c["room"] == room and c["type"] in FESTIVAL_TYPES and c["start_d"].isoformat() <= day <= c["end_d"].isoformat():
+            return TYPE_ICON.get(c["type"], "🎪")
+    return "📅"
+
+
+def hm_day(weekday, day, month, today):
+    """The date of e.g. 'Sat 10 Oct': the nearest year in which that day really is a Saturday."""
+    options = []
+    for year in (today.year - 1, today.year, today.year + 1):
+        try:
+            d = date(year, month, day)
+        except ValueError:
+            continue
+        options.append((DAYS[d.weekday()] != weekday.title(), abs((d - today).days), d))
+    return min(options)[2] if options else None
+
+
+def hm_kind(title):
+    t = title.lower()
+    if "cash game challenge" in t:
+        return "cash"
+    if re.search(r"party|dinner|lunch|slots|blackjack|roulette|sportsbook|chicago|flip finals", t):
+        return "other"
+    if re.search(r"satell?ite|qualifier|flip\W*(?:n|&)\W*go to", t):
+        return "satellite"
+    return "tournament"
+
+
+def hm_starts(text):
+    """Each event in a copied Hendon Mob page: the match of its day(s) and time, and the rest of its text (country,
+    title, venue) up to the next event. Reads a tidy copy (one event per line, tabs between the parts) and a squashed
+    one alike. Only a day with a month counts, so a stray 'Sun 1' inside a title can't split an event."""
+    text = (text or "").replace("’", "'").replace("´", "'")
+    found = [m for m in HM_START.finditer(text) if m.group("m1") or m.group("m2")]
+    return [(m, " ".join(text[m.end():nxt.start() if nxt else len(text)].split()))
+            for m, nxt in zip(found, found[1:] + [None])]
+
+
+def hm_start_day(m, today):
+    """The first day of an event found by hm_starts."""
+    return hm_day(m.group("d1"), int(m.group("n1")), MONTHS.index(m.group("m1") or m.group("m2")) + 1, today)
+
+
+def parse_hendonmob(text, today):
+    """The events at the tracked rooms in a copied Hendon Mob 'upcoming events' page (other events are ignored)."""
+    events = []
+    for m, rest in hm_starts(text):
+        found = next(((regex.search(rest), key) for regex, key in HM_ROOM_RES if regex.search(rest)), None)
+        if not found:
+            continue
+        venue, room = found
+        title = rest[:venue.start()].rstrip(" ,")
+        for country in HM_COUNTRIES:  # a squashed copy has no space after it: 'Czech Republic€ 120 ...'
+            if title.startswith(country):
+                title = title[len(country):].strip()
+                break
+        title = HM_LOGO.sub("", title)  # only some copies carry the logo's name, so it's never kept
+        start = hm_start_day(m, today)
+        if not title or not start:
+            continue
+        end = start
+        if m.group("n2"):
+            end = hm_day(m.group("d2"), int(m.group("n2")), MONTHS.index(m.group("m2")) + 1, today) or start
+            end = end if timedelta(0) <= end - start <= timedelta(days=60) else start
+        buy = BUYIN_RE.match(title)
+        kind = hm_kind(title)
+        clock = datetime.strptime(m.group("t").replace(" ", "").upper(), "%I:%M%p") if m.group("t") else None
+        events.append({"room": room, "date": start.isoformat(), "end": end.isoformat() if end != start else "",
+                       "time": f"{clock:%H:%M}" if clock else "", "kind": kind,
+                       "game": "Other" if kind == "other" else tourney_game(title),
+                       "buyin": str(sum(int(x.replace(",", "")) for x in re.findall(r"\d[\d,]*", buy.group(1)))) if buy else "",
+                       "title": title[:150], "restricted": "yes" if "restricted" in rest[venue.end():].lower() else ""})
+    return events
+
+
+def hm_last_day(text, today):
+    """The last day a copied Hendon Mob page covers (any venue), so events past it are never touched."""
+    return max((d for d in (hm_start_day(m, today) for m, _ in hm_starts(text)) if d), default=None)
+
+
+def hm_first_day(text, today):
+    """The first day a copied Hendon Mob page covers: its earliest one-day event (any venue). Events of
+    several days that started earlier are listed too, so those don't count."""
+    return min((d for d in (hm_start_day(m, today) for m, _ in hm_starts(text) if m.group("m1") and not m.group("n2"))
+                if d), default=None)
+
+
+def paste_window(text, today, pasted_on):
+    """The days a copied Hendon Mob page has the final word on: from the day it was pasted - or from the
+    first day it covers, if that's later (a copy made today can start in two days, and the events in
+    between must not count as cancelled) - to the last day it covers."""
+    first, last = hm_first_day(text, today), hm_last_day(text, today) or today
+    return max(pasted_on, first.isoformat()) if first else pasted_on, last.isoformat()
+
+
+def merge_schedule(known, events, since, last_day):
+    """Add a fresh copy's events. For the rooms it lists, it has the final word on the days from
+    `since` to the last day it covers (see paste_window): anything it no longer lists there was moved
+    or cancelled and is dropped. Older days are never touched, so the history stays complete."""
+    fresh = {(e["room"], e["date"], e["time"], e["title"]): e for e in events}
+    rooms = {e["room"] for e in events}
+    for key in list(known):
+        if (key[0] in rooms and since <= key[1] <= last_day and key not in fresh
+                and (key[0], key[1], "", key[3]) not in fresh):  # still listed, just without its time
+            del known[key]
+    known.update(fresh)
+    # An event of several days that started before the copy was made is listed without its start time
+    # ('Wed 14 - Mon 19 Oct', no 'at 6:00pm'). It's the same event as the row with the time, which stays.
+    # Two rows that both have a time are left alone: e.g. the same satellite at 15:00 and at 19:00.
+    timed = {(k[0], k[1], k[3]) for k in known if k[2]}
+    for key in [k for k in known if not k[2] and (k[0], k[1], k[3]) in timed]:
+        del known[key]
+    return known
+
+
+def tidy_schedule(rows):
+    """Stored schedule rows, keyed for merging. Rows misread from a squashed copy by v34 and older are dropped (the
+    title starts with the time: 'at 12:00pmIreland ...'), and a series logo's name in front of a title comes off,
+    as copies are read that way now."""
+    known = {}
+    for r in rows:
+        if HM_MISREAD.match(r["title"]):
+            continue
+        r = dict(r, title=HM_LOGO.sub("", r["title"]))
+        known[(r["room"], r["date"], r["time"], r["title"])] = r
+    return known
+
+
+def incomplete_rooms(known, events, since, last_day):
+    """Rooms a copy can't be trusted for: in the days it covers it lists fewer than half of the events already known
+    there (at least 10). That's a garbled or cut-short copy rather than half the schedule being cancelled, so it
+    isn't used for those rooms and the README asks for a fresh paste."""
+    def count(pairs, room):
+        return sum(1 for r, d in pairs if r == room and since <= d <= last_day)
+    have, listed = [(k[0], k[1]) for k in known], [(e["room"], e["date"]) for e in events]
+    return sorted(room for room in {e["room"] for e in events}
+                  if count(have, room) >= 10 and count(listed, room) < count(have, room) / 2)
+
+
+def update_schedule(today):
+    """Every event read from hendonmob.txt so far, kept in data/schedule/events.csv: replacing hendonmob.txt with a
+    fresh copy adds new events and keeps the old ones, so past days can still be compared."""
+    rows = []
+    try:
+        with SCHEDULE_FILE.open(newline="", encoding="utf-8-sig") as fh:
+            rows = [{k: r.get(k) or "" for k in SCHEDULE_FIELDS} for r in csv.DictReader(fh)]
+    except OSError:
+        pass
+    saved = {(r["room"], r["date"], r["time"], r["title"]): dict(r) for r in rows}
+    known = tidy_schedule(rows)
+    try:
+        text = HENDONMOB_FILE.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        text = ""
+    events = parse_hendonmob(text, today)
+    if events:
+        try:
+            state = json.loads(PASTE_STATE.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            state = {}
+        before = dict(state)
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+        if state.get("hash") != digest:  # a new copy: it speaks for the days from today on
+            state = {"hash": digest, "from": today.isoformat()}
+        since, last_day = paste_window(text, today, state.get("from", today.isoformat()))
+        skipped = incomplete_rooms(known, events, since, last_day)
+        if skipped:
+            print(f"::warning::hendonmob.txt lists under half of the known events for {', '.join(skipped)}, "
+                  "so it wasn't used for them (a garbled or cut-short copy?)")
+            state["incomplete"] = skipped
+        else:
+            state.pop("incomplete", None)
+        merge_schedule(known, [e for e in events if e["room"] not in skipped], since, last_day)
+        if state != before:
+            PASTE_STATE.parent.mkdir(parents=True, exist_ok=True)
+            PASTE_STATE.write_text(json.dumps(state), encoding="utf-8")
+    for e in known.values():  # re-read the game of older rows too, in case the reading has improved
+        e["kind"] = hm_kind(e["title"])
+        e["game"] = "Other" if e["kind"] == "other" else tourney_game(e["title"])
+    rows = sorted(known.values(), key=lambda r: (r["date"], r["time"], r["room"], r["title"]))
+    if known != saved:
+        SCHEDULE_FILE.parent.mkdir(parents=True, exist_ok=True)
+        rewrite_csv(SCHEDULE_FILE, SCHEDULE_FIELDS, rows)
+    return rows
+
+
+def calendar_day(text):
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(text.strip(), fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def load_calendar():
+    """calendar.csv: one line per festival, series or cash-game event (also if saved by Excel with ';')."""
+    try:
+        text = CALENDAR_FILE.read_text(encoding="utf-8-sig")
+    except OSError:
+        return []
+    first = text.split("\n", 1)[0]
+    out = []
+    for r in csv.DictReader(text.splitlines(), delimiter=";" if first.count(";") > first.count(",") else ","):
+        r = {str(k).strip().lower(): (v or "").strip() for k, v in r.items() if k}
+        start, end = calendar_day(r.get("start", "")), calendar_day(r.get("end", "") or r.get("start", ""))
+        if not (start and r.get("room") and r.get("name")):
+            continue
+        out.append({**r, "type": r.get("type", "").lower() or "festival", "start_d": start, "end_d": max(start, end or start)})
+    return sorted(out, key=lambda c: (c["start_d"], c["room"]))
+
+
+def load_holidays(now):
+    """Public holidays in each room's main player countries, worked out once a day with the 'holidays'
+    package (installed on first use) and kept in data/holidays.json. If that fails, they're left out."""
+    today = f"{now:%Y-%m-%d}"
+    cache = {}
+    try:
+        cache = json.loads(HOLIDAY_FILE.read_text(encoding="utf-8"))
+        if cache.get("made") == today and set(ROOMS) <= set(cache.get("rooms", {})):  # (a room added today: redo)
+            return cache.get("rooms", {})
+    except (OSError, ValueError, AttributeError):
+        cache = {}
+    try:
+        try:
+            import holidays as hol
+        except ImportError:
+            subprocess.run([sys.executable, "-m", "pip", "install", "-q", "holidays"], check=True, timeout=180)
+            import importlib
+            importlib.invalidate_caches()
+            import holidays as hol
+        years = list(range(now.year - 1, now.year + 2))
+        rooms = {}
+        for room, (_, _, markets) in ROOMS.items():
+            days = defaultdict(lambda: defaultdict(list))
+            for country, subdiv, label in markets:
+                try:
+                    found = hol.country_holidays(country, subdiv=subdiv, years=years, language="en_US")
+                except Exception:
+                    found = hol.country_holidays(country, subdiv=subdiv, years=years)
+                for day, names in found.items():
+                    for name in str(names).split("; "):
+                        days[day.isoformat()][name].append(label)
+            rooms[room] = {d: dict(names) for d, names in sorted(days.items())}
+        HOLIDAY_FILE.write_text(json.dumps({"made": today, "rooms": rooms}, ensure_ascii=False, indent=1), encoding="utf-8")
+        return rooms
+    except Exception as e:
+        print(f"Public holidays unavailable this run: {short_error(e)}")
+        return cache.get("rooms", {})
+
+
+def setup_context(now):
+    CONTEXT["calendar"] = load_calendar()
+    CONTEXT["schedule"] = update_schedule(now.date())
+    CONTEXT["holidays"] = load_holidays(now)
+    day_info.cache_clear()
+
+
+def holiday_text(names):
+    return "; ".join(f"{name} ({', '.join(labels)})" for name, labels in names.items())
+
+
+@lru_cache(maxsize=None)
+def day_info(room, day):
+    """What kind of day it was at a room: ('festival', name), ('holiday', names) or ('normal', '')."""
+    try:
+        d = date.fromisoformat(day)
+    except ValueError:
+        return "normal", ""
+    for c in CONTEXT["calendar"]:
+        if c["room"] == room and c["type"] in FESTIVAL_TYPES and c["start_d"] <= d <= c["end_d"]:
+            return "festival", c["name"]
+    names = CONTEXT["holidays"].get(room, {}).get(day)
+    return ("holiday", holiday_text(names)) if names else ("normal", "")
+
+
+def day_tag(room, day):
+    kind, label = day_info(room, day)
+    return f" {day_icon(room, day)} {label}" if kind == "festival" else " 📅 public holiday" if kind == "holiday" else ""
+
+
+def omaha_event(e):
+    """An Omaha tournament, or a mix that includes Omaha (satellites and side events left out)."""
+    if e["kind"] != "tournament":
+        return False
+    return tourney_family(e["game"]) == "PLO" or (e["game"] == "Mixed" and bool(re.search(r"\bplo\d?\b|omaha|\bbig o\b", e["title"], re.I)))
+
+
+def nice_dates(start, end):
+    if start == end:
+        return f"{start.day} {start:%b}"
+    if (start.year, start.month) == (end.year, end.month):
+        return f"{start.day}–{end.day} {end:%b}"
+    return f"{start.day} {start:%b} – {end.day} {end:%b}"
+
+
+def uncovered_main_events(room, today):
+    """Main-event days on the schedule that no calendar.csv line covers yet - the cue to add a festival."""
+    covered = [(c["start_d"], c["end_d"]) for c in CONTEXT["calendar"] if c["room"] == room]
+    found = {}
+    for e in CONTEXT["schedule"]:
+        if e["room"] != room or e["kind"] != "tournament" or not re.search(r"main event|\bme\b", e["title"], re.I):
+            continue
+        d = date.fromisoformat(e["date"])
+        if d >= today and not any(a <= d <= b for a, b in covered):
+            found.setdefault(d, e)
+    return sorted(found.items())
+
+
+def calendar_lines(room, now):
+    """Festivals now and next, Omaha tournaments in the next two weeks and coming public holidays."""
+    today = now.date()
+    if not (CONTEXT["calendar"] or CONTEXT["schedule"] or CONTEXT["holidays"]):
+        return []
+    out = ["## Festivals and schedule", ""]
+    cal = [c for c in CONTEXT["calendar"] if c["room"] == room and c["end_d"] >= today]
+    shown_rows = [("Now", c) for c in cal if c["start_d"] <= today] + [("Coming up", c) for c in cal if c["start_d"] > today][:4]
+    for label, c in shown_rows:
+        details = " · ".join(x for x in (cal_text(c.get("notes"), 300),
+                                         f"Omaha: {cal_text(c['omaha_events'], 900)}" if c.get("omaha_events") else "") if x)
+        out.append(f"- **{label}:** {TYPE_ICON.get(c['type'], '')} **{cal_text(c['name'], 80)}**, "
+                   f"{nice_dates(c['start_d'], c['end_d'])} ({c['type']})" + (f" — {details}" if details else ""))
+    if not shown_rows:
+        out.append("- No festivals listed for this room in `calendar.csv`.")
+    missing = uncovered_main_events(room, today)
+    if missing:
+        days = ", ".join(f"{d.day} {d:%b}" for d, _ in missing[:8]) + (" …" if len(missing) > 8 else "")
+        out.append(f"- ⚠️ **Not in `calendar.csv` yet:** Hendon Mob lists main-event days on {days} "
+                   f"(e.g. “{cal_text(event_name(missing[0][1]['title']), 70)}”). Add a line for that festival or "
+                   "series, so its days are compared separately instead of counting as normal days.")
+    soon = [e for e in CONTEXT["schedule"] if e["room"] == room and omaha_event(e)
+            and today <= date.fromisoformat(e["date"]) <= today + timedelta(days=14)]
+    if soon:
+        out += ["", "**Omaha tournaments in the next 14 days** (from `hendonmob.txt`):", "",
+                "| Day | Time (local) | Buy-in | Tournament |", "|:--|:--|--:|:--|"]
+        for e in soon[:15]:
+            d = date.fromisoformat(e["date"])
+            when = f"{DAYS[d.weekday()]} {d.day} {d:%b}"
+            if e["end"]:
+                last = date.fromisoformat(e["end"])
+                when += f" – {DAYS[last.weekday()]} {last.day} {last:%b}"
+            out.append(f"| {when} | {e['time'] or '·'} | {money(int(e['buyin'])) if e['buyin'] else '·'} "
+                       f"| {cal_text(event_name(e['title']), 90)} |")
+    elif any(e["room"] == room for e in CONTEXT["schedule"]):
+        out += ["", "No Omaha tournaments on the schedule in the next 14 days."]
+    holidays = CONTEXT["holidays"].get(room, {})
+    if holidays:
+        markets = ", ".join(label for _, _, label in ROOMS[room][2])
+        last = (today + timedelta(days=30)).isoformat()
+        coming = [(d, names) for d, names in holidays.items() if today.isoformat() <= d <= last]
+        text = " · ".join(f"{DAYS[date.fromisoformat(d).weekday()]} {date.fromisoformat(d).day} "
+                          f"{date.fromisoformat(d):%b}: {holiday_text(names)}" for d, names in coming)
+        out += ["", f"**Public holidays in the next 30 days** where most players come from ({markets}): {text or 'none'}."]
+    return out + [""]
+
+
+def schedule_reminder(today):
+    """A nudge on the README when hendonmob.txt hasn't been refreshed for three weeks, or when the last copy looked
+    garbled or cut short for some rooms (then it wasn't used for them)."""
+    try:
+        state = json.loads(PASTE_STATE.read_text(encoding="utf-8"))
+        pasted = date.fromisoformat(state["from"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    out = []
+    if state.get("incomplete"):
+        names = ", ".join(ROOMS[r][0] if r in ROOMS else r for r in state["incomplete"])
+        out += [f"⚠️ **`hendonmob.txt` looks incomplete for {names}**, so their schedule wasn't changed — paste the "
+                "whole Hendon Mob page again (in the editor: Ctrl+A, then paste).", ""]
+    age = (today - pasted).days
+    if age >= 21:
+        out += [f"⏰ **`hendonmob.txt` was pasted {age} days ago** — paste a fresh copy of the Hendon Mob page (same "
+                "filters) so the schedule stays complete.", ""]
+    return out
+
+
+def all_rooms_calendar_lines(now, limit=30):
+    today = now.date()
+    rows = [c for c in CONTEXT["calendar"] if c["end_d"] >= today]
+    if not rows:
+        return []
+    out = ["## Coming up at all rooms", "",
+           "From `calendar.csv` — open it on GitHub and use the pencil button to add or correct dates. "
+           "🎪 festival · 💵 cash-game event · 🎟️ smaller series · 📍 nearby, not tracked.", "",
+           "| Dates | Room | Event | Omaha |", "|:--|:--|:--|:--|"]
+    gaps = [ROOMS[room][0] for room in ROOMS if uncovered_main_events(room, today)]
+    if gaps:
+        out[3:3] = [f"⚠️ Main events on the schedule that `calendar.csv` doesn't cover yet: {', '.join(gaps)} "
+                    "(details on their pages).", ""]
+    for c in rows[:limit]:
+        name, page = ROOMS[c["room"]][:2] if c["room"] in ROOMS else (c["room"], "")
+        room_cell = f"[{name}]({page})" if page else name
+        when = nice_dates(c["start_d"], c["end_d"]) + (" **now**" if c["start_d"] <= today else "")
+        out.append(f"| {when} | {room_cell} | {TYPE_ICON.get(c['type'], '')} {cal_text(c['name'], 60)} "
+                   f"| {cal_text(c.get('omaha_events'), 500) or '·'} |")
+    return out + [""]
+
+
+def split_days(room, rows):
+    """The rows for a page's main statistics: normal days only, once at least two normal days have been
+    recorded. Returns (rows, a note saying which days are included)."""
+    if not room or not rows:
+        return rows, ""
+    normal = [r for r in rows if day_info(room, r["time"][:10])[0] == "normal"]
+    special = len(rows) - len(normal)
+    if not special:
+        return rows, ""
+    if len({r["time"][:10] for r in normal}) >= 2:
+        return normal, (f"*Normal days only: {count_text(special, 'check')} during festivals, cash-game events or "
+                        "public holidays are compared separately in “Festivals, holidays and normal days” below.*")
+    return rows, ("*All days: fewer than two normal days recorded so far, so these include festival and holiday "
+                  "days (compared separately below).*")
+
+
+def day_type_lines(room, ok, measure="players"):
+    """Normal days, each festival and public holidays side by side, adjusted for the hour of day."""
+    groups = defaultdict(list)
+    for r in ok:
+        kind, label = day_info(room, r["time"][:10])
+        groups[(kind, label if kind == "festival" else "")].append(r)
+    if not groups or set(groups) == {("normal", "")}:
+        return []
+
+    def value(r):
+        return as_int(r["players"] if measure == "players" else r["tables"])
+
+    def families(r):
+        found = Counter()
+        if measure == "players":
+            for game, _, seated, _ in parse_games(r["games"]):
+                found[family(game)] += seated
+        else:
+            for game, _, status in parse_gas_games(r["games"]):
+                found[family(game)] += status == "RUNNING"
+        return found
+
+    hours = defaultdict(list)
+    for r in groups.get(("normal", ""), []):
+        hours[int(r["hour"])].append(value(r))
+    usual = {h: sum(v) / len(v) for h, v in hours.items()}
+    schedule_days = {e["date"] for e in CONTEXT["schedule"] if e["room"] == room}
+    omaha_days = {e["date"] for e in CONTEXT["schedule"] if e["room"] == room and omaha_event(e)}
+    first_listed = min(schedule_days) if schedule_days else None
+
+    def line(label, rows):
+        dates = sorted({r["time"][:10] for r in rows})
+        fam = [families(r) for r in rows]
+        diffs = [value(r) - usual[int(r["hour"])] for r in rows if int(r["hour"]) in usual]
+        span = f"{nice_dates(date.fromisoformat(dates[0]), date.fromisoformat(dates[-1]))} ({count_text(len(dates), 'day')})"
+        return (f"| {label} | {span} | {len(rows)} | {sum(value(r) for r in rows) / len(rows):.1f} "
+                f"| {sum(f['NLH'] for f in fam) / len(rows):.1f} | {sum(f['PLO'] for f in fam) / len(rows):.1f} "
+                f"| {(f'{sum(diffs) / len(diffs):+.1f}' if diffs else '·')} |")
+
+    markets = ", ".join(label for _, _, label in ROOMS[room][2])
+    what = "seated players" if measure == "players" else "running tables"
+    out = ["## Festivals, holidays and normal days", "",
+           f"Average {what} per check on each kind of day, in total and for NLH and Omaha games. “vs normal” "
+           "compares every check with normal days at the same hour, so days that happened to be checked mostly in "
+           "the evening don't look busier just because evenings are. Festival dates: `calendar.csv`; public "
+           f"holidays: those of the countries most players come from ({markets}).", "",
+           f"| Days | Dates | Checks | {'Players' if measure == 'players' else 'Tables'} | NLH | Omaha | vs normal, same hour |",
+           "|:--|:--|--:|--:|--:|--:|--:|"]
+    for key in sorted(groups, key=lambda g: ({"normal": 0, "festival": 1, "holiday": 2}[g[0]], min(r["time"] for r in groups[g]))):
+        rows = groups[key]
+        icon = day_icon(room, rows[0]["time"][:10]) if key[0] == "festival" else ""
+        out.append(line({"normal": "Normal days", "festival": f"{icon} {cal_text(key[1], 50)}", "holiday": "📅 Public holidays"}[key[0]], rows))
+        if key == ("normal", "") and first_listed:
+            listed = [r for r in rows if r["time"][:10] >= first_listed]
+            with_o = [r for r in listed if r["time"][:10] in omaha_days]
+            without = [r for r in listed if r["time"][:10] not in omaha_days]
+            if with_o and without:
+                out += [line("↳ with an Omaha tournament on the schedule", with_o), line("↳ without one", without)]
+    return out + [""]
+
+
+def save_sample(name, data, keep=None):
+    """Once a day, keep a few raw records of a data feed and the list of all its fields - to spot
+    details worth recording that the tracker doesn't use yet (debug/samples/)."""
+    path = SAMPLE_DIR / f"{name}.json"
+    today = f"{datetime.now(TZ):%Y-%m-%d}"
+    try:
+        if json.loads(path.read_text(encoding="utf-8")).get("saved_on") == today:
+            return
+    except (OSError, ValueError, AttributeError):
+        pass
+    try:
+        records = data if isinstance(data, list) else [data]
+        records = [r for r in records if keep is None or (isinstance(r, dict) and keep(r))] or records
+        fields = sorted({str(k) for r in records if isinstance(r, dict) for k in r})
+        SAMPLE_DIR.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"saved_on": today, "records": len(records), "fields": fields, "sample": records[:5]},
+                                   ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------- README with statistics
+
+def stake_key(stakes):
+    return [float(x) for x in stakes.split("/") if re.fullmatch(r"\d+(?:\.\d+)?", x)][::-1]
+
+
+def game_order(game):
+    """NLH first, then the Omaha games, then everything else."""
+    return 0 if game == "NLH" else 1 if game.startswith("PLO") else 2
+
+
+def label_key(label):
+    game, _, stakes = label.rpartition(" €")
+    return game_order(game), stake_key(stakes), game
+
+
+def players_per_game(row):
+    count = Counter()
+    for game, _, seated, _ in parse_games(row["games"]):
+        count[game] += seated
+    return count
+
+
+def labels_of(row):
+    return {f"{game} €{stakes}" for game, stakes, _, _ in parse_games(row["games"])}
+
+
+def main_games(checks):
+    """Games that run regularly (in at least 10% of checks), NLH first - at most 4."""
+    volume, ran = Counter(), Counter()
+    for _, per_game in checks:
+        volume.update(per_game)
+        ran.update(g for g, n in per_game.items() if n)
+    regular = [g for g in volume if ran[g] >= 0.1 * len(checks)]
+    return sorted(regular, key=lambda g: (game_order(g), -volume[g]))[:4]
+
+
+def busiest_slots(checks, game, top=3, min_dates=2):
+    total, count, dates = defaultdict(float), defaultdict(int), defaultdict(set)
+    for r, per_game in checks:
+        slot = (r["weekday"], int(r["hour"]))
+        total[slot] += per_game.get(game, 0)
+        count[slot] += 1
+        dates[slot].add(r["time"][:10])
+    slots = sorted(((total[s] / count[s], s) for s in count if len(dates[s]) >= min_dates), key=lambda x: -x[0])
+    return [f"{day} {hour:02d}:00 ({avg:.0f})" for avg, (day, hour) in slots[:top] if avg > 0]
+
+
+def pct_cell(n, total):
+    if not total:
+        return "·"
+    p = round(100 * n / total)
+    return f"{'🟩' if p >= 75 else '🟨' if p >= 25 else '🟥'} {p}%"
+
+
+def count_text(n, word):
+    return f"{n} {word}{'s' * (int(n) != 1)}"
+
+
+def health_lines(rows, now, sources, problem_file):
+    if not rows:
+        return []
+    good = sum(1 for r in rows if r["status"] == "ok" and r.get("players", "x") != "")
+    last = rows[-1]
+    source = last.get("source") or ""
+    state = ((f"✅ OK ({sources.get(source, source)})" if source else "✅ OK") if last["status"] == "ok"
+             else f"⚠️ {clean(last['status'], 160)} — details in `{problem_file}`")
+    day_ago = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M")
+    recent = [r for r in rows if r["time"] >= day_ago]
+    times = real_times([r["time"] for r in recent])
+    gaps = [b - a for a, b in zip(times, times[1:])] or [timedelta(0)]
+    gap_min = int(max(gaps).total_seconds() // 60)
+    gap = f"longest gap {gap_min // 60} h {gap_min % 60} min" + (" (GitHub skipped runs)" if gap_min > 60 else "")
+    return [f"**Last check:** {last['time']} — {state}  ",
+            f"**Last 24 h:** {sum(r['status'] == 'ok' for r in recent)} of {len(recent)} checks OK, {gap} · "
+            f"**Collecting since:** {rows[0]['time'][:10]} ({count_text(good, 'good check')})", ""]
+
+
+def real_times(texts):
+    """Czech times as saved ('YYYY-MM-DD HH:MM', in the order recorded) as real moments, so the time between
+    two checks is right across clock changes. When the clocks go back, the hour that happens twice is
+    told apart by the order of the checks. Unreadable times are left out."""
+    out = []
+    for text in texts:
+        try:
+            t = datetime.strptime(text, "%Y-%m-%d %H:%M")
+        except (TypeError, ValueError):
+            continue
+        moment = t.replace(tzinfo=TZ, fold=0).astimezone(timezone.utc)
+        if out and moment <= out[-1]:
+            second = t.replace(tzinfo=TZ, fold=1).astimezone(timezone.utc)
+            moment = second if second > out[-1] else moment
+        out.append(moment)
+    return out
+
+
+def snapshot_lines(latest):
+    tables = sorted(parse_games(latest["games"]), key=lambda t: (game_order(t[0]), t[0], stake_key(t[1])))
+    out = [f"## Tables running at {latest['time']}", ""]
+    if not tables:
+        return out + ["No tables were running.", ""]
+    width = max(len(t[0]) for t in tables) + 2
+    per_game = defaultdict(lambda: [0, 0])
+    for game, _, seated, _ in tables:
+        per_game[game][0] += seated
+        per_game[game][1] += 1
+    totals = sorted(per_game.items(), key=lambda kv: (game_order(kv[0]), kv[0]))
+    return out + ["```", *(f"{g:<{width}}€{s:<8}{a}/{b} players" if b else f"{g:<{width}}€{s:<8}{a} players"
+                           for g, s, a, b in tables), "```",
+                  " · ".join(f"**{g}:** {p} players at {count_text(n, 'table')}" for g, (p, n) in totals), ""]
+
+
+def busy_sections(ok, checks, room=None):
+    """Busiest times, average players by hour per game, and how often each game + stake runs
+    (normal days only once there are enough of them - see split_days)."""
+    kept, note = split_days(room, ok)
+    if kept is not ok:
+        ids = {id(r) for r in kept}
+        ok, checks = kept, [(r, pg) for r, pg in checks if id(r) in ids]
+    games = main_games(checks) if checks else []
+    out = ["## Busiest times so far", ""] + ([note, ""] if note else [])
+    lines = [f"- **{g}:** " + " · ".join(slots) for g in games if (slots := busiest_slots(checks, g))]
+    out += (["Day, hour and average seated players (only day-hour slots seen on at least 2 different dates).", "", *lines]
+            if lines else ["Needs about two weeks of data: each day-and-hour slot must be seen on at least 2 dates."])
+    out.append("")
+
+    out += ["## Average players by hour", "",
+            "Seated players at each game's tables. 0 = that game wasn't running." if games else "No player data yet.", ""]
+    for game in games:
+        total, count = defaultdict(float), defaultdict(int)
+        for r, per_game in checks:
+            for key in ((int(r["hour"]), r["weekday"]), (int(r["hour"]), "All")):
+                total[key] += per_game.get(game, 0)
+                count[key] += 1
+        out += [f"### {GAME_NAMES.get(game, game)}", "",
+                "| Hour | " + " | ".join(DAYS) + " | All days |", "|:--|" + "--:|" * (len(DAYS) + 1)]
+        for h in range(24):
+            cells = [f"{total[(h, d)] / count[(h, d)]:.0f}" if count[(h, d)] else "·" for d in DAYS + ["All"]]
+            out.append(f"| {h:02d}:00 | " + " | ".join(cells) + " |")
+        out.append("")
+
+    labelled = [(r, labels_of(r)) for r in ok]
+    freq = Counter(label for _, labels in labelled for label in labels)
+    top = sorted((label for label, _ in freq.most_common(8)), key=label_key)
+    out += ["## How often each game was running, by hour (all days)", ""]
+    if top:
+        total_h, seen = defaultdict(int), defaultdict(int)
+        for r, labels in labelled:
+            total_h[int(r["hour"])] += 1
+            for label in labels:
+                seen[(int(r["hour"]), label)] += 1
+        out += ["🟩 most of the time · 🟨 sometimes · 🟥 rarely", "",
+                "| Hour | " + " | ".join(top) + " | Checks |", "|:--|" + "--:|" * (len(top) + 1)]
+        for h in range(24):
+            cells = [pct_cell(seen[(h, label)], total_h[h]) for label in top]
+            out.append(f"| {h:02d}:00 | " + " | ".join(cells) + f" | {total_h[h]} |")
+    else:
+        out.append("No games seen yet.")
+    out.append("")
+    return out
+
+
+def all_games_lines(ok):
+    """Every game + stake ever seen, rare ones included."""
+    appearances = defaultdict(list)
+    for r in ok:
+        for label in labels_of(r):
+            appearances[label].append(r)
+    if not appearances:
+        return []
+    out = ["## All games seen", "", "| Game | Running in | Most often | Last seen |", "|:--|--:|:--|:--|"]
+    for label in sorted(appearances, key=label_key):
+        seen_rows = appearances[label]
+        day, hour = Counter((r["weekday"], int(r["hour"])) for r in seen_rows).most_common(1)[0][0]
+        out.append(f"| {label} | {round(100 * len(seen_rows) / len(ok))}% of checks "
+                   f"| {day} around {hour:02d}:00 | {seen_rows[-1]['time']} |")
+    return out + [""]
+
+
+def tourney_info_of(row):
+    """The saved tournament details of one check (older checks only have names: the game is read from those)."""
+    try:
+        details = json.loads(row.get("tourney_details") or "[]")
+    except ValueError:
+        details = []
+    if details:
+        return details
+    return [{"name": n, "game": tourney_game(n), "left": a, "entries": e} for n, a, e in parse_tourneys(row.get("tourney_list"))]
+
+
+def money(value, currency="EUR"):
+    sign = {"EUR": "€", "CZK": "CZK ", "USD": "$"}.get(currency or "EUR", f"{currency} ")
+    return f"{sign}{value:,.0f}".replace(",", " ") if isinstance(value, (int, float)) else "?"
+
+
+def tourney_text(d):
+    parts = [d.get("game", "?")]
+    if d.get("buyin") is not None:
+        buyin = money(d["buyin"] + (d.get("fee") or 0), d.get("currency"))
+        parts.append(buyin + (f", {money(d['bounty'], d.get('currency'))} bounty" if d.get("bounty") else ""))
+    parts.append(f"{d.get('left', '?')} of {d.get('entries', '?')} left")
+    if d.get("status") == "BREAK":
+        parts.append("on a break")
+    if d.get("late_reg_open"):
+        parts.append("late reg open")
+    if d.get("level") is not None:
+        parts.append(f"level {d['level']}" + (f", blinds {d['blinds']}" if d.get("blinds") else ""))
+    return f"{shown(d.get('name'), 60)} ({', '.join(parts)})"
+
+
+def tournaments_seen_lines(rows, limit=15):
+    """The tournaments seen most recently: game, buy-in and how big they got."""
+    seen = {}
+    for r in rows:
+        for d in tourney_info_of(r):
+            key = d.get("name")
+            item = seen.setdefault(key, {"d": d, "first": r["time"], "last": r["time"], "max_entries": 0})
+            item.update(d=d, last=r["time"])
+            item["max_entries"] = max(item["max_entries"], as_int(d.get("entries")))
+    if not seen:
+        return []
+    recent = sorted(seen.values(), key=lambda item: item["last"], reverse=True)[:limit]
+    out = ["## Tournaments seen", "", "The most recent ones. The game is read from the tournament's name.", "",
+           "| Tournament | Game | Buy-in | Entries | Seen |", "|:--|:--|--:|--:|:--|"]
+    for item in recent:
+        d = item["d"]
+        buyin = money(d["buyin"] + (d.get("fee") or 0), d.get("currency")) if d.get("buyin") is not None else "·"
+        period = item["first"] if item["first"][:13] == item["last"][:13] else f"{item['first']} → {item['last'][5:]}"
+        out.append(f"| {shown(d.get('name'), 60)} | {d.get('game', '?')} | {buyin} | {item['max_entries']} | {period} |")
+    return out + [""]
+
+
+def overview_line(kings_row, card_row, banco_row, gas_row=None, oly_rows=None, day=None, prague_row=None):
+    """One line at the top of the King's page: what's running at every room right now."""
+    day = day or f"{datetime.now(TZ):%Y-%m-%d}"
+    def cash(row):
+        if row and row.get("status") == "ok" and row.get("players", "") != "":
+            return f"{count_text(row['tables'], 'table')}, {count_text(row['players'], 'player')}"
+        return "couldn't be read"
+    parts = [f"King's{day_tag('kings', day)}: {cash(kings_row)}"]
+    if prague_row:
+        parts.append(f"[King's Prague]({PRAGUE_PAGE.name}){day_tag(PRAGUE_KEY, day)}: {cash(prague_row)}")
+    parts.append(f"[Card Casino Šamorín](CARD_CASINO.md){day_tag('cardcasino', day)}: {cash(card_row)}")
+    if gas_row:
+        gas = ("couldn't be read" if gas_row.get("status") != "ok"
+               else f"{count_text(gas_row['tables'], 'table')} running" + (f", {gas_row['waiting']} waiting" if as_int(gas_row["waiting"]) else ""))
+        parts.append(f"[Grand Casino Aš](GRAND_CASINO_AS.md){day_tag('grandcasinoas', day)}: {gas}")
+    for site in OLY_SITES:
+        row = (oly_rows or {}).get(site["key"])
+        if row:
+            text = cash(row) + (f" ({row['waiting']} waiting)" if as_int(row.get("waiting")) else "") \
+                if row.get("status") == "ok" else ("blocked" if "blocked" in row.get("status", "") else "couldn't be read")
+            parts.append(f"[{site['name'].replace(' Casino', '')}]({site['page'].name}){day_tag(site['key'], day)}: "
+                         f"{text} at {row['time'][11:]}")
+    if banco_row:
+        listed = shown((banco_row.get("cash_text") or "").replace(" ; ", " ").replace(" | ", ", "), 70)
+        banco = ("couldn't be read" if banco_row.get("status") != "ok" else cash(banco_row) if banco_row.get("players", "") != ""
+                 else listed or "no games listed")
+        parts.append(f"[Banco](BANCO.md){day_tag('banco', day)}: {banco}")
+    return "**Right now:** " + " · ".join(parts)
+
+
+OMAHA_MIN_SEATED = 2  # an Omaha table counts as a game from 2 players seated
+
+
+def room_rows(room):
+    """All saved checks of one room, oldest first."""
+    if room == "kings":
+        return load_rows()
+    return load_csv_rows({PRAGUE_KEY: PRAGUE_DIR, "cardcasino": CARD_DIR, "grandcasinoas": GAS_DIR}.get(room, DATA_DIR / room))
+
+
+def omaha_tables(room, r):
+    """The Omaha tables in one check: (labels like 'PLO €2/2', players seated - None where the room only shows
+    which games run), or None if the check has no table data. A table counts from OMAHA_MIN_SEATED players."""
+    if r.get("status") != "ok":
+        return None
+    if room == "grandcasinoas":
+        return [f"{g} €{s}" if s else g for g, s, st in parse_gas_games(r.get("games") or "")
+                if st == "RUNNING" and family(g) == "PLO"], None
+    if r.get("players", "") == "":
+        return None
+    tables = [(g, s, seated) for g, s, seated, _ in parse_games(r.get("games") or "")
+              if family(g) == "PLO" and seated >= OMAHA_MIN_SEATED]
+    return [f"{g} €{s}" for g, s, _ in tables], sum(seated for _, _, seated in tables)
+
+
+def room_link(room):
+    name, page, _ = ROOMS[room]
+    return name if page == README.name else f"[{name}]({page})"
+
+
+def omaha_now_line(all_rows, now):
+    """The Omaha tables running now at every room (each room's last good check from the last 70 minutes)."""
+    cutoff, parts = f"{now - timedelta(minutes=70):%Y-%m-%d %H:%M}", []
+    for room in ROOMS:
+        r = next((x for x in reversed(all_rows.get(room) or []) if x.get("status") == "ok"), None)
+        found = omaha_tables(room, r) if r and r["time"] >= cutoff else None
+        if not found or not found[0]:
+            continue
+        counts = Counter(found[0])
+        text = ", ".join(label + (f" ×{n}" if n > 1 else "") for label, n in sorted(counts.items(), key=lambda kv: label_key(kv[0])))
+        parts.append(f"{room_link(room)}: {text}" + (f" ({found[1]} players)" if found[1] is not None else "")
+                     + (f" at {r['time'][11:]}" if room.startswith("olympic") else ""))
+    return "**🎯 Omaha right now:** " + (" · ".join(parts) if parts else "no Omaha tables running at any room")
+
+
+def omaha_lines(all_rows, now):
+    """All rooms side by side: average Omaha tables (and players) per check on each evening of the week
+    (18:00-02:00, after midnight counted with the evening before), and each room's best hour of the day."""
+    out = ["## 🎯 Omaha at all rooms", "",
+           "Average Omaha tables running per check on each **evening, 18:00–02:00** (after midnight still counts as "
+           "the evening before), with the average Omaha players in brackets where the room shows them. Omaha = any PLO "
+           f"game with at least {OMAHA_MIN_SEATED} players seated; mixed and dealer's choice games aren't counted. "
+           "Festival days are included, so a room tracked mostly during a festival looks busier than usual. "
+           "**Best hour:** the hour of the day with the most Omaha players on average (tables for Aš), "
+           "counting hours seen on 2 or more days where possible.", "",
+           "| Room | " + " | ".join(DAYS) + " | Best hour | Days tracked |", "|:--|" + "--:|" * len(DAYS) + ":--|--:|"]
+    for room in ROOMS:
+        evening, by_hour, dates = defaultdict(list), defaultdict(list), set()
+        for r in all_rows.get(room) or []:
+            found = omaha_tables(room, r)
+            try:
+                t = datetime.strptime(r["time"], "%Y-%m-%d %H:%M")
+            except (KeyError, ValueError):
+                continue
+            if found is None:
+                continue
+            value = (len(found[0]), found[1], r["time"][:10])
+            dates.add(value[2])
+            by_hour[t.hour].append(value)
+            if t.hour >= 18 or t.hour < 2:
+                evening[DAYS[(t - timedelta(days=1) if t.hour < 2 else t).weekday()]].append(value)
+        if not dates:
+            continue
+
+        def average(values, i):
+            known = [v[i] for v in values if v[i] is not None]
+            return sum(known) / len(known) if known else None
+
+        def cell(values):
+            if not values:
+                return "·"
+            players = average(values, 1)
+            return f"{average(values, 0):.1f}" + (f" ({players:.0f})" if players is not None else "")
+
+        def score(h):
+            players = average(by_hour[h], 1)
+            return players if players is not None else average(by_hour[h], 0)
+        hours = [h for h in by_hour if len({v[2] for v in by_hour[h]}) >= 2] or list(by_hour)
+        best = max(sorted(hours, key=lambda h: (h - 6) % 24), key=score)  # a tie: the earlier hour of the poker day
+        players = average(by_hour[best], 1)
+        best_text = ("·" if not score(best) else f"{best:02d}:00 ({players:.0f} players)" if players is not None
+                     else f"{best:02d}:00 ({average(by_hour[best], 0):.1f} tables)")
+        out.append(f"| {room_link(room)} | " + " | ".join(cell(evening[d]) for d in DAYS) + f" | {best_text} | {len(dates)} |")
+    return out + [""]
+
+
+def rooms_health_lines(all_rows, now):
+    """One line per room: its last check, and how many checks worked in the last 24 hours."""
+    day_ago = f"{now - timedelta(hours=24):%Y-%m-%d %H:%M}"
+    out = ["## Tracker health (all rooms)", "", "| Room | Last check | OK in the last 24 h | Most common problem |",
+           "|:--|:--|--:|:--|"]
+    for room in ROOMS:
+        rows = all_rows.get(room) or []
+        if not rows:
+            continue
+        recent = [r for r in rows if r["time"] >= day_ago]
+        problems = Counter(clean(r["status"].replace("error: ", ""), 70) for r in recent if r["status"] != "ok")
+        last = rows[-1]
+        out.append(f"| {room_link(room)} | {'✅' if last['status'] == 'ok' else '⚠️'} {last['time'][5:]} | "
+                   f"{sum(r['status'] == 'ok' for r in recent)} of {len(recent)} | "
+                   f"{problems.most_common(1)[0][0] if problems else '·'} |")
+    return out + [""]
+
+
+def write_readme(rows, now, overview=""):
+    ok = [r for r in rows if r["status"] == "ok" and r["players"] != ""]
+    checks = [(r, players_per_game(r)) for r in ok]
+    out = ["# 🃏 King's Rozvadov — cash game tracker", "",
+           "Checks King's live cash games and tournaments about every 10 minutes and updates this page by itself. "
+           "All times are **Czech time** (same as Poland). Also tracking: [King's Prague](KINGS_PRAGUE.md) · "
+           "[Card Casino Šamorín](CARD_CASINO.md) · [Grand Casino Aš](GRAND_CASINO_AS.md) · "
+           "[Banco Casino Bratislava](BANCO.md) · [Olympic Park Tallinn](OLYMPIC_TALLINN.md) · "
+           "[Olympic Voodoo Riga](OLYMPIC_RIGA.md) · [Olympic Casino Vilnius](OLYMPIC_VILNIUS.md).", ""]
+    all_rows = {room: rows if room == "kings" else room_rows(room) for room in ROOMS}
+    if overview:
+        out += [overview, ""]
+    out += [omaha_now_line(all_rows, now), ""]
+    out += health_lines(rows, now, SOURCES, "debug/last_problem.json")
+
+    if ok:
+        latest = ok[-1]
+        out += snapshot_lines(latest)
+        if latest.get("tourneys", "") != "":
+            running = tourney_info_of(latest)
+            out += ["**Tournaments in play:** " + (" · ".join(tourney_text(d) for d in running) if running else "none"), ""]
+        else:
+            out += ["**Tournaments:** couldn't be read at this check (cash data is unaffected).", ""]
+
+    out += calendar_lines("kings", now)
+    out += schedule_reminder(now.date())
+    out += all_rooms_calendar_lines(now)
+    out += omaha_lines(all_rows, now)
+    out += busy_sections(ok, checks, "kings")
+    out += day_type_lines("kings", ok)
+
+    # Do cash games get busier when tournaments are running?
+    with_t = [r for r in ok if r.get("tourney_players", "") != ""]
+    first_t = datetime.strptime(min(r["time"] for r in with_t), "%Y-%m-%d %H:%M") if with_t else None
+    if first_t and now.replace(tzinfo=None) - first_t < timedelta(days=14):
+        out += ["## Cash games vs tournaments", "",
+                f"Collecting since {first_t:%Y-%m-%d}. Shown from {first_t + timedelta(days=14):%Y-%m-%d}: with fewer "
+                "than two weeks, the numbers would mostly reflect which days happened to be recorded.", ""]
+        with_t = []
+    if with_t:
+        by_hour = defaultdict(list)
+        for r in ok:
+            by_hour[int(r["hour"])].append(int(r["players"]))
+        usual = {h: sum(v) / len(v) for h, v in by_hour.items()}
+        out += ["## Cash games vs tournaments", "",
+                "Cash players grouped by how many players were still in tournaments at the time. "
+                "\"vs usual\" compares each check with the average for the same hour of day, so the "
+                "normal evening rush doesn't fake a link. It needs a few weeks of data to mean much.", "",
+                "| Tournament players in action | Checks | Avg cash players | vs usual for that hour |",
+                "|:--|--:|--:|--:|"]
+        for label, low, high in (("none", 0, 0), ("1–49", 1, 49), ("50–149", 50, 149), ("150 or more", 150, 10**9)):
+            group = [r for r in with_t if low <= int(r["tourney_players"]) <= high]
+            if group:
+                avg = sum(int(r["players"]) for r in group) / len(group)
+                diff = sum(int(r["players"]) - usual[int(r["hour"])] for r in group) / len(group)
+                out.append(f"| {label} | {len(group)} | {avg:.0f} | {diff:+.0f} |")
+        out.append("")
+
+        # Which cash games run alongside which tournament games?
+        cash = {id(r): Counter() for r in ok}
+        per_hour = {"NLH": defaultdict(list), "PLO": defaultdict(list)}
+        for r in ok:
+            for game, _, seated, _ in parse_games(r["games"]):
+                cash[id(r)][family(game)] += seated
+            for fam in per_hour:
+                per_hour[fam][int(r["hour"])].append(cash[id(r)][fam])
+        usual_fam = {fam: {h: sum(v) / len(v) for h, v in hours.items()} for fam, hours in per_hour.items()}
+
+        def situation(r):
+            families = {tourney_family(d.get("game", "NLH")) for d in tourney_info_of(r) if as_int(d.get("left"))}
+            if not families:
+                return "none"
+            if "PLO" in families:
+                return "a PLO tournament"
+            return "only NLH tournaments" if families == {"NLH"} else "other tournament games"
+
+        groups = defaultdict(list)
+        for r in with_t:
+            groups[situation(r)].append(r)
+        out += ["### Cash games by tournament type", "",
+                "NLH and PLO cash players depending on which tournament games were running. The game of a "
+                "tournament is read from its names (PLO/Omaha, Mix, Short Deck... in the title; otherwise NLH).", "",
+                "| Tournaments in play | Checks | NLH cash players | vs usual | PLO cash players | vs usual |",
+                "|:--|--:|--:|--:|--:|--:|"]
+        for label in ("none", "only NLH tournaments", "a PLO tournament", "other tournament games"):
+            group = groups.get(label)
+            if not group:
+                continue
+            cells = []
+            for fam in ("NLH", "PLO"):
+                values = [cash[id(r)][fam] for r in group]
+                diffs = [cash[id(r)][fam] - usual_fam[fam][int(r["hour"])] for r in group]
+                cells += [f"{sum(values) / len(values):.0f}", f"{sum(diffs) / len(diffs):+.0f}"]
+            out.append(f"| {label} | {len(group)} | " + " | ".join(cells) + " |")
+        out.append("")
+
+    out += all_games_lines(ok)
+    out += tournaments_seen_lines(rows)
+    out += rooms_health_lines(all_rows, now)
+    out += ["---", "Raw data: the `data` folder, one CSV file per month. To open one in Excel, use "
+            "Data → From Text/CSV (double-clicking puts everything in one column in Polish Excel). "
+            "The tracker is `tracker.py`; its schedule is in `.github/workflows/track.yml`.  ",
+            "Festival dates: `calendar.csv` (edit on GitHub). Tournament schedule: `hendonmob.txt` — to refresh it, "
+            "copy the Hendon Mob upcoming-events page and paste it over that file's contents; every event read so far "
+            "is kept in `data/schedule/events.csv`. Public holidays: `data/holidays.json`. Tracker version: " + VERSION + "."]
+    README.write_text("\n".join(out) + "\n", encoding="utf-8")
+
+
+# ---------------------------------------------------------------- self-test and main
+
+def self_test():
+    """Quick checks of the parsing code. If one fails, the run stops before recording anything and
+    GitHub emails you - so a broken update can't quietly fill the data with nonsense."""
+    def table(prof, gtype, blinds, seated, venue=1, status="PLAYING"):
+        return {"gameProfile": {"name": prof, "blindsFormatted": blinds}, "gameType": {"name": gtype},
+                "playerCount": seated, "seatCount": 8, "venue": venue, "status": status}
+    feed = [table("NLH 2-4", "No Limit Holdem", "€ 2/4", 7), table("PLO 10-10 5cards", "Omaha Poker", "€ 10/10", 8),
+            table("SD 25-50", "Short Deck", "€ 25/50", 5, status="WAITING"), table("PLO 5-5", "Omaha Poker", "€ 5/5", "3"),
+            table("NLH 1-2", "No Limit Holdem", "€ 1/2", 6, venue=2), table("X|<b>;[Y] 5-10", "", "€ 5/10", None)]
+    got = feed_entries(feed)
+    assert got == ["NLH €2/4 7/8", "PLO5 €10/10 8/8", "SD (Short Deck) €25/50 5/8 [WAITING]",
+                   "PLO €5/5 3/8", "X b Y €5/10 0/8"], got
+    assert feed_entries({"error": "x"}) is None and feed_entries([]) == []
+    assert list(parse_games("; ".join(got[:3]))) == [("NLH", "2/4", 7, 8), ("PLO5", "10/10", 8, 8),
+                                               ("SD (Short Deck)", "25/50", 5, 8)]
+    box = "NO LIMIT TEXAS HOLD’EM | € 2/4 | 8/8 PLAYERS | POT-LIMIT OMAHA 5 CARDS | € 5/5 | 7/8 PLAYERS"
+    assert box_entries(box) == ["NLH €2/4 8/8", "PLO5 €5/5 7/8"], box_entries(box)
+    assert box_entries("CASH GAME TABLES ARE WAITING FOR MORE PLAYERS.") == []
+    assert box_entries("SOME NEW LAYOUT 12") is None
+    old = convert_old_row({"time": "2026-10-06 04:40", "weekday": "Tue", "hour": "4", "status": "ok", "box_text": box})
+    assert (old["source"], old["tables"], old["players"], old["games"]) == \
+        ("page table", 2, 15, "NLH €2/4 8/8; PLO5 €5/5 7/8"), old
+    clocks = [{"fullName": "Daily | Deepstack", "status": "RUNNING", "start": "2026-10-08T18:00:00", "activePlayers": 40, "totalEntries": 62},
+              {"fullName": "Main Event - Final Day", "status": "REGISTRATION_OPEN", "start": "2026-10-08T23:00:00", "activePlayers": 85, "totalEntries": 565},
+              {"fullName": "Main Event - Day 1", "status": "PAUSED", "start": "2026-10-07T18:00:00", "activePlayers": 84, "totalEntries": 565},
+              {"fullName": "Turbo", "status": "FINISHED", "start": "2026-10-08T12:00:00", "activePlayers": 1, "totalEntries": 30}]
+    got = tournament_entries(clocks, datetime(2026, 10, 8, 20, 0, tzinfo=TZ))
+    assert got == ["Daily Deepstack 40/62", "Main Event - Day 1 84/565 [PAUSED]"], got
+    assert list(parse_tourneys("; ".join(got))) == [("Daily Deepstack", 40, 62), ("Main Event - Day 1", 84, 565)]
+    assert tournament_entries({"x": 1}, datetime(2026, 10, 8, tzinfo=TZ)) is None
+    bagged = {"fullName": "Day 1", "status": "PAUSED", "start": "2026-10-07T18:00:00", "activePlayers": 84,
+              "totalEntries": 565, "activePause": {"sinceTime": "2026-10-08T17:30:00.5",
+                                                   "previousPause": {"sinceTime": "2026-10-08T17:00:00"}}}
+    assert tournament_entries([bagged], datetime(2026, 10, 8, 18, 30, tzinfo=TZ)) == ["Day 1 84/565 [PAUSED]"]
+    assert tournament_entries([bagged], datetime(2026, 10, 8, 19, 30, tzinfo=TZ)) == []
+    assert parse_games("MIX NLH /PLO €5/5 6/8") == (("MIX NLH/PLO", "5/5", 6, 8),)
+    assert as_int("7.0") == 7 and as_int(None) == 0 and as_int("x") == 0
+    names = ("GPD Mystery Bounty - Day 1D", "RENEMASTERMIX Friday Bounty", "PLO5 Bounty", "Pot-Limit Omaha Deepstack",
+             "NLH/PLO Mix", "Short Deck Special", "PLO 6-Card Bounty", "Omaha Hi-Lo", "Flip & Go Pineapple", "Big O",
+             "GPD NLH Morning Turbo", "6-Max Turbo", "Satellite to PLO Main")
+    assert [tourney_game(n) for n in names] == ["NLH", "NLH", "PLO5", "PLO", "Mixed", "Short Deck", "PLO6", "PLO Hi-Lo",
+                                               "Pineapple", "PLO5 Hi-Lo", "NLH", "NLH", "PLO"], [tourney_game(n) for n in names]
+    more = {"€ 1,100 Pot Limit Omaha - PLO4/PLO5 Championship Day 1 (Event #10)": "PLO mix",
+            "€ 85 + 15 Pot Limit Omaha - 4-5-6 in the Mix (PLO4/5/6)": "PLO mix",
+            "€ 175 + 25 Omaha Dealers Choice (Event #12)": "PLO mix", "€ 310 + 40 Pot Limit Dealers Choice": "Mixed",
+            "€ 350 Pot Limit Sviten - PLO5 & Draw (Event #15)": "Mixed",
+            "€ 170 + 30 No Limit Hold'em / Pot Limit Omaha - Half n Half": "Mixed",
+            "€ 1,500 WSOPC Big O (Ring Event #3)": "PLO5 Hi-Lo", "€ 350 Pot Limit Omaha - PLO4 HI-LO/PLO5 HI-LO": "PLO Hi-Lo",
+            "€ 500 + 50 Pot Limit Omaha - 550er PLO5 Highroller": "PLO5", "€ 250 Pot Limit - 2-7 Triple Draw": "Mixed",
+            "€ 125 Pot Limit Omaha": "PLO", "€ 310 + 40 Pot Limit Omaha 4/5/6 (Event #22)": "PLO mix",
+            "€ 50 + 10 Pot Limit Omaha - 4/5/6 Masters 7 Max": "PLO mix", "€ 295 No Limit Hold'em - BPC Main Event": "NLH",
+            "€ 1,500 No Limit Hold'em - WSOPC Monster Stack (Ring Event #15)": "NLH", "€ 220 + 30 Mixed Games - H.O.R.S.E.": "Mixed"}
+    assert {n: tourney_game(n) for n in more} == more, {n: tourney_game(n) for n in more if tourney_game(n) != more[n]}
+    paste = ("10-Oct-2026\tSaturday\nSat 10 Oct at 3:00pm\tCzech Republic\t€ 125 Pot Limit Omaha, King's Resort Live, Rozvadov\n"
+             "Sat 10 Oct at 2:00pm\tWales\t£ 100 No Limit Hold'em, Les Croupiers, Cardiff\n"
+             "Fri 30 Oct - Sun 1 Nov at 2:00pm  Czech Republic  € 500 No Limit Hold'em - WSOPC King's German Championship "
+             "(Ring Event #6) Day 1, King’s Resort Live, Rozvadov\n"
+             "Sun 11 - Mon 12 Oct at 2:00pm\tEstonia\tKOT € 1,100 + 100 Pot Limit Omaha - PLO4/PLO5 Championship Day 1 (Event #10), "
+             "Olympic Park Casino, Tallinn\n"
+             "Fri 16 Oct at 3:00pm\tCzech Republic\t€ 120 No Limit Hold'em - DPM Ladies Event, King's Resort Live, Rozvadov Entry restricted\n"
+             "Sat 17 Oct at 6:00pm\tCzech Republic\t€ 34 + 6 Flip´n Go Satellite to PLO ME, Grand Casino Asch (Aš), Asch\n"
+             "Tue 24 Nov at 8:00pm\tEstonia\t€ 200 Cash Game Challenge (Event #30), Olympic Park Casino, Tallinn\n"
+             "Fri 9 - Sun 11 Oct\tEstonia\t€ 250 No Limit Hold'em - Mini-Main (Event #2), Olympic Park Casino, Tallinn\n")
+    got = [(e["room"], e["date"], e["end"], e["time"], e["kind"], e["game"], e["buyin"], e["restricted"])
+           for e in parse_hendonmob(paste, date(2026, 10, 10))]
+    assert got == [("kings", "2026-10-10", "", "15:00", "tournament", "PLO", "125", ""),
+                   ("kings", "2026-10-30", "2026-11-01", "14:00", "tournament", "NLH", "500", ""),
+                   ("olympic-tallinn", "2026-10-11", "2026-10-12", "14:00", "tournament", "PLO mix", "1200", ""),
+                   ("kings", "2026-10-16", "", "15:00", "tournament", "NLH", "120", "yes"),
+                   ("grandcasinoas", "2026-10-17", "", "18:00", "satellite", "PLO", "40", ""),
+                   ("olympic-tallinn", "2026-11-24", "", "20:00", "cash", "NLH", "200", ""),
+                   ("olympic-tallinn", "2026-10-09", "2026-10-11", "", "tournament", "NLH", "250", "")], got
+    assert parse_hendonmob(paste, date(2027, 1, 20))[0]["date"] == "2026-10-10"  # the year follows the weekday
+    saved = dict(CONTEXT)
+    try:
+        CONTEXT.update(calendar=[{"room": "kings", "type": "festival", "name": "WSOPC", "start_d": date(2026, 10, 28),
+                                  "end_d": date(2026, 11, 11)}],
+                       schedule=[], holidays={"kings": {"2026-10-28": {"Independent Czechoslovak State Day": ["Czechia"]},
+                                                        "2026-11-17": {"Freedom Day": ["Czechia"]}}})
+        day_info.cache_clear()
+        assert day_info("kings", "2026-10-28") == ("festival", "WSOPC")  # a festival outranks the holiday
+        assert day_info("kings", "2026-11-17") == ("holiday", "Freedom Day (Czechia)")
+        assert day_info("kings", "2026-11-12") == ("normal", "") and day_info("cardcasino", "2026-10-30") == ("normal", "")
+        rows = [{"time": f"2026-11-{d:02d} 20:00", "hour": "20", "players": "30", "games": "NLH €2/4 8/8"} for d in (12, 13)]
+        rows += [{"time": "2026-10-29 20:00", "hour": "20", "players": "50", "games": "PLO5 €5/5 8/8"}]
+        kept, note = split_days("kings", rows)
+        assert len(kept) == 2 and "Normal days only" in note
+        table = "\n".join(day_type_lines("kings", rows))
+        assert "| 🎪 WSOPC | 29 Oct (1 day) | 1 | 50.0 | 0.0 | 8.0 | +20.0 |" in table, table
+        assert day_tag("kings", "2026-10-30") == " 🎪 WSOPC" and day_tag("kings", "2026-11-17") == " 📅 public holiday"
+        assert event_name("€ 300 + 40 Pot Limit Omaha - Main Event") == "Pot Limit Omaha - Main Event"
+        old = {("kings", "2026-10-09", "15:00", "Past event"): {}, ("kings", "2026-10-20", "15:00", "Cancelled"): {},
+               ("kings", "2026-12-30", "15:00", "Beyond the new copy"): {}, ("banco", "2026-10-20", "18:00", "Other room"): {},
+               ("kings", "2026-10-21", "14:00", "Moved"): {}}
+        new = [{"room": "kings", "date": "2026-10-21", "time": "16:00", "title": "Moved"}]
+        assert sorted(merge_schedule(old, new, "2026-10-11", "2026-12-19")) == [
+            ("banco", "2026-10-20", "18:00", "Other room"), ("kings", "2026-10-09", "15:00", "Past event"),
+            ("kings", "2026-10-21", "16:00", "Moved"), ("kings", "2026-12-30", "15:00", "Beyond the new copy")]
+        CONTEXT["schedule"] = [{"room": "kings", "date": "2026-11-12", "kind": "tournament", "title": "€ 500 NLH - Main Event Day 1A"},
+                               {"room": "kings", "date": "2026-11-02", "kind": "tournament", "title": "€ 500 NLH - Main Event Day 1A"},
+                               {"room": "kings", "date": "2026-11-13", "kind": "satellite", "title": "Satellite to ME"}]
+        assert [d.isoformat() for d, _ in uncovered_main_events("kings", date(2026, 10, 11))] == ["2026-11-12"]
+        assert cal_text("€199 main event; €350 high roller 11–12 Oct | x") == "€199 main event; €350 high roller 11–12 Oct x"
+    finally:
+        CONTEXT.update(saved)
+        day_info.cache_clear()
+    clock = {"fullName": "KM EPC Closer - Day 1", "tournamentName": "KM EPC Closer", "subName": "played till ITM",
+             "status": "PAUSED", "currency": "EUR", "effectivePrizePool": 240125, "startingStack": 50000,
+             "openRegistration": False, "lateRegistrationUntilLevel": 9, "start": "2026-10-05T18:00:03", "totalEntries": 565,
+             "activePlayers": 84, "averageStack": 336310, "entryValue": 500, "serviceFee": 0, "bountyValue": None,
+             "currentLevel": {"sb": 5000, "bb": 10000, "ante": 10000, "number": 14}}
+    entries, details = tournament_entries([clock], datetime(2026, 10, 6, 4, 40, tzinfo=TZ), with_details=True)
+    assert entries == ["KM EPC Closer - Day 1 84/565 [PAUSED]"], entries
+    assert details[0]["game"] == "NLH" and details[0]["blinds"] == "5000/10000/10000" and details[0]["buyin"] == 500, details
+    assert tourney_text(details[0]) == "KM EPC Closer - Day 1 (NLH, €500, 84 of 565 left, level 14, blinds 5000/10000/10000)", \
+        tourney_text(details[0])
+    assert [family(g) for g in ("NLH", "PLO5", "PLO", "MIX NLH/PLO")] == ["NLH", "PLO", "PLO", "Other"]
+    page = "Cash Game\nCash games\nNLH\t1/2\t8\nPLO\t2/2\t6\nPoker tournaments\nCurrently we do not play any tournaments\nBanco promotions"
+    assert page_section(page, "cash games", ("poker tournaments",)) == "NLH | 1/2 | 8 | PLO | 2/2 | 6"
+    assert page_section(page, "poker tournaments", ("banco promotions",)) == "Currently we do not play any tournaments"
+    card_html = ('<div class="splide__slide"><div class="cash-game aligner flex-start">\r <h4 class="stretch">NLH</h4>\r'
+                 ' <h4 class="number">1/3 €</h4>\r <h4>8/8</h4>\r </div><div class="cash-game aligner flex-start">'
+                 '<h4 class="stretch">PLO</h4><h4 class="number">100/100 €</h4><h4>5/8</h4></div></div>')
+    assert card_entries(card_html) == ["NLH €1/3 8/8", "PLO €100/100 5/8"], card_entries(card_html)
+    assert card_entries("") is None and card_entries("  ") is None and card_entries("<p>No cash games at the moment</p>") == []
+    assert card_entries('<div class="cash-game"><h4>NLH</h4></div>') is None
+    assert card_text_entries("NLH | 1/3 € | 8/8 | PLO | 10/10 € | 8/8") == ["NLH €1/3 8/8", "PLO €10/10 8/8"]
+    assert [card_game(g) for g in ("nlh", "PLO", "PLO 5", "PLO4", "NLH/PLO")] == ["NLH", "PLO", "PLO5", "PLO", "NLH/PLO"]
+    gas_table = ('<h2>Current cash game</h2><table><thead><tr><th>Game</th><th>Blinds</th><th>Buy-in</th><th>Status</th></tr>'
+                 '</thead><tr><td><a href="/x/15">NLH</a></td><td>1€-2€</td><td>€50 &ndash; €500</td><td>Running</td></tr>'
+                 '<tr><td><a href="/x/16">PLO/NLH</a></td><td></td><td></td><td>Waiting</td></tr></table>')
+    assert gas_cash_entries(gas_table) == ["NLH €1/2 [RUNNING]", "PLO/NLH [WAITING]"], gas_cash_entries(gas_table)
+    assert gas_cash_entries("<p>nothing</p>") is None
+    gas_page = ("<h2>Current Tournaments</h2><div>Crazy Pineapple</div> Start 01.10. 14:00 11:19 LVL 9 Level 1000/1500/1500 "
+                "70 € Buy-In Closed Late Reg. 30&nbsp;000 Starting Stack 55&nbsp;500 Average Stack 20 (37) Players "
+                "€ 2&nbsp;220 Prizepool Next level 1000/2000/2000 National NLH Championship 1A Start 01.10. 17:00 32:12 Countdown "
+                "Level Countdown 150 € Buy-In 05:12:12 Late Reg. 100 000 Starting Stack 100 000 Average Stack 3 (3) Players "
+                "€ 100 000 Prizepool Next level 200/500/500 01.10. 12:00 German Team Championship I All Tournaments (126)")
+    entries, details = gas_tournaments(gas_page, datetime(2026, 10, 1, 16, 0, tzinfo=TZ))
+    assert entries == ["Crazy Pineapple 20/37"], entries
+    assert (details[0]["game"], details[0]["prizepool"], details[0]["avg_stack"], details[0]["late_reg_open"]) == \
+        ("Pineapple", 2220, 55500, False), details
+    def oly_row(status, name, blinds, buyin, tables, seated, seats, open_seats, waiting):
+        return (f'<div class="table-data-row" data-game-type-id="1"><span class="row-status-badge status-x">{status}</span>'
+                f'<div class="col-checkbox"><label><input type="checkbox" data-game-name="{name}" data-club-name="Olympic Park Casino" '
+                f'data-blinds="{blinds}" data-buyin="{buyin}" /><span class="select-text">Select</span></label></div>'
+                f'<div class="col-game"><span class="game-name">{name}</span><span class="game-tables-label">Tables {tables}</span></div>'
+                f'<div class="col-blinds" data-label="BLINDS"><span>{blinds}</span></div><div class="col-buyin"><span>{buyin}</span></div>'
+                f'<div class="row-stats"><div class="col-tables">\n<span>{tables}</span>\n</div><div class="col-players"><svg/>'
+                f'<span class="players-total"><span class="players-count">{seated}</span><span class="players-max">/{seats}</span></span>'
+                f'<span class="waiting-count">({waiting} waiting)</span></div><div class="col-seats"><span>{open_seats}</span></div>'
+                f'<div class="col-waiting"><span>{waiting}</span></div></div></div>')
+    oly_page = ('<div class="table-header-row">GAME</div><div class="table-rows">'
+                + oly_row("OPENED", "NLH 1/3", "€1/€3", "€200", 1, 9, 9, 0, 3) + oly_row("OPENED", "PLO/PLO5", "€1/€3", "€200", 0, 0, 0, 0, 0)
+                + oly_row("CLOSED", "NLH 5/5", "€5/€5", "€300", 0, 0, 0, 0, 0) + oly_row("OPENED", "PLO/PLO5", "€5/€5", "€300", 2, 13, 16, 3, 1)
+                + oly_row("WAITING TO START", "Dealer&#039;s Choice", "€1/2€", "€100", 1, 0, 8, 8, 0)
+                + oly_row("WAITING TO START", "NLH", "€1/2€", "€100", 1, 4, 9, 5, 0)
+                + '</div><template id="cash-games-row-template">' + oly_row("", "", "", "", "", "", "", "", 0) + "</template>")
+    rows = oly_cash_rows(oly_page)
+    assert [(r["game"], r["stakes"], r["buyin"], r["status"], r["tables"], r["players"], r["seats"], r["open"], r["waiting"])
+            for r in rows] == [("NLH", "1/3", 200, "OPENED", 1, 9, 9, 0, 3), ("PLO/PLO5", "1/3", 200, "OPENED", 0, 0, 0, 0, 0),
+                               ("NLH", "5/5", 300, "CLOSED", 0, 0, 0, 0, 0), ("PLO/PLO5", "5/5", 300, "OPENED", 2, 13, 16, 3, 1),
+                               ("Dealer's Choice", "1/2", 100, "WAITING TO START", 1, 0, 8, 8, 0),
+                               ("NLH", "1/2", 100, "WAITING TO START", 1, 4, 9, 5, 0)], rows
+    tables, players, waiting, entries, listed = oly_summary(rows)
+    assert (tables, players, waiting) == (4, 26, 4) and entries == [
+        "NLH €1/3 9/9", "PLO/PLO5 €5/5 7/8", "PLO/PLO5 €5/5 6/8", "NLH €1/2 4/9 [WAITING]"], entries
+    assert all(ENTRY_RE.match(e) for e in entries) and listed.startswith("NLH €1/3 (opened): 1 table, 9/9 players, 3 waiting")
+    assert oly_cash_rows('<div class="table-header-row">GAME</div><div class="table-rows"></div>') == []
+    assert oly_summary([])[4] == "no games listed"
+    assert oly_cash_rows("<p>nothing here</p>") is None
+    real = ("<div class='title'>Bratislava</div><div class=\"game-info\"><div class=\"game-type info-item\">PLO 4/5c 2/2&euro;</div><!--\n"
+            "--><div class=\"buy-in info-item\">100&euro;</div><div class=\"players info-item\">\n 6 <i class=\"fa fa-users\"></i>\n</div>"
+            "<a href=\"tel:+421\" class=\"phone info-item\"><i class=\"fa fa-phone\"></i></a></div><div class=\"game-info\">"
+            "<div class=\"game-type info-item\">NLHE 1/3&euro;</div><div class=\"buy-in info-item\">100&euro;</div>"
+            "<div class=\"players info-item\"> 5 <i class=\"fa fa-users\"></i></div></div><div class=\"title\">Košice</div>"
+            "<div class=\"game-info\"><div class=\"game-type info-item\">DCH 1/2&euro;</div><div class=\"buy-in info-item\">50&euro;</div>"
+            "<div class=\"players info-item\"> 4 </div></div><div class=\"title\">&nbsp;</div><div class=\"game-info\"></div>"
+            "<div class=\"updated\"><span>Aktualizované: </span> 13.10.2026 11:40 </div>")
+    games = banco_games(real)
+    assert [(g["room"], g["game"], g["stakes"], g["buyin"], g["players"]) for g in games] == [
+        ("Bratislava", "PLO 4/5", "2/2", 100, 6), ("Bratislava", "NLH", "1/3", 100, 5), ("Košice", "Dealer's Choice", "1/2", 50, 4)], games
+    tables, players, entries, text = banco_summary(games)
+    assert (tables, players, entries) == (2, 11, "PLO 4/5 €2/2 6/0; NLH €1/3 5/0") and text.startswith("Bratislava: PLO 4/5 €2/2 6 players")
+    assert parse_games(entries) == (("PLO 4/5", "2/2", 6, 0), ("NLH", "1/3", 5, 0))
+    old = banco_old_text_games("Bratislava | PLO 4/5c 2/2€ | <!-- | --> 100€ | 6 | NLHE 1/3€ | <!-- | --> 100€ | 8 | Košice | DCH 1/2€ | <!-- | --> 50€ | 4")
+    assert [(g["room"], g["game"], g["buyin"], g["players"]) for g in old] == [
+        ("Bratislava", "PLO 4/5", 100, 6), ("Bratislava", "NLH", 100, 8), ("Košice", "Dealer's Choice", 50, 4)], old
+    assert banco_summary([]) == (0, 0, "", "") and BANCO_NONE.search("Momentálne sa nehrajú žiadne cash games.")
+    assert banco_cash_text("") == "" and banco_cash_text("  ") == ""
+    assert banco_cash_text('<table><tr><th>Game</th><th>Blinds</th></tr></table><p class="updated">Updated <a>12:00</a></p>') == ""
+    assert banco_cash_text('<table><tr><th>Game</th><th>Blinds</th></tr><tr><td>NLH</td><td>1/2</td><td><span class="hide">7/9</span></td></tr>'
+                           '<tr><td>PLO</td><td>2/2</td><td>6/9</td></tr></table>') == "NLH ; 1/2 ; 7/9 | PLO ; 2/2 ; 6/9"
+    assert banco_cash_text("<div>NLH 1/2 - 7 players</div><div>PLO 2/2 - 6 players</div>") == "NLH 1/2 - 7 players | PLO 2/2 - 6 players"
+    saved = page_details("<html><head><script src='/a.js'></script><script>var cashAjax = {url: '/x'};</script></head>"
+                         "<body><h1>Cash games</h1><style>p{}</style><p>Table</p></body></html>")
+    assert saved["scripts"] == ["/a.js"] and "cashAjax" in saved["inline_scripts"][0] and saved["page_text"] == "Cash games Table"
+    assert gzip.decompress(base64.b64decode(saved["page_gz_base64"])).decode().startswith("<html>")
+    assert oly_cash_rows(oly_page.replace('<span class="players-max">/9</span>', "", 1)) is None  # a row changed shape
+    assert oly_cash_rows(oly_row("OPENED", "PLO/PLO 5 5/5/10", "€5/€5/€10", "€500", 1, 7, 8, 1, 0))[0]["game"] == "PLO/PLO5"
+    assert plo_digits("NLH €1/3 9/9; PLO/PLO 5 €5/5/10 8/8") == "NLH €1/3 9/9; PLO/PLO5 €5/5/10 8/8"
+    assert plo_digits("PLO €5/5 (closed): 0 tables, 0/0 players, 3 waiting; PLO5 €5/5 7/8") == \
+        "PLO €5/5 (closed): 0 tables, 0/0 players, 3 waiting; PLO5 €5/5 7/8"
+    first = banco_row_numbers({"cash_text": "Bratislava | PLO 4/5c 2/2€ | <!-- | --> 100€ | 6 | NLHE 1/3€ | <!-- | --> 100€ | 5"})
+    assert (first["tables"], first["players"], first["games"]) == (2, 11, "PLO 4/5 €2/2 6/0; NLH €1/3 5/0"), first
+    assert first["cash_text"] == "Bratislava: PLO 4/5 €2/2 6 players (buy-in €100), NLH €1/3 5 players (buy-in €100)"
+    page0 = {"time": "2026-10-14 11:00", "status": "ok", "source": "page table", "tables": "0"}
+
+    def feed_check(hm, n):
+        return {"time": f"2026-10-14 {hm}", "status": "ok", "source": "feed", "tables": str(n)}
+    t0 = datetime(2026, 10, 14, 12, 16)
+    assert trusted_empty([page0, feed_check("11:10", 0), feed_check("11:50", 0)], t0)
+    assert not trusted_empty([page0, feed_check("12:00", 1), feed_check("12:10", 1)], t0)  # a table came and went
+    assert not trusted_empty([page0, feed_check("11:10", 0)], datetime(2026, 10, 14, 13, 30))  # page check too old
+    assert not trusted_empty([feed_check("11:50", 0)], t0)  # never checked on the page
+    assert unchecked_empties([page0, feed_check("11:10", 0), feed_check("12:10", 1), feed_check("12:16", 0),
+                              feed_check("12:20", 1)]) == [3]
+    extract = json.loads(banco_event_extract({"status": {"level": {"id": 2}}, "stats": {"totalPlayers": 0},
+                                              "levels": [{"type": 1}, {"type": 2}]}, {"type": 2}))
+    assert extract["level"] == {"type": 2} and extract["levels"] == 2
+    ladies = {"dailyDetails": {"fullname": "Ladies Night", "startDate": "2026-10-14T19:00:00"},
+              "subscription": {"buyin": {"buyinFee": 35}}, "stats": {"totalPlayers": 0, "guaranteedAmount": 3000},
+              "status": {"level": {"id": 1}}, "levels": [{"index": 0, "type": 2}, {"index": 1, "type": 1, "smallBlind": 100,
+                                                                                    "bigBlind": 100}, {"index": 0, "type": 2}]}
+    assert banco_event_line(ladies)[0] == "Ladies Night, starts at 19:00, buy-in €35, €3000 GTD"
+    ladies.update(stats={"totalPlayers": 33, "totalEntries": 33, "guaranteedAmount": 3000}, status={"level": {"id": 2}})
+    assert banco_event_line(ladies)[0] == "Ladies Night: 33/33 players, level 1, blinds 100/100, buy-in €35, €3000 GTD"
+    ladies.update(status={"level": {"id": 3}})
+    assert banco_event_line(ladies)[0] == "Ladies Night: 33/33 players, on a break, buy-in €35, €3000 GTD"
+    assert banco_break_text("Ladies Night: 22/96 players, starts at 19:00, buy-in €35") == \
+        "Ladies Night: 22/96 players, on a break, buy-in €35"
+    assert banco_break_text("Ladies Night: 4/4 players, starts at 19:00, buy-in €35") == \
+        "Ladies Night: 4/4 players, starts at 19:00, buy-in €35"
+    assert card_entries('<div class="splide__slide">\r\n <div class="cash-game aligner">\r\n <h4>No games currently</h4>\r\n </div>\r\n</div>') == []
+    assert gas_cash_entries("<p>Back to home</p><p>No Cash Game table is open at this time</p>") == []
+    assert [is_tracker(h) for h in ("www.googletagmanager.com", "ajax.googleapis.com", "connect.facebook.net",
+                                    "admin.kings-resort.com", "bancocasino.sk")] == [True, False, True, False, False]
+    self_test_v32()
+    self_test_v33()
+    self_test_v34()
+    self_test_v35()
+    self_test_v36()
+    self_test_v37()
+
+
+def self_test_v32():
+    """Checks for the v32 additions (run as part of self_test)."""
+    autumn = real_times(["2026-10-25 02:40", "2026-10-25 02:50", "2026-10-25 02:00", "2026-10-25 02:10"])
+    assert [b - a for a, b in zip(autumn, autumn[1:])] == [timedelta(minutes=10)] * 3, autumn
+    spring = real_times(["2027-03-28 01:50", "2027-03-28 03:00", "bad", None])
+    assert len(spring) == 2 and spring[1] - spring[0] == timedelta(minutes=10), spring
+    at8 = datetime(2026, 10, 15, 8, 0, tzinfo=TZ)
+    assert backup_not_needed({"time": "2026-10-15 07:52"}, at8) and not backup_not_needed({"time": "2026-10-15 07:40"}, at8)
+    assert not backup_not_needed(None, at8) and not backup_not_needed({"time": ""}, at8)
+    assert local_time("2026-10-14T17:00:00Z") == datetime(2026, 10, 14, 19, 0)
+    assert local_time("2026-10-14T18:00:05") == datetime(2026, 10, 14, 18, 0, 5) and local_time(None) is None
+    with tempfile.TemporaryDirectory() as tmp:  # a half-written last row is finished before the next one
+        path = Path(tmp) / "2026-10.csv"
+        path.write_bytes(b"\xef\xbb\xbftime,status\r\n2026-10-15 07:50,ok\r\n2026-10-15 08:0")
+        fh, new_file = open_for_append(path)
+        with fh:
+            csv.DictWriter(fh, fieldnames=["time", "status"]).writerow({"time": "2026-10-15 08:10", "status": "ok"})
+        with path.open(newline="", encoding="utf-8-sig") as fh:
+            got = [r["time"] for r in csv.DictReader(fh)]
+        assert not new_file and got == ["2026-10-15 07:50", "2026-10-15 08:0", "2026-10-15 08:10"], got
+    calls = []
+
+    def fake_feed(url=None):  # the clock feed leaves a running tournament out for a moment
+        calls.append(url)
+        return [] if len(calls) == 1 else [{"fullName": "Daily", "status": "RUNNING", "activePlayers": 30, "totalEntries": 60}]
+    real_fetch, real_sleep, real_sample = globals()["fetch_feed"], time.sleep, globals()["save_sample"]
+    globals().update(fetch_feed=fake_feed, save_sample=lambda *a, **k: None)
+    time.sleep = lambda seconds: None
+    try:
+        assert check_tournaments(at8, were_running=True)[0] == ["Daily 30/60"] and len(calls) == 2
+        calls.clear()
+        assert check_tournaments(at8)[0] == [] and len(calls) == 1
+    finally:
+        globals().update(fetch_feed=real_fetch, save_sample=real_sample)
+        time.sleep = real_sleep
+
+
+def self_test_v33():
+    """Checks for the v33 change: a copy that starts after the day it's pasted keeps the days before it."""
+    copy = ("5,174 Events: 17 October - 26 December 2026\n14-Oct-2026\tWednesday\n"
+            "Wed 14 - Mon 19 Oct\tCzech Republic\t€ 225 No Limit Hold'em - DPM Day 1A, King's Resort Live, Rozvadov\n"
+            "17-Oct-2026\tSaturday\n"
+            "Sat 17 Oct at 3:00pm\tCzech Republic\t€ 120 Pot Limit Omaha, King's Resort Live, Rozvadov\n"
+            "Sat 26 Dec at 4:00pm\tUnited States\t$ 125 No Limit Hold'em, Jamul Casino, Jamul\n")
+    today = date(2026, 10, 15)
+    assert hm_first_day(copy, today) == date(2026, 10, 17), hm_first_day(copy, today)
+    assert paste_window(copy, today, "2026-10-15") == ("2026-10-17", "2026-12-26")
+    assert paste_window(copy, today, "2026-10-20") == ("2026-10-20", "2026-12-26")
+    assert paste_window("no dates here", today, "2026-10-15") == ("2026-10-15", "2026-10-15")
+    old = {("kings", "2026-10-15", "17:00", "€ 225 No Limit Hold'em - DPM Day 1B"): {},
+           ("kings", "2026-10-18", "18:00", "€ 500 No Limit Hold'em - DPM High Roller"): {}}
+    merged = merge_schedule(old, parse_hendonmob(copy, today), *paste_window(copy, today, "2026-10-15"))
+    assert ("kings", "2026-10-15", "17:00", "€ 225 No Limit Hold'em - DPM Day 1B") in merged  # before the copy starts
+    assert ("kings", "2026-10-18", "18:00", "€ 500 No Limit Hold'em - DPM High Roller") not in merged  # no longer listed
+    assert ("kings", "2026-10-17", "15:00", "€ 120 Pot Limit Omaha") in merged
+
+
+def self_test_v34():
+    """Checks for the v34 change: an ongoing event listed again without its start time isn't stored twice."""
+    copy = ("5,347 Events: 16 October - 25 December 2026\n14-Oct-2026\tWednesday\n"
+            "Wed 14 - Mon 19 Oct\tCzech Republic\t€ 225 No Limit Hold'em - DPM Day 1A, King's Resort Live, Rozvadov\n"
+            "16-Oct-2026\tFriday\n"
+            "Fri 16 Oct at 3:00pm\tCzech Republic\t€ 120 No Limit Hold'em - DPM Ladies Event, King's Resort Live, Rozvadov\n"
+            "Fri 16 - Sun 18 Oct\tCzech Republic\t€ 300 + 40 Pot Limit Omaha - Main Event - Day 1A, Grand Casino Asch ( Aš ), Asch\n"
+            "Wed 21 Oct at 3:00pm\tSlovakia\t€ 45 + 5 Satellite to Main Event, Card Casino Šamorín, Šamorín\n"
+            "Wed 21 Oct at 7:00pm\tSlovakia\t€ 45 + 5 Satellite to Main Event, Card Casino Šamorín, Šamorín\n"
+            "Fri 25 Dec at 6:00pm\tSerbia\tRSD 11,000 No Limit Hold'em, Grand Casino Admiral Beograd, Belgrade\n")
+    today = date(2026, 10, 15)
+    assert paste_window(copy, today, "2026-10-15") == ("2026-10-16", "2026-12-25")
+    dpm, ladies = "€ 225 No Limit Hold'em - DPM Day 1A", "€ 120 No Limit Hold'em - DPM Ladies Event"
+    plo, sat = "€ 300 + 40 Pot Limit Omaha - Main Event - Day 1A", "€ 45 + 5 Satellite to Main Event"
+    old = {("kings", "2026-10-14", "18:00", dpm): {}, ("kings", "2026-10-15", "17:00", "€ 225 No Limit Hold'em - DPM Day 1B"): {},
+           ("grandcasinoas", "2026-10-16", "16:00", plo): {}, ("cardcasino", "2026-10-21", "15:00", sat): {},
+           ("cardcasino", "2026-10-21", "19:00", sat): {}, ("kings", "2026-10-16", "", ladies): {}}
+    merged = merge_schedule(old, parse_hendonmob(copy, today), *paste_window(copy, today, "2026-10-15"))
+    assert ("kings", "2026-10-14", "18:00", dpm) in merged and ("kings", "2026-10-14", "", dpm) not in merged
+    assert ("kings", "2026-10-15", "17:00", "€ 225 No Limit Hold'em - DPM Day 1B") in merged  # before the copy starts
+    assert ("grandcasinoas", "2026-10-16", "16:00", plo) in merged and ("grandcasinoas", "2026-10-16", "", plo) not in merged
+    assert ("cardcasino", "2026-10-21", "15:00", sat) in merged and ("cardcasino", "2026-10-21", "19:00", sat) in merged
+    assert ("kings", "2026-10-16", "15:00", ladies) in merged and ("kings", "2026-10-16", "", ladies) not in merged
+    assert len(merged) == 6, sorted(merged)
+
+
+def self_test_v35():
+    """Checks for the v35 change: a copy squashed together by the editor (no line breaks or tabs) reads like a tidy one."""
+    squashed = ("5,347 Events: 16 October - 25 December 2026\n"
+                "Wed 14 - Sun 18 OctEstonia\xa0€ 1,100 No Limit Hold'em - Kings of Tallinn Main Event Flight 1A (Event #33), "
+                "Olympic Park Casino, TallinnWed 14 - Fri 16 OctFrance€ 210 + 40 No Limit Hold'em - Cup 250 Day1A, Pasino Grand "
+                "Aix en Provence, Aix-en-Provence16-Oct-2026FridayFri 16 OctBelgium€ 80 No Limit Hold'em - PKR4U Big Stack 80, "
+                "PKR4U Poker Room, BrusselsFri 16 Oct at 3:00pmCzech Republic€ 120 No Limit Hold'em - DPM Ladies Event, King's "
+                "Resort Live, Rozvadov Fri 16 Oct at 3:00pmTaiwanNT$ 5,100 + 900 Pot Limit Omaha - Battle Stack PLO, Asia Poker "
+                "Arena - CTP Poker Club, Taipei City\n"
+                "Fri 16 Oct at 4:00pmCzech Republic€ 40 Satellite to DPM ME - Day 1 PRAGUE, King's Casino Prague (Formerly "
+                "Casino Atrium - Hilton Hotel), PragueFri 16 Oct at 4:00pmCzech RepublicFlip n Go Satellite to DPM ME Day 1D, "
+                "King's Resort Live, RozvadovFri 16 - Sun 18 Oct at 4:00pmCzech Republic€ 300 + 40 Pot Limit Omaha - Main Event "
+                "- Day 1A, Grand Casino Asch ( Aš ), AschSat 24 Oct at 6:00pmLithuaniaNo Limit Texas Hold'em, Warm -up, Olympic "
+                "Casino Donelaitis, KaunasFri 6 - Mon 16 Nov at 6:00pmSlovakia€ 150 No Limit Hold'em - Main Event Day 1A (Event "
+                "#1), Banco Casino, BratislavaFri 25 Dec at 6:00pmSerbiaRSD 11,000 No Limit Hold'em, Grand Casino Admiral "
+                "Beograd, Belgrade")
+    tidy = ("5,347 Events: 16 October - 25 December 2026\n14-Oct-2026\tWednesday\n"
+            "Wed 14 - Sun 18 Oct\tEstonia\tKOT € 1,100 No Limit Hold'em - Kings of Tallinn Main Event Flight 1A (Event #33), "
+            "Olympic Park Casino, Tallinn\n"
+            "Wed 14 - Fri 16 Oct\tFrance\t€ 210 + 40 No Limit Hold'em - Cup 250 Day1A, Pasino Grand Aix en Provence, Aix-en-Provence\n"
+            "16-Oct-2026\tFriday\nFri 16 Oct\tBelgium\t€ 80 No Limit Hold'em - PKR4U Big Stack 80, PKR4U Poker Room, Brussels\n"
+            "Fri 16 Oct at 3:00pm\tCzech Republic\t€ 120 No Limit Hold'em - DPM Ladies Event, King's Resort Live, Rozvadov "
+            "Entry restricted\n"
+            "Fri 16 Oct at 3:00pm\tTaiwan\tNT$ 5,100 + 900 Pot Limit Omaha - Battle Stack PLO, Asia Poker Arena - CTP Poker Club, "
+            "Taipei City\n"
+            "Fri 16 Oct at 4:00pm\tCzech Republic\t€ 40 Satellite to DPM ME - Day 1 PRAGUE, King's Casino Prague (Formerly "
+            "Casino Atrium - Hilton Hotel), Prague\n"
+            "Fri 16 Oct at 4:00pm\tCzech Republic\tFlip n Go Satellite to DPM ME Day 1D, King's Resort Live, Rozvadov\n"
+            "Fri 16 - Sun 18 Oct at 4:00pm\tCzech Republic\t€ 300 + 40 Pot Limit Omaha - Main Event - Day 1A, Grand Casino "
+            "Asch ( Aš ), Asch\n"
+            "Sat 24 Oct at 6:00pm\tLithuania\tNo Limit Texas Hold'em, Warm -up, Olympic Casino Donelaitis, Kaunas\n"
+            "Fri 6 - Mon 16 Nov at 6:00pm\tSlovakia\t€ 150 No Limit Hold'em - Main Event Day 1A (Event #1), Banco Casino, "
+            "Bratislava\n"
+            "Fri 25 Dec at 6:00pm\tSerbia\tRSD 11,000 No Limit Hold'em, Grand Casino Admiral Beograd, Belgrade\n")
+    today = date(2026, 10, 16)
+    kot = "€ 1,100 No Limit Hold'em - Kings of Tallinn Main Event Flight 1A (Event #33)"
+    want = [("olympic-tallinn", "2026-10-14", "2026-10-18", "", "tournament", "1100", kot),
+            ("kings", "2026-10-16", "", "15:00", "tournament", "120", "€ 120 No Limit Hold'em - DPM Ladies Event"),
+            ("kings-prague", "2026-10-16", "", "16:00", "satellite", "40", "€ 40 Satellite to DPM ME - Day 1 PRAGUE"),  # v36
+            ("kings", "2026-10-16", "", "16:00", "satellite", "", "Flip n Go Satellite to DPM ME Day 1D"),
+            ("grandcasinoas", "2026-10-16", "2026-10-18", "16:00", "tournament", "340",
+             "€ 300 + 40 Pot Limit Omaha - Main Event - Day 1A"),
+            ("banco", "2026-11-06", "2026-11-16", "18:00", "tournament", "150",
+             "€ 150 No Limit Hold'em - Main Event Day 1A (Event #1)")]
+    for copy in (squashed, tidy):
+        got = [(e["room"], e["date"], e["end"], e["time"], e["kind"], e["buyin"], e["title"])
+               for e in parse_hendonmob(copy, today)]
+        assert got == want, got
+        assert paste_window(copy, today, "2026-10-15") == ("2026-10-16", "2026-12-25"), paste_window(copy, today, "2026-10-15")
+    assert parse_hendonmob(tidy, today)[1]["restricted"] == "yes"  # a squashed copy has lost that mark
+    junk = {"room": "kings", "date": "2026-10-15", "end": "", "time": "", "kind": "tournament", "game": "NLH", "buyin": "",
+            "title": "at 12:00pmIreland € 620 + 80 No Limit Hold'em - Killarney Main Event Day 1A, Gleneagle Arena, Killarney",
+            "restricted": ""}
+    timed = dict(junk, room="olympic-tallinn", date="2026-10-14", end="2026-10-18", time="12:00", buyin="1100",
+                 title="KOT " + kot)
+    known = tidy_schedule([junk, timed])
+    assert list(known) == [("olympic-tallinn", "2026-10-14", "12:00", kot)], list(known)
+    merge_schedule(known, parse_hendonmob(squashed, today), "2026-10-16", "2026-12-25")
+    assert ("olympic-tallinn", "2026-10-14", "", kot) not in known  # the same event, listed again without its time
+    assert ("grandcasinoas", "2026-10-16", "16:00", want[4][6]) in known
+    many = {("kings", f"2026-10-{d}", "20:00", f"€ 100 No Limit Hold'em - Daily {d}"): {} for d in range(16, 30)}
+    assert incomplete_rooms(many, parse_hendonmob(squashed, today), "2026-10-16", "2026-12-25") == ["kings"]
+    assert incomplete_rooms(dict(list(many.items())[:9]), parse_hendonmob(squashed, today), "2026-10-16", "2026-12-25") == []
+
+
+def self_test_v36():
+    """Checks for the v36 additions: King's Prague from the shared feed, Riga's club on OlyBet's page, both rooms in a
+    Hendon Mob copy, and Aš tournaments that show no level (a break) or are laid out a little differently."""
+    def table(prof, blinds, seated, venue):
+        return {"gameProfile": {"name": prof, "blindsFormatted": blinds}, "gameType": {"name": "Poker"},
+                "playerCount": seated, "seatCount": 8, "venue": venue, "status": "PLAYING"}
+    feed = [table("NLH 2-4", "€ 2/4", 7, 1), table("NLH 1-2", "€ 1/2", 6, 2), table("PLO 5-5 5cards", "€ 5/5", 7, 2),
+            table("PLO 2-2", "€ 2/2", 8, 1)]
+    assert feed_entries(feed) == ["NLH €2/4 7/8", "PLO €2/2 8/8"], feed_entries(feed)
+    assert feed_entries(feed, "2") == ["NLH €1/2 6/8", "PLO5 €5/5 7/8"], feed_entries(feed, "2")
+    assert feed_venues(feed) == {"1": 2, "2": 2} and feed_venues(None) == {} and feed_venues([{"x": 1}]) == {}
+    saved = globals()["PRAGUE_VENUE"], globals()["VENUES_FILE"]
+    with tempfile.TemporaryDirectory() as tmp:
+        globals().update(PRAGUE_VENUE="", VENUES_FILE=Path(tmp) / "venues.json")
+        try:
+            assert prague_venue({"1": {"checks": 9}}) is None and prague_venue({"1": {}, "2": {"checks": 3}}) == "2"
+            assert prague_venue({"2": {"checks": 1}, "10": {"checks": 7}}) == "10" and prague_venue({"3": {}, "2": {}}) == "2"
+            at = datetime(2026, 10, 17, 20, 0, tzinfo=TZ)
+            remember_venues({"1": 9, "2": 4}, at)
+            seen = remember_venues({"1": 8}, at + timedelta(minutes=10))
+            assert seen["2"] == {"first": "2026-10-17 20:00", "last": "2026-10-17 20:00", "checks": 1, "most_tables": 4}, seen
+            assert seen["1"]["checks"] == 2 and seen["1"]["most_tables"] == 9 and prague_venue(load_venues()) == "2"
+            globals()["PRAGUE_VENUE"] = "5"
+            assert prague_venue({}) == "5"
+        finally:
+            globals().update(PRAGUE_VENUE=saved[0], VENUES_FILE=saved[1])
+    assert prague_reading(feed, "2", False) == ("ok", ["NLH €1/2 6/8", "PLO5 €5/5 7/8"])
+    assert prague_reading(feed[:1], "2", True) == ("ok", [])  # the feed works (Rozvadov is in it): Prague has none
+    assert prague_reading([], "2", True) == ("ok", []) and prague_reading([], "2", False)[1] is None
+    assert prague_reading(feed, None, True)[1] is None and prague_reading(None, "2", True)[1] is None
+    links = OLY_CLUB_RE.findall('<a href="/lv/cash-games/?club=8">Olympic Casino Rīga</a> '
+                                '<a href="/lv/cash-games/?club=7"><span>Olympic Voodoo</span> Casino</a>')
+    base = "https://olybetpoker.com/lv/cash-games/"
+    assert oly_find_club(links, base, ("voodoo", "rīga", "riga")) == (base + "?club=7", "Olympic Voodoo Casino")
+    assert oly_find_club(links, base, ("riga", "rīga")) == (base + "?club=8", "Olympic Casino Rīga")
+    assert oly_find_club(links, base, ("kempinski",)) is None and club_keys({"club": "vilni"}) == ("vilni",)
+    assert [site["key"] for site in OLY_SITES] == ["olympic-tallinn", "olympic-riga", "olympic-vilnius"]
+    copy = ("5,376 Events: 16 October - 25 December 2026\n"
+            "Sat 17 Oct at 3:00pm\tCzech Republic\t€ 100 No Limit Hold'em - Saturday Monsterstack, King's Casino Prague "
+            "(Formerly Casino Atrium - Hilton Hotel), Prague\n"
+            "Fri 23 Oct at 7:00pm\tLatvia\t€ 250 No Limit Hold'em - Opening Event, Olympic Voodoo Casino, Riga\n"
+            "Sat 24 Oct at 6:00pm\tLithuania\tNo Limit Texas Hold'em, Warm -up, Olympic Casino Donelaitis, Kaunas\n")
+    want = [("kings-prague", "2026-10-17", "15:00", "100", "€ 100 No Limit Hold'em - Saturday Monsterstack"),
+            ("olympic-riga", "2026-10-23", "19:00", "250", "€ 250 No Limit Hold'em - Opening Event")]
+    for text in (copy, copy.replace("\t", "").replace("\n", "")):  # tidy, and squashed by the editor
+        got = [(e["room"], e["date"], e["time"], e["buyin"], e["title"]) for e in parse_hendonmob(text, date(2026, 10, 17))]
+        assert got == want, got
+    page = ("<h2>Current Tournaments</h2><div>PLO Main Event Day 1/A</div> Start 16.10. 16:00 14:59 Break Level Break "
+            "300 € Buy-In Closed Late Reg. 30 000 Starting Stack 240 000 Average Stack 35 (42) Players € 100 000 Prizepool "
+            "<div>Classic Friday</div> Start 16.10. 18:00 08:12 LVL 3 Level 200/400/400 60 € Buy-In 20:00 Late Reg. "
+            "20 000 Starting Stack 21 000 Average Stack 43 (45) Players € 7 000 Prizepool Next level 300/600/600 "
+            "<div>Satellite</div> Start 16.10. 21:00 1:12:00 Countdown Level Countdown 50 € Buy-In 21:00 Late Reg. "
+            "5 000 Starting Stack 5 000 Average Stack 4 (4) Players - Prizepool 17.10. 12:00 Supersatellite All Tournaments (3)")
+    unread = []
+    entries, details = gas_tournaments(page, datetime(2026, 10, 16, 19, 0, tzinfo=TZ), unread)
+    assert entries == ["PLO Main Event Day 1/A 35/42 [BREAK]", "Classic Friday 43/45"], entries
+    assert (details[0]["status"], details[0]["game"], details[0].get("level"), details[0]["buyin"], details[0]["prizepool"]) \
+        == ("BREAK", "PLO", None, 300, 100000), details[0]
+    assert (details[1]["status"], details[1]["level"], details[1]["blinds"], details[1]["late_reg_open"],
+            details[1]["avg_stack"], details[1]["start_stack"]) == ("RUNNING", 3, "200/400/400", True, 21000, 20000), details[1]
+    assert unread == [], unread  # v37: 'Break Level Break' is understood, so it's no longer kept for checking
+    assert "on a break" in tourney_text(details[0]) and "on a break" not in tourney_text(details[1])
+    assert gas_tournaments("<h2>Current Tournaments</h2> Poker 5 (9) Players All Tournaments",
+                           datetime(2026, 10, 16, tzinfo=TZ)) is None  # listed, but laid out differently: not guessed
+    stale = ("<h2>Current Tournaments</h2><div>Old Day 1</div> Start 16.10. 16:00 9:59 Countdown Level Countdown 300 € Buy-In "
+             "Closed Late Reg. 30 000 Starting Stack 240 000 Average Stack 15 (52) Players € 100 000 Prizepool All Tournaments")
+    assert gas_tournaments(stale, datetime(2026, 10, 16, 20, 0, tzinfo=TZ))[0] == ["Old Day 1 15/52 [BREAK]"]
+    assert gas_tournaments(stale, datetime(2026, 10, 17, 12, 0, tzinfo=TZ)) == ([], [])  # 20 h on, no level: not in play
+    assert gas_tournaments("<h2>Current Tournaments</h2> No tournaments now. All Tournaments (0)",
+                           datetime(2026, 10, 16, tzinfo=TZ)) == ([], [])
+    line = overview_line({"status": "ok", "tables": 2, "players": 15}, None, None, day="2026-10-17",
+                         prague_row={"status": "ok", "tables": 3, "players": 20})
+    assert "[King's Prague](KINGS_PRAGUE.md): 3 tables, 20 players" in line, line
+
+
+def self_test_v37():
+    """Checks for v37: game families, the Omaha overview and health table, Aš breaks as the page shows them, and
+    feeds that send something unexpected."""
+    games = ("NLH/PLO", "PLO/NLH", "SUNDAY CASH GAME NLH", "PLO4/PLO5 DC", "Dealer's Choice", "DC", "DCH", "PLO 4/5",
+             "PLO 5Card", "MIX NLH/PLO", "SD (Short Deck)", "NLH", "PLO5", "PLO/PLO5", "Omaha Hi-Lo", "")
+    assert [family(g) for g in games] == ["Other", "Other", "NLH", "PLO", "Other", "Other", "Other", "PLO", "PLO", "Other",
+                                          "Other", "NLH", "PLO", "PLO", "PLO", "Other"], [family(g) for g in games]
+    kings = {"time": "2026-10-17 23:00", "status": "ok", "players": "40",
+             "games": "NLH €1/2 8/8; PLO €2/2 8/8; PLO €2/2 6/8; PLO5 €5/10 1/8 [STARTED]; MIX NLH/PLO €5/5 6/8"}
+    assert omaha_tables("kings", kings) == (["PLO €2/2", "PLO €2/2"], 14), omaha_tables("kings", kings)
+    gas = {"time": "2026-10-17 23:00", "status": "ok", "games": "PLO 5Card €5/5 [RUNNING]; PLO/NLH [WAITING]; DC €2/2 [RUNNING]"}
+    assert omaha_tables("grandcasinoas", gas) == (["PLO 5Card €5/5"], None), omaha_tables("grandcasinoas", gas)
+    assert omaha_tables("kings", {"status": "error: x"}) is None and omaha_tables("banco", {"status": "ok", "players": ""}) is None
+    now = datetime(2026, 10, 17, 23, 5, tzinfo=TZ)
+    line = omaha_now_line({"kings": [kings], "grandcasinoas": [gas]}, now)
+    assert "King's Rozvadov: PLO €2/2 ×2 (14 players)" in line and "[Grand Casino Aš](GRAND_CASINO_AS.md): PLO 5Card €5/5" in line, line
+    assert "no Omaha" in omaha_now_line({"kings": [dict(kings, time="2026-10-17 20:00")]}, now)  # too old to be 'now'
+    late = dict(kings, time="2026-10-18 01:00")  # after midnight: still Saturday's evening
+    table = "\n".join(omaha_lines({"kings": [kings, late]}, now))
+    assert "| King's Rozvadov | · | · | · | · | · | 2.0 (14) | · | 23:00 (14 players) | 2 |" in table, table
+    health = "\n".join(rooms_health_lines({"kings": [kings, dict(kings, time="2026-10-17 23:10", status="error: no answer")]}, now))
+    assert "| King's Rozvadov | ⚠️ 10-17 23:10 | 1 of 2 | no answer |" in health, health
+    page = ("<h2>Current Tournaments</h2><div>Day 2</div> Start 15.10. 14:00 07:41 Break Level Break 340 € Buy-In Closed "
+            "Late Reg. 200 000 Starting Stack 546 667 Average Stack 30 (82) Players € 100 000 Prizepool All Tournaments")
+    unread = []
+    entries, details = gas_tournaments(page, datetime(2026, 10, 17, 20, 0, tzinfo=TZ), unread)  # the page says Break
+    assert entries == ["Day 2 30/82 [BREAK]"] and details[0]["avg_stack"] == 546667 and unread == [], (entries, unread)
+    odd = "<h2>Current Tournaments</h2><div>Odd</div> Start 17.10. 18:00 Pause 100 € Buy-In 9 (9) Players € 900 Prizepool"
+    assert gas_tournaments(odd, datetime(2026, 10, 17, 19, 0, tzinfo=TZ), unread)[0] == ["Odd 9/9 [BREAK]"] and len(unread) == 1
+    assert isinstance(tourney_details({"currentLevel": "x", "fullName": "T"}, "T", "NLH", "RUNNING", 5), dict)
+    assert banco_event_line({"status": {"level": "x"}, "levels": ["x", None], "subscription": {"buyin": "x"}, "stats": None})[0] \
+        == "tournament"
+
+
+def last_row():
+    """The latest King's check on record, or None."""
+    for path in sorted(DATA_DIR.glob(MONTH_FILES), reverse=True):
+        with path.open(newline="", encoding="utf-8-sig") as fh:
+            rows = list(csv.DictReader(fh))
+        if rows:
+            return rows[-1]
+    return None
+
+
+def backup_not_needed(last, now):
+    """GitHub's hourly backup run only checks when the 10-minute timer seems to have stopped: with a check
+    recorded in the last 15 minutes, it would only add a duplicate (and extra visits to the sites)."""
+    times = real_times([(last or {}).get("time")])
+    return bool(times) and now.astimezone(timezone.utc) - times[0] < timedelta(minutes=15)
+
+
+def should_alert(rows):
+    """Email-worthy: the first time ALERT_AFTER checks in a row have failed, then once a day
+    (on the first failed check of each new day) for as long as the problem lasts."""
+    streak = failure_streak(rows)
+    if streak < ALERT_AFTER:
+        return False
+    return streak == ALERT_AFTER or rows[-1]["time"][:10] != rows[-2]["time"][:10]
+
+
+def failure_streak(rows):
+    streak = 0
+    for r in reversed(rows):
+        if r["status"] == "ok":
+            break
+        streak += 1
+    return streak
+
+
+def main():
+    RUN["start"], RUN["timings"] = time.monotonic(), []
+    try:
+        self_test()
+    except AssertionError as e:
+        print(f"::error::Self-test failed, so nothing was recorded: {e}")
+        return 1
+
+    now = datetime.now(TZ)
+    print(f"Tracker {VERSION}")
+    DATA_DIR.mkdir(exist_ok=True)
+    migrate_old_files()
+    previous = last_row()
+    if previous and previous.get("time") == f"{now:%Y-%m-%d %H:%M}":
+        print("Another run already checked this minute, so this one stops here (no duplicate rows).")
+        return 0
+    if os.environ.get("GITHUB_EVENT_NAME") == "schedule" and backup_not_needed(previous, now):
+        print("Hourly backup run: the 10-minute timer is working, so there's nothing to do.")
+        return 0
+    try:
+        setup_context(now)
+    except Exception as e:  # the calendar is extra: a problem with it never stops the tracking
+        print(f"Festival calendar / schedule / holidays skipped: {short_error(e)}")
+
+    status, source, entries, page_text, problem = timed("King's", check)
+    tourneys, tourney_info, tourney_error = timed("King's tournaments", check_tournaments, now,
+                                                  bool(previous and as_int(previous.get("tourneys"))))
+    if tourney_error:
+        problem = {**(problem or {}), "tournaments": tourney_error}
+    row = {"time": f"{now:%Y-%m-%d %H:%M}", "weekday": DAYS[now.weekday()], "hour": now.hour,
+           "status": status, "source": source,
+           "tables": len(entries) if entries is not None else "",
+           "players": sum(t[2] for t in parse_games("; ".join(entries))) if entries is not None else "",
+           "games": "; ".join(entries or []),
+           "tourneys": len(tourneys) if tourneys is not None else "",
+           "tourney_players": sum(a for _, a, _ in parse_tourneys("; ".join(tourneys))) if tourneys is not None else "",
+           "tourney_list": "; ".join(tourneys or []),
+           "tourney_details": json.dumps(tourney_info, ensure_ascii=False, separators=(",", ":")) if tourneys else "",
+           "page_text": page_text[:3000]}
+    append_row(now, row)
+    for label, step in (("saving the problem details", lambda: save_problem(now, row, problem)),
+                        ("old site cleanup", remove_retired_sites), ("Card file update", migrate_card_files),
+                        ("Banco file update", migrate_site_files), ("history repairs", repair_history)):
+        try:
+            step()
+        except Exception as e:  # housekeeping must never stop the checks of the other rooms
+            print(f"::warning::{label} failed: {short_error(e)}")
+    prague_row = timed("King's Prague", record_prague, now)
+    card_row = timed("Card Casino", record_card, now)
+    gas_row, site_rows = None, {}
+    for label, step in (("Grand Casino Aš", lambda: record_gas(now)), ("Olympic", lambda: record_olympic(now)),
+                        ("Banco", lambda: record_sites(now))):
+        if short_on_time():  # better to skip a room this once than to lose the whole run
+            RUN["timings"].append(f"{label} skipped (run running long)")
+            continue
+        result = timed(label, step)
+        if label == "Grand Casino Aš":
+            gas_row = result
+        elif label == "Banco":
+            site_rows = result
+    latest_oly = {}
+    for site in OLY_SITES:
+        oly = load_csv_rows(DATA_DIR / site["key"])
+        if oly:
+            latest_oly[site["key"]] = oly[-1]
+    rows = load_rows()
+    write_readme(rows, now, overview_line(row, card_row, site_rows.get("banco"), gas_row, latest_oly, f"{now:%Y-%m-%d}",
+                                          prague_row))
+    print(json.dumps(row, ensure_ascii=False))
+    print("kings-prague:", json.dumps(prague_row, ensure_ascii=False)[:200])
+    print("cardcasino:", json.dumps(card_row, ensure_ascii=False)[:200])
+    print("grandcasinoas:", json.dumps(gas_row, ensure_ascii=False)[:200])
+    for key, site_row in site_rows.items():
+        print(f"{key}:", json.dumps(site_row, ensure_ascii=False)[:200])
+    print("Timing: " + " · ".join(RUN["timings"]) + f" · total {time.monotonic() - RUN['start']:.0f}s")
+
+    if should_alert(rows):
+        print(f"::error::{failure_streak(rows)} checks in a row have failed. See README.md and debug/last_problem.json.")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
