@@ -1,0 +1,841 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fox Hollow Shot Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css">
+<style>
+:root {
+  --bg: #f4f5f1;
+  --panel: #ffffff;
+  --ink: #1d2419;
+  --muted: #646d5f;
+  --line: #dfe3da;
+  --accent: #2f6f3e;
+  --accent-ink: #ffffff;
+  --chip: #eef1ea;
+  --shot: #ffd23f;
+  --pen: #d64545;
+  --good: #2f8f4e;
+  --bad: #b5463c;
+  --under: #c0392b;
+  --over: #2c5aa0;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121510; --panel: #1a1e17; --ink: #e7ebe2; --muted: #9aa392; --line: #2c3328;
+    --accent: #5fae6f; --accent-ink: #0f140d; --chip: #252b21; --good: #6cc685; --bad: #e07a6f;
+    --under: #ff7b6b; --over: #7fa8ea;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121510; --panel: #1a1e17; --ink: #e7ebe2; --muted: #9aa392; --line: #2c3328;
+  --accent: #5fae6f; --accent-ink: #0f140d; --chip: #252b21; --good: #6cc685; --bad: #e07a6f;
+  --under: #ff7b6b; --over: #7fa8ea;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  display: grid; grid-template-rows: auto 1fr; grid-template-columns: minmax(0, 1fr); height: 100dvh; overflow: hidden;
+}
+button, select, input { font: inherit; color: inherit; }
+button {
+  background: var(--chip); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 10px; cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+select, input[type="text"], input[type="date"] {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; min-width: 0;
+}
+
+/* Header */
+.top {
+  display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+  background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap;
+}
+.brand { display: flex; flex-direction: column; margin-right: auto; }
+.brand b { font-size: 16px; }
+.brand span { color: var(--muted); font-size: 12px; }
+.round-ctl { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+#roundSel { max-width: 260px; text-overflow: ellipsis; }
+.menu { position: relative; }
+.menu summary { list-style: none; cursor: pointer; padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--chip); }
+.menu summary::-webkit-details-marker { display: none; }
+.menu > div {
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 10px; padding: 6px; display: grid; gap: 4px; min-width: 190px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18);
+}
+.menu > div button { text-align: left; background: transparent; border-color: transparent; }
+.menu > div button:hover { background: var(--chip); }
+.menu .danger { color: var(--bad); }
+
+/* Layout */
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 390px; min-height: 0; }
+.mapwrap { position: relative; min-height: 0; }
+#map { position: absolute; inset: 0; background: #2b3a26; }
+#panel { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 14px 16px 40px; }
+@media (max-width: 820px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: 52dvh minmax(0, 1fr); }
+  #panel { border-left: 0; border-top: 1px solid var(--line); }
+  .brand span { display: none; }
+  .top { gap: 6px; padding: 6px 12px; }
+  .brand { margin-right: 0; }
+  .round-ctl { flex: 1 1 100%; flex-wrap: nowrap; }
+  #roundSel { flex: 1 1 0; width: 0; max-width: none; }
+  .mapctl button { padding: 4px 8px; font-size: 13px; }
+  .mapctl .long { display: none; }
+  .maphole { bottom: 22px; }
+}
+
+/* Map overlay controls */
+.mapctl { position: absolute; top: 10px; left: 10px; z-index: 5; display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100% - 60px); }
+.mapctl button { background: rgba(20,24,18,.78); color: #fff; border-color: rgba(255,255,255,.18); backdrop-filter: blur(4px); }
+.mapctl button.on { background: #ffd23f; color: #1d2419; border-color: #ffd23f; }
+.maphole { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; gap: 6px; align-items: center;
+  background: rgba(20,24,18,.78); color: #fff; padding: 4px; border-radius: 999px; backdrop-filter: blur(4px); }
+.maphole button { background: transparent; color: #fff; border: 0; padding: 4px 12px; font-size: 18px; border-radius: 999px; }
+.maphole button:hover { background: rgba(255,255,255,.12); }
+.maphole span { min-width: 92px; text-align: center; font-weight: 600; }
+.toast { position: absolute; top: 54px; left: 50%; transform: translateX(-50%); z-index: 6; background: rgba(20,24,18,.9); color: #fff;
+  padding: 8px 14px; border-radius: 8px; font-size: 13px; pointer-events: none; opacity: 0; transition: opacity .2s; max-width: 90%; text-align: center; }
+.toast.show { opacity: 1; }
+
+/* Map markers */
+.mk { cursor: grab; }
+.mk-ball { width: 22px; height: 22px; border-radius: 50%; background: var(--shot); color: #1d2419; border: 2px solid #fff;
+  display: grid; place-items: center; font: 700 11px/1 system-ui, sans-serif; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+.mk-ball.pen { border-color: var(--pen); box-shadow: 0 0 0 2px var(--pen), 0 1px 4px rgba(0,0,0,.5); }
+.mk-ball.last { width: 26px; height: 26px; font-size: 12px; }
+.mk-tee { width: 20px; height: 20px; border-radius: 50%; background: #fff; color: #1d2419; border: 2px solid #1d2419;
+  display: grid; place-items: center; font: 800 10px/1 system-ui, sans-serif; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+.mk-pin { width: 22px; height: 30px; position: relative; }
+.mk-pin::before { content: ""; position: absolute; left: 3px; bottom: 0; width: 2px; height: 30px; background: #fff; box-shadow: 0 0 2px rgba(0,0,0,.7); }
+.mk-pin::after { content: ""; position: absolute; left: 5px; top: 0; border-left: 15px solid #e8402f; border-top: 6px solid transparent; border-bottom: 6px solid transparent; }
+.mk-label { pointer-events: none; background: rgba(20,24,18,.82); color: #fff; padding: 1px 6px; border-radius: 999px; font: 600 11px/1.5 system-ui, sans-serif; white-space: nowrap; }
+.mk-holeno { cursor: pointer; width: 24px; height: 24px; border-radius: 50%; background: #fff; color: #1d2419; border: 2px solid #1d2419;
+  display: grid; place-items: center; font: 800 11px/1 system-ui, sans-serif; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+.mk-holeno.played { background: var(--shot); }
+
+/* Panel */
+.holenav { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; margin-bottom: 8px; }
+.holenav h2 { margin: 0; font-size: 22px; text-align: center; }
+.holenav p { margin: 0; text-align: center; color: var(--muted); }
+.holenav button { font-size: 20px; padding: 2px 14px; }
+.hint { background: var(--chip); border-radius: 8px; padding: 8px 10px; color: var(--muted); margin: 8px 0 12px; font-size: 13px; }
+.section-h { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 16px 0 6px; }
+.shots { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.shots li { display: grid; grid-template-columns: 26px 1fr auto auto; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+.shots .n { width: 22px; height: 22px; border-radius: 50%; background: var(--shot); color: #1d2419; font-weight: 700; font-size: 11px; display: grid; place-items: center; }
+.shots .l1 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.shots .l2 { color: var(--muted); font-size: 12px; }
+.shots select { padding: 2px 4px; font-size: 13px; }
+.shots button { padding: 3px 8px; font-size: 12px; }
+.shots button.pen.on { background: var(--pen); color: #fff; border-color: var(--pen); }
+.lie { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--chip); border: 1px solid var(--line); }
+.lie-fairway { background: #d8f0cf; color: #24521c; border-color: #b9e0aa; }
+.lie-green { background: #c9f0be; color: #1b5a12; border-color: #a5e295; }
+.lie-bunker { background: #f4e7c2; color: #6b5517; border-color: #e6d49c; }
+.lie-water { background: #cfe2f7; color: #1c4a7d; border-color: #a9c9ee; }
+.lie-rough { background: #e3e8dc; color: #45503d; }
+.lie-off { background: #f6d5d1; color: #7a231a; border-color: #eab3ac; }
+.empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+.btnrow { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.putts { display: flex; align-items: center; gap: 8px; }
+.putts output { min-width: 28px; text-align: center; font-size: 20px; font-weight: 700; }
+.putts button { min-width: 38px; font-size: 18px; padding: 2px 10px; }
+.putts.ask { outline: 2px solid var(--shot); outline-offset: 4px; border-radius: 8px; }
+.result { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 4px; }
+.stat { background: var(--chip); border-radius: 10px; padding: 8px; text-align: center; }
+.stat b { display: block; font-size: 18px; }
+.stat span { color: var(--muted); font-size: 11px; }
+.yes { color: var(--good); } .no { color: var(--bad); }
+.meta { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+
+/* Scorecard */
+.sc { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; margin-bottom: 8px; }
+.sc th, .sc td { border: 1px solid var(--line); text-align: center; padding: 3px 0; }
+.sc th:first-child { width: 44px; text-align: left; padding-left: 4px; color: var(--muted); font-weight: 500; }
+.sc .tot { font-weight: 700; background: var(--chip); width: 34px; }
+.sc .hn { cursor: pointer; }
+.sc .hn:hover { background: var(--chip); }
+.sc .cur { background: var(--shot) !important; color: #1d2419; }
+.sc .s { display: inline-grid; place-items: center; width: 20px; height: 20px; }
+.sc .s.birdie { border: 1.5px solid var(--under); border-radius: 50%; color: var(--under); }
+.sc .s.eagle { border: 1.5px solid var(--under); border-radius: 50%; box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--under); color: var(--under); }
+.sc .s.bogey { border: 1.5px solid var(--over); color: var(--over); }
+.sc .s.double { border: 1.5px solid var(--over); box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--over); color: var(--over); }
+.totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.clubs { width: 100%; border-collapse: collapse; font-size: 13px; }
+.clubs td, .clubs th { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: right; }
+.clubs td:first-child, .clubs th:first-child { text-align: left; }
+.clubs th { color: var(--muted); font-weight: 500; font-size: 12px; }
+.foot { color: var(--muted); font-size: 11px; margin-top: 20px; }
+.warn { color: var(--bad); font-size: 12px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><b>Fox Hollow Golf Club</b><span>Branchburg, NJ · round shot map</span></div>
+  <div class="round-ctl">
+    <select id="roundSel" aria-label="Round"></select>
+    <button id="newRound" class="primary">New round</button>
+    <details class="menu" id="menu">
+      <summary aria-label="More">⋯</summary>
+      <div>
+        <button data-menu="export">Export rounds (JSON)</button>
+        <button data-menu="import">Import rounds…</button>
+        <button data-menu="delete" class="danger">Delete this round</button>
+      </div>
+    </details>
+  </div>
+</header>
+<main class="app">
+  <div class="mapwrap">
+    <div id="map"></div>
+    <div class="mapctl">
+      <button id="viewBtn">All holes</button>
+      <button id="styleBtn">Diagram</button>
+      <button id="locBtn" title="Add a shot at your current GPS position">📍 Ball is here</button>
+    </div>
+    <div class="maphole" id="mapHole">
+      <button data-act="prev" aria-label="Previous hole">‹</button>
+      <span id="mapHoleLbl"></span>
+      <button data-act="next" aria-label="Next hole">›</button>
+    </div>
+    <div class="toast" id="toast"></div>
+  </div>
+  <aside id="panel"></aside>
+</main>
+<input type="file" id="importFile" accept="application/json,.json" hidden>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
+<script src="course-data.js"></script>
+<script>
+"use strict";
+const COURSE = window.COURSE;
+const HOLES = {};
+COURSE.holes.forEach(h => { HOLES[h.number] = h; });
+const FEATURES = COURSE.features.features;
+const CLUBS = ["", "Driver", "3W", "5W", "7W", "Hybrid", "3i", "4i", "5i", "6i", "7i", "8i", "9i", "PW", "GW", "SW", "LW", "Putter"];
+const STORE_KEY = "foxhollow.rounds.v1";
+const YD = 0.9144;
+const R2D = 180 / Math.PI, D2R = Math.PI / 180;
+
+/* ---------- geometry ---------- */
+function meters(a, b) {
+  const R = 6371008.8, p1 = a[1] * D2R, p2 = b[1] * D2R;
+  const dp = p2 - p1, dl = (b[0] - a[0]) * D2R;
+  const h = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const yards = (a, b) => meters(a, b) / YD;
+function bearing(a, b) {
+  const p1 = a[1] * D2R, p2 = b[1] * D2R, dl = (b[0] - a[0]) * D2R;
+  const y = Math.sin(dl) * Math.cos(p2);
+  const x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (Math.atan2(y, x) * R2D + 360) % 360;
+}
+function inRing(p, r) {
+  let c = false;
+  for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+    const xi = r[i][0], yi = r[i][1], xj = r[j][0], yj = r[j][1];
+    if ((yi > p[1]) !== (yj > p[1]) && p[0] < (xj - xi) * (p[1] - yi) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+function polysOf(g) {
+  return g.type === "Polygon" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : [];
+}
+function inGeom(p, g) {
+  return polysOf(g).some(rings => inRing(p, rings[0]) && !rings.slice(1).some(h => inRing(p, h)));
+}
+function coordsOf(g) {
+  const out = [];
+  (function walk(c) { typeof c[0] === "number" ? out.push(c) : c.forEach(walk); })(g.coordinates);
+  return out;
+}
+// Polygon index with bounding boxes for quick lie lookups.
+const POLYS = FEATURES.filter(f => /Polygon/.test(f.geometry.type)).map(f => {
+  const cs = coordsOf(f.geometry);
+  const xs = cs.map(c => c[0]), ys = cs.map(c => c[1]);
+  return { f, k: f.properties.kind, holes: f.properties.holes || [], bb: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)] };
+});
+const COURSE_POLY = POLYS.find(p => p.k === "course");
+function hits(p, kind) {
+  return POLYS.filter(x => x.k === kind && p[0] >= x.bb[0] && p[0] <= x.bb[2] && p[1] >= x.bb[1] && p[1] <= x.bb[3] && inGeom(p, x.f.geometry));
+}
+/** Where did the ball finish? Returns {k, label, own} */
+function lieAt(p, n) {
+  const g = hits(p, "green");
+  if (g.length) return g.some(x => x.holes.includes(n)) ? { k: "green", label: "Green", own: true } : { k: "green", label: "Wrong green", own: false };
+  if (hits(p, "practice_green").length) return { k: "green", label: "Practice green", own: false };
+  if (hits(p, "bunker").length) return { k: "bunker", label: "Bunker" };
+  if (hits(p, "water").length) return { k: "water", label: "Water" };
+  const fw = hits(p, "fairway");
+  if (fw.length) {
+    const own = fw.some(x => x.holes.includes(n));
+    return { k: "fairway", label: own ? "Fairway" : "Fairway (hole " + fw[0].holes.join("/") + ")", own };
+  }
+  if (hits(p, "tee").length) return { k: "rough", label: "Tee box" };
+  if (COURSE_POLY && !inGeom(p, COURSE_POLY.f.geometry)) return { k: "off", label: "Off course" };
+  return { k: "rough", label: "Rough" };
+}
+
+/* ---------- state ---------- */
+let saveOk = true;
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(STORE_KEY)); if (s && Array.isArray(s.rounds)) return s; } catch (e) {}
+  return { rounds: [], cur: null };
+}
+function save() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); saveOk = true; } catch (e) { saveOk = false; }
+}
+const today = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 6e4).toISOString().slice(0, 10); };
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+function newRound() {
+  const r = { id: uid(), date: today(), name: "", holes: {} };
+  store.rounds.unshift(r); store.cur = r.id; save(); return r;
+}
+const store = load();
+let round = store.rounds.find(r => r.id === store.cur) || store.rounds[0] || newRound();
+store.cur = round.id;
+let holeNo = 1, view = "hole", mapStyle = "sat";
+
+function hd(n, create) {
+  let d = round.holes[n];
+  if (!d && create) d = round.holes[n] = { start: null, pin: null, shots: [], putts: null };
+  return d || { start: null, pin: null, shots: [], putts: null };
+}
+const startOf = n => hd(n).start || HOLES[n].line[0];
+const pinOf = n => hd(n).pin || HOLES[n].line[HOLES[n].line.length - 1];
+function pointsOf(n) { return [startOf(n), ...hd(n).shots.map(s => s.to)]; }
+
+/* ---------- stats ---------- */
+const SCORE_NAMES = { "-3": "Albatross", "-2": "Eagle", "-1": "Birdie", "0": "Par", "1": "Bogey", "2": "Double bogey", "3": "Triple bogey" };
+function scoreName(score, par) {
+  if (score === 1) return "Hole in one";
+  return SCORE_NAMES[String(score - par)] || ("+" + (score - par));
+}
+function holeStats(n) {
+  const h = HOLES[n], d = hd(n);
+  const strokes = d.shots.length, pen = d.shots.reduce((a, s) => a + (s.pen || 0), 0);
+  if (!strokes && d.putts === null) return null;
+  const score = strokes + pen + (d.putts || 0);
+  const finished = d.putts !== null;
+  let fir = null;
+  if (h.par >= 4 && strokes) fir = !d.shots[0].pen && lieAt(d.shots[0].to, n).k === "fairway" && lieAt(d.shots[0].to, n).own;
+  const gir = finished ? (d.putts > 0 && strokes + pen <= h.par - 2) : null;
+  return { score, finished, fir, gir, putts: d.putts, pen, diff: score - h.par };
+}
+function shotRows(n) {
+  const pts = pointsOf(n), pin = pinOf(n);
+  return hd(n).shots.map((s, i) => ({
+    i, s, dist: yards(pts[i], s.to), toPin: yards(s.to, pin), lie: lieAt(s.to, n)
+  }));
+}
+function roundStats() {
+  let score = 0, par = 0, played = 0, putts = 0, pen = 0, firHit = 0, firN = 0, girHit = 0, girN = 0;
+  const tee = [];
+  const clubs = {};
+  for (let n = 1; n <= 18; n++) {
+    const st = holeStats(n);
+    if (!st) continue;
+    played++; score += st.score; par += HOLES[n].par; putts += st.putts || 0; pen += st.pen;
+    if (st.fir !== null) { firN++; if (st.fir) firHit++; }
+    if (st.gir !== null) { girN++; if (st.gir) girHit++; }
+    shotRows(n).forEach(r => {
+      if (r.i === 0 && HOLES[n].par >= 4 && !r.s.pen) tee.push(r.dist);
+      if (r.s.club && r.s.club !== "Putter" && !r.s.pen) (clubs[r.s.club] = clubs[r.s.club] || []).push(r.dist);
+    });
+  }
+  return { score, par, played, putts, pen, firHit, firN, girHit, girN, tee, clubs };
+}
+
+/* ---------- map ---------- */
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+const map = new maplibregl.Map({
+  container: "map",
+  style: {
+    version: 8,
+    sources: { sat: { type: "raster", tiles: [ESRI], tileSize: 256, maxzoom: 19, attribution: "Imagery © Esri · Course © OpenStreetMap contributors" } },
+    layers: [
+      { id: "bg", type: "background", paint: { "background-color": "#2b3a26" } },
+      { id: "sat", type: "raster", source: "sat" }
+    ]
+  },
+  center: HOLES[1].line[0], zoom: 16, maxZoom: 20, minZoom: 13,
+  dragRotate: false, pitchWithRotate: false, attributionControl: { compact: true }
+});
+map.touchZoomRotate.disableRotation();
+map.keyboard.disableRotation();
+
+const FILL = {
+  //            satellite overlay       diagram
+  water:   { c: "#3d8fe0", sat: 0.28, dia: 0.95 },
+  fairway: { c: "#7ed36b", sat: 0.16, dia: 1 },
+  driving_range: { c: "#7ed36b", sat: 0.06, dia: 0.5 },
+  tee:     { c: "#8fe07a", sat: 0.22, dia: 1 },
+  green:   { c: "#a6f08f", sat: 0.30, dia: 1 },
+  practice_green: { c: "#a6f08f", sat: 0.15, dia: 0.8 },
+  bunker:  { c: "#f3e2b0", sat: 0.40, dia: 1 },
+};
+const STROKE = { water: "#9fd0ff", fairway: "#d8f7cc", tee: "#ffffff", green: "#f0ffe8", bunker: "#fff5d6", practice_green: "#f0ffe8", driving_range: "#d8f7cc" };
+const emptyFC = () => ({ type: "FeatureCollection", features: [] });
+
+// Set up as soon as the style is ready ("load" waits for every satellite tile, which can be slow on a phone).
+map.on("style.load", setupLayers);
+map.on("load", setupLayers);
+function setupLayers() {
+  if (map.getSource("course")) return;
+  map.addSource("course", { type: "geojson", data: COURSE.features });
+  map.addSource("shots", { type: "geojson", data: emptyFC() });
+  map.addSource("dots", { type: "geojson", data: emptyFC() });
+  map.addLayer({ id: "course-edge", type: "line", source: "course", filter: ["==", ["get", "kind"], "course"],
+    paint: { "line-color": "#ffffff", "line-opacity": 0.35, "line-width": 1, "line-dasharray": [3, 3] } });
+  for (const k of ["driving_range", "fairway", "water", "tee", "practice_green", "green", "bunker"]) {
+    map.addLayer({ id: "fill-" + k, type: "fill", source: "course", filter: ["==", ["get", "kind"], k],
+      paint: { "fill-color": FILL[k].c, "fill-opacity": FILL[k].sat } });
+    map.addLayer({ id: "edge-" + k, type: "line", source: "course", filter: ["==", ["get", "kind"], k],
+      paint: { "line-color": STROKE[k], "line-opacity": k === "green" ? 0.9 : 0.6, "line-width": k === "green" ? 1.6 : 1 } });
+  }
+  map.addLayer({ id: "holeline", type: "line", source: "course", filter: ["==", ["get", "kind"], "hole"],
+    paint: { "line-color": "#ffffff", "line-width": 1.5, "line-dasharray": [2, 2], "line-opacity": 0.5 } });
+  map.addLayer({ id: "shot-casing", type: "line", source: "shots", layout: { "line-cap": "round" },
+    paint: { "line-color": "#111", "line-width": 5, "line-opacity": 0.45 } });
+  map.addLayer({ id: "shot-line", type: "line", source: "shots", layout: { "line-cap": "round" },
+    paint: { "line-color": ["case", ["get", "pen"], "#ff6b6b", "#ffd23f"], "line-width": 2.5 } });
+  map.addLayer({ id: "shot-dots", type: "circle", source: "dots",
+    paint: { "circle-radius": 3.5, "circle-color": "#ffd23f", "circle-stroke-color": "#111", "circle-stroke-width": 1 } });
+  render(true, false); // jump (not animate) on first load so nothing can interrupt it
+}
+
+let markers = [];
+function clearMarkers() { markers.forEach(m => m.remove()); markers = []; }
+function el(cls, text) { const e = document.createElement("div"); e.className = cls; if (text != null) e.textContent = text; return e; }
+function addMarker(elem, lngLat, opts = {}) {
+  const m = new maplibregl.Marker({ element: elem, draggable: !!opts.drag, anchor: opts.anchor || "center" }).setLngLat(lngLat).addTo(map);
+  if (opts.drag) {
+    m.on("drag", () => { opts.drag(m.getLngLat().toArray(), false); });
+    m.on("dragend", () => { opts.drag(m.getLngLat().toArray(), true); });
+  }
+  markers.push(m);
+  return m;
+}
+
+function segmentsFC(holes) {
+  const fc = emptyFC(), dots = emptyFC();
+  holes.forEach(n => {
+    const pts = pointsOf(n), shots = hd(n).shots;
+    shots.forEach((s, i) => {
+      fc.features.push({ type: "Feature", properties: { hole: n, i, pen: !!s.pen }, geometry: { type: "LineString", coordinates: [pts[i], s.to] } });
+      dots.features.push({ type: "Feature", properties: { hole: n }, geometry: { type: "Point", coordinates: s.to } });
+    });
+  });
+  return { fc, dots };
+}
+
+function drawShotsLayer() {
+  if (!map.getSource("shots")) return;
+  const holes = view === "hole" ? [holeNo] : Array.from({ length: 18 }, (_, i) => i + 1);
+  const { fc, dots } = segmentsFC(holes);
+  map.getSource("shots").setData(fc);
+  map.getSource("dots").setData(view === "hole" ? emptyFC() : dots);
+}
+
+// Distance labels are kept in a list so drags can move them without rebuilding everything.
+let labelMarkers = [];
+function placeLabels() {
+  labelMarkers.forEach(m => m.remove()); labelMarkers = [];
+  if (view !== "hole") return;
+  const pts = pointsOf(holeNo);
+  hd(holeNo).shots.forEach((s, i) => {
+    const a = pts[i], b = s.to;
+    const m = new maplibregl.Marker({ element: el("mk-label", Math.round(yards(a, b)) + " yd") })
+      .setLngLat([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]).addTo(map);
+    labelMarkers.push(m);
+  });
+  const last = pts[pts.length - 1], pin = pinOf(holeNo);
+  if (hd(holeNo).putts === null && yards(last, pin) > 3) {
+    const lbl = el("mk-label", Math.round(yards(last, pin)) + " to pin");
+    lbl.style.background = "rgba(232,64,47,.85)";
+    labelMarkers.push(new maplibregl.Marker({ element: lbl, offset: [0, -22] }).setLngLat(pin).addTo(map));
+  }
+}
+
+function drawMarkers() {
+  clearMarkers();
+  if (view === "overview") {
+    for (let n = 1; n <= 18; n++) {
+      const e = el("mk mk-holeno" + (holeStats(n) ? " played" : ""), String(n));
+      e.title = "Hole " + n;
+      e.addEventListener("click", () => { holeNo = n; setView("hole"); });
+      addMarker(e, HOLES[n].line[0]);
+    }
+    return;
+  }
+  const n = holeNo, d = hd(n);
+  // The flag is draggable, but a plain tap on it places a shot there:
+  // approaches often finish right next to the pin.
+  const pinEl = el("mk mk-pin");
+  let pinMoved = false;
+  addMarker(pinEl, pinOf(n), { anchor: "bottom-left", drag: (ll, done) => {
+    pinMoved = true; hd(n, true).pin = ll; onGeomChange(done);
+  } });
+  pinEl.addEventListener("click", ev => {
+    ev.stopPropagation();
+    if (pinMoved) { pinMoved = false; return; }
+    const r = map.getContainer().getBoundingClientRect();
+    const ll = map.unproject([ev.clientX - r.left, ev.clientY - r.top]);
+    addShot([ll.lng, ll.lat]);
+  });
+  addMarker(el("mk mk-tee", "T"), startOf(n), { drag: (ll, done) => {
+    hd(n, true).start = ll; onGeomChange(done);
+  } });
+  d.shots.forEach((s, i) => {
+    const e = el("mk mk-ball" + (s.pen ? " pen" : "") + (i === d.shots.length - 1 ? " last" : ""), String(i + 1));
+    addMarker(e, s.to, { drag: (ll, done) => { hd(n, true).shots[i].to = ll; onGeomChange(done); } });
+  });
+}
+function onGeomChange(done) {
+  drawShotsLayer(); placeLabels();
+  if (done) { save(); renderPanel(); }
+}
+
+/** Fit the camera so the hole plays bottom-to-top, tee to green. */
+function holeCamera(n, animate) {
+  const h = HOLES[n];
+  const a = startOf(n), b = pinOf(n);
+  const brg = bearing(h.line[0], h.line[h.line.length - 1]);
+  const pts = [...h.line, a, b, ...hd(n).shots.map(s => s.to)];
+  FEATURES.forEach(f => {
+    const k = f.properties.kind;
+    if ((k === "green" || k === "tee" || k === "fairway") && (f.properties.holes || []).includes(n)) {
+      if (k === "fairway") return; // fairways can be shared between holes; tees + green define the hole
+      pts.push(...coordsOf(f.geometry));
+    }
+  });
+  const lat0 = b[1], kx = 111320 * Math.cos(lat0 * D2R), ky = 111132;
+  const th = brg * D2R, c = Math.cos(th), s = Math.sin(th);
+  let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+  pts.forEach(p => {
+    const dx = (p[0] - b[0]) * kx, dy = (p[1] - b[1]) * ky;
+    const u = dx * c - dy * s, v = dx * s + dy * c;
+    u0 = Math.min(u0, u); u1 = Math.max(u1, u); v0 = Math.min(v0, v); v1 = Math.max(v1, v);
+  });
+  const uc = (u0 + u1) / 2, vc = (v0 + v1) / 2;
+  const dx = uc * c + vc * s, dy = -uc * s + vc * c;
+  const center = [b[0] + dx / kx, b[1] + dy / ky];
+  const box = map.getContainer();
+  const w = Math.max(box.clientWidth - 60, 100), hgt = Math.max(box.clientHeight - 130, 100);
+  const mpp = Math.max((u1 - u0 + 30) / w, (v1 - v0 + 30) / hgt);
+  const zoom = Math.min(19.5, Math.log2(78271.517 * Math.cos(lat0 * D2R) / mpp));
+  const opts = { center, zoom, bearing: brg };
+  animate ? map.easeTo({ ...opts, duration: 700 }) : map.jumpTo(opts);
+}
+function overviewCamera(animate) {
+  const cs = coordsOf(COURSE_POLY.f.geometry);
+  const xs = cs.map(c => c[0]), ys = cs.map(c => c[1]);
+  map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]], { padding: { top: 60, bottom: 30, left: 20, right: 20 }, bearing: 0, duration: animate ? 700 : 0 });
+}
+
+function styleMap() {
+  if (!map.getLayer("sat")) return;
+  const dia = mapStyle === "diagram";
+  map.setLayoutProperty("sat", "visibility", dia ? "none" : "visible");
+  map.setPaintProperty("bg", "background-color", dia ? "#3f6f37" : "#2b3a26");
+  for (const k in FILL) map.setPaintProperty("fill-" + k, "fill-opacity", dia ? FILL[k].dia : FILL[k].sat);
+  map.setPaintProperty("holeline", "line-opacity",
+    view === "hole" ? ["case", ["==", ["get", "ref"], holeNo], 0.85, 0.2] : 0.45);
+  document.getElementById("styleBtn").textContent = dia ? "Satellite" : "Diagram";
+}
+
+/* ---------- interactions ---------- */
+map.on("click", e => {
+  if (e.originalEvent && e.originalEvent.target.closest && e.originalEvent.target.closest(".mk")) return;
+  if (view !== "hole") return;
+  const p = [e.lngLat.lng, e.lngLat.lat];
+  const d = hd(holeNo, true);
+  // Before the first shot, tapping one of this hole's tee boxes sets where you teed off.
+  if (!d.shots.length && hits(p, "tee").some(x => x.holes.includes(holeNo))) {
+    d.start = p; save(); render(); toast("Tee set — now tap where your tee shot finished"); return;
+  }
+  addShot(p);
+});
+function addShot(p) {
+  const d = hd(holeNo, true);
+  d.shots.push({ to: p, club: "", pen: 0 });
+  const lie = lieAt(p, holeNo);
+  save(); render();
+  const dist = Math.round(yards(pointsOf(holeNo).slice(-2)[0], p));
+  toast(`Shot ${d.shots.length}: ${dist} yds · ${lie.label}` + (lie.k === "water" ? " — tap +1 if you took a drop" : "") + (lie.own && lie.k === "green" ? " — add your putts" : ""));
+}
+function setView(v) {
+  view = v;
+  document.getElementById("viewBtn").classList.toggle("on", v === "overview");
+  document.getElementById("viewBtn").textContent = v === "overview" ? "Back to hole " + holeNo : "All holes";
+  render(true);
+}
+function goHole(n) { holeNo = ((n - 1 + 18) % 18) + 1; if (view !== "hole") view = "hole"; setView("hole"); }
+
+let toastTimer;
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+document.getElementById("viewBtn").onclick = () => setView(view === "hole" ? "overview" : "hole");
+document.getElementById("styleBtn").onclick = () => { mapStyle = mapStyle === "sat" ? "diagram" : "sat"; styleMap(); };
+document.getElementById("locBtn").onclick = () => {
+  if (view !== "hole") { toast("Pick a hole first"); return; }
+  if (!navigator.geolocation) { toast("Location isn't available in this browser"); return; }
+  toast("Getting your location…");
+  navigator.geolocation.getCurrentPosition(pos => {
+    const p = [pos.coords.longitude, pos.coords.latitude];
+    if (meters(p, pinOf(holeNo)) > 3000) { toast("You don't seem to be at Fox Hollow — shot not added"); return; }
+    addShot(p);
+  }, err => toast("Couldn't get location: " + err.message), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+};
+document.getElementById("mapHole").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (view !== "hole") { setView("hole"); return; }
+  goHole(holeNo + (b.dataset.act === "next" ? 1 : -1));
+});
+document.addEventListener("keydown", e => {
+  if (e.target.matches("input, select, textarea")) return;
+  if (e.key === "ArrowRight") goHole(holeNo + 1);
+  if (e.key === "ArrowLeft") goHole(holeNo - 1);
+});
+
+// Round controls
+const roundSel = document.getElementById("roundSel");
+function roundLabel(r) {
+  const prev = round; round = r; const st = roundStats(); round = prev;
+  const sc = st.played ? ` · ${st.score} (${fmtDiff(st.score - st.par)}) thru ${st.played}` : " · not started";
+  return (r.date || "No date") + (r.name ? " – " + r.name : "") + sc;
+}
+function fillRounds() {
+  roundSel.innerHTML = "";
+  store.rounds.forEach(r => { const o = document.createElement("option"); o.value = r.id; o.textContent = roundLabel(r); roundSel.appendChild(o); });
+  roundSel.value = round.id;
+}
+roundSel.onchange = () => { round = store.rounds.find(r => r.id === roundSel.value); store.cur = round.id; save(); holeNo = 1; setView("hole"); };
+document.getElementById("newRound").onclick = () => { round = newRound(); holeNo = 1; setView("hole"); toast("New round started — tap a tee box on hole 1"); };
+document.getElementById("menu").addEventListener("click", e => {
+  const b = e.target.closest("[data-menu]"); if (!b) return;
+  document.getElementById("menu").open = false;
+  const act = b.dataset.menu;
+  if (act === "export") {
+    const blob = new Blob([JSON.stringify({ course: COURSE.name, exported: new Date().toISOString(), rounds: store.rounds }, null, 1)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `fox-hollow-rounds-${today()}.json`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  } else if (act === "import") {
+    document.getElementById("importFile").click();
+  } else if (act === "delete") {
+    if (!confirm(`Delete the round "${roundLabel(round)}"? This can't be undone unless you exported it.`)) return;
+    store.rounds = store.rounds.filter(r => r.id !== round.id);
+    round = store.rounds[0] || newRound(); store.cur = round.id; save(); holeNo = 1; setView("hole");
+  }
+});
+document.getElementById("importFile").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    const incoming = Array.isArray(data) ? data : data.rounds;
+    if (!Array.isArray(incoming)) throw new Error("no rounds in file");
+    let added = 0, updated = 0;
+    incoming.forEach(r => {
+      if (!r || !r.id || typeof r.holes !== "object") return;
+      const i = store.rounds.findIndex(x => x.id === r.id);
+      if (i >= 0) { store.rounds[i] = r; updated++; } else { store.rounds.push(r); added++; }
+    });
+    store.rounds.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    save(); fillRounds(); render();
+    toast(`Imported ${added} new, ${updated} updated round(s)`);
+  } catch (err) { toast("Couldn't import: " + err.message); }
+};
+
+/* ---------- panel ---------- */
+const panel = document.getElementById("panel");
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmtDiff = d => d === 0 ? "E" : (d > 0 ? "+" + d : String(d));
+const mark = v => v === null ? "—" : v ? '<span class="yes">✓</span>' : '<span class="no">✗</span>';
+
+function scorecardHTML() {
+  const half = (from, label) => {
+    let hn = "", par = "", sc = "", pt = 0, st = 0, any = false;
+    for (let n = from; n < from + 9; n++) {
+      const s = holeStats(n), cur = view === "hole" && n === holeNo ? " cur" : "";
+      hn += `<td class="hn${cur}" data-hole="${n}">${n}</td>`;
+      par += `<td>${HOLES[n].par}</td>`;
+      pt += HOLES[n].par;
+      if (s) {
+        any = true; st += s.score;
+        const cls = s.diff <= -2 ? "eagle" : s.diff === -1 ? "birdie" : s.diff === 1 ? "bogey" : s.diff >= 2 ? "double" : "";
+        sc += `<td class="hn" data-hole="${n}"><span class="s ${cls}">${s.score}${s.finished ? "" : "…"}</span></td>`;
+      } else sc += `<td class="hn" data-hole="${n}"></td>`;
+    }
+    return `<table class="sc"><tr><th>Hole</th>${hn}<td class="tot">${label}</td></tr>
+      <tr><th>Par</th>${par}<td class="tot">${pt}</td></tr>
+      <tr><th>Score</th>${sc}<td class="tot">${any ? st : ""}</td></tr></table>`;
+  };
+  return half(1, "Out") + half(10, "In");
+}
+
+function roundMetaHTML() {
+  return `<div class="meta"><input type="text" id="rName" placeholder="Round name (e.g. Saturday w/ Dad)"><input type="date" id="rDate"></div>`;
+}
+
+function renderHolePanel() {
+  const n = holeNo, h = HOLES[n], d = hd(n), st = holeStats(n), rows = shotRows(n);
+  const fromTee = Math.round(yards(startOf(n), pinOf(n)));
+  const lastLie = rows.length ? rows[rows.length - 1].lie : null;
+  const onGreen = lastLie && lastLie.k === "green" && lastLie.own;
+  let hint;
+  if (!rows.length) hint = "Tap the tee box you played from (or drag the <b>T</b>), then tap the map where each shot finished. Drag the flag to today's pin.";
+  else if (onGreen && d.putts === null) hint = "On the green — enter your putts below.";
+  else if (d.putts !== null) hint = "Hole done. Drag any ball to fix its spot, or use › to go to the next hole.";
+  else hint = `Tap where shot ${rows.length + 1} finished. ${Math.round(rows[rows.length - 1].toPin)} yds to the pin.`;
+
+  const shotsHTML = rows.length ? rows.map(r => `
+    <li>
+      <span class="n">${r.i + 1}</span>
+      <div>
+        <div class="l1">
+          <select data-club="${r.i}" aria-label="Club for shot ${r.i + 1}">${CLUBS.map(c => `<option value="${c}"${c === r.s.club ? " selected" : ""}>${c || "Club…"}</option>`).join("")}</select>
+          <b>${Math.round(r.dist)} yds</b>
+          <span class="lie lie-${r.lie.k}">${esc(r.lie.label)}</span>
+        </div>
+        <div class="l2">${r.lie.k === "green" && r.lie.own ? Math.round(r.toPin * 3) + " ft to pin" : Math.round(r.toPin) + " yds to pin"}</div>
+      </div>
+      <button class="pen${r.s.pen ? " on" : ""}" data-pen="${r.i}" title="Penalty strokes (tap to cycle 0/1/2)">${r.s.pen ? "+" + r.s.pen : "+0"}</button>
+      <button data-del="${r.i}" aria-label="Delete shot ${r.i + 1}">✕</button>
+    </li>`).join("") : `<li style="display:block;border:0;padding:0"><div class="empty">No shots yet on this hole.</div></li>`;
+
+  panel.innerHTML = `
+    ${roundMetaHTML()}
+    <div class="holenav" style="margin-top:12px">
+      <button data-act="prev" aria-label="Previous hole">‹</button>
+      <div><h2>Hole ${n}</h2><p>Par ${h.par} · ${fromTee} yds from your tee${h.handicap ? " · HCP " + h.handicap : ""}</p></div>
+      <button data-act="next" aria-label="Next hole">›</button>
+    </div>
+    <div class="hint">${hint}</div>
+    <div class="section-h">Shots</div>
+    <ol class="shots">${shotsHTML}</ol>
+    <div class="btnrow">
+      ${rows.length ? '<button data-act="undo">Undo last shot</button>' : ""}
+      ${rows.length || d.start || d.pin || d.putts !== null ? '<button data-act="clear">Clear hole</button>' : ""}
+    </div>
+    <div class="section-h">Putts</div>
+    <div class="putts${onGreen && d.putts === null ? " ask" : ""}">
+      <button data-act="putt-" aria-label="Fewer putts">−</button>
+      <output>${d.putts === null ? "–" : d.putts}</output>
+      <button data-act="putt+" aria-label="More putts">+</button>
+      ${d.putts === null ? '<button data-act="holed">Holed out (0)</button>' : '<button data-act="puttclear">Not finished</button>'}
+    </div>
+    <div class="section-h">Hole ${n}</div>
+    <div class="result">
+      <div class="stat"><b>${st ? st.score + (st.finished ? "" : "…") : "—"}</b><span>${st && st.finished ? scoreName(st.score, h.par) : "Score"}</span></div>
+      <div class="stat"><b>${h.par >= 4 ? mark(st ? st.fir : null) : "n/a"}</b><span>Fairway</span></div>
+      <div class="stat"><b>${mark(st ? st.gir : null)}</b><span>Green in reg</span></div>
+      <div class="stat"><b>${st ? st.pen : "—"}</b><span>Penalties</span></div>
+    </div>
+    <div class="section-h">Scorecard</div>
+    ${scorecardHTML()}
+    ${totalsHTML()}
+    ${saveOk ? "" : '<div class="warn">This browser isn\'t saving rounds (private window?). Use ⋯ → Export before closing.</div>'}
+    <div class="foot">Course map © OpenStreetMap contributors · Imagery © Esri. Yardages are measured on the map, not from the scorecard.</div>`;
+  bindMeta();
+}
+
+function totalsHTML() {
+  const s = roundStats();
+  if (!s.played) return "";
+  return `<div class="totals">
+    <div class="stat"><b>${s.score}</b><span>${fmtDiff(s.score - s.par)} thru ${s.played}</span></div>
+    <div class="stat"><b>${s.firN ? s.firHit + "/" + s.firN : "—"}</b><span>Fairways</span></div>
+    <div class="stat"><b>${s.girN ? s.girHit + "/" + s.girN : "—"}</b><span>GIR</span></div>
+  </div>`;
+}
+
+function renderOverviewPanel() {
+  const s = roundStats();
+  const avg = a => a.length ? Math.round(a.reduce((x, y) => x + y, 0) / a.length) : null;
+  const clubRows = Object.entries(s.clubs).sort((a, b) => CLUBS.indexOf(a[0]) - CLUBS.indexOf(b[0]))
+    .map(([c, ds]) => `<tr><td>${esc(c)}</td><td>${ds.length}</td><td>${avg(ds)}</td><td>${Math.round(Math.max(...ds))}</td></tr>`).join("");
+  panel.innerHTML = `
+    ${roundMetaHTML()}
+    <div class="section-h">Round</div>
+    <div class="totals">
+      <div class="stat"><b>${s.played ? s.score : "—"}</b><span>${s.played ? fmtDiff(s.score - s.par) + " thru " + s.played : "Score"}</span></div>
+      <div class="stat"><b>${s.played ? s.putts : "—"}</b><span>Putts</span></div>
+      <div class="stat"><b>${s.played ? s.pen : "—"}</b><span>Penalties</span></div>
+      <div class="stat"><b>${s.firN ? Math.round(100 * s.firHit / s.firN) + "%" : "—"}</b><span>Fairways ${s.firN ? s.firHit + "/" + s.firN : ""}</span></div>
+      <div class="stat"><b>${s.girN ? Math.round(100 * s.girHit / s.girN) + "%" : "—"}</b><span>GIR ${s.girN ? s.girHit + "/" + s.girN : ""}</span></div>
+      <div class="stat"><b>${avg(s.tee) ?? "—"}</b><span>Avg tee shot (yds)</span></div>
+    </div>
+    <div class="section-h">Scorecard</div>
+    ${scorecardHTML()}
+    <div class="section-h">Distance by club</div>
+    ${clubRows ? `<table class="clubs"><tr><th>Club</th><th>Shots</th><th>Avg yds</th><th>Long</th></tr>${clubRows}</table>`
+      : '<div class="empty">Pick a club on your shots to see how far each one went.</div>'}
+    <div class="hint" style="margin-top:14px">Tap a hole number on the map or scorecard to open that hole.</div>
+    ${saveOk ? "" : '<div class="warn">This browser isn\'t saving rounds (private window?). Use ⋯ → Export before closing.</div>'}
+    <div class="foot">Course map © OpenStreetMap contributors · Imagery © Esri. Par per hole from OpenStreetMap — check it against the scorecard.</div>`;
+  bindMeta();
+}
+
+function bindMeta() {
+  const nm = document.getElementById("rName"), dt = document.getElementById("rDate");
+  nm.value = round.name || ""; dt.value = round.date || "";
+  nm.oninput = () => { round.name = nm.value; save(); fillRounds(); };
+  dt.onchange = () => { round.date = dt.value; save(); fillRounds(); };
+}
+
+panel.addEventListener("click", e => {
+  const t = e.target.closest("button, [data-hole]"); if (!t) return;
+  const d = hd(holeNo, true);
+  if (t.dataset.hole) { holeNo = +t.dataset.hole; setView("hole"); return; }
+  if (t.dataset.pen != null) { const s = d.shots[+t.dataset.pen]; s.pen = ((s.pen || 0) + 1) % 3; }
+  else if (t.dataset.del != null) { d.shots.splice(+t.dataset.del, 1); }
+  else switch (t.dataset.act) {
+    case "prev": goHole(holeNo - 1); return;
+    case "next": goHole(holeNo + 1); return;
+    case "undo": d.shots.pop(); break;
+    case "clear": if (!confirm(`Clear everything on hole ${holeNo}?`)) return; delete round.holes[holeNo]; break;
+    case "putt+": d.putts = d.putts === null ? 1 : Math.min(9, d.putts + 1); break;
+    case "putt-": d.putts = d.putts === null ? 0 : Math.max(0, d.putts - 1); break;
+    case "holed": d.putts = 0; break;
+    case "puttclear": d.putts = null; break;
+    default: return;
+  }
+  save(); render();
+});
+panel.addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.club != null) { hd(holeNo, true).shots[+t.dataset.club].club = t.value; save(); fillRounds(); }
+});
+
+/* ---------- render ---------- */
+function renderPanel() {
+  view === "hole" ? renderHolePanel() : renderOverviewPanel();
+  fillRounds();
+  document.getElementById("mapHoleLbl").textContent = view === "hole" ? `Hole ${holeNo} · Par ${HOLES[holeNo].par}` : "All 18 holes";
+}
+function render(moveCamera, animate = true) {
+  renderPanel();
+  if (!map.getSource("shots")) return;
+  styleMap();
+  drawShotsLayer(); drawMarkers(); placeLabels();
+  if (moveCamera) view === "hole" ? holeCamera(holeNo, animate) : overviewCamera(animate);
+}
+renderPanel();
+window.addEventListener("resize", () => { clearTimeout(window.__rz); window.__rz = setTimeout(() => view === "hole" ? holeCamera(holeNo, false) : overviewCamera(false), 250); });
+</script>
+</body>
+</html>
